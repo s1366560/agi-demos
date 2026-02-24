@@ -13,6 +13,7 @@ import json
 import logging
 from typing import Any, Optional, TypeVar
 
+from redis.asyncio import Redis
 from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class CachedRepositoryMixin:
 
     def __init__(
         self,
-        redis_client: Optional[Any] = None,
+        redis_client: Optional[Redis] = None,
         cache_prefix: Optional[str] = None,
         cache_ttl_seconds: Optional[int] = None,
     ) -> None:
@@ -90,7 +91,7 @@ class CachedRepositoryMixin:
         self,
         entity_id: str,
         namespace: Optional[str] = None,
-    ) -> Optional[Any]:
+    ) -> Optional[Any]:  # noqa: ANN401
         """
         Get entity from cache.
 
@@ -119,7 +120,7 @@ class CachedRepositoryMixin:
     async def _cache_set(
         self,
         entity_id: str,
-        entity: Any,
+        entity: Any,  # noqa: ANN401
         namespace: Optional[str] = None,
         ttl: Optional[int] = None,
     ) -> None:
@@ -208,7 +209,7 @@ class CachedRepositoryMixin:
         self,
         entity_id: str,
         namespace: Optional[str] = None,
-    ) -> Optional[Any]:
+    ) -> Optional[Any]:  # noqa: ANN401
         """
         Find entity with cache fallback.
 
@@ -263,7 +264,7 @@ class CachedRepositoryMixin:
 
     # === Serialization ===
 
-    async def _serialize(self, entity: Any) -> str:
+    async def _serialize(self, entity: Any) -> str:  # noqa: ANN401
         """
         Serialize entity for storage.
 
@@ -287,7 +288,7 @@ class CachedRepositoryMixin:
 
         return json.dumps(str(entity))
 
-    async def _deserialize(self, data: str) -> Any:
+    async def _deserialize(self, data: str) -> Any:  # noqa: ANN401
         """
         Deserialize entity from storage.
 

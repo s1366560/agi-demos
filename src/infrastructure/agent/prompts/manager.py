@@ -125,7 +125,7 @@ class SystemPromptManager:
     async def build_system_prompt(
         self,
         context: PromptContext,
-        subagent: Optional[Any] = None,
+        subagent: Optional[Any] = None,  # noqa: ANN401
     ) -> str:
         """
         Build the complete system prompt for the agent.

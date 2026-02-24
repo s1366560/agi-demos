@@ -41,7 +41,7 @@ class MCPAppResourceResolver:
 
     def __init__(
         self,
-        sandbox_mcp_server_manager: Any = None,
+        sandbox_mcp_server_manager: Any = None,  # noqa: ANN401
         manager_factory: Optional[Callable] = None,
     ) -> None:
         """Initialize resource resolver.
@@ -57,7 +57,7 @@ class MCPAppResourceResolver:
         self._mcp_manager = sandbox_mcp_server_manager
         self._manager_factory = manager_factory
 
-    def _get_manager(self) -> Any:
+    def _get_manager(self) -> Any:  # noqa: ANN401
         """Get the MCP manager, creating it lazily from factory if needed."""
         if self._mcp_manager is None and self._manager_factory is not None:
             self._mcp_manager = self._manager_factory()

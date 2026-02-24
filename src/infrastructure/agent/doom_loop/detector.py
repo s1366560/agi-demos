@@ -55,7 +55,7 @@ class DoomLoopDetector:
         self.threshold = threshold
         self.window: deque[ToolCallRecord] = deque(maxlen=window_size)
 
-    def _hash_input(self, input: Any) -> str:
+    def _hash_input(self, input: Any) -> str:  # noqa: ANN401
         """
         Compute a hash of the tool input for comparison.
 
@@ -70,7 +70,7 @@ class DoomLoopDetector:
         except (TypeError, ValueError):
             return str(input)
 
-    def record(self, tool: str, input: Any) -> None:
+    def record(self, tool: str, input: Any) -> None:  # noqa: ANN401
         """
         Record a tool call.
 
@@ -87,7 +87,7 @@ class DoomLoopDetector:
             )
         )
 
-    def should_intervene(self, tool: str, input: Any) -> bool:
+    def should_intervene(self, tool: str, input: Any) -> bool:  # noqa: ANN401
         """
         Check if user intervention is needed.
 

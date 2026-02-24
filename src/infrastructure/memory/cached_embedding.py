@@ -13,9 +13,14 @@ import hashlib
 import json
 import logging
 from collections import OrderedDict
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 
 _DEFAULT_L1_SIZE = 500
 _DEFAULT_L2_TTL = 86400  # 24 hours
@@ -30,8 +35,8 @@ class CachedEmbeddingService:
 
     def __init__(
         self,
-        embedding_service: Any,
-        redis_client: Any = None,
+        embedding_service: EmbeddingService,
+        redis_client: Optional[Redis] = None,
         model_name: str = "default",
         l1_size: int = _DEFAULT_L1_SIZE,
         l2_ttl: int = _DEFAULT_L2_TTL,

@@ -4,7 +4,7 @@ Publishes sandbox lifecycle and status events to Redis streams.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
@@ -17,6 +17,7 @@ from src.domain.events.agent_events import (
     AgentTerminalStatusEvent,
     AgentTerminalStoppedEvent,
 )
+from src.domain.ports.services.event_bus_port import EventBusPort
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 class SandboxEventPublisher:
     """Publishes sandbox events to Redis streams."""
 
-    def __init__(self, event_bus: Optional[Any] = None):
+    def __init__(self, event_bus: Optional[EventBusPort] = None):
         """
         Initialize publisher.
 

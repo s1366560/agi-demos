@@ -15,13 +15,20 @@ Usage:
     await notifier.notify_ready(tenant_id, project_id, tool_count=10)
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+        ConnectionManager,
+    )
 
 
 class LifecycleState(str, Enum):
@@ -116,7 +123,7 @@ class WebSocketNotifier:
         await notifier.notify_ready(tenant_id, project_id, tool_count=10)
     """
 
-    def __init__(self, connection_manager: Any):
+    def __init__(self, connection_manager: ConnectionManager):
         """
         Initialize the notifier.
 
@@ -351,7 +358,7 @@ class WebSocketNotifier:
         return await self.notify_lifecycle_state_change(message)
 
 
-def get_websocket_notifier(connection_manager: Any) -> WebSocketNotifier:
+def get_websocket_notifier(connection_manager: ConnectionManager) -> WebSocketNotifier:
     """
     Get or create a WebSocketNotifier instance.
 

@@ -5,9 +5,15 @@ Collects SubAgentResult instances from parallel or sequential executions
 and produces a unified summary.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.domain.model.agent.subagent_result import SubAgentResult
 
@@ -43,7 +49,7 @@ class ResultAggregator:
     produce a coherent unified summary.
     """
 
-    def __init__(self, llm_client: Optional[Any] = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None):
         """Initialize ResultAggregator.
 
         Args:

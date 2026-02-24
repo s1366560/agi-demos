@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from src.domain.shared_kernel import DomainEvent, Entity, ValueObject
 
@@ -193,14 +193,14 @@ class ChannelAdapter(Protocol):
         """Send a text message (convenience method)."""
         ...
 
-    def on_message(self, handler: Any) -> Any:
+    def on_message(self, handler: Callable[[Message], None]) -> Callable[[], None]:
         """Register a message handler callback.
 
         Returns a function to unregister the handler.
         """
         ...
 
-    def on_error(self, handler: Any) -> Any:
+    def on_error(self, handler: Callable[[Exception], None]) -> Callable[[], None]:
         """Register an error handler callback."""
         ...
 

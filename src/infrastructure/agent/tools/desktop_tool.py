@@ -6,8 +6,14 @@ remote desktop sessions in sandbox environments.
 Refactored to use SandboxOrchestrator for unified sandbox service management.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 from src.application.services.sandbox_orchestrator import (
     DesktopConfig,
@@ -41,7 +47,7 @@ class DesktopTool(AgentTool):
     def __init__(
         self,
         orchestrator: Optional[SandboxOrchestrator] = None,
-        sandbox_adapter: Optional[Any] = None,
+        sandbox_adapter: Optional[SandboxPort] = None,
         sandbox_id: str = "test_sandbox",
     ):
         """

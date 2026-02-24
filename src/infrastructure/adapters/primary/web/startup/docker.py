@@ -1,18 +1,25 @@
 """Docker services initialization for startup."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.sandbox.docker_event_monitor import (
+        DockerEventMonitor,
+    )
+
 logger = logging.getLogger(__name__)
 
 # Module-level reference for shutdown
-_docker_event_monitor: Optional[Any] = None
+_docker_event_monitor: Optional[DockerEventMonitor] = None
 
 
-async def initialize_docker_services(container: DIContainer) -> Optional[Any]:
+async def initialize_docker_services(container: DIContainer) -> Optional[DockerEventMonitor]:
     """
     Initialize Docker-related services including sandbox sync and event monitor.
 

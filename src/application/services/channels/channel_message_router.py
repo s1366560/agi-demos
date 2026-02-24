@@ -1,8 +1,8 @@
 """Channel message router - routes IM messages to Agent system.
-
-This module provides the routing logic to bridge incoming channel messages
 (Feishu, DingTalk, WeCom, etc.) to the Agent conversation system.
 """
+
+from __future__ import annotations
 
 import asyncio
 import collections
@@ -14,10 +14,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from src.domain.model.channels.message import ChatType, Message, MessageType
+from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.application.services.channels.media_import_service import MediaImportService
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,7 @@ class ChannelMessageRouter:
         # 3. Trigger agent processing
     """
 
-    def __init__(self, media_import_service: Optional[Any] = None) -> None:
+    def __init__(self, media_import_service: Optional[MediaImportService] = None) -> None:
         self._chat_to_conversation: collections.OrderedDict[str, str] = collections.OrderedDict()
         self._rate_limiter = _SlidingWindowRateLimiter()
         self._media_import_service = media_import_service
@@ -405,7 +407,7 @@ class ChannelMessageRouter:
 
     async def _find_or_create_conversation_db(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         message: Message,
         session_key: str,
         channel_config_id: Optional[str],
@@ -632,7 +634,7 @@ class ChannelMessageRouter:
         except Exception as e:
             logger.warning(f"[MessageRouter] Failed to store message history: {e}")
 
-    def _to_json_safe(self, value: Any, *, _depth: int = 0) -> Any:
+    def _to_json_safe(self, value: Any, *, _depth: int = 0) -> Any:  # noqa: ANN401
         """Convert payload value into JSON-serializable primitives."""
         if _depth > 8:
             return str(value)
@@ -1207,7 +1209,7 @@ class ChannelMessageRouter:
 
     async def _smart_send(
         self,
-        adapter: Any,
+        adapter: ChannelAdapter,
         chat_id: str,
         text: str,
         reply_to: Optional[str] = None,
@@ -1228,7 +1230,7 @@ class ChannelMessageRouter:
     # Streaming card helpers
     # ------------------------------------------------------------------
 
-    def _get_streaming_adapter(self, message: Message) -> Any:
+    def _get_streaming_adapter(self, message: Message) -> Optional[ChannelAdapter]:
         """Return the channel adapter if it supports streaming card updates."""
         try:
             from src.infrastructure.adapters.primary.web.startup import get_channel_manager
@@ -1256,7 +1258,7 @@ class ChannelMessageRouter:
             return None
 
     @staticmethod
-    def _supports_cardkit_streaming(adapter: Any) -> bool:
+    def _supports_cardkit_streaming(adapter: ChannelAdapter) -> bool:
         """Check if adapter supports CardKit streaming APIs."""
         return (
             hasattr(adapter, "create_card_entity")
@@ -1265,7 +1267,7 @@ class ChannelMessageRouter:
             and hasattr(adapter, "send_card_entity_message")
         )
 
-    async def _send_initial_streaming_card(self, adapter: Any, message: Message) -> Optional[str]:
+    async def _send_initial_streaming_card(self, adapter: ChannelAdapter, message: Message) -> Optional[str]:
         """Send the initial 'Thinking...' card and return its message_id."""
         try:
             reply_to = self._extract_channel_message_id(message)
@@ -1283,7 +1285,7 @@ class ChannelMessageRouter:
 
     async def _patch_streaming_card(
         self,
-        adapter: Any,
+        adapter: ChannelAdapter,
         message_id: str,
         text: str,
         *,
@@ -1468,7 +1470,7 @@ class ChannelMessageRouter:
 
     async def _resolve_channel_config_id(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         message: Message,
     ) -> Optional[str]:
         """Resolve channel config ID strictly from trusted routing metadata."""

@@ -149,7 +149,7 @@ def get_mutation_ledger() -> MutationLedger:
     return MutationLedger()
 
 
-def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
     if not isinstance(value, str) or not value.strip():
         return None
     try:

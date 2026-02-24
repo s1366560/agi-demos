@@ -219,7 +219,7 @@ class MCPServerRegistry:
                 result[server_id] = []
         return result
 
-    async def call_tool(self, server_id: str, tool_name: str, arguments: dict) -> Any:
+    async def call_tool(self, server_id: str, tool_name: str, arguments: dict) -> Any:  # noqa: ANN401
         """
         Call a tool on a registered MCP server.
 

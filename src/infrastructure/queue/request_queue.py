@@ -126,7 +126,7 @@ class RequestQueue:
         args: tuple = (),
         kwargs: dict | None = None,
         priority: int = 0,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """
         Enqueue a request to be processed.
 

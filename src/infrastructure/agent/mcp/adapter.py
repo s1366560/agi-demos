@@ -124,7 +124,7 @@ class MCPToolAdapter(AgentTool):
 
         return True
 
-    def _validate_type(self, value: Any, expected_type: str) -> bool:
+    def _validate_type(self, value: Any, expected_type: str) -> bool:  # noqa: ANN401
         """
         Validate value against JSON Schema type.
 

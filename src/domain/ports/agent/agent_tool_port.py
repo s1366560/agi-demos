@@ -154,7 +154,7 @@ class AgentToolBase(ABC):
             "required": [],
         }
 
-    def extract_output_field(self, output: str, field_path: str) -> Any:
+    def extract_output_field(self, output: str, field_path: str) -> Any:  # noqa: ANN401
         """Extract a specific field from tool output using a dot-separated path."""
         try:
             data = json.loads(output)

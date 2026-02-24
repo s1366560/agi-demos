@@ -194,14 +194,14 @@ class LiteLLMEmbedder(BaseEmbedder):
         )
 
     @staticmethod
-    def _normalize_optional_str(value: Any) -> Optional[str]:
+    def _normalize_optional_str(value: Any) -> Optional[str]:  # noqa: ANN401
         if not isinstance(value, str):
             return None
         normalized = value.strip()
         return normalized or None
 
     @staticmethod
-    def _normalize_optional_int(value: Any) -> Optional[int]:
+    def _normalize_optional_int(value: Any) -> Optional[int]:  # noqa: ANN401
         if value is None:
             return None
         try:
@@ -211,7 +211,7 @@ class LiteLLMEmbedder(BaseEmbedder):
         return parsed if parsed > 0 else None
 
     @staticmethod
-    def _normalize_optional_float(value: Any) -> Optional[float]:
+    def _normalize_optional_float(value: Any) -> Optional[float]:  # noqa: ANN401
         if value is None:
             return None
         try:
@@ -221,11 +221,11 @@ class LiteLLMEmbedder(BaseEmbedder):
         return parsed if parsed > 0 else None
 
     @staticmethod
-    def _normalize_provider_options(value: Any) -> dict[str, Any]:
+    def _normalize_provider_options(value: Any) -> dict[str, Any]:  # noqa: ANN401
         return dict(value) if isinstance(value, dict) else {}
 
     @classmethod
-    def _normalize_encoding_format(cls, value: Any) -> Optional[str]:
+    def _normalize_encoding_format(cls, value: Any) -> Optional[str]:  # noqa: ANN401
         normalized = cls._normalize_optional_str(value)
         if normalized in {"float", "base64"}:
             return normalized

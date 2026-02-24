@@ -60,11 +60,11 @@ class CostTrackerProtocol(Protocol):
 
     def calculate(
         self, usage: Dict[str, int], model_name: str
-    ) -> Any:  # Returns CostResult-like object
+    ) -> Any:  # Returns CostResult-like object  # noqa: ANN401
         """Calculate cost from usage."""
         ...
 
-    def needs_compaction(self, tokens: Any) -> bool:  # tokens is TokenUsage-like
+    def needs_compaction(self, tokens: Any) -> bool:  # tokens is TokenUsage-like  # noqa: ANN401
         """Check if context compaction is needed."""
         ...
 
@@ -360,7 +360,7 @@ class LLMInvoker:
 
     async def _process_stream_event(
         self,
-        event: Any,  # StreamEvent
+        event: Any,  # StreamEvent  # noqa: ANN401
         result: InvocationResult,
         config: InvocationConfig,
         context: InvocationContext,
@@ -457,7 +457,7 @@ class LLMInvoker:
 
     async def _handle_tool_call_end(
         self,
-        event: Any,
+        event: Any,  # noqa: ANN401
         result: InvocationResult,
         context: InvocationContext,
         pending_tool_calls: Dict[str, ToolPartProtocol],
@@ -518,7 +518,7 @@ class LLMInvoker:
         self,
         call_id: str,
         tool_name: str,
-        arguments: Any,
+        arguments: Any,  # noqa: ANN401
     ) -> Optional[str]:
         """
         Validate tool call parameters.
@@ -542,7 +542,7 @@ class LLMInvoker:
 
     async def _handle_usage_event(
         self,
-        event: Any,
+        event: Any,  # noqa: ANN401
         result: InvocationResult,
         config: InvocationConfig,
     ) -> AsyncIterator[AgentDomainEvent]:

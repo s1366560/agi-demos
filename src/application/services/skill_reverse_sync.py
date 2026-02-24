@@ -9,12 +9,14 @@ This service handles both directions of skill sync:
 - Reverse: sync from sandbox back to DB + host filesystem (this service)
 """
 
+from __future__ import annotations
+
 import base64
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.domain.model.agent.skill import Skill, SkillScope, TriggerPattern, TriggerType
 from src.domain.model.agent.skill.skill_source import SkillSource
@@ -23,6 +25,9 @@ from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
 from src.infrastructure.skill.markdown_parser import MarkdownParser
 
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+    from src.infrastructure.skill.markdown_parser import SkillMarkdown
 logger = logging.getLogger(__name__)
 
 # Default skill path inside sandbox container
@@ -79,7 +84,7 @@ class SkillReverseSync:
         self,
         skill_name: str,
         tenant_id: str,
-        sandbox_adapter: Any,
+        sandbox_adapter: SandboxPort,
         sandbox_id: str,
         project_id: Optional[str] = None,
         change_summary: Optional[str] = None,
@@ -219,7 +224,7 @@ class SkillReverseSync:
 
     async def _read_sandbox_files(
         self,
-        sandbox_adapter: Any,
+        sandbox_adapter: SandboxPort,
         sandbox_id: str,
         container_path: str,
     ) -> Dict[str, str]:
@@ -297,7 +302,7 @@ class SkillReverseSync:
     async def _upsert_skill(
         self,
         skill_name: str,
-        parsed: Any,
+        parsed: SkillMarkdown,
         tenant_id: str,
         project_id: Optional[str],
         skill_md_content: str,
@@ -439,7 +444,7 @@ class SkillReverseSync:
         logger.info(f"Wrote {len(files)} files to {skill_dir}")
 
     @staticmethod
-    def _extract_file_paths(glob_result: Any) -> List[str]:
+    def _extract_file_paths(glob_result: Any) -> List[str]:  # noqa: ANN401
         """Extract file paths from MCP glob tool result.
 
         The MCP glob tool returns newline-separated file paths in a single
@@ -474,7 +479,7 @@ class SkillReverseSync:
         ]
 
     @staticmethod
-    def _extract_content(read_result: Any) -> Optional[str]:
+    def _extract_content(read_result: Any) -> Optional[str]:  # noqa: ANN401
         """Extract text content from MCP read tool result.
 
         Handles line-number prefixes (e.g. '     1\\t...') that the MCP read

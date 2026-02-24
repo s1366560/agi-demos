@@ -424,7 +424,7 @@ class HITLResponse:
     user_id: Optional[str] = None
 
     @property
-    def response_value(self) -> Any:
+    def response_value(self) -> Union[str, List[str], Dict[str, str], None]:
         """Get the response value for the Agent."""
         if self.clarification_response:
             return self.clarification_response.answer

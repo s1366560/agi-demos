@@ -56,7 +56,7 @@ class HITLTypeStrategy(ABC):
     def extract_response_value(
         self,
         response_data: Dict[str, Any],
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """Extract the usable response value from response data."""
         pass
 
@@ -64,7 +64,7 @@ class HITLTypeStrategy(ABC):
     def get_default_response(
         self,
         request: HITLRequest,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """Get a default response for timeout scenarios."""
         pass
 
@@ -124,10 +124,10 @@ class ClarificationStrategy(HITLTypeStrategy):
             context=request_data.get("context", {}),
         )
 
-    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:  # noqa: ANN401
         return response_data.get("answer", "")
 
-    def get_default_response(self, request: HITLRequest) -> Any:
+    def get_default_response(self, request: HITLRequest) -> Any:  # noqa: ANN401
         if request.clarification_data and request.clarification_data.default_value:
             return request.clarification_data.default_value
         if request.clarification_data and request.clarification_data.options:
@@ -203,10 +203,10 @@ class DecisionStrategy(HITLTypeStrategy):
             max_selections=request_data.get("max_selections"),
         )
 
-    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:  # noqa: ANN401
         return response_data.get("decision", "")
 
-    def get_default_response(self, request: HITLRequest) -> Any:
+    def get_default_response(self, request: HITLRequest) -> Any:  # noqa: ANN401
         if request.decision_data and request.decision_data.default_option:
             return request.decision_data.default_option
         if request.decision_data and request.decision_data.options:
@@ -276,10 +276,10 @@ class EnvVarStrategy(HITLTypeStrategy):
             allow_save=request_data.get("allow_save", True),
         )
 
-    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:  # noqa: ANN401
         return response_data.get("values", {})
 
-    def get_default_response(self, request: HITLRequest) -> Any:
+    def get_default_response(self, request: HITLRequest) -> Any:  # noqa: ANN401
         return {}
 
 
@@ -324,11 +324,11 @@ class PermissionStrategy(HITLTypeStrategy):
             context=request_data.get("context", {}),
         )
 
-    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: Dict[str, Any]) -> Any:  # noqa: ANN401
         action = response_data.get("action", "deny")
         return action in ("allow", "allow_always")
 
-    def get_default_response(self, request: HITLRequest) -> Any:
+    def get_default_response(self, request: HITLRequest) -> Any:  # noqa: ANN401
         if request.permission_data and request.permission_data.default_action:
             return request.permission_data.default_action.value in (
                 "allow",

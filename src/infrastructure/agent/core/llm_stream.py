@@ -14,6 +14,8 @@ P0-2 Optimization: Batch logging and token delta sampling to reduce I/O overhead
 Reference: OpenCode's LLM.stream() in llm.ts
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -21,7 +23,11 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 # Import sampling utilities from llm package
 from src.infrastructure.agent.llm.token_sampler import BatchLogBuffer, TokenDeltaSampler
@@ -160,32 +166,32 @@ class StreamEvent:
     timestamp: float = field(default_factory=time.time)
 
     @classmethod
-    def text_start(cls) -> "StreamEvent":
+    def text_start(cls) -> StreamEvent:
         """Create text start event."""
         return cls(StreamEventType.TEXT_START)
 
     @classmethod
-    def text_delta(cls, delta: str) -> "StreamEvent":
+    def text_delta(cls, delta: str) -> StreamEvent:
         """Create text delta event."""
         return cls(StreamEventType.TEXT_DELTA, {"delta": delta})
 
     @classmethod
-    def text_end(cls, full_text: str = "") -> "StreamEvent":
+    def text_end(cls, full_text: str = "") -> StreamEvent:
         """Create text end event."""
         return cls(StreamEventType.TEXT_END, {"full_text": full_text})
 
     @classmethod
-    def reasoning_start(cls) -> "StreamEvent":
+    def reasoning_start(cls) -> StreamEvent:
         """Create reasoning start event."""
         return cls(StreamEventType.REASONING_START)
 
     @classmethod
-    def reasoning_delta(cls, delta: str) -> "StreamEvent":
+    def reasoning_delta(cls, delta: str) -> StreamEvent:
         """Create reasoning delta event."""
         return cls(StreamEventType.REASONING_DELTA, {"delta": delta})
 
     @classmethod
-    def reasoning_end(cls, full_text: str = "") -> "StreamEvent":
+    def reasoning_end(cls, full_text: str = "") -> StreamEvent:
         """Create reasoning end event."""
         return cls(StreamEventType.REASONING_END, {"full_text": full_text})
 
@@ -195,7 +201,7 @@ class StreamEvent:
         call_id: str,
         name: str,
         index: int = 0,
-    ) -> "StreamEvent":
+    ) -> StreamEvent:
         """Create tool call start event."""
         return cls(
             StreamEventType.TOOL_CALL_START,
@@ -211,7 +217,7 @@ class StreamEvent:
         cls,
         call_id: str,
         arguments_delta: str,
-    ) -> "StreamEvent":
+    ) -> StreamEvent:
         """Create tool call delta event."""
         return cls(
             StreamEventType.TOOL_CALL_DELTA,
@@ -227,7 +233,7 @@ class StreamEvent:
         call_id: str,
         name: str,
         arguments: Dict[str, Any],
-    ) -> "StreamEvent":
+    ) -> StreamEvent:
         """Create tool call end event."""
         return cls(
             StreamEventType.TOOL_CALL_END,
@@ -246,7 +252,7 @@ class StreamEvent:
         reasoning_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_write_tokens: int = 0,
-    ) -> "StreamEvent":
+    ) -> StreamEvent:
         """Create usage event."""
         return cls(
             StreamEventType.USAGE,
@@ -260,12 +266,12 @@ class StreamEvent:
         )
 
     @classmethod
-    def finish(cls, reason: str) -> "StreamEvent":
+    def finish(cls, reason: str) -> StreamEvent:
         """Create finish event."""
         return cls(StreamEventType.FINISH, {"reason": reason})
 
     @classmethod
-    def error(cls, message: str, code: str = None) -> "StreamEvent":
+    def error(cls, message: str, code: str = None) -> StreamEvent:
         """Create error event."""
         data = {"message": message}
         if code:
@@ -359,7 +365,7 @@ class LLMStream:
                 # Execute tool...
     """
 
-    def __init__(self, config: StreamConfig, llm_client: Optional[Any] = None):
+    def __init__(self, config: StreamConfig, llm_client: Optional[LLMClient] = None):
         """
         Initialize LLM stream.
 
@@ -608,7 +614,7 @@ class LLMStream:
 
     async def _process_chunk(
         self,
-        chunk: Any,
+        chunk: Any,  # noqa: ANN401
     ) -> AsyncIterator[StreamEvent]:
         """
         Process a single streaming chunk.
@@ -878,7 +884,7 @@ class LLMStream:
         # Emit finish event
         yield StreamEvent.finish(self._finish_reason or "stop")
 
-    def _extract_usage(self, usage: Any) -> Dict[str, int]:
+    def _extract_usage(self, usage: Any) -> Dict[str, int]:  # noqa: ANN401
         """
         Extract token usage from response.
 

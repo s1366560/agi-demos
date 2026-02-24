@@ -1,10 +1,16 @@
 """Agent runtime bootstrapping extracted from AgentService."""
 
+
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.domain.model.agent import Conversation
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +178,7 @@ class AgentRuntimeBootstrapper:
 
         await register_project_local(tenant_id, project_id)
 
-    async def _start_local_chat(self, conversation_id: str, config: Any, request: Any) -> None:
+    async def _start_local_chat(self, conversation_id: str, config: ProjectAgentActorConfig, request: ProjectChatRequest) -> None:
         """Start local execution task and register cancellation signal."""
         abort_signal = asyncio.Event()
         task = asyncio.create_task(self._run_chat_local(config, request, abort_signal=abort_signal))
@@ -241,8 +247,8 @@ class AgentRuntimeBootstrapper:
 
     async def _run_chat_local(
         self,
-        config: Any,
-        request: Any,
+        config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
         abort_signal: Optional[asyncio.Event] = None,
     ) -> None:
         """Run agent chat locally in-process when Ray is unavailable."""

@@ -72,7 +72,7 @@ class SubAgentTemplate:
     @classmethod
     def from_subagent(
         cls,
-        subagent: Any,
+        subagent: Any,  # noqa: ANN401
         author: str = "",
         category: str = "general",
         version: str = "1.0.0",
@@ -116,7 +116,7 @@ class SubAgentTemplate:
             version=version,
         )
 
-    def to_subagent(self, project_id: str = "", tenant_id: str = "") -> Any:
+    def to_subagent(self, project_id: str = "", tenant_id: str = "") -> Any:  # noqa: ANN401
         """Instantiate a SubAgent from this template.
 
         Args:

@@ -63,7 +63,7 @@ class QueryBuilder:
     def where_eq(
         self,
         column: str,
-        value: Any,
+        value: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add equality condition.
@@ -82,7 +82,7 @@ class QueryBuilder:
     def where_ne(
         self,
         column: str,
-        value: Any,
+        value: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add inequality condition.
@@ -177,7 +177,7 @@ class QueryBuilder:
     def where_gt(
         self,
         column: str,
-        value: Any,
+        value: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add greater than condition.
@@ -196,7 +196,7 @@ class QueryBuilder:
     def where_gte(
         self,
         column: str,
-        value: Any,
+        value: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add greater than or equal condition.
@@ -215,7 +215,7 @@ class QueryBuilder:
     def where_lt(
         self,
         column: str,
-        value: Any,
+        value: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add less than condition.
@@ -234,7 +234,7 @@ class QueryBuilder:
     def where_lte(
         self,
         column: str,
-        value: Any,
+        value: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add less than or equal condition.
@@ -253,8 +253,8 @@ class QueryBuilder:
     def where_between(
         self,
         column: str,
-        lower: Any,
-        upper: Any,
+        lower: Any,  # noqa: ANN401
+        upper: Any,  # noqa: ANN401
     ) -> "QueryBuilder[T]":
         """
         Add BETWEEN condition.
@@ -410,7 +410,7 @@ class QueryBuilder:
     def join(
         self,
         other_model: type,
-        on_clause: Any,
+        on_clause: Any,  # noqa: ANN401
         is_outer: bool = False,
     ) -> "QueryBuilder[T]":
         """

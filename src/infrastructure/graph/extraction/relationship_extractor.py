@@ -7,10 +7,12 @@ This module provides:
 - Weight calculation for relationship strength
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from src.infrastructure.graph.extraction.prompts import (
@@ -20,6 +22,10 @@ from src.infrastructure.graph.extraction.prompts import (
 from src.infrastructure.graph.schemas import EntityEdge, EntityNode
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.graph.neo4j_client import Neo4jClient
 
 
 class RelationshipExtractor:
@@ -41,7 +47,7 @@ class RelationshipExtractor:
 
     def __init__(
         self,
-        llm_client: Any,
+        llm_client: LLMClient,
         model: Optional[str] = None,
         temperature: float = 0.0,
     ):
@@ -556,7 +562,7 @@ class RelationshipDeduplicator:
     Deduplicator for relationships to avoid duplicate edges in the graph.
     """
 
-    def __init__(self, neo4j_client: Any):
+    def __init__(self, neo4j_client: Neo4jClient):
         """
         Initialize deduplicator.
 

@@ -178,8 +178,8 @@ class TransactionManager:
     @asynccontextmanager
     async def distributed_transaction(
         self,
-        neo4j_tx: Optional[Any] = None,
-        redis_tx: Optional[Any] = None,
+        neo4j_tx: Optional[Any] = None,  # noqa: ANN401
+        redis_tx: Optional[Any] = None,  # noqa: ANN401
     ) -> AsyncGenerator["TransactionManager", None]:
         """
         Context manager for distributed transactions across multiple databases.

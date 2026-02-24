@@ -12,11 +12,17 @@ Reference: OpenCode's context management with prune + compaction strategy
 Adapted for Web applications with query-time compression (no DB modification).
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.infrastructure.agent.context.compaction import (
     ModelLimits,
@@ -314,7 +320,7 @@ class ContextWindowManager:
         self,
         system_prompt: str,
         messages: List[Dict[str, Any]],
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
     ) -> ContextWindowResult:
         """
         Build context window with dynamic compression.
@@ -468,7 +474,7 @@ class ContextWindowManager:
     async def _generate_summary(
         self,
         messages: List[Dict[str, Any]],
-        llm_client: Any,
+        llm_client: LLMClient,
     ) -> str:
         """
         Generate summary of messages using LLM.
@@ -718,7 +724,7 @@ Summary:"""
         self,
         system_prompt: str,
         messages: List[Dict[str, Any]],
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
         model_limits: Optional[ModelLimits] = None,
     ) -> ContextWindowResult:
         """

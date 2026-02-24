@@ -23,10 +23,15 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from src.infrastructure.graph.neo4j_client import Neo4jClient
 
 # For type checking mock objects in tests
 try:
@@ -110,8 +115,8 @@ class DistributedTransactionCoordinator:
     def __init__(
         self,
         pg_session: Optional[AsyncSession] = None,
-        neo4j_client: Optional[Any] = None,
-        redis_client: Optional[Any] = None,
+        neo4j_client: Optional[Neo4jClient] = None,
+        redis_client: Optional[Redis] = None,
         timeout_seconds: float = 30.0,
     ):
         """
@@ -477,7 +482,7 @@ class DistributedTransaction:
         # For tests, use the client directly
         return await self._context.neo4j_client.execute_query(query, **params)
 
-    async def execute_redis(self, command: str) -> Any:
+    async def execute_redis(self, command: str) -> Any:  # noqa: ANN401
         """
         Execute a Redis command within this transaction.
 

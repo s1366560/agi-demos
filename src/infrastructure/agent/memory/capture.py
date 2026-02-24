@@ -11,9 +11,16 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.infrastructure.memory.prompt_safety import looks_like_prompt_injection
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
+        SqlChunkRepository,
+    )
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +64,10 @@ class MemoryCapturePostprocessor:
 
     def __init__(
         self,
-        llm_client: Any,
-        chunk_repo: Any = None,
-        embedding_service: Any = None,
-        session_factory: Any = None,
+        llm_client: LLMClient,
+        chunk_repo: SqlChunkRepository = None,
+        embedding_service: EmbeddingService = None,
+        session_factory: Any = None,  # noqa: ANN401
     ):
         self._llm_client = llm_client
         self._chunk_repo = chunk_repo
@@ -75,7 +82,7 @@ class MemoryCapturePostprocessor:
             f"session_factory={'yes' if session_factory else 'no'})"
         )
 
-    async def _get_chunk_repo(self) -> Any:
+    async def _get_chunk_repo(self) -> Any:  # noqa: ANN401
         """Get or create a chunk repository with a fresh DB session."""
         if self._chunk_repo is not None:
             return self._chunk_repo
@@ -247,7 +254,7 @@ class MemoryCapturePostprocessor:
 
     async def _store_chunk(
         self,
-        chunk_repo: Any,
+        chunk_repo: Any,  # noqa: ANN401
         content: str,
         category: str,
         embedding: Optional[list[float]],
@@ -282,7 +289,7 @@ class MemoryCapturePostprocessor:
 
     async def _is_duplicate(
         self,
-        chunk_repo: Any,
+        chunk_repo: Any,  # noqa: ANN401
         embedding: list[float],
         project_id: str,
         threshold: float = 0.95,

@@ -133,7 +133,7 @@ class HITLCoordinator:
         request_id: str,
         hitl_type: HITLType,
         timeout_seconds: Optional[float] = None,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """Await the Future for a previously prepared request.
 
         Returns the response value extracted by the type strategy.
@@ -176,7 +176,7 @@ class HITLCoordinator:
         hitl_type: HITLType,
         request_data: Dict[str, Any],
         timeout_seconds: Optional[float] = None,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """Convenience wrapper: prepare + wait in one call.
 
         Prefer ``prepare_request()`` + ``wait_for_response()`` when you need
@@ -260,7 +260,7 @@ def resolve_by_request_id(request_id: str, response_data: Dict[str, Any]) -> boo
 # ---------------------------------------------------------------------------
 
 
-def _type_default(hitl_type: HITLType) -> Any:
+def _type_default(hitl_type: HITLType) -> Any:  # noqa: ANN401
     """Return a safe fallback value for timeout/cancellation without needing the request object."""
     defaults: Dict[HITLType, Any] = {
         HITLType.CLARIFICATION: "",

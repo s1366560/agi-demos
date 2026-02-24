@@ -420,12 +420,12 @@ class PoolOrchestrator:
                 error_message=f"Health status changed to {new_status.value}",
             )
 
-    async def _on_failure(self, event: Any) -> None:
+    async def _on_failure(self, event: Any) -> None:  # noqa: ANN401
         """Handle failure event."""
         logger.warning(f"Failure detected: {event.instance_key} - {event.failure_type}")
         # Metrics tracked via record_recovery_attempt
 
-    async def _on_recovery(self, instance_key: str, event: Any) -> None:
+    async def _on_recovery(self, instance_key: str, event: Any) -> None:  # noqa: ANN401
         """Handle recovery success."""
         logger.info(f"Recovery successful: {instance_key}")
 
@@ -435,7 +435,7 @@ class PoolOrchestrator:
     async def _on_escalation(
         self,
         instance_key: str,
-        event: Any,
+        event: Any,  # noqa: ANN401
         reason: str,
     ) -> None:
         """Handle escalation (human intervention needed)."""
@@ -461,7 +461,7 @@ class PoolOrchestrator:
         except Exception as e:
             logger.error(f"Failed to send escalation alert: {e}")
 
-    async def _on_scale(self, instance_key: str, event: Any) -> None:
+    async def _on_scale(self, instance_key: str, event: Any) -> None:  # noqa: ANN401
         """Handle scaling event."""
         logger.info(
             f"Scaling: {instance_key} {event.direction.value} "

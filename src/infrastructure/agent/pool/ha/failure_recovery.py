@@ -108,8 +108,8 @@ class FailureRecoveryService:
 
     def __init__(
         self,
-        state_recovery_service: Optional[Any] = None,
-        pool_manager: Optional[Any] = None,
+        state_recovery_service: Optional[Any] = None,  # noqa: ANN401
+        pool_manager: Optional[Any] = None,  # noqa: ANN401
         max_failures_per_hour: int = 10,
         pattern_detection_window_minutes: int = 60,
     ):

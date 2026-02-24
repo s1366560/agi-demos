@@ -8,9 +8,15 @@ This replaces the pure-keyword SubAgentRouter while maintaining
 backward compatibility via the SubAgentRouterProtocol interface.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.domain.model.agent.subagent import SubAgent
 
@@ -30,7 +36,7 @@ class ExecutionConfigLike(Protocol):
     enable_subagent_routing: bool
 
 
-def _safe_float(value: Any, default: float) -> float:
+def _safe_float(value: Any, default: float) -> float:  # noqa: ANN401
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -56,7 +62,7 @@ class HybridRouterConfig:
     @classmethod
     def from_execution_config(
         cls, execution_config: Optional[ExecutionConfigLike]
-    ) -> "HybridRouterConfig":
+    ) -> HybridRouterConfig:
         """Build HybridRouterConfig from ExecutionConfig-like object."""
         if execution_config is None:
             return cls()
@@ -112,7 +118,7 @@ class HybridRouter:
     def __init__(
         self,
         subagents: List[SubAgent],
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
         config: Optional[HybridRouterConfig] = None,
         default_confidence_threshold: float = 0.5,
     ):

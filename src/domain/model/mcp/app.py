@@ -74,7 +74,7 @@ class MCPAppUIMetadata:
         return result
 
     @classmethod
-    def _normalize_permissions(cls, raw: Any) -> Dict[str, Any]:
+    def _normalize_permissions(cls, raw: Any) -> Dict[str, Any]:  # noqa: ANN401
         """Normalize permissions to spec format {camera: {}, microphone: {}, ...}.
 
         Accepts both legacy array format ["camera", "microphone"] and

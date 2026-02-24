@@ -1,10 +1,16 @@
 """DI Container initialization for startup."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.graph_service_port import GraphServicePort
+    from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +23,9 @@ def get_app_container() -> Optional[DIContainer]:
 
 
 def initialize_container(
-    graph_service: Any,
+    graph_service: GraphServicePort,
     redis_client: Optional[object],
-    workflow_engine: Optional[Any],
+    workflow_engine: Optional[WorkflowEnginePort],
 ) -> DIContainer:
     """
     Initialize the DI container with all services.

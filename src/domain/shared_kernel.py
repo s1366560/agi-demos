@@ -2,7 +2,7 @@ import uuid
 from abc import ABC
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -22,7 +22,7 @@ class Entity(ABC):
         """Generate a unique UUID string for entity identification."""
         return str(uuid.uuid4())
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, self.__class__):
             return False
         return self.id == other.id

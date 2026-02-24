@@ -9,9 +9,15 @@ Each sync creates a versioned snapshot of the skill's SKILL.md and
 all resource files.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -38,10 +44,10 @@ class SkillSyncTool(AgentTool):
         self,
         tenant_id: str,
         project_id: Optional[str] = None,
-        sandbox_adapter: Optional[Any] = None,
+        sandbox_adapter: Optional[SandboxPort] = None,
         sandbox_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,
-        skill_loader_tool: Optional[Any] = None,
+        session_factory: Optional[Any] = None,  # noqa: ANN401
+        skill_loader_tool: Optional[Any] = None,  # noqa: ANN401
     ) -> None:
         super().__init__(name=TOOL_NAME, description=TOOL_DESCRIPTION)
         self._tenant_id = tenant_id
@@ -56,15 +62,15 @@ class SkillSyncTool(AgentTool):
         """Set the sandbox ID (called when sandbox becomes available)."""
         self._sandbox_id = sandbox_id
 
-    def set_sandbox_adapter(self, adapter: Any) -> None:
+    def set_sandbox_adapter(self, adapter: Any) -> None:  # noqa: ANN401
         """Set the sandbox adapter (called during initialization)."""
         self._sandbox_adapter = adapter
 
-    def set_session_factory(self, factory: Any) -> None:
+    def set_session_factory(self, factory: Any) -> None:  # noqa: ANN401
         """Set the async session factory for DB access."""
         self._session_factory = factory
 
-    def set_skill_loader_tool(self, tool: Any) -> None:
+    def set_skill_loader_tool(self, tool: Any) -> None:  # noqa: ANN401
         """Set reference to SkillLoaderTool for cache invalidation."""
         self._skill_loader_tool = tool
 

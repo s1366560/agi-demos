@@ -154,7 +154,7 @@ class ModelError(LLMError):
         self,
         message: str,
         model: Optional[str] = None,
-        response: Optional[Any] = None,
+        response: Optional[Any] = None,  # noqa: ANN401
         **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, model=model, **kwargs)

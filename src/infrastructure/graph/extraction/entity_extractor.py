@@ -7,9 +7,11 @@ This module provides:
 - Support for custom entity types
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from src.infrastructure.graph.dedup import HashDeduplicator
@@ -21,6 +23,9 @@ from src.infrastructure.graph.extraction.prompts import (
 from src.infrastructure.graph.schemas import EntityNode
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
 
 # Similarity threshold for entity deduplication
 DEDUPE_SIMILARITY_THRESHOLD = 0.92
@@ -40,7 +45,7 @@ class EntityExtractor:
 
     def __init__(
         self,
-        llm_client: Any,
+        llm_client: LLMClient,
         embedding_service: EmbeddingService,
         model: Optional[str] = None,
         temperature: float = 0.0,

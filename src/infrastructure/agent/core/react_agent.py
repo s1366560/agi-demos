@@ -17,6 +17,8 @@ Features:
 Reference: OpenCode SessionProcessor architecture
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import logging
@@ -64,6 +66,8 @@ from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.domain.ports.services.graph_service_port import GraphServicePort
 
 logger = logging.getLogger(__name__)
 
@@ -161,13 +165,13 @@ class ReActAgent:
         # Project root for custom rules loading
         project_root: Optional[Path] = None,
         # Artifact service for rich output handling
-        artifact_service: Optional["ArtifactService"] = None,
+        artifact_service: Optional[ArtifactService] = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
         # Skill resource sync service for sandbox resource injection
-        resource_sync_service: Optional[Any] = None,
+        resource_sync_service: Optional[Any] = None,  # noqa: ANN401
         # Graph service for SubAgent memory sharing (Phase 5.1)
-        graph_service: Optional[Any] = None,
+        graph_service: Optional[GraphServicePort] = None,
         # ====================================================================
         # Hot-plug support: Optional tool provider function for dynamic tools
         # When provided, tools are fetched at each stream() call instead of
@@ -180,15 +184,15 @@ class ReActAgent:
         # when using the Agent Session Pool for component reuse.
         # ====================================================================
         _cached_tool_definitions: Optional[List[Any]] = None,
-        _cached_system_prompt_manager: Optional[Any] = None,
-        _cached_subagent_router: Optional[Any] = None,
+        _cached_system_prompt_manager: Optional[Any] = None,  # noqa: ANN401
+        _cached_subagent_router: Optional[Any] = None,  # noqa: ANN401
         # Plan Mode detection
         plan_detector: Optional[PlanDetector] = None,
         # Memory auto-recall / auto-capture preprocessors
-        memory_recall: Optional[Any] = None,
-        memory_capture: Optional[Any] = None,
-        memory_flush: Optional[Any] = None,
-        tool_selection_pipeline: Optional[Any] = None,
+        memory_recall: Optional[Any] = None,  # noqa: ANN401
+        memory_capture: Optional[Any] = None,  # noqa: ANN401
+        memory_flush: Optional[Any] = None,  # noqa: ANN401
+        tool_selection_pipeline: Optional[Any] = None,  # noqa: ANN401
         tool_selection_max_tools: int = 40,
         tool_selection_semantic_backend: str = "embedding_vector",
         router_mode_tool_count_threshold: int = 100,
@@ -502,7 +506,7 @@ class ReActAgent:
     class _ExecutionRouterSkillMatcher:
         """Skill matcher adapter for ExecutionRouter."""
 
-        def __init__(self, agent: "ReActAgent") -> None:
+        def __init__(self, agent: ReActAgent) -> None:
             self._agent = agent
 
         def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
@@ -516,7 +520,7 @@ class ReActAgent:
     class _ExecutionRouterSubAgentMatcher:
         """SubAgent matcher adapter for ExecutionRouter."""
 
-        def __init__(self, agent: "ReActAgent") -> None:
+        def __init__(self, agent: ReActAgent) -> None:
             self._agent = agent
 
         def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
@@ -525,7 +529,7 @@ class ReActAgent:
             match = self._agent._match_subagent(query)
             return match.subagent.name if match.subagent else None
 
-        def get_subagent(self, name: str) -> Any:
+        def get_subagent(self, name: str) -> Any:  # noqa: ANN401
             for subagent in self._agent.subagents:
                 if subagent.name == name:
                     return subagent
@@ -2089,7 +2093,7 @@ class ReActAgent:
             filtered_tools = list(current_tool_definitions)
         existing_tool_names = {tool.name for tool in filtered_tools}
 
-        def _append_nested_tool(tool_instance: Any) -> None:
+        def _append_nested_tool(tool_instance: Any) -> None:  # noqa: ANN401
             if tool_instance.name in existing_tool_names:
                 return
             filtered_tools.append(
@@ -2899,7 +2903,7 @@ class ReActAgent:
     def _build_subagent_completion_payload(
         cls,
         *,
-        run: Any,
+        run: Any,  # noqa: ANN401
         fallback_summary: str,
         fallback_tokens_used: Optional[int],
         fallback_execution_time_ms: Optional[int],

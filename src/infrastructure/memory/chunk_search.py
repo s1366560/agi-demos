@@ -9,13 +9,21 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.infrastructure.memory.mmr import mmr_rerank
 from src.infrastructure.memory.query_expansion import extract_keywords
 from src.infrastructure.memory.temporal_decay import apply_temporal_decay
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
+        SqlChunkRepository,
+    )
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 
 RRF_K = 60  # Same K as existing HybridSearch
 
@@ -57,15 +65,15 @@ class ChunkHybridSearch:
 
     def __init__(
         self,
-        embedding_service: Any,
-        session_factory: Any = None,
+        embedding_service: EmbeddingService,
+        session_factory: Optional[async_sessionmaker[AsyncSession]] = None,
         config: Optional[ChunkSearchConfig] = None,
     ):
         self._embedding = embedding_service
         self._session_factory = session_factory
         self._config = config or ChunkSearchConfig()
 
-    async def _get_chunk_repo(self) -> Any:
+    async def _get_chunk_repo(self) -> Optional[SqlChunkRepository]:
         """Create a chunk repository with a fresh DB session."""
         if self._session_factory is None:
             return None
@@ -110,7 +118,7 @@ class ChunkHybridSearch:
 
     async def _do_search(
         self,
-        chunk_repo: Any,
+        chunk_repo: SqlChunkRepository,
         query: str,
         project_id: str,
         limit: int,

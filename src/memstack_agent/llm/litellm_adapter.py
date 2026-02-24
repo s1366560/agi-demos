@@ -1,11 +1,10 @@
 """LiteLLM adapter for memstack-agent.
-
-Provides a unified LLM client using LiteLLM for 100+ provider support.
 """
+from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 
 import litellm
 from litellm import acompletion
@@ -13,6 +12,10 @@ from litellm import acompletion
 from memstack_agent.llm.config import LLMConfig
 from memstack_agent.llm.protocol import LLMClient
 from memstack_agent.llm.types import ChatResponse, Message, StreamChunk, ToolCall, Usage
+
+if TYPE_CHECKING:
+    from litellm import ModelResponse
+
 from memstack_agent.tools.protocol import ToolDefinition
 
 logger = logging.getLogger(__name__)
@@ -149,7 +152,7 @@ class LiteLLMAdapter(LLMClient):
             )
         return tool_calls
 
-    def _extract_usage(self, response: Any) -> Usage:
+    def _extract_usage(self, response: ModelResponse) -> Usage:
         """Extract token usage from LiteLLM response.
 
         Args:
@@ -276,7 +279,7 @@ class LiteLLMAdapter(LLMClient):
             logger.error(f"LiteLLM stream error: {e}")
             raise
 
-    def with_config(self, **kwargs: Any) -> "LiteLLMAdapter":  # noqa: ANN401
+    def with_config(self, **kwargs: Any) -> LiteLLMAdapter:  # noqa: ANN401
         """Create a new adapter with modified configuration.
 
         Args:

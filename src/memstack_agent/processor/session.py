@@ -82,7 +82,7 @@ class SessionProcessor:
         self,
         tool_name: str,
         tool_input: dict[str, Any],
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """Execute a single tool call.
 
         Args:

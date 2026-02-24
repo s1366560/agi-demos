@@ -123,7 +123,7 @@ class PluginRuntimeApi:
     def register_service(
         self,
         service_name: str,
-        service: Any,
+        service: Any,  # noqa: ANN401
         *,
         overwrite: bool = False,
     ) -> None:
@@ -138,7 +138,7 @@ class PluginRuntimeApi:
     def register_provider(
         self,
         provider_name: str,
-        provider: Any,
+        provider: Any,  # noqa: ANN401
         *,
         overwrite: bool = False,
     ) -> None:

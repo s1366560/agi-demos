@@ -7,15 +7,24 @@ events to the appropriate channel adapter (Feishu, Slack, etc.).
 The agent core remains unchanged; the bridge is purely additive.
 """
 
+
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional
 
 from src.configuration.config import get_settings
 from src.domain.model.channels.message import ChannelAdapter
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (
+        CardStreamState,
+    )
+    from src.infrastructure.channels.connection_manager import ChannelConnectionManager
 
 # Type alias for event handler coroutines
 EventHandler = Callable[
@@ -62,7 +71,7 @@ class ChannelEventBridge:
 
     def __init__(
         self,
-        channel_manager: Any = None,
+        channel_manager: Optional[ChannelConnectionManager] = None,
         *,
         subagent_focus_ttl_seconds: Optional[float] = None,
     ) -> None:
@@ -162,7 +171,7 @@ class ChannelEventBridge:
                 f"for conversation {conversation_id}: {e}"
             )
 
-    async def _lookup_binding(self, conversation_id: str) -> Any:
+    async def _lookup_binding(self, conversation_id: str) -> Any:  # noqa: ANN401
         """Reverse-lookup channel binding from conversation_id."""
         try:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
@@ -203,7 +212,7 @@ class ChannelEventBridge:
     # Card state management (for unified CardKit HITL)
     # ------------------------------------------------------------------
 
-    def register_card_state(self, conversation_id: str, card_state: Any) -> None:
+    def register_card_state(self, conversation_id: str, card_state: CardStreamState) -> None:
         """Register a CardStreamState for unified HITL on a streaming card.
 
         Called by ``_invoke_agent()`` when CardKit streaming starts so HITL
@@ -215,7 +224,7 @@ class ChannelEventBridge:
         """Remove card state tracking for a conversation."""
         self._card_states.pop(conversation_id, None)
 
-    def get_card_state(self, conversation_id: str) -> Any:
+    def get_card_state(self, conversation_id: str) -> Optional[CardStreamState]:
         """Get the active CardStreamState for a conversation (or None)."""
         return self._card_states.get(conversation_id)
 
@@ -319,7 +328,7 @@ class ChannelEventBridge:
     async def _add_hitl_to_streaming_card(
         self,
         adapter: ChannelAdapter,
-        card_state: Any,
+        card_state: CardStreamState,
         event_type: str,
         request_id: str,
         event_data: Dict[str, Any],

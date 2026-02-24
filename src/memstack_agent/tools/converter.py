@@ -29,7 +29,7 @@ _TYPE_MAPPING: Dict[type, Dict[str, Any]] = {
 }
 
 
-def infer_type_schema(type_hint: Any) -> Dict[str, Any]:
+def infer_type_schema(type_hint: Any) -> Dict[str, Any]:  # noqa: ANN401
     """Infer JSON Schema from a Python type hint.
 
     Supports:
@@ -143,7 +143,7 @@ def _parse_param_docstring(docstring: str) -> Dict[str, str]:
     return result
 
 
-def _infer_dataclass_schema(dataclass_type: Any) -> Dict[str, Any]:
+def _infer_dataclass_schema(dataclass_type: Any) -> Dict[str, Any]:  # noqa: ANN401
     """Infer JSON Schema from a dataclass type.
 
     Args:

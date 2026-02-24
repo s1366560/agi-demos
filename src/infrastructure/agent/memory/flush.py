@@ -11,7 +11,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+
 
 from src.infrastructure.memory.prompt_safety import looks_like_prompt_injection
 
@@ -58,9 +63,9 @@ class MemoryFlushService:
 
     def __init__(
         self,
-        llm_client: Any,
-        embedding_service: Any = None,
-        session_factory: Any = None,
+        llm_client: LLMClient,
+        embedding_service: EmbeddingService = None,
+        session_factory: Any = None,  # noqa: ANN401
     ):
         self._llm_client = llm_client
         self._embedding = embedding_service
@@ -210,7 +215,7 @@ class MemoryFlushService:
             logger.debug(f"Memory flush extraction failed ({type(self._llm_client).__name__}): {e}")
             return []
 
-    async def _get_chunk_repo(self) -> Optional[Any]:
+    async def _get_chunk_repo(self) -> Optional[Any]:  # noqa: ANN401
         """Create chunk repo with a fresh DB session."""
         if self._session_factory is None:
             return None
@@ -225,7 +230,7 @@ class MemoryFlushService:
             logger.debug(f"Failed to create chunk repo for flush: {e}")
             return None
 
-    async def _is_duplicate(self, chunk_repo: Any, embedding: list[float], project_id: str) -> bool:
+    async def _is_duplicate(self, chunk_repo: Any, embedding: list[float], project_id: str) -> bool:  # noqa: ANN401
         """Check if a memory already exists with high similarity."""
         try:
             similar = await chunk_repo.find_similar(embedding, project_id, threshold=0.95)
@@ -235,7 +240,7 @@ class MemoryFlushService:
 
     async def _store_chunk(
         self,
-        chunk_repo: Optional[Any],
+        chunk_repo: Optional[Any],  # noqa: ANN401
         content: str,
         category: str,
         embedding: Optional[list[float]],

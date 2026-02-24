@@ -366,7 +366,7 @@ class ComposeToolsUseCase:
     def _evaluate_condition(
         self,
         tool_index: int,
-        current_output: Any,
+        current_output: Any,  # noqa: ANN401
         execution_context: Dict[str, Any],
         conditions: List[Dict[str, Any]],
     ) -> bool:
@@ -424,7 +424,7 @@ class ComposeToolsUseCase:
     async def _execute_tool_step(
         self,
         tool: AgentToolBase,
-        previous_output: Optional[Any],
+        previous_output: Optional[Any],  # noqa: ANN401
         execution_context: Dict[str, Any],
         is_chained: bool,
     ) -> Dict[str, Any]:

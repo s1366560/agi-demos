@@ -77,7 +77,7 @@ class FeishuAdapter:
     def connected(self) -> bool:
         return self._connected
 
-    def _build_rest_client(self) -> Any:
+    def _build_rest_client(self) -> Any:  # noqa: ANN401
         """Build a lark_oapi REST Client with proper domain configuration."""
         from lark_oapi import FEISHU_DOMAIN, LARK_DOMAIN, Client
 
@@ -208,7 +208,7 @@ class FeishuAdapter:
 
         raise RuntimeError("Feishu websocket startup timeout")
 
-    def _run_websocket(self, event_handler: Any, domain: str) -> None:
+    def _run_websocket(self, event_handler: Any, domain: str) -> None:  # noqa: ANN401
         """Run WebSocket client."""
         ws_loop: Optional[asyncio.AbstractEventLoop] = None
         try:
@@ -256,7 +256,7 @@ class FeishuAdapter:
             self._ws_loop = None
             self._ws_ready.clear()
 
-    def _on_message_receive(self, event: Any) -> None:
+    def _on_message_receive(self, event: Any) -> None:  # noqa: ANN401
         """Handle incoming message event from WebSocket."""
         try:
             # DEBUG: Log raw event
@@ -320,29 +320,29 @@ class FeishuAdapter:
             logger.error(f"[Feishu] Error processing message: {e}")
             self._handle_error(e)
 
-    def _on_message_recalled(self, event: Any) -> None:
+    def _on_message_recalled(self, event: Any) -> None:  # noqa: ANN401
         """Handle message recalled event."""
         logger.debug("[Feishu] Message recalled")
 
-    def _on_message_read(self, event: Any) -> None:
+    def _on_message_read(self, event: Any) -> None:  # noqa: ANN401
         """Handle message read receipt event (no-op, suppresses SDK warning)."""
         logger.debug("[Feishu] Message read receipt received")
 
-    def _on_bot_added(self, event: Any) -> None:
+    def _on_bot_added(self, event: Any) -> None:  # noqa: ANN401
         """Handle bot added to chat event."""
         chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot added to chat: {chat_id}")
 
-    def _on_bot_deleted(self, event: Any) -> None:
+    def _on_bot_deleted(self, event: Any) -> None:  # noqa: ANN401
         """Handle bot removed from chat event."""
         chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
 
-    def _on_bot_p2p_chat_entered(self, event: Any) -> None:
+    def _on_bot_p2p_chat_entered(self, event: Any) -> None:  # noqa: ANN401
         """Handle user entering bot P2P chat (no-op, suppresses SDK warning)."""
         logger.debug("[Feishu] User entered bot P2P chat")
 
-    def _on_card_action(self, event: Any) -> Any:
+    def _on_card_action(self, event: Any) -> Any:  # noqa: ANN401
         """Handle interactive card button click (card.action.trigger callback).
 
         The lark_oapi SDK deserializes the callback into typed objects:
@@ -558,7 +558,7 @@ class FeishuAdapter:
             self._sender_name_cache[sender_id] = name
         return name
 
-    def _extract_sender_open_id(self, sender_id_data: Any) -> str:
+    def _extract_sender_open_id(self, sender_id_data: Any) -> str:  # noqa: ANN401
         """Extract sender open_id from SDK dict/object payloads."""
         if isinstance(sender_id_data, dict):
             open_id = sender_id_data.get("open_id")
@@ -568,7 +568,7 @@ class FeishuAdapter:
         open_id = getattr(sender_id_data, "open_id", None)
         return open_id if isinstance(open_id, str) else ""
 
-    def _extract_mention_open_id(self, mention_data: Any) -> str:
+    def _extract_mention_open_id(self, mention_data: Any) -> str:  # noqa: ANN401
         """Extract mention open_id from SDK dict/object payloads."""
         if isinstance(mention_data, dict):
             mention_id = mention_data.get("id")
@@ -591,7 +591,7 @@ class FeishuAdapter:
         mention_open_id = getattr(mention_data, "open_id", None)
         return mention_open_id if isinstance(mention_open_id, str) else ""
 
-    def _extract_mentions(self, mentions_data: Any) -> List[str]:
+    def _extract_mentions(self, mentions_data: Any) -> List[str]:  # noqa: ANN401
         """Normalize mentions payload and return mentioned open_id list."""
         if not mentions_data:
             return []
@@ -612,7 +612,7 @@ class FeishuAdapter:
                 mention_open_ids.append(mention_open_id)
         return mention_open_ids
 
-    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:
+    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:  # noqa: ANN401
         """Parse message content based on type."""
         logger.info(
             f"[FeishuAdapter] Parsing message - type={message_type}, "

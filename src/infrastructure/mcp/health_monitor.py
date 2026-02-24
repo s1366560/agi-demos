@@ -11,14 +11,19 @@ Features:
 - Restart count tracking to prevent infinite restarts
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 
 @dataclass
@@ -87,7 +92,7 @@ class MCPServerHealthMonitor:
 
     def __init__(
         self,
-        sandbox_adapter: Any,
+        sandbox_adapter: MCPSandboxAdapter,
         check_interval_seconds: float = 30.0,
         health_check_timeout: float = 10.0,
     ):
@@ -536,7 +541,7 @@ class MCPServerHealthMonitor:
         return servers
 
     @staticmethod
-    def _parse_tool_result(result: Dict[str, Any]) -> Any:
+    def _parse_tool_result(result: Dict[str, Any]) -> Any:  # noqa: ANN401
         """Parse tool result content, extracting JSON if present."""
         content = result.get("content", [])
         if not content:

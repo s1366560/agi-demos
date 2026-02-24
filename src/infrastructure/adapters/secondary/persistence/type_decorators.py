@@ -113,7 +113,7 @@ class ValidatedJSON(TypeDecorator):
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: Any, dialect: Dialect) -> Optional[dict]:
+    def process_bind_param(self, value: Any, dialect: Dialect) -> Optional[dict]:  # noqa: ANN401
         """Validate and convert value for storage."""
         if value is None:
             return None
@@ -129,7 +129,7 @@ class ValidatedJSON(TypeDecorator):
             return value
         raise ValueError(f"Expected dict, got {type(value)}")
 
-    def process_result_value(self, value: Any, dialect: Dialect) -> Any:
+    def process_result_value(self, value: Any, dialect: Dialect) -> Any:  # noqa: ANN401
         """Return stored value as-is (dict)."""
         return value
 

@@ -4,9 +4,15 @@ This tool helps agents diagnose issues with MCP servers running inside
 sandboxes by collecting logs, process info, and error details.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -28,7 +34,7 @@ class DebugMCPServerTool(AgentTool):
 
     def __init__(
         self,
-        sandbox_adapter: Any,
+        sandbox_adapter: SandboxPort,
         sandbox_id: str,
     ):
         """Initialize the debug tool.

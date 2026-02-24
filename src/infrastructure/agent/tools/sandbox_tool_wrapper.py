@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 from src.infrastructure.agent.permission.rules import classify_sandbox_tool_permission
 from src.infrastructure.agent.tools.base import AgentTool
@@ -36,7 +40,7 @@ class SandboxMCPToolWrapper(AgentTool):
         sandbox_id: str,
         tool_name: str,
         tool_schema: Dict[str, Any],
-        sandbox_adapter: Any,
+        sandbox_adapter: SandboxPort,
         retry_config: Optional[RetryConfig] = None,
     ):
         """

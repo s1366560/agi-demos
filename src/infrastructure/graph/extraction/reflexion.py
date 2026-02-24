@@ -7,9 +7,11 @@ This module provides:
 - Iterative improvement of extraction quality
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
@@ -20,6 +22,10 @@ from src.infrastructure.graph.extraction.prompts import (
 from src.infrastructure.graph.schemas import EntityNode
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.graph.extraction.entity_extractor import EntityExtractor
 
 
 class ReflexionChecker:
@@ -40,7 +46,7 @@ class ReflexionChecker:
 
     def __init__(
         self,
-        llm_client: Any,
+        llm_client: LLMClient,
         embedding_service: EmbeddingService,
         model: Optional[str] = None,
         temperature: float = 0.0,
@@ -149,7 +155,7 @@ class ReflexionChecker:
     async def extract_with_reflexion(
         self,
         content: str,
-        entity_extractor: Any,  # EntityExtractor
+        entity_extractor: EntityExtractor,
         entity_types: Optional[str] = None,
         previous_context: Optional[str] = None,
         project_id: Optional[str] = None,

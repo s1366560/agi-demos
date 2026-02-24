@@ -7,7 +7,7 @@ Uses the RedisDistributedLock class for actual locking operations.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.domain.ports.services.distributed_lock_port import (
     DistributedLockPort,
@@ -19,6 +19,10 @@ from src.infrastructure.adapters.secondary.cache.redis_lock import (
     RedisDistributedLock,
     RedisLockManager,
 )
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
 
 
 class RedisDistributedLockAdapter(DistributedLockPort):
@@ -40,7 +44,7 @@ class RedisDistributedLockAdapter(DistributedLockPort):
 
     def __init__(
         self,
-        redis: Any,
+        redis: Redis,
         namespace: str = "memstack:lock",
         default_ttl: int = 60,
         retry_interval: float = 0.1,

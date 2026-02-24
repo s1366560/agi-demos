@@ -8,7 +8,10 @@ import logging
 import time as time_module
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.model.agent.hitl.hitl_types import HITLPendingException
 
 import redis.asyncio as aioredis
 
@@ -250,7 +253,7 @@ async def execute_project_chat(
 async def handle_hitl_pending(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
-    hitl_exception: Any,
+    hitl_exception: HITLPendingException,
     last_event_time_us: int = 0,
     last_event_counter: int = 0,
 ) -> ProjectChatResult:

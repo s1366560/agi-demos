@@ -1,11 +1,9 @@
 """Sandbox Orchestrator - Unified sandbox service orchestration layer.
-
-This module provides a unified interface for sandbox operations,
 used by both REST API and Agent Tools to eliminate code duplication.
-
-Supports both cloud sandboxes (Docker containers) and local sandboxes
 (user's machine via WebSocket tunnel).
 """
+
+from __future__ import annotations
 
 import json
 import logging
@@ -13,7 +11,10 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from src.domain.ports.services.sandbox_port import SandboxPort
+
 if TYPE_CHECKING:
+    from src.application.services.sandbox_event_service import SandboxEventPublisher
     from src.infrastructure.adapters.secondary.sandbox.local_sandbox_adapter import (
         LocalSandboxAdapter,
     )
@@ -120,10 +121,10 @@ class SandboxOrchestrator:
 
     def __init__(
         self,
-        sandbox_adapter: Any,  # SandboxPort (MCPSandboxAdapter for cloud)
-        event_publisher: Optional[Any] = None,  # Reserved for future use
+        sandbox_adapter: SandboxPort,  # SandboxPort (MCPSandboxAdapter for cloud)
+        event_publisher: Optional[SandboxEventPublisher] = None,  # Reserved for future use
         default_timeout: int = 30,
-        local_sandbox_adapter: Optional["LocalSandboxAdapter"] = None,
+        local_sandbox_adapter: Optional[LocalSandboxAdapter] = None,
     ) -> None:
         """
         Initialize the orchestrator.
@@ -160,7 +161,7 @@ class SandboxOrchestrator:
         """Check if a sandbox is a local sandbox."""
         return self.get_sandbox_type(sandbox_id) == "local"
 
-    def _get_adapter_for_sandbox(self, sandbox_id: str) -> Any:
+    def _get_adapter_for_sandbox(self, sandbox_id: str) -> SandboxPort:
         """Get the appropriate adapter for a sandbox."""
         if self.is_local_sandbox(sandbox_id) and self._local_adapter:
             return self._local_adapter

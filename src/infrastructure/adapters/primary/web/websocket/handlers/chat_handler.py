@@ -4,15 +4,20 @@ Chat Handlers for WebSocket
 Handles send_message and stop_session message types.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+
+if TYPE_CHECKING:
+    from src.application.services.agent_service import AgentService
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +237,7 @@ class StopSessionHandler(WebSocketMessageHandler):
 
 
 async def stream_agent_to_websocket(
-    agent_service: Any,
+    agent_service: AgentService,
     context: MessageContext,
     conversation_id: str,
     user_message: str,
@@ -308,7 +313,7 @@ async def stream_agent_to_websocket(
 
 
 async def stream_hitl_response_to_websocket(
-    agent_service: Any,
+    agent_service: AgentService,
     session_id: str,
     conversation_id: str,
     message_id: Optional[str] = None,

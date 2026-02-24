@@ -97,7 +97,7 @@ class DuplicateEntityError(RepositoryError):
         self,
         entity_type: str,
         field_name: str,
-        field_value: Any,
+        field_value: Any,  # noqa: ANN401
         message: Optional[str] = None,
     ) -> None:
         self.entity_type = entity_type

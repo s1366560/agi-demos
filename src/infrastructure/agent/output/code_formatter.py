@@ -27,7 +27,7 @@ class CodeFormatter(OutputFormatter):
         self._language = language
         self._indent = indent
 
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:
+    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
         """
         Format data as a code block.
 
@@ -53,14 +53,14 @@ class CodeFormatter(OutputFormatter):
             # Default: just wrap in code block
             return f"```{language}\n{data!s}\n```"
 
-    def _format_json(self, data: Any) -> str:
+    def _format_json(self, data: Any) -> str:  # noqa: ANN401
         """Format as JSON."""
         import json
 
         json_str = json.dumps(data, indent=self._indent, ensure_ascii=False)
         return f"```json\n{json_str}\n```"
 
-    def _format_yaml(self, data: Any) -> str:
+    def _format_yaml(self, data: Any) -> str:  # noqa: ANN401
         """Format as YAML."""
         # Simple YAML formatter (basic implementation)
         lines = ["```yaml"]
@@ -68,7 +68,7 @@ class CodeFormatter(OutputFormatter):
         lines.append("```")
         return "\n".join(lines)
 
-    def _yaml_format_value(self, value: Any, indent: int) -> list[str]:
+    def _yaml_format_value(self, value: Any, indent: int) -> list[str]:  # noqa: ANN401
         """Recursively format a value as YAML."""
         lines = []
         prefix = " " * indent
@@ -92,7 +92,7 @@ class CodeFormatter(OutputFormatter):
 
         return lines
 
-    def _format_python(self, data: Any) -> str:
+    def _format_python(self, data: Any) -> str:  # noqa: ANN401
         """Format as Python code."""
         lines = ["```python"]
 
@@ -115,7 +115,7 @@ class CodeFormatter(OutputFormatter):
         lines.append("```")
         return "\n".join(lines)
 
-    def _format_javascript(self, data: Any) -> str:
+    def _format_javascript(self, data: Any) -> str:  # noqa: ANN401
         """Format as JavaScript code."""
         import json
 

@@ -86,7 +86,7 @@ class TTLCache:
         self._max_size = max_size
         self._lock = asyncio.Lock()
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Optional[Any]:  # noqa: ANN401
         """Get value if exists and not expired."""
         async with self._lock:
             entry = self._entries.get(key)
@@ -98,7 +98,7 @@ class TTLCache:
             entry.touch()
             return entry.value
 
-    async def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:
+    async def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:  # noqa: ANN401
         """Set a value with optional custom TTL."""
         async with self._lock:
             # Check if cleanup needed

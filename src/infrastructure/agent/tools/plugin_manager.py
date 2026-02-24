@@ -945,7 +945,7 @@ class PluginManagerTool(AgentTool):
     def _build_reload_plan(
         self,
         *,
-        manager: Any,
+        manager: Any,  # noqa: ANN401
         action: str,
         plugin_name: Optional[str],
         dry_run: bool,
@@ -981,7 +981,7 @@ class PluginManagerTool(AgentTool):
         }
         return build_mutation_fingerprint(TOOL_NAME, normalized_payload)
 
-    def _snapshot_plugin_inventory(self, manager: Any) -> list[Dict[str, Any]]:
+    def _snapshot_plugin_inventory(self, manager: Any) -> list[Dict[str, Any]]:  # noqa: ANN401
         plugins, _diagnostics = manager.list_plugins(tenant_id=self._tenant_id)
         snapshot: list[Dict[str, Any]] = []
         for plugin in plugins:
@@ -1208,7 +1208,7 @@ class PluginManagerTool(AgentTool):
         )
 
     @staticmethod
-    def _as_bool(value: Any) -> bool:
+    def _as_bool(value: Any) -> bool:  # noqa: ANN401
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
@@ -1240,7 +1240,7 @@ class PluginManagerTool(AgentTool):
         }
 
 
-def _serialize_diagnostic(diagnostic: Any) -> Dict[str, Any]:
+def _serialize_diagnostic(diagnostic: Any) -> Dict[str, Any]:  # noqa: ANN401
     return {
         "plugin_name": diagnostic.plugin_name,
         "code": diagnostic.code,

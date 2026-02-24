@@ -181,7 +181,7 @@ class RayHITLHandler:
         hitl_type: HITLType,
         request_data: Dict[str, Any],
         timeout_seconds: float,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         strategy = self._get_strategy(hitl_type)
 
         if self._preinjected_response:

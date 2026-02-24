@@ -16,13 +16,19 @@ Usage:
         # Use legacy pool
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +147,7 @@ class FeatureFlags:
     def __init__(
         self,
         flags: Optional[Dict[str, FeatureFlagConfig]] = None,
-        redis_client: Optional[Any] = None,
+        redis_client: Optional[Redis] = None,
     ):
         # Use default flags, then override with provided flags
         self._flags: Dict[str, FeatureFlagConfig] = dict(DEFAULT_FLAGS)

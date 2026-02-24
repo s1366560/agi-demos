@@ -211,7 +211,7 @@ class PluginStateStore:
         return plugins
 
 
-def _normalize_string_list(value: Any) -> list[str]:
+def _normalize_string_list(value: Any) -> list[str]:  # noqa: ANN401
     if not isinstance(value, (list, tuple)):
         return []
     normalized: list[str] = []

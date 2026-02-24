@@ -6,10 +6,16 @@ Auto-detection of MCP Apps (tools with _meta.ui) happens through the existing
 pipeline.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 from src.domain.events.agent_events import AgentMCPAppRegisteredEvent
 from src.infrastructure.agent.tools.base import AgentTool
@@ -44,9 +50,9 @@ class RegisterMCPServerTool(AgentTool):
         self,
         tenant_id: str,
         project_id: str,
-        sandbox_adapter: Optional[Any] = None,
+        sandbox_adapter: Optional[SandboxPort] = None,
         sandbox_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,
+        session_factory: Optional[Any] = None,  # noqa: ANN401
     ) -> None:
         super().__init__(name=TOOL_NAME, description=TOOL_DESCRIPTION)
         self._tenant_id = tenant_id
@@ -412,7 +418,7 @@ class RegisterMCPServerTool(AgentTool):
         return result.get("error_message", "Unknown error")
 
     @staticmethod
-    def _parse_result(result: Dict[str, Any]) -> Any:
+    def _parse_result(result: Dict[str, Any]) -> Any:  # noqa: ANN401
         """Parse MCP tool call result, extracting text content."""
         if not result:
             return {}

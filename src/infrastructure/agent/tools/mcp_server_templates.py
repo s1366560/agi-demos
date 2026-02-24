@@ -4,9 +4,15 @@ This module provides templates for common MCP server patterns,
 enabling agents to quickly scaffold new servers with best practices.
 """
 
+from __future__ import annotations
+
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -388,7 +394,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
 
     def __init__(
         self,
-        sandbox_adapter: Any,
+        sandbox_adapter: SandboxPort,
         sandbox_id: str,
         workspace_path: str = "/workspace",
     ):

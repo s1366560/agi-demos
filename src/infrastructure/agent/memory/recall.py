@@ -28,8 +28,8 @@ class MemoryRecallPreprocessor:
 
     def __init__(
         self,
-        chunk_search: Any = None,
-        graph_search: Any = None,
+        chunk_search: Any = None,  # noqa: ANN401
+        graph_search: Any = None,  # noqa: ANN401
     ):
         self._chunk_search = chunk_search
         self._graph_search = graph_search

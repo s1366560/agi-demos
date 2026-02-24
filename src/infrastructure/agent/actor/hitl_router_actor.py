@@ -149,7 +149,7 @@ class HITLStreamRouterActor:
         tenant_id: str,
         project_id: str,
         agent_mode: str,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         settings = get_settings()
         ray_settings = get_ray_settings()
         actor_id = ProjectAgentActor.actor_id(tenant_id, project_id, agent_mode)

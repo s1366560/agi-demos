@@ -88,7 +88,7 @@ class SandboxValidationError(SandboxError):
         self,
         message: str,
         field: Optional[str] = None,
-        value: Optional[Any] = None,
+        value: Optional[Any] = None,  # noqa: ANN401
     ):
         super().__init__(message, None, "validate")
         self.field = field

@@ -5,11 +5,16 @@ this responder converts the card action into a standard HITL response
 using the same flow as the Web UI ``POST /api/v1/agent/hitl/respond``.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class HITLChannelResponder:
@@ -78,7 +83,7 @@ class HITLChannelResponder:
 
     async def _submit_response(
         self,
-        session: Any,
+        session: AsyncSession,
         request_id: str,
         hitl_type: str,
         response_data: Dict[str, Any],

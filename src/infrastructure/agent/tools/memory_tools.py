@@ -29,8 +29,8 @@ class MemorySearchTool(AgentTool):
 
     def __init__(
         self,
-        chunk_search: Any,
-        graph_service: Any = None,
+        chunk_search: Any,  # noqa: ANN401
+        graph_service: Any = None,  # noqa: ANN401
         project_id: str = "",
     ):
         super().__init__(

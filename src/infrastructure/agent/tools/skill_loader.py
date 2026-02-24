@@ -13,6 +13,8 @@ Features:
 - Tier-based progressive loading
 """
 
+from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
@@ -52,9 +54,9 @@ class SkillLoaderTool(AgentTool):
         tenant_id: str,
         project_id: Optional[str] = None,
         agent_mode: str = "default",
-        permission_manager: Optional["PermissionManager"] = None,
+        permission_manager: Optional[PermissionManager] = None,
         session_id: Optional[str] = None,
-        resource_sync_service: Optional["SkillResourceSyncService"] = None,
+        resource_sync_service: Optional[SkillResourceSyncService] = None,
         sandbox_id: Optional[str] = None,
     ):
         """
@@ -405,7 +407,7 @@ class SkillLoaderTool(AgentTool):
         """
         self._session_id = session_id
 
-    def set_permission_manager(self, permission_manager: "PermissionManager") -> None:
+    def set_permission_manager(self, permission_manager: PermissionManager) -> None:
         """
         Set the permission manager for access control.
 
@@ -423,7 +425,7 @@ class SkillLoaderTool(AgentTool):
         """
         self._sandbox_id = sandbox_id
 
-    def set_resource_sync_service(self, sync_service: "SkillResourceSyncService") -> None:
+    def set_resource_sync_service(self, sync_service: SkillResourceSyncService) -> None:
         """
         Set the resource sync service for sandbox resource injection.
 

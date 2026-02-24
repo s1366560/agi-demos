@@ -239,7 +239,7 @@ def generate_session_key(
 # ============================================================================
 
 
-async def get_system_prompt_manager() -> Any:
+async def get_system_prompt_manager() -> Any:  # noqa: ANN401
     """Get or create the global SystemPromptManager singleton.
 
     Returns:
@@ -470,7 +470,7 @@ async def get_or_create_subagent_router(
     subagents: List[Any],
     subagents_hash: Optional[str] = None,
     match_threshold: float = 0.5,
-) -> Optional[Any]:
+) -> Optional[Any]:  # noqa: ANN401
     """Get or create cached SubAgentRouter with built keyword index.
 
     Args:
@@ -556,7 +556,7 @@ async def get_or_create_agent_session(
     tools: Dict[str, Any],
     skills: Optional[List[Any]] = None,
     subagents: Optional[List[Any]] = None,
-    processor_config: Optional[Any] = None,
+    processor_config: Optional[Any] = None,  # noqa: ANN401
     subagent_match_threshold: float = 0.5,
 ) -> AgentSessionContext:
     """Get or create an agent session context with cached components.
@@ -1057,7 +1057,7 @@ async def get_or_create_project_session(
     tools: Dict[str, Any],
     skills: Optional[List[Any]] = None,
     subagents: Optional[List[Any]] = None,
-    processor_config: Optional[Any] = None,
+    processor_config: Optional[Any] = None,  # noqa: ANN401
     subagent_match_threshold: float = 0.5,
     project_config: Optional[Dict[str, Any]] = None,
 ) -> AgentSessionContext:

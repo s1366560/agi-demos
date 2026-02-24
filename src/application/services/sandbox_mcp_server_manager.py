@@ -1,14 +1,15 @@
 """Sandbox MCP Server Manager service.
-
 Orchestrates user-configured MCP servers running inside project sandbox
 containers. Handles sandbox auto-creation, server installation, lifecycle
 management, tool discovery, and tool call proxying.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.domain.ports.services.sandbox_mcp_server_port import (
     SandboxMCPServerPort,
@@ -16,6 +17,9 @@ from src.domain.ports.services.sandbox_mcp_server_port import (
     SandboxMCPToolCallResult,
 )
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
+
+if TYPE_CHECKING:
+    from src.application.services.mcp_app_service import MCPAppService
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
     def __init__(
         self,
         sandbox_resource: SandboxResourcePort,
-        app_service: Any = None,
+        app_service: Optional[MCPAppService] = None,
     ) -> None:
         """Initialize the manager.
 
@@ -369,7 +373,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             logger.warning(f"Failed to list MCP servers: {e}")
             return []
 
-    def _parse_tool_result(self, result: Dict[str, Any]) -> Any:
+    def _parse_tool_result(self, result: Dict[str, Any]) -> Any:  # noqa: ANN401
         """Parse tool result content, extracting JSON if present."""
         content = result.get("content", [])
         if not content:

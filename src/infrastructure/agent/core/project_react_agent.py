@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 _websocket_manager: Optional[Any] = None
 
 
-def get_websocket_notifier() -> Optional[Any]:
+def get_websocket_notifier() -> Optional[Any]:  # noqa: ANN401
     """
     Get the global WebSocket notifier.
 
@@ -70,7 +70,7 @@ def get_websocket_notifier() -> Optional[Any]:
     return WebSocketNotifier(_websocket_manager)
 
 
-def register_websocket_manager(manager: Any) -> None:
+def register_websocket_manager(manager: Any) -> None:  # noqa: ANN401
     """
     Register the WebSocket connection manager globally.
 

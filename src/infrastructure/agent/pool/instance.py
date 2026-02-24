@@ -4,6 +4,8 @@ Agent实例封装.
 封装单个项目的 ReActAgent，管理实例级资源和生命周期。
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
@@ -69,7 +71,7 @@ class AgentInstance:
     def __init__(
         self,
         config: AgentInstanceConfig,
-        react_agent: Optional["ReActAgent"] = None,
+        react_agent: Optional[ReActAgent] = None,
         instance_id: Optional[str] = None,
     ):
         """初始化Agent实例.
@@ -175,7 +177,7 @@ class AgentInstance:
             )
             return False
 
-    async def _create_agent(self) -> "ReActAgent":
+    async def _create_agent(self) -> ReActAgent:
         """创建ReActAgent实例.
 
         子类可重写此方法以自定义创建逻辑。

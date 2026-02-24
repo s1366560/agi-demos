@@ -1,14 +1,19 @@
 """Graph service initialization for startup."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from src.configuration.factories import create_native_graph_adapter
+
+if TYPE_CHECKING:
+    from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
 
 logger = logging.getLogger(__name__)
 
 
-async def initialize_graph_service() -> Any:
+async def initialize_graph_service() -> NativeGraphAdapter:
     """
     Initialize NativeGraphAdapter (self-developed knowledge graph engine).
 
@@ -29,7 +34,7 @@ async def initialize_graph_service() -> Any:
         raise
 
 
-async def shutdown_graph_service(graph_service: Any) -> None:
+async def shutdown_graph_service(graph_service: NativeGraphAdapter) -> None:
     """Shutdown graph service and close Neo4j connection."""
     if hasattr(graph_service, "client") and hasattr(graph_service.client, "close"):
         await graph_service.client.close()

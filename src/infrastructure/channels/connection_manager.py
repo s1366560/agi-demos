@@ -5,12 +5,14 @@ IM platforms (Feishu, DingTalk, WeCom, etc.). It handles connection lifecycle,
 automatic reconnection with exponential backoff, health checks, and message routing.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +26,10 @@ from src.infrastructure.adapters.secondary.persistence.channel_models import (
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
     ChannelConfigRepository,
 )
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.plugins.registry import PluginDiagnostic
+
 from src.infrastructure.channels.outbox_worker import OutboxRetryWorker
 
 logger = logging.getLogger(__name__)
@@ -236,7 +242,7 @@ class ChannelConnectionManager:
 
         return connection
 
-    async def _create_adapter(self, config: ChannelConfigModel) -> Any:
+    async def _create_adapter(self, config: ChannelConfigModel) -> Any:  # noqa: ANN401
         """Create a channel adapter based on configuration.
 
         Args:
@@ -321,7 +327,7 @@ class ChannelConnectionManager:
         raise ValueError(f"Unsupported channel type: {config.channel_type}")
 
     @staticmethod
-    def _log_plugin_diagnostic(diagnostic: Any) -> None:
+    def _log_plugin_diagnostic(diagnostic: PluginDiagnostic) -> None:
         """Log plugin diagnostic records emitted during adapter creation."""
         message = (
             f"[ChannelManager][Plugin:{diagnostic.plugin_name}] "

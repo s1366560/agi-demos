@@ -184,7 +184,7 @@ class PostgresSubAgentRunRepository:
             logger.warning(f"[PostgresSubAgentRunRepository] Failed to initialize schema: {exc}")
             self._safe_rollback(conn)
 
-    def _connect(self) -> Any:
+    def _connect(self) -> Any:  # noqa: ANN401
         if self._connect_factory is not None:
             return self._connect_factory(self._postgres_dsn)
         try:
@@ -195,7 +195,7 @@ class PostgresSubAgentRunRepository:
             ) from exc
         return psycopg2.connect(self._postgres_dsn)
 
-    def _ensure_schema(self, cursor: Any) -> None:
+    def _ensure_schema(self, cursor: Any) -> None:  # noqa: ANN401
         cursor.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {self._table_name} (
@@ -207,7 +207,7 @@ class PostgresSubAgentRunRepository:
         )
 
     @staticmethod
-    def _safe_rollback(conn: Any) -> None:
+    def _safe_rollback(conn: Any) -> None:  # noqa: ANN401
         if conn is None:
             return
         rollback = getattr(conn, "rollback", None)
@@ -231,7 +231,7 @@ class RedisRunSnapshotCache:
         *,
         key: str = "subagent:runs:snapshot:v1",
         ttl_seconds: int = 60,
-        client: Optional[Any] = None,
+        client: Optional[Any] = None,  # noqa: ANN401
     ) -> None:
         self._key = key
         self._ttl_seconds = max(1, int(ttl_seconds))
@@ -360,7 +360,7 @@ def _deserialize_snapshot(payload: str) -> Dict[str, Dict[str, SubAgentRun]]:
     return loaded
 
 
-def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:
+def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:  # noqa: ANN401
     if not isinstance(payload, dict):
         return None
     try:
@@ -392,7 +392,7 @@ def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:
         return None
 
 
-def _parse_datetime(value: Any) -> Optional[datetime]:
+def _parse_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -404,14 +404,14 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
     return parsed.astimezone(timezone.utc)
 
 
-def _optional_str(value: Any) -> Optional[str]:
+def _optional_str(value: Any) -> Optional[str]:  # noqa: ANN401
     if value is None:
         return None
     text = str(value)
     return text if text else None
 
 
-def _optional_int(value: Any) -> Optional[int]:
+def _optional_int(value: Any) -> Optional[int]:  # noqa: ANN401
     if value is None:
         return None
     try:

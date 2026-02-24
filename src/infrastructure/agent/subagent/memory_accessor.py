@@ -35,7 +35,7 @@ class GraphSearchable(Protocol):
 class GraphWritable(Protocol):
     """Protocol for graph write operations."""
 
-    async def add_episode(self, episode: Any) -> Any: ...
+    async def add_episode(self, episode: Any) -> Any: ...  # noqa: ANN401
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ class MemoryAccessor:
 
     def __init__(
         self,
-        graph_service: Any,
+        graph_service: Any,  # noqa: ANN401
         project_id: str,
         writable: bool = False,
         max_results: int = DEFAULT_MAX_RESULTS,
@@ -205,7 +205,7 @@ class MemoryAccessor:
 
         return "\n".join(parts)
 
-    def _normalize_results(self, raw_results: Any) -> List[MemoryItem]:
+    def _normalize_results(self, raw_results: Any) -> List[MemoryItem]:  # noqa: ANN401
         """Normalize raw graph search results to MemoryItem list.
 
         Handles both list-of-dicts and SearchResultItem-like objects.

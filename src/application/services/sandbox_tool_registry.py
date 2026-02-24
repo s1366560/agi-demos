@@ -3,13 +3,20 @@
 Manages dynamic registration of Sandbox MCP tools to Agent tool context.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 
 @dataclass
@@ -38,8 +45,8 @@ class SandboxToolRegistry:
 
     def __init__(
         self,
-        redis_client: Optional[Any] = None,
-        mcp_adapter: Optional[Any] = None,
+        redis_client: Optional[Redis] = None,
+        mcp_adapter: Optional[MCPSandboxAdapter] = None,
     ):
         """
         Initialize the registry.

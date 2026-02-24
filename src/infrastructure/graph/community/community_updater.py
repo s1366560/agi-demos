@@ -7,8 +7,10 @@ This module provides:
 - Community name generation
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +23,12 @@ from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.graph.schemas import CommunityNode, EntityNode
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
 
 
 # =============================================================================
@@ -55,7 +63,7 @@ class CommunityUpdater:
     def __init__(
         self,
         neo4j_client: Neo4jClient,
-        llm_client: Any,
+        llm_client: LLMClient,
         louvain_detector: LouvainDetector,
         model: Optional[str] = None,
     ):

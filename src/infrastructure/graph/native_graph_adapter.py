@@ -8,9 +8,11 @@ This adapter provides a self-researched knowledge graph system that:
 - Supports community detection with Louvain algorithm
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.domain.model.memory.episode import Episode
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -34,6 +36,14 @@ from .schemas import (
 from .search.hybrid_search import GraphSearchConfig, HybridSearch
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.graph.distributed_transaction_coordinator import (
+        DistributedTransactionCoordinator,
+    )
 
 # Cache TTL for embedding dimension checks (seconds)
 EMBEDDING_DIM_CACHE_TTL = 10
@@ -63,7 +73,7 @@ class NativeGraphAdapter(GraphServicePort):
     def __init__(
         self,
         neo4j_client: Neo4jClient,
-        llm_client: Any,
+        llm_client: LLMClient,
         embedding_service: EmbeddingService,
         queue_port: Optional[QueuePort] = None,
         enable_reflexion: bool = True,
@@ -126,7 +136,7 @@ class NativeGraphAdapter(GraphServicePort):
         """Get the community updater (lazily initialized)."""
         return self._get_community_updater()
 
-    def set_transaction_coordinator(self, coordinator: Any) -> None:
+    def set_transaction_coordinator(self, coordinator: DistributedTransactionCoordinator) -> None:
         """
         Set the distributed transaction coordinator.
 
@@ -135,7 +145,7 @@ class NativeGraphAdapter(GraphServicePort):
         """
         self._transaction_coordinator = coordinator
 
-    def set_redis_client(self, redis_client: Any) -> None:
+    def set_redis_client(self, redis_client: Redis) -> None:
         """
         Set the Redis client for cached embedding support.
 
@@ -154,7 +164,7 @@ class NativeGraphAdapter(GraphServicePort):
             "Redis client set on NativeGraphAdapter; hybrid search will use cached embeddings"
         )
 
-    def get_transaction_coordinator(self) -> Optional[Any]:
+    def get_transaction_coordinator(self) -> Optional[DistributedTransactionCoordinator]:
         """Get the current transaction coordinator."""
         return self._transaction_coordinator
 

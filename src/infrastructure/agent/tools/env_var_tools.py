@@ -62,7 +62,7 @@ class GetEnvVarTool(AgentTool):
         encryption_service: Optional[EncryptionService] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,
+        session_factory: Optional[Any] = None,  # noqa: ANN401
     ):
         """
         Initialize the get env var tool.
@@ -291,7 +291,7 @@ class RequestEnvVarTool(AgentTool):
         event_publisher: Optional[Callable[[Dict[str, Any]], None]] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,
+        session_factory: Optional[Any] = None,  # noqa: ANN401
     ):
         """
         Initialize the request env var tool.
@@ -630,7 +630,7 @@ class CheckEnvVarsTool(AgentTool):
         encryption_service: Optional[EncryptionService] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,
+        session_factory: Optional[Any] = None,  # noqa: ANN401
     ):
         """
         Initialize the check env vars tool.

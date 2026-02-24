@@ -5,11 +5,17 @@ Allows the main agent to continue responding while SubAgents work
 in the background. Results are pushed via SSE events when complete.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.domain.model.agent.subagent import SubAgent
 
@@ -67,7 +73,7 @@ class BackgroundExecutor:
         tenant_id: str = "",
         base_api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
     ) -> str:
         """Launch a SubAgent in the background.
 
@@ -175,7 +181,7 @@ class BackgroundExecutor:
         tenant_id: str = "",
         base_api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
     ) -> None:
         """Internal execution coroutine for background SubAgent."""
         self._tracker.start(execution_id, conversation_id)

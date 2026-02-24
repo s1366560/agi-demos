@@ -13,7 +13,7 @@ The service wraps existing embedder implementations and provides:
 import asyncio
 import logging
 import math
-from typing import Any, List, Optional, Protocol
+from typing import List, Optional, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class EmbeddingService:
 
     def __init__(
         self,
-        embedder: Any,
+        embedder: EmbedderProtocol,
         validate_dimensions: bool = True,
     ):
         """

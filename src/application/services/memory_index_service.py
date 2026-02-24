@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.infrastructure.memory.chunker import TextChunk, chunk_text
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
+        SqlChunkRepository,
+    )
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 
 
 class MemoryIndexService:
@@ -24,8 +30,8 @@ class MemoryIndexService:
 
     def __init__(
         self,
-        chunk_repo: Any,
-        embedding_service: Any,
+        chunk_repo: SqlChunkRepository,
+        embedding_service: EmbeddingService,
     ):
         self._chunk_repo = chunk_repo
         self._embedding = embedding_service

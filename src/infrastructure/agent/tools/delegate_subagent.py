@@ -297,7 +297,7 @@ class ParallelDelegateSubAgentTool(AgentTool):
             "required": ["tasks"],
         }
 
-    async def execute(self, tasks: Any = None, **kwargs) -> str:
+    async def execute(self, tasks: Any = None, **kwargs) -> str:  # noqa: ANN401
         """Execute parallel delegation to multiple SubAgents.
 
         Args:

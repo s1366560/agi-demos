@@ -385,7 +385,7 @@ class LiteLLMClient(LLMClient):
             raise
 
     @staticmethod
-    def _convert_message(m: Any) -> dict[str, Any]:
+    def _convert_message(m: Any) -> dict[str, Any]:  # noqa: ANN401
         """Convert a message to LiteLLM dict format, preserving tool-related fields.
 
         Handles both dict messages and Message objects. Preserves:
@@ -434,7 +434,7 @@ class LiteLLMClient(LLMClient):
         """
         import litellm
 
-        def _get_attr(obj: Any, key: str, default: Any = None) -> Any:
+        def _get_attr(obj: Any, key: str, default: Any = None) -> Any:  # noqa: ANN401
             if isinstance(obj, dict):
                 return obj.get(key, default)
             return getattr(obj, key, default)

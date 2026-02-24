@@ -131,7 +131,7 @@ class OverflowRecoveryCoordinator:
     async def recover(
         self,
         *,
-        context_request: Any,
+        context_request: Any,  # noqa: ANN401
         current_messages: List[Dict[str, Any]],
         base_manager: ContextWindowManager,
         build_context: Callable[[Any, ContextWindowManager], Awaitable[Any]],

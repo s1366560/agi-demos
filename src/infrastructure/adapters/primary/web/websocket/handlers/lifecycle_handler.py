@@ -6,15 +6,20 @@ Handles agent lifecycle control messages:
 - start_agent / stop_agent / restart_agent
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+
+if TYPE_CHECKING:
+    from src.application.services.project_sandbox_lifecycle_service import SandboxInfo
 
 logger = logging.getLogger(__name__)
 
@@ -437,7 +442,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
 # =============================================================================
 
 
-async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Any:
+async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Optional[SandboxInfo]:
     """Ensure sandbox exists for the project before starting agent."""
     try:
         from src.application.services.project_sandbox_lifecycle_service import (
@@ -493,7 +498,7 @@ async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> An
         return None
 
 
-async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> Any:
+async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> Optional[SandboxInfo]:
     """Sync and repair sandbox on agent restart."""
     try:
         from src.application.services.project_sandbox_lifecycle_service import (

@@ -324,7 +324,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
     # Private helper methods
     # =========================================================================
 
-    def _parse_stream_message(self, msg_id: Any, fields: Dict[Any, Any]) -> Optional[AgentEvent]:
+    def _parse_stream_message(self, msg_id: Any, fields: Dict[Any, Any]) -> Optional[AgentEvent]:  # noqa: ANN401
         """Parse a raw Redis stream message into AgentEvent."""
         try:
             # Decode message ID
@@ -332,7 +332,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 msg_id = msg_id.decode("utf-8")
 
             # Helper to get field value
-            def get_field(key: str) -> Any:
+            def get_field(key: str) -> Any:  # noqa: ANN401
                 return fields.get(key.encode()) if key.encode() in fields else fields.get(key)
 
             sequence = get_field("event_time_us")

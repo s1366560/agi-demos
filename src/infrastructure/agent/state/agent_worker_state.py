@@ -17,11 +17,17 @@ Performance Impact (with Agent Session Pool):
 - Subsequent requests: <20ms (95%+ reduction)
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.ports.services.sandbox_port import SandboxPort
+
 
 import redis.asyncio as redis
 
@@ -147,7 +153,7 @@ _provider_config_cache_lock = asyncio.Lock()
 _provider_config_cache_ttl_seconds = int(os.getenv("PROVIDER_CONFIG_CACHE_TTL_SECONDS", "60"))
 
 
-def set_agent_graph_service(service: Any) -> None:
+def set_agent_graph_service(service: Any) -> None:  # noqa: ANN401
     """Set the global graph service instance for agent worker.
 
     Called during Agent Worker initialization to make graph_service
@@ -162,7 +168,7 @@ def set_agent_graph_service(service: Any) -> None:
     logger.info("Agent Worker: Graph service registered for Activities")
 
 
-def get_agent_graph_service() -> Optional[Any]:
+def get_agent_graph_service() -> Optional[Any]:  # noqa: ANN401
     """Get the global graph service instance for agent worker.
 
     Returns:
@@ -171,7 +177,7 @@ def get_agent_graph_service() -> Optional[Any]:
     return _agent_graph_service
 
 
-async def get_or_create_agent_graph_service(tenant_id: Optional[str] = None) -> Any:
+async def get_or_create_agent_graph_service(tenant_id: Optional[str] = None) -> Any:  # noqa: ANN401
     """Get tenant-scoped graph service, creating and caching when needed."""
     cache_key = tenant_id or "default"
     if cache_key in _tenant_graph_services:
@@ -195,7 +201,7 @@ async def get_or_create_agent_graph_service(tenant_id: Optional[str] = None) -> 
         return graph_service
 
 
-def set_mcp_sandbox_adapter(adapter: Any) -> None:
+def set_mcp_sandbox_adapter(adapter: Any) -> None:  # noqa: ANN401
     """Set the global MCP Sandbox Adapter instance for agent worker.
 
     Called during Agent Worker initialization to make MCPSandboxAdapter
@@ -232,7 +238,7 @@ async def sync_mcp_sandbox_adapter_from_docker() -> int:
         return 0
 
 
-def get_mcp_sandbox_adapter() -> Optional[Any]:
+def get_mcp_sandbox_adapter() -> Optional[Any]:  # noqa: ANN401
     """Get the global MCP Sandbox Adapter instance for agent worker.
 
     Returns:
@@ -246,7 +252,7 @@ def get_mcp_sandbox_adapter() -> Optional[Any]:
 # ============================================================================
 
 
-def set_pool_adapter(adapter: Any) -> None:
+def set_pool_adapter(adapter: Any) -> None:  # noqa: ANN401
     """Set the global Pool Adapter instance for agent worker.
 
     Called during Agent Worker initialization when AGENT_POOL_ENABLED=true.
@@ -260,7 +266,7 @@ def set_pool_adapter(adapter: Any) -> None:
     logger.info("Agent Worker: Pool Adapter registered for Activities")
 
 
-def get_pool_adapter() -> Optional[Any]:
+def get_pool_adapter() -> Optional[Any]:  # noqa: ANN401
     """Get the global Pool Adapter instance for agent worker.
 
     Returns:
@@ -370,9 +376,9 @@ def get_cached_llm_clients() -> Dict[str, Any]:
 async def get_or_create_tools(
     project_id: str,
     tenant_id: str,
-    graph_service: Any,
-    redis_client: Any,
-    llm: Any = None,
+    graph_service: Any,  # noqa: ANN401
+    redis_client: Any,  # noqa: ANN401
+    llm: Any = None,  # noqa: ANN401
     agent_mode: str = "default",
     **kwargs: Any,  # noqa: ANN401
 ) -> Dict[str, Any]:
@@ -929,7 +935,7 @@ async def _load_project_sandbox_tools(
 
 
 async def _discover_single_server_tools(
-    sandbox_adapter: Any,
+    sandbox_adapter: SandboxPort,
     sandbox_id: str,
     server_name: str,
 ) -> List[Dict[str, Any]]:
@@ -966,7 +972,7 @@ async def _discover_single_server_tools(
 
 
 async def _discover_tools_for_servers_parallel(
-    sandbox_adapter: Any,
+    sandbox_adapter: SandboxPort,
     sandbox_id: str,
     servers: List[Dict[str, Any]],
     overall_timeout_seconds: Optional[float] = None,
@@ -1041,7 +1047,7 @@ async def _discover_tools_for_servers_parallel(
 
 
 async def _load_user_mcp_server_tools(
-    sandbox_adapter: Any,
+    sandbox_adapter: SandboxPort,
     sandbox_id: str,
     project_id: str,
     redis_client: Optional[redis.Redis] = None,
@@ -1136,7 +1142,7 @@ async def _load_user_mcp_server_tools(
 
 
 async def _auto_restore_mcp_servers(
-    sandbox_adapter: Any,
+    sandbox_adapter: SandboxPort,
     sandbox_id: str,
     project_id: str,
     running_names: set,
@@ -1291,7 +1297,7 @@ async def _auto_restore_mcp_servers(
 
 
 async def _restore_single_server(
-    sandbox_adapter: Any,
+    sandbox_adapter: SandboxPort,
     sandbox_id: str,
     server_name: str,
     server_type: str,
@@ -1448,7 +1454,7 @@ def _parse_discovered_tools(content: list) -> list:
     return []
 
 
-def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
+def _match_adapter_to_app(adapter: Any, apps: list) -> Any:  # noqa: ANN401
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB.
 
     Matching strategy (in priority order):
@@ -1469,7 +1475,7 @@ def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
     return matched_app
 
 
-def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:
+def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:  # noqa: ANN401
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB with confidence score.
 
     This function returns both the matched app and a confidence score,
@@ -1747,7 +1753,7 @@ async def get_or_create_skills(
 async def get_or_create_provider_config(
     tenant_id: Optional[str] = None,
     force_refresh: bool = False,
-) -> Any:
+) -> Any:  # noqa: ANN401
     """Get or create cached default LLM provider config.
 
     Delegates to AIServiceFactory which handles caching and provider resolution.
@@ -1771,9 +1777,9 @@ async def get_or_create_provider_config(
 
 
 async def get_or_create_llm_client(
-    provider_config: Any = None,
+    provider_config: Any = None,  # noqa: ANN401
     tenant_id: Optional[str] = None,
-) -> Any:
+) -> Any:  # noqa: ANN401
     """Get or create a cached LLM client using AIServiceFactory.
 
     Delegates to AIServiceFactory which handles caching and provider resolution.
@@ -1835,7 +1841,7 @@ async def get_or_create_skill_loader_tool(
     tenant_id: str,
     project_id: Optional[str] = None,
     agent_mode: str = "default",
-) -> Any:
+) -> Any:  # noqa: ANN401
     """Get or create a cached and initialized SkillLoaderTool.
 
     This function caches SkillLoaderTool instances by tenant_id:project_id:agent_mode
@@ -1854,7 +1860,7 @@ async def get_or_create_skill_loader_tool(
         Initialized SkillLoaderTool instance with dynamic description
     """
     from pathlib import Path
-    from typing import List, Optional as Opt
+    from typing import Optional as Opt
 
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.application.services.skill_service import SkillService
@@ -2060,7 +2066,7 @@ async def prewarm_agent_session(
 # ============================================================================
 
 
-def set_hitl_response_listener(listener: Any) -> None:
+def set_hitl_response_listener(listener: Any) -> None:  # noqa: ANN401
     """Set the global HITL Response Listener instance for agent worker.
 
     Called during Agent Worker initialization to enable real-time
@@ -2074,7 +2080,7 @@ def set_hitl_response_listener(listener: Any) -> None:
     logger.info("Agent Worker: HITL Response Listener registered for Activities")
 
 
-def get_hitl_response_listener() -> Optional[Any]:
+def get_hitl_response_listener() -> Optional[Any]:  # noqa: ANN401
     """Get the global HITL Response Listener instance for agent worker.
 
     Returns:
@@ -2177,7 +2183,7 @@ async def wait_for_hitl_response_realtime(
 
 
 async def discover_tools_with_retry(
-    sandbox_adapter: Any,
+    sandbox_adapter: SandboxPort,
     sandbox_id: str,
     server_name: str,
     max_retries: int = 3,

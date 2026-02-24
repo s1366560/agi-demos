@@ -188,7 +188,7 @@ class AgentPluginRegistry:
         self,
         plugin_name: str,
         service_name: str,
-        service: Any,
+        service: Any,  # noqa: ANN401
         *,
         overwrite: bool = False,
     ) -> None:
@@ -209,7 +209,7 @@ class AgentPluginRegistry:
         self,
         plugin_name: str,
         provider_name: str,
-        provider: Any,
+        provider: Any,  # noqa: ANN401
         *,
         overwrite: bool = False,
     ) -> None:
@@ -328,7 +328,7 @@ class AgentPluginRegistry:
             )
             return None, diagnostics
 
-    def get_service(self, service_name: str) -> Any:
+    def get_service(self, service_name: str) -> Any:  # noqa: ANN401
         """Get a service by name if registered."""
         normalized_name = (service_name or "").strip().lower()
         if not normalized_name:
@@ -339,7 +339,7 @@ class AgentPluginRegistry:
             return None
         return service_entry[1]
 
-    def get_provider(self, provider_name: str) -> Any:
+    def get_provider(self, provider_name: str) -> Any:  # noqa: ANN401
         """Get a provider by name if registered."""
         normalized_name = (provider_name or "").strip().lower()
         if not normalized_name:

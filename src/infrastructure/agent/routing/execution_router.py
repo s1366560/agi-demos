@@ -79,7 +79,7 @@ class SubAgentMatcher(Protocol):
         """
         ...
 
-    def get_subagent(self, name: str) -> Any:
+    def get_subagent(self, name: str) -> Any:  # noqa: ANN401
         """Get a sub-agent by name.
 
         Args:

@@ -78,7 +78,7 @@ class Tool(ABC):
         ...
 
     @abstractmethod
-    async def execute(self, **kwargs) -> Any:
+    async def execute(self, **kwargs) -> Any:  # noqa: ANN401
         """Execute the tool.
 
         Args:

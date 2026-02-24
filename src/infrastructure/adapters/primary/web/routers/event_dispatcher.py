@@ -10,13 +10,17 @@ Design:
 - Drop oldest strategy when queue is full
 - Timeout protection: WebSocket send has 5s timeout
 """
+from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from starlette.websockets import WebSocket
 
 
 @dataclass
@@ -61,7 +65,7 @@ class EventDispatcher:
     def __init__(
         self,
         session_id: str,
-        websocket: Any,
+        websocket: WebSocket,
         config: Optional[DispatcherConfig] = None,
     ):
         self.session_id = session_id
@@ -237,7 +241,7 @@ class DispatcherManager:
     async def get_dispatcher(
         self,
         session_id: str,
-        websocket: Any,
+        websocket: WebSocket,
         config: Optional[DispatcherConfig] = None,
     ) -> EventDispatcher:
         """Get or create a dispatcher for the session."""

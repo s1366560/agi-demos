@@ -5,10 +5,16 @@ Analyzes complex user queries and decomposes them into independent sub-tasks
 that can be assigned to different SubAgents and executed in parallel.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +137,7 @@ class TaskDecomposer:
 
     def __init__(
         self,
-        llm_client: Any,
+        llm_client: LLMClient,
         available_agent_names: Optional[List[str]] = None,
         max_subtasks: int = 4,
     ):

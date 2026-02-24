@@ -5,12 +5,20 @@ next_retry_at has passed, and attempts to resend them via the appropriate
 channel adapter.
 """
 
+
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.infrastructure.adapters.secondary.persistence.channel_models import ChannelOutboxModel
+    from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+        ChannelOutboxRepository,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +87,7 @@ class OutboxRetryWorker:
             for item in items:
                 await self._retry_item(item, repo, session)
 
-    async def _retry_item(self, item: Any, repo: Any, session: "AsyncSession") -> None:
+    async def _retry_item(self, item: ChannelOutboxModel, repo: ChannelOutboxRepository, session: AsyncSession) -> None:
         """Retry a single outbox message."""
         try:
             connection = self._get_connection(item.channel_config_id)

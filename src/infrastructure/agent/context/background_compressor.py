@@ -5,9 +5,15 @@ Runs compression as a background task after each agent step,
 storing results for the next LLM call to pick up.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.infrastructure.agent.context.compaction import ModelLimits
 from src.infrastructure.agent.context.compression_engine import (
@@ -45,7 +51,7 @@ class BackgroundCompressor:
         system_prompt: str,
         messages: List[Dict[str, Any]],
         model_limits: ModelLimits,
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
         level: Optional[CompressionLevel] = None,
     ) -> bool:
         """Schedule background compression.
@@ -69,7 +75,7 @@ class BackgroundCompressor:
         system_prompt: str,
         messages: List[Dict[str, Any]],
         model_limits: ModelLimits,
-        llm_client: Optional[Any],
+        llm_client: Optional[LLMClient],
         level: Optional[CompressionLevel],
     ) -> None:
         """Execute compression in background."""

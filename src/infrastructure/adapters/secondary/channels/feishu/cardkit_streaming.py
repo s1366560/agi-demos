@@ -15,9 +15,12 @@ import asyncio
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.channels.feishu.adapter import FeishuAdapter
 
 CONTENT_ELEMENT_ID = "content"
 """Fixed element_id for the main markdown content element."""
@@ -145,7 +148,7 @@ class CardKitStreamingManager:
     # Minimum interval between streaming text updates (seconds)
     _MIN_UPDATE_INTERVAL = 0.3
 
-    def __init__(self, adapter: Any) -> None:
+    def __init__(self, adapter: FeishuAdapter) -> None:
         self._adapter = adapter
         self._last_update_time: float = 0
 

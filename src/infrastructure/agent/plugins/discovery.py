@@ -304,7 +304,7 @@ def _iter_entry_points(group: str) -> Sequence[Any]:
     return list(entry_points.get(group, []))
 
 
-def _coerce_plugin_instance(candidate: Any) -> Any:
+def _coerce_plugin_instance(candidate: Any) -> Any:  # noqa: ANN401
     if inspect.isclass(candidate) or (callable(candidate) and not hasattr(candidate, "setup")):
         candidate = candidate()
 
@@ -330,7 +330,7 @@ def _has_manifest_errors(diagnostics: Sequence[PluginDiagnostic]) -> bool:
 
 def _load_entrypoint_manifest_metadata(
     *,
-    plugin: Any,
+    plugin: Any,  # noqa: ANN401
     plugin_name: str,
 ) -> tuple[Optional[PluginManifestMetadata], list[PluginDiagnostic]]:
     payload = _resolve_entrypoint_manifest_payload(plugin)
@@ -343,7 +343,7 @@ def _load_entrypoint_manifest_metadata(
     )
 
 
-def _resolve_entrypoint_manifest_payload(plugin: Any) -> Optional[Any]:
+def _resolve_entrypoint_manifest_payload(plugin: Any) -> Optional[Any]:  # noqa: ANN401
     for attr in ("plugin_manifest", "manifest"):
         payload = getattr(plugin, attr, None)
         if payload is not None:
@@ -381,7 +381,7 @@ def _resolve_local_plugin_root(*, state_store: Optional[PluginStateStore]) -> Op
     return state_store.state_path.parent
 
 
-def _load_local_plugin(plugin_dir: Path) -> Any:
+def _load_local_plugin(plugin_dir: Path) -> Any:  # noqa: ANN401
     """Load one local plugin from .memstack/plugins/<name>/plugin.py."""
     plugin_file = plugin_dir / LOCAL_PLUGIN_ENTRY_FILE
     if not plugin_file.exists():
@@ -404,7 +404,7 @@ def _load_module_from_path(*, module_name: str, file_path: Path) -> ModuleType:
     return module
 
 
-def _resolve_local_plugin_candidate(module: ModuleType) -> Any:
+def _resolve_local_plugin_candidate(module: ModuleType) -> Any:  # noqa: ANN401
     """Resolve plugin candidate exported by local module."""
     exported = getattr(module, "plugin", None)
     if exported is not None:

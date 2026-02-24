@@ -1,7 +1,9 @@
 """Channel configuration API endpoints."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jsonschema import Draft7Validator
@@ -36,6 +38,9 @@ from src.infrastructure.agent.plugins.control_plane import PluginControlPlaneSer
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 from src.infrastructure.agent.plugins.registry import get_plugin_registry
 from src.infrastructure.security.encryption_service import get_encryption_service
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.plugins.registry import ChannelTypeConfigMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +167,7 @@ class ChannelConfigCreate(BaseModel):
     description: Optional[str] = Field(None, description="Description")
 
     @model_validator(mode="after")
-    def _validate_webhook_requires_token(self) -> "ChannelConfigCreate":
+    def _validate_webhook_requires_token(self) -> ChannelConfigCreate:
         token = self.verification_token
         if not token and isinstance(self.extra_settings, dict):
             token = self.extra_settings.get("verification_token")
@@ -335,14 +340,14 @@ _CHANNEL_SETTING_FIELDS = {
 _SECRET_UNCHANGED_SENTINEL = "__MEMSTACK_SECRET_UNCHANGED__"
 
 
-def _resolve_channel_metadata(channel_type: str) -> Any | None:
+def _resolve_channel_metadata(channel_type: str) -> ChannelTypeConfigMetadata | None:
     normalized = (channel_type or "").strip().lower()
     if not normalized:
         return None
     return get_plugin_registry().list_channel_type_metadata().get(normalized)
 
 
-def _resolve_secret_paths(metadata: Any | None) -> List[str]:
+def _resolve_secret_paths(metadata: ChannelTypeConfigMetadata | None) -> List[str]:
     secret_paths = getattr(metadata, "secret_paths", None) if metadata is not None else None
     if not isinstance(secret_paths, list):
         return []
@@ -353,7 +358,7 @@ def _resolve_secret_paths(metadata: Any | None) -> List[str]:
     return normalized
 
 
-def _as_string_list(value: Any) -> List[str]:
+def _as_string_list(value: Any) -> List[str]:  # noqa: ANN401
     if not isinstance(value, list):
         return []
     normalized: List[str] = []
@@ -381,7 +386,7 @@ def _split_path(path: str) -> List[str]:
 _MISSING = object()
 
 
-def _get_path_value(data: Dict[str, Any], path: str) -> Any:
+def _get_path_value(data: Dict[str, Any], path: str) -> Any:  # noqa: ANN401
     current: Any = data
     for segment in _split_path(path):
         if not isinstance(current, dict) or segment not in current:
@@ -390,7 +395,7 @@ def _get_path_value(data: Dict[str, Any], path: str) -> Any:
     return current
 
 
-def _set_path_value(data: Dict[str, Any], path: str, value: Any) -> None:
+def _set_path_value(data: Dict[str, Any], path: str, value: Any) -> None:  # noqa: ANN401
     segments = _split_path(path)
     if not segments:
         return
@@ -431,7 +436,7 @@ def _collect_settings_from_config(
 def _build_plugin_settings_payload(
     *,
     payload: Dict[str, Any],
-    metadata: Any | None,
+    metadata: ChannelTypeConfigMetadata | None,
     existing_config: Optional[ChannelConfigModel] = None,
     secret_paths: Optional[List[str]] = None,
     apply_defaults: bool = False,
@@ -534,7 +539,7 @@ def _mask_secret_values_for_response(
 def _validate_plugin_settings_schema(
     *,
     channel_type: str,
-    metadata: Any | None,
+    metadata: ChannelTypeConfigMetadata | None,
     settings: Dict[str, Any],
 ) -> None:
     schema = getattr(metadata, "config_schema", None) if metadata is not None else None

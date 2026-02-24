@@ -585,7 +585,7 @@ class SubAgentRunRegistry:
             logger.warning(f"[SubAgentRunRegistry] Failed to persist runs: {exc}")
 
     @staticmethod
-    def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:
+    def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:  # noqa: ANN401
         if not isinstance(payload, dict):
             return None
         try:
@@ -621,7 +621,7 @@ class SubAgentRunRegistry:
         return run
 
     @staticmethod
-    def _parse_datetime(value: Any) -> Optional[datetime]:
+    def _parse_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
         if not isinstance(value, str) or not value.strip():
             return None
         try:
@@ -633,14 +633,14 @@ class SubAgentRunRegistry:
         return parsed.astimezone(timezone.utc)
 
     @staticmethod
-    def _optional_str(value: Any) -> Optional[str]:
+    def _optional_str(value: Any) -> Optional[str]:  # noqa: ANN401
         if value is None:
             return None
         text = str(value)
         return text if text else None
 
     @staticmethod
-    def _optional_int(value: Any) -> Optional[int]:
+    def _optional_int(value: Any) -> Optional[int]:  # noqa: ANN401
         if value is None:
             return None
         try:

@@ -97,14 +97,14 @@ def build_mutation_fingerprint(
     return "|".join(parts)
 
 
-def _normalize_action(value: Any) -> Optional[str]:
+def _normalize_action(value: Any) -> Optional[str]:  # noqa: ANN401
     if not isinstance(value, str):
         return None
     normalized = value.strip().lower().replace("-", "_")
     return normalized or None
 
 
-def _normalize_fingerprint_value(value: Any) -> Optional[str]:
+def _normalize_fingerprint_value(value: Any) -> Optional[str]:  # noqa: ANN401
     if isinstance(value, str):
         normalized = value.strip()
         return normalized.lower() if normalized else None

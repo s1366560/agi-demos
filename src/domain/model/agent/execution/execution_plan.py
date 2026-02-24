@@ -8,7 +8,7 @@ This model represents a pre-generated plan for complex query execution.
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, Dict, NoReturn
 
 from src.domain.shared_kernel import Entity
 
@@ -287,7 +287,7 @@ class ExecutionPlan(Entity):
                 return step
         return None
 
-    def create_snapshot(self, name: str, description: str | None = None) -> Any:
+    def create_snapshot(self, name: str, description: str | None = None) -> NoReturn:
         """Create a snapshot of current plan state for rollback.
         
         Note: Plan snapshot system is being refactored.

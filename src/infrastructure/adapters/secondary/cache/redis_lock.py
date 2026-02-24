@@ -36,9 +36,13 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Optional
+from typing import TYPE_CHECKING, AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
 
 
 @dataclass
@@ -81,7 +85,7 @@ class RedisDistributedLock:
 
     def __init__(
         self,
-        redis: Any,
+        redis: Redis,
         key: str,
         ttl: int = 60,
         retry_interval: float = 0.1,
@@ -359,7 +363,7 @@ class RedisLockManager:
 
     def __init__(
         self,
-        redis: Any,
+        redis: Redis,
         namespace: str = "memstack:lock",
         default_ttl: int = 60,
         default_retry_interval: float = 0.1,

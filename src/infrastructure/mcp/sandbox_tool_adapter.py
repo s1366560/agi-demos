@@ -4,13 +4,18 @@ Adapts user MCP tools running inside sandbox containers to the AgentTool
 interface. Tool calls are proxied through the sandbox's mcp_server_call_tool.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 
 class SandboxMCPServerToolAdapter(AgentTool):
@@ -28,7 +33,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
     def __init__(
         self,
-        sandbox_adapter: Any,
+        sandbox_adapter: MCPSandboxAdapter,
         sandbox_id: str,
         server_name: str,
         tool_info: Dict[str, Any],

@@ -28,7 +28,7 @@ class TableFormatter(OutputFormatter):
         """
         self._table_format = table_format
 
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:
+    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
         """
         Format data as a table.
 
@@ -54,7 +54,7 @@ class TableFormatter(OutputFormatter):
         else:
             return self._format_markdown(rows, columns)
 
-    def _normalize_data(self, data: Any) -> tuple[list[dict], list[str]]:
+    def _normalize_data(self, data: Any) -> tuple[list[dict], list[str]]:  # noqa: ANN401
         """
         Normalize data to list of dicts and extract columns.
 

@@ -21,6 +21,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from neo4j import AsyncDriver
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,7 +80,7 @@ class PostgresHealthChecker:
 
     def __init__(
         self,
-        engine: Any,
+        engine: AsyncEngine,
         query: str = "SELECT 1",
         timeout: float = 5.0,
     ):
@@ -162,7 +166,7 @@ class RedisHealthChecker:
 
     def __init__(
         self,
-        redis: Any,
+        redis: Redis,
         timeout: float = 2.0,
     ):
         """
@@ -247,7 +251,7 @@ class Neo4jHealthChecker:
 
     def __init__(
         self,
-        driver: Any,
+        driver: AsyncDriver,
         query: str = "RETURN 1",
         timeout: float = 5.0,
     ):

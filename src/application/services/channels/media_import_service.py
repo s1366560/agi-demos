@@ -1,4 +1,5 @@
 """Media import service for downloading and importing channel media to workspace."""
+from __future__ import annotations
 
 import base64
 import json
@@ -6,7 +7,7 @@ import logging
 import os
 import re
 import uuid
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,11 @@ from src.infrastructure.adapters.secondary.channels.feishu.media_downloader impo
     FeishuMediaDownloader,
     FeishuMediaDownloadError,
 )
+
+if TYPE_CHECKING:
+    from src.application.services.artifact_service import ArtifactService
+    from src.domain.model.artifact.artifact import Artifact
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +57,8 @@ class MediaImportService:
         project_id: str,
         tenant_id: str,
         conversation_id: str,
-        mcp_adapter: Any,  # MCPSandboxAdapter - avoid circular import
-        artifact_service: Any,  # ArtifactService - avoid circular import
+        mcp_adapter: MCPSandboxAdapter,  # MCPSandboxAdapter - avoid circular import
+        artifact_service: ArtifactService,  # ArtifactService - avoid circular import
         db_session: AsyncSession,
     ) -> Optional[str]:
         """Import media from channel message to workspace.
@@ -284,7 +290,7 @@ class MediaImportService:
         content: bytes,
         filename: str,
         project_id: str,
-        mcp_adapter: Any,
+        mcp_adapter: MCPSandboxAdapter,
         db_session: AsyncSession,
     ) -> str:
         """Import file to sandbox workspace.
@@ -375,8 +381,8 @@ class MediaImportService:
         tenant_id: str,
         conversation_id: str,
         sandbox_path: str,
-        artifact_service: Any,
-    ) -> Optional[Any]:
+        artifact_service: ArtifactService,
+    ) -> Optional[Artifact]:
         """Create Artifact record for imported media.
 
         Args:

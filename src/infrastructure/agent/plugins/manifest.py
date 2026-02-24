@@ -61,7 +61,7 @@ def load_local_plugin_manifest(
 
 
 def parse_plugin_manifest_payload(
-    payload: Any,
+    payload: Any,  # noqa: ANN401
     *,
     plugin_name: str,
     manifest_path: Optional[str] = None,
@@ -106,21 +106,21 @@ def parse_plugin_manifest_payload(
     return metadata, diagnostics
 
 
-def _read_json_manifest(path: Path) -> Optional[Any]:
+def _read_json_manifest(path: Path) -> Optional[Any]:  # noqa: ANN401
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
 
 
-def _normalize_str(value: Any) -> Optional[str]:
+def _normalize_str(value: Any) -> Optional[str]:  # noqa: ANN401
     if not isinstance(value, str):
         return None
     normalized = value.strip()
     return normalized or None
 
 
-def normalize_string_list(value: Any) -> tuple[str, ...]:
+def normalize_string_list(value: Any) -> tuple[str, ...]:  # noqa: ANN401
     if not isinstance(value, (list, tuple)):
         return ()
     items: list[str] = []

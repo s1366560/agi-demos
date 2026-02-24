@@ -11,11 +11,19 @@ The orchestrator (main agent) delegates a task to a SubAgentProcess
 and receives a structured SubAgentResult back.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.application.services.artifact_service import ArtifactService
+    from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.agent.permission.manager import PermissionManager
+
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
@@ -51,9 +59,9 @@ class SubAgentProcess:
         base_model: str,
         base_api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        llm_client: Optional[Any] = None,
-        permission_manager: Optional[Any] = None,
-        artifact_service: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
+        permission_manager: Optional[PermissionManager] = None,
+        artifact_service: Optional[ArtifactService] = None,
         abort_signal: Optional[asyncio.Event] = None,
     ) -> None:
         """Initialize a SubAgent process.
@@ -216,7 +224,7 @@ class SubAgentProcess:
                 f"time={execution_time_ms}ms"
             )
 
-    def _relay_event(self, domain_event: Any) -> Optional[Dict[str, Any]]:
+    def _relay_event(self, domain_event: Any) -> Optional[Dict[str, Any]]:  # noqa: ANN401
         """Convert a domain event to a prefixed SSE event.
 
         Adds subagent metadata and prefixes the event type.

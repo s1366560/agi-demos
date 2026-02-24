@@ -21,7 +21,7 @@ class MarkdownFormatter(OutputFormatter):
     - Links and images
     """
 
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:
+    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
         """
         Format data as markdown.
 

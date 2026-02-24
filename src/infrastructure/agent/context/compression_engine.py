@@ -13,11 +13,17 @@ The AdaptiveStrategySelector picks the level based on context occupancy:
 - 90%+   -> L3_DEEP_COMPRESS (includes L1 + L2)
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.infrastructure.agent.context.compaction import (
     ModelLimits,
@@ -268,7 +274,7 @@ class ContextCompressionEngine:
         system_prompt: str,
         messages: List[Dict[str, Any]],
         model_limits: ModelLimits,
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
         level: Optional[CompressionLevel] = None,
     ) -> CompressionResult:
         """Compress context messages based on adaptive level selection.
@@ -477,7 +483,7 @@ class ContextCompressionEngine:
     async def _incremental_summarize(
         self,
         messages: List[Dict[str, Any]],
-        llm_client: Any,
+        llm_client: LLMClient,
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         """L2: Incrementally summarize old messages in chunks.
 
@@ -563,7 +569,7 @@ class ContextCompressionEngine:
     async def _deep_compress(
         self,
         messages: List[Dict[str, Any]],
-        llm_client: Any,
+        llm_client: LLMClient,
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         """L3: Deep compress all context into one ultra-compact summary.
 
@@ -725,7 +731,7 @@ class ContextCompressionEngine:
         return "\n".join(user_lines), "\n".join(assistant_lines)
 
     @staticmethod
-    def _extract_response_text(response: Any) -> str:
+    def _extract_response_text(response: Any) -> str:  # noqa: ANN401
         """Extract text from LLM response (handles both object and dict formats)."""
         if hasattr(response, "choices") and response.choices:
             return response.choices[0].message.content.strip()

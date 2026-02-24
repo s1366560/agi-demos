@@ -408,13 +408,13 @@ def _read_env_bool(name: str) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
-def _coalesce_str(preferred: Any, fallback: Optional[str]) -> Optional[str]:
+def _coalesce_str(preferred: Any, fallback: Optional[str]) -> Optional[str]:  # noqa: ANN401
     if isinstance(preferred, str) and preferred.strip():
         return preferred.strip()
     return fallback
 
 
-def _coalesce_string_list(preferred: Any, fallback: Any) -> List[str]:
+def _coalesce_string_list(preferred: Any, fallback: Any) -> List[str]:  # noqa: ANN401
     preferred_list = list(normalize_string_list(preferred))
     if preferred_list:
         return preferred_list

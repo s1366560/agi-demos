@@ -4,16 +4,21 @@ This adapter creates Docker containers running the sandbox-mcp-server,
 enabling file system operations via the MCP protocol over WebSocket.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import socket
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, AsyncIterator, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Set
 
 import docker
 from docker.errors import ImageNotFound, NotFound
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.services.sandbox_port import (
     CodeExecutionRequest,
@@ -2921,7 +2926,7 @@ class MCPSandboxAdapter(SandboxPort):
     async def get_or_create_sandbox(
         self,
         project_id: str,
-        db_session: Optional[Any] = None,
+        db_session: Optional[AsyncSession] = None,
     ) -> Optional[MCPSandboxInstance]:
         """Get existing active sandbox or create new one for project.
 

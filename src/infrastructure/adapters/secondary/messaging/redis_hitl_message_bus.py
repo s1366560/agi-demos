@@ -77,7 +77,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         self,
         request_id: str,
         response_key: str,
-        response_value: Any,
+        response_value: Any,  # noqa: ANN401
         metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
@@ -209,7 +209,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 logger.error(f"[HITLMessageBus] Error reading from {stream_key}: {e}")
                 raise
 
-    def _parse_stream_message(self, msg_id: Any, fields: Dict[Any, Any]) -> Optional[HITLMessage]:
+    def _parse_stream_message(self, msg_id: Any, fields: Dict[Any, Any]) -> Optional[HITLMessage]:  # noqa: ANN401
         """Parse a raw Redis stream message into HITLMessage."""
         try:
             # Decode message ID

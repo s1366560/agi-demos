@@ -7,6 +7,7 @@ from src.domain.model.channels.message import (
     ChannelAdapter,
     Message,
     MessageContent,
+    SenderInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ class ChannelService:
         self,
         channel_id: str,
         user_id: str
-    ) -> Optional[Any]:
+    ) -> Optional[SenderInfo]:
         """Get user information."""
         adapter = self._adapters.get(channel_id)
         if not adapter:

@@ -1016,7 +1016,7 @@ class MCPClient:
 
         return await self.transport.list_tools()
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict) -> Any:  # noqa: ANN401
         """
         Call a tool on the MCP server.
 

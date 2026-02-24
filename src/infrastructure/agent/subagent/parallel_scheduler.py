@@ -5,11 +5,17 @@ Executes multiple SubAgentProcess instances in parallel using asyncio,
 respecting dependency ordering and concurrency limits.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Set
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
@@ -74,7 +80,7 @@ class ParallelScheduler:
         base_model: str,
         base_api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        llm_client: Optional[Any] = None,
+        llm_client: Optional[LLMClient] = None,
         conversation_context: Optional[List[Dict[str, str]]] = None,
         main_token_budget: int = 128000,
         project_id: str = "",

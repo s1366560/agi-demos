@@ -103,7 +103,7 @@ class HITLMessageBusPort(ABC):
         self,
         request_id: str,
         response_key: str,
-        response_value: Any,
+        response_value: Any,  # noqa: ANN401
         metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
@@ -322,7 +322,7 @@ class HITLMessageBusPort(ABC):
     async def publish_timeout(
         self,
         request_id: str,
-        default_value: Optional[Any] = None,
+        default_value: Optional[Any] = None,  # noqa: ANN401
     ) -> str:
         """Publish a timeout notification."""
         return await self.publish_response(

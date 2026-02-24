@@ -51,7 +51,7 @@ class SubAgentRouterProtocol(Protocol):
         self,
         query: str,
         confidence_threshold: Optional[float] = None,
-    ) -> Any:  # SubAgentMatch
+    ) -> Any:  # SubAgentMatch  # noqa: ANN401
         """Find the best SubAgent for a query."""
         ...
 

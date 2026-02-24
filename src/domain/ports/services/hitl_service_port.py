@@ -182,7 +182,7 @@ class HITLServicePort(ABC):
     async def create_and_wait(
         self,
         request: HITLRequest,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """
         Create request and wait for response in one call.
 

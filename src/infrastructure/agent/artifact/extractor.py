@@ -13,6 +13,8 @@ Handles:
 Reference: Extracted from processor.py::_process_tool_artifacts() (lines 1258-1459)
 """
 
+from __future__ import annotations
+
 import base64
 import logging
 from dataclasses import dataclass, field
@@ -122,7 +124,7 @@ class ArtifactServiceLike(Protocol):
         source_tool: Optional[str] = None,
         source_path: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> Any:
+    ) -> ArtifactLike:
         """Create and store an artifact."""
         ...
 
@@ -143,7 +145,7 @@ class ArtifactLike(Protocol):
         ...
 
     @property
-    def category(self) -> Any:
+    def category(self) -> str:
         ...
 
     @property
@@ -226,7 +228,7 @@ class ArtifactExtractor:
     async def process(
         self,
         tool_name: str,
-        result: Any,
+        result: Any,  # noqa: ANN401
         context: ExtractionContext,
         tool_execution_id: Optional[str] = None,
     ) -> AsyncIterator[AgentArtifactCreatedEvent]:
@@ -607,7 +609,7 @@ class ArtifactExtractor:
         )
 
     def extract_only(
-        self, result: Any, tool_name: str
+        self, result: Any, tool_name: str  # noqa: ANN401
     ) -> ArtifactExtractionResult:
         """
         Extract artifacts without uploading (for testing or preview).

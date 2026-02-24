@@ -17,7 +17,7 @@ class OutputFormatter(ABC):
     """
 
     @abstractmethod
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:
+    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
         """
         Format the given data into the specific output format.
 

@@ -437,7 +437,7 @@ def _resolve_policy_context(
     return PolicyContext.from_metadata(metadata, layer_order=DEFAULT_POLICY_LAYER_ORDER)
 
 
-def _parse_positive_int(value: Any) -> Optional[int]:
+def _parse_positive_int(value: Any) -> Optional[int]:  # noqa: ANN401
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -468,7 +468,7 @@ def _resolve_stage_budget_fallback(metadata: Mapping[str, Any]) -> str:
     return fallback
 
 
-def _parse_positive_float(value: Any) -> Optional[float]:
+def _parse_positive_float(value: Any) -> Optional[float]:  # noqa: ANN401
     try:
         parsed = float(value)
     except (TypeError, ValueError):

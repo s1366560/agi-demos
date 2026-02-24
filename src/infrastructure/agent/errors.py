@@ -109,7 +109,7 @@ class AgentValidationError(AgentError):
         self,
         message: str,
         field: Optional[str] = None,
-        value: Optional[Any] = None,
+        value: Optional[Any] = None,  # noqa: ANN401
         context: Optional[ErrorContext] = None,
     ) -> None:
         super().__init__(

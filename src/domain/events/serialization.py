@@ -249,7 +249,7 @@ class EventSerializer:
             raise ValueError(f"Unknown format: {format}")
 
     @staticmethod
-    def _json_serializer(obj: Any) -> Any:
+    def _json_serializer(obj: Any) -> Any:  # noqa: ANN401
         """Custom JSON serializer for special types."""
         if isinstance(obj, datetime):
             return obj.isoformat()

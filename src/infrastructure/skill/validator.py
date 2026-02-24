@@ -495,7 +495,7 @@ class AgentSkillsValidator:
                 )
             )
 
-    def _validate_allowed_tools(self, allowed_tools: Any, errors: List[ValidationError]) -> None:
+    def _validate_allowed_tools(self, allowed_tools: Any, errors: List[ValidationError]) -> None:  # noqa: ANN401
         """Validate the allowed-tools field format."""
         if not isinstance(allowed_tools, str):
             errors.append(

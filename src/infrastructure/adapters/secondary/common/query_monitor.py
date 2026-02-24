@@ -293,11 +293,11 @@ class QueryMonitor:
 
     async def execute(
         self,
-        session: Any,
-        query: Any,
+        session: Any,  # noqa: ANN401
+        query: Any,  # noqa: ANN401
         params: Optional[Dict[str, Any]] = None,
         duration_ms: Optional[float] = None,
-    ) -> Any:
+    ) -> Any:  # noqa: ANN401
         """
         Execute and monitor a query.
 

@@ -520,7 +520,7 @@ class CostTracker:
         self.call_count = 0
 
     @staticmethod
-    def _safe_int(value: Any) -> int:
+    def _safe_int(value: Any) -> int:  # noqa: ANN401
         """
         Safely convert a value to int.
 

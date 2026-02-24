@@ -238,7 +238,7 @@ class AgentContainerServer:
             await self._health_server.cleanup()
             logger.info("Health server stopped")
 
-    async def _handle_health(self, request) -> Any:
+    async def _handle_health(self, request) -> Any:  # noqa: ANN401
         """Handle health check request."""
         from aiohttp import web
 
@@ -252,13 +252,13 @@ class AgentContainerServer:
             }
         )
 
-    async def _handle_status(self, request) -> Any:
+    async def _handle_status(self, request) -> Any:  # noqa: ANN401
         """Handle status request."""
         from aiohttp import web
 
         return web.json_response(self._get_status_dict())
 
-    async def _handle_metrics(self, request) -> Any:
+    async def _handle_metrics(self, request) -> Any:  # noqa: ANN401
         """Handle metrics request."""
         from aiohttp import web
 

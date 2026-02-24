@@ -9,15 +9,22 @@ Provides a context object for message handlers with access to:
 - Connection manager
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from fastapi import WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+        ConnectionManager,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +45,10 @@ class MessageContext:
     container: DIContainer
 
     # Lazy-loaded connection manager (to avoid circular imports)
-    _connection_manager: Optional[Any] = None
+    _connection_manager: Optional[ConnectionManager] = None
 
     @property
-    def connection_manager(self) -> Any:
+    def connection_manager(self) -> ConnectionManager:
         """Get the connection manager instance."""
         if self._connection_manager is None:
             from src.infrastructure.adapters.primary.web.websocket.connection_manager import (

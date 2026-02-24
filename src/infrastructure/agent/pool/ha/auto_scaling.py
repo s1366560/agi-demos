@@ -124,7 +124,7 @@ class AutoScalingService:
 
     def __init__(
         self,
-        pool_manager: Optional[Any] = None,
+        pool_manager: Optional[Any] = None,  # noqa: ANN401
         default_policy: Optional[ScalingPolicy] = None,
     ):
         self._pool_manager = pool_manager

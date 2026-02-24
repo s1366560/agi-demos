@@ -6,8 +6,14 @@ and route to the most appropriate SubAgent. This replaces pure keyword
 matching with semantic understanding.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.llm_providers.llm_types import LLMClient
+
 
 from .schemas import (
     LLMRoutingDecision,
@@ -36,7 +42,7 @@ class IntentRouter:
 
     def __init__(
         self,
-        llm_client: Any,
+        llm_client: LLMClient,
         candidates: Optional[List[RoutingCandidate]] = None,
     ):
         """Initialize IntentRouter.

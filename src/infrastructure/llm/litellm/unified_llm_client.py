@@ -6,8 +6,10 @@ unified LLMClient interface, replacing LangChain dependencies with our own
 abstraction layer.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.domain.llm_providers.llm_types import (
     DEFAULT_MAX_TOKENS,
@@ -19,6 +21,9 @@ from src.domain.llm_providers.llm_types import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
 
 
 class UnifiedLLMClient(LLMClient):
@@ -47,7 +52,7 @@ class UnifiedLLMClient(LLMClient):
 
     def __init__(
         self,
-        litellm_client: Any,  # LiteLLMClient - use Any to avoid circular imports
+        litellm_client: LiteLLMClient,
         temperature: float = 0.7,
         config: Optional[LLMConfig] = None,
     ):
@@ -68,14 +73,14 @@ class UnifiedLLMClient(LLMClient):
         self.temperature = temperature
 
     @property
-    def litellm_client(self) -> Any:
+    def litellm_client(self) -> LiteLLMClient:
         """Access the underlying LiteLLM client."""
         return self._litellm_client
 
     async def _generate_response(
         self,
         messages: list[Message],
-        response_model: Any = None,
+        response_model: Any = None,  # noqa: ANN401
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, Any]:

@@ -13,7 +13,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,11 @@ from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository im
 from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
     SqlMCPServerRepository,
 )
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
 
 
 def _utcnow() -> datetime:
@@ -68,8 +73,8 @@ class MCPRuntimeService:
         server_repo: SqlMCPServerRepository,
         app_repo: SqlMCPAppRepository,
         app_service: MCPAppService,
-        sandbox_manager: Any,
-        redis_client: Optional[Any] = None,
+        sandbox_manager: SandboxMCPServerManager,
+        redis_client: Optional[Redis] = None,
     ) -> None:
         self._db = db
         self._server_repo = server_repo

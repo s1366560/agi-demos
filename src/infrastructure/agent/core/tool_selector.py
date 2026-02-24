@@ -333,7 +333,7 @@ class ToolSelector:
 
     def score_tool_relevance(
         self,
-        tool: Any,
+        tool: Any,  # noqa: ANN401
         context: ToolSelectionContext,
     ) -> float:
         """Score a tool's relevance to the context.
@@ -475,7 +475,7 @@ class ToolSelector:
         tools: Dict[str, Any],
         context: ToolSelectionContext,
     ) -> List[str]:
-        def _score_fallback(tool: Any) -> float:
+        def _score_fallback(tool: Any) -> float:  # noqa: ANN401
             return self.score_tool_relevance(tool, context)
 
         try:

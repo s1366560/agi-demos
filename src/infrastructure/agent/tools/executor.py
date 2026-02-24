@@ -92,7 +92,7 @@ class DoomLoopDetectorProtocol(Protocol):
 class PermissionManagerProtocol(Protocol):
     """Protocol for permission manager."""
 
-    def evaluate(self, permission: str, pattern: str) -> Any:
+    def evaluate(self, permission: str, pattern: str) -> Any:  # noqa: ANN401
         """Evaluate permission rule."""
         ...
 
@@ -589,7 +589,7 @@ class ToolExecutor:
     # Regex matching long base64-like sequences (256+ chars)
     _BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/=]{256,}')
 
-    def _process_result(self, result: Any) -> tuple[str, Any]:
+    def _process_result(self, result: Any) -> tuple[str, Any]:  # noqa: ANN401
         """
         Process tool result into output string and SSE result.
 
@@ -639,7 +639,7 @@ class ToolExecutor:
     async def _process_artifacts(
         self,
         tool_name: str,
-        result: Any,
+        result: Any,  # noqa: ANN401
         tool_execution_id: Optional[str],
         context: ExecutionContext,
     ) -> AsyncIterator[AgentDomainEvent]:

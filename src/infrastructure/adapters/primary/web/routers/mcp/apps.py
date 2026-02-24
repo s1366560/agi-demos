@@ -4,9 +4,12 @@ CRUD operations and resource serving for MCP Apps -
 interactive HTML interfaces declared by MCP tools.
 """
 
+
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -26,6 +29,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository
 from .utils import ensure_project_access, get_container_with_db
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from src.domain.model.mcp.app import MCPApp
 
 router = APIRouter(prefix="/apps", tags=["MCP Apps"])
 
@@ -105,7 +112,7 @@ async def _get_mcp_runtime_service(request: Request, db: AsyncSession) -> MCPRun
     )
 
 
-def _validate_tenant(app: Any, tenant_id: str) -> None:
+def _validate_tenant(app: MCPApp, tenant_id: str) -> None:
     """Ensure app belongs to the requesting tenant."""
     if app.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="MCP App not found")
@@ -494,7 +501,7 @@ async def proxy_resource_read(
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
 
-        async def _read_resource() -> Any:
+        async def _read_resource() -> Any:  # noqa: ANN401
             """Call __resources_read__ with a 15s timeout."""
             return await asyncio.wait_for(
                 mcp_manager.call_tool(

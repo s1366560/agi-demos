@@ -468,7 +468,7 @@ class SessionProcessor:
             return {}
 
     async def _hydrate_mcp_ui_metadata(
-        self, tool_instance: Any, app_id: str, tool_name: str
+        self, tool_instance: Any, app_id: str, tool_name: str  # noqa: ANN401
     ) -> Dict[str, Any]:
         """Ensure MCP tool has usable UI metadata for app rendering."""
         ui_metadata = getattr(tool_instance, "ui_metadata", None) or {}
@@ -2079,7 +2079,7 @@ class SessionProcessor:
     async def _process_tool_artifacts(
         self,
         tool_name: str,
-        result: Any,
+        result: Any,  # noqa: ANN401
         tool_execution_id: Optional[str] = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
