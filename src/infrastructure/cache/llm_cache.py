@@ -18,7 +18,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.configuration.config import get_settings
 
@@ -152,7 +152,7 @@ class LLMCache:
             response, timestamp = self._l1_cache[cache_key]
             if not self._is_expired(timestamp, self._l1_ttl):
                 logger.debug(f"L1 cache hit: {cache_key}")
-                return response
+                return cast(str | None, response)
             else:
                 # Expired, remove from L1
                 del self._l1_cache[cache_key]
@@ -166,7 +166,7 @@ class LLMCache:
                     # Populate L1 cache
                     self._l1_cache[cache_key] = (cached, datetime.now(UTC))
                     self._evict_l1_if_needed()
-                    return cached
+                    return cast(str | None, cached)
             except Exception as e:
                 logger.warning(f"L2 cache get failed: {e}")
 

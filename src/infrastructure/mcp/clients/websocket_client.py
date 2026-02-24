@@ -18,7 +18,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 
@@ -561,7 +561,7 @@ class MCPWebSocketClient:
         try:
             result = await self._send_request("prompts/list", {}, timeout=timeout)
             if result:
-                return result.get("prompts", [])
+                return cast(list[dict[str, Any]], result.get("prompts", []))
             return []
         except Exception as e:
             logger.error(f"list_prompts error: {e}")
@@ -714,7 +714,7 @@ class MCPWebSocketClient:
 
             # Wait for response with timeout
             result = await asyncio.wait_for(future, timeout=timeout)
-            return result
+            return cast(dict[str, Any] | None, result)
 
         except TimeoutError:
             async with self._request_id_lock:

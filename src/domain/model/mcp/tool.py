@@ -6,7 +6,7 @@ Defines the MCPTool entity, schema, and result value objects.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class MCPToolSchema:
         "app" = callable by the MCP App UI only.
         """
         if self.ui_metadata:
-            return self.ui_metadata.get("visibility", ["model", "app"])
+            return cast(list[str], self.ui_metadata.get("visibility", ["model", "app"]))
         return ["model", "app"]
 
     @property

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity, HITLRequestType
 from src.domain.model.agent.hitl_types import (
@@ -94,11 +94,11 @@ class RayHITLHandler:
         if request_id:
             request_data["_request_id"] = request_id
 
-        return await self._execute_hitl_request(
+        return cast(str, await self._execute_hitl_request(
             HITLType.CLARIFICATION,
             request_data,
             timeout_seconds or self.default_timeout,
-        )
+        ))
 
     async def request_decision(
         self,
@@ -122,11 +122,11 @@ class RayHITLHandler:
         if request_id:
             request_data["_request_id"] = request_id
 
-        return await self._execute_hitl_request(
+        return cast(str, await self._execute_hitl_request(
             HITLType.DECISION,
             request_data,
             timeout_seconds or self.default_timeout,
-        )
+        ))
 
     async def request_env_vars(
         self,
@@ -146,11 +146,11 @@ class RayHITLHandler:
         if request_id:
             request_data["_request_id"] = request_id
 
-        return await self._execute_hitl_request(
+        return cast(dict[str, str], await self._execute_hitl_request(
             HITLType.ENV_VAR,
             request_data,
             timeout_seconds or self.default_timeout,
-        )
+        ))
 
     async def request_permission(
         self,
@@ -171,11 +171,11 @@ class RayHITLHandler:
             "allow_remember": allow_remember,
         }
 
-        return await self._execute_hitl_request(
+        return cast(bool, await self._execute_hitl_request(
             HITLType.PERMISSION,
             request_data,
             timeout_seconds or 60.0,
-        )
+        ))
 
     async def _execute_hitl_request(
         self,

@@ -13,7 +13,7 @@ import hashlib
 import json
 import logging
 from collections import OrderedDict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class CachedEmbeddingService:
         try:
             data = await self._redis.get(key)
             if data:
-                return json.loads(data)
+                return cast(list[float] | None, json.loads(data))
         except Exception as e:
             logger.debug(f"Redis cache read error: {e}")
         return None

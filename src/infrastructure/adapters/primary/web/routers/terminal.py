@@ -8,7 +8,7 @@ import asyncio
 import contextlib
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -297,9 +297,9 @@ async def _resolve_terminal_session(
             await websocket.send_json({"type": "error", "message": "Session not found"})
             await websocket.close()
             return None
-        return session
+        return cast(TerminalSession | None, session)
     try:
-        return await proxy.create_session(container_id=sandbox_id)
+        return cast(TerminalSession | None, await proxy.create_session(container_id=sandbox_id))
     except ValueError as e:
         await websocket.send_json({"type": "error", "message": str(e)})
         await websocket.close()

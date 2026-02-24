@@ -8,7 +8,7 @@ for sandbox environments. Extracted from MCPSandboxAdapter.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import docker
 from docker.errors import ImageNotFound, NotFound
@@ -237,7 +237,7 @@ class ContainerManager:
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, container.reload)
-            return container.status == "running"
+            return cast(bool, container.status == "running")
         except Exception:
             return False
 
@@ -268,7 +268,7 @@ class ContainerManager:
                     c for c in containers if c.labels.get("memstack.tenant.id") == tenant_id
                 ]
 
-            return containers
+            return cast(list[Any], containers)
         except Exception as e:
             logger.error(f"Error listing sandbox containers: {e}")
             return []

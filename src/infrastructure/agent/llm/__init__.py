@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 """
 LLM streaming utilities for ReActAgent.
 
@@ -32,7 +34,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> getattr:
+def __getattr__(name: str) -> Any:
     """Lazy import components to avoid circular imports."""
     # LLM stream components
     if name in (
@@ -47,7 +49,7 @@ def __getattr__(name: str) -> getattr:
     ):
         from src.infrastructure.agent.core import llm_stream
 
-        return getattr(llm_stream, name)
+        return cast(Any, getattr(llm_stream, name))
 
     # LLM Invoker components
     if name in (
@@ -63,6 +65,6 @@ def __getattr__(name: str) -> getattr:
     ):
         from src.infrastructure.agent.llm import invoker
 
-        return getattr(invoker, name)
+        return cast(Any, getattr(invoker, name))
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

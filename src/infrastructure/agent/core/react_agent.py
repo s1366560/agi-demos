@@ -28,7 +28,7 @@ import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from src.domain.events.agent_events import (
@@ -1165,10 +1165,10 @@ class ReActAgent:
         )
 
         # Use SystemPromptManager to build the prompt
-        return await self.prompt_manager.build_system_prompt(
+        return cast(str, await self.prompt_manager.build_system_prompt(
             context=context,
             subagent=subagent,
-        )
+        ))
 
     async def _stream_detect_plan_mode(
         self,
@@ -4041,7 +4041,7 @@ class ReActAgent:
         current_tools, _ = self._get_current_tools()
         for tool in current_tools.values():
             if hasattr(tool, "sandbox_id") and tool.sandbox_id:
-                return tool.sandbox_id
+                return cast(str | None, tool.sandbox_id)
         return None
 
     def _convert_domain_event(

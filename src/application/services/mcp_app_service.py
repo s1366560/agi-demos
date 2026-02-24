@@ -5,7 +5,7 @@ resource resolution, tool call proxying, and status management.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.mcp.app import (
     MCPApp,
@@ -217,7 +217,7 @@ class MCPAppService:
         include_disabled: bool = False,
     ) -> list[MCPApp]:
         """List all MCP Apps for a tenant (across all projects)."""
-        return await self._app_repo.find_by_tenant(tenant_id, include_disabled)
+        return cast(list[MCPApp], await self._app_repo.find_by_tenant(tenant_id, include_disabled))
 
     async def list_ready_apps(self, project_id: str) -> list[MCPApp]:
         """List all ready-to-render MCP Apps for a project."""

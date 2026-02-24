@@ -1,7 +1,7 @@
 """Feishu utility functions for direct API calls."""
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.channels.message import SenderInfo
 
@@ -43,7 +43,7 @@ class FeishuClient:
                 )
             except ImportError:
                 raise ImportError("lark_oapi not installed. Run: pip install lark_oapi") from None
-        return self._client
+        return cast(None, self._client)
 
     @property
     def media(self) -> None:
@@ -118,7 +118,7 @@ class FeishuClient:
             },
         )
 
-        return response.get("data", {}).get("message_id")
+        return cast(str, response.get("data", {}).get("message_id"))
 
     async def send_card_message(self, to: str, card: dict[str, Any] | str) -> str:
         """Send interactive card message.
@@ -145,7 +145,7 @@ class FeishuClient:
             },
         )
 
-        return response.get("data", {}).get("message_id")
+        return cast(str, response.get("data", {}).get("message_id"))
 
     async def send_markdown_card(self, to: str, content: str, title: str | None = None) -> str:
         """Send a markdown card message.
@@ -185,7 +185,7 @@ class FeishuClient:
             },
         )
 
-        return response.get("data", {}).get("message_id")
+        return cast(str, response.get("data", {}).get("message_id"))
 
     async def send_file_message(self, to: str, file_key: str, file_name: str = "") -> str:
         """Send a file message.
@@ -210,7 +210,7 @@ class FeishuClient:
             },
         )
 
-        return response.get("data", {}).get("message_id")
+        return cast(str, response.get("data", {}).get("message_id"))
 
     async def reply_message(self, message_id: str, text: str, msg_type: str = "text") -> str:
         """Reply to a message.
@@ -237,7 +237,7 @@ class FeishuClient:
             },
         )
 
-        return response.get("data", {}).get("message_id")
+        return cast(str, response.get("data", {}).get("message_id"))
 
     async def edit_message(self, message_id: str, text: str, msg_type: str = "text") -> None:
         """Edit an existing message (within 24 hours).
@@ -405,7 +405,7 @@ class FeishuClient:
             },
         )
 
-        return response.get("data", {}).get("message_id")
+        return cast(str, response.get("data", {}).get("message_id"))
 
     async def upload_image(self, image_data: bytes) -> str:
         """Upload image.
@@ -420,7 +420,7 @@ class FeishuClient:
 
         response = client.im.image.create({"image_type": "message"}, image_data)
 
-        return response.get("data", {}).get("image_key")
+        return cast(str, response.get("data", {}).get("image_key"))
 
 
 # Convenience functions for direct use

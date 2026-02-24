@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -360,7 +360,7 @@ class MediaImportService:
                     # Fallback to expected path
                     sandbox_path = f"/workspace/input/{filename}"
                 logger.info(f"[MediaImportService] Import success: {sandbox_path}")
-                return sandbox_path
+                return cast(str, sandbox_path)
             else:
                 error_msg = import_result.get(
                     "error", import_result.get("message", "Unknown error")

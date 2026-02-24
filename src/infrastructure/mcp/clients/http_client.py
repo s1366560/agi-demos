@@ -15,7 +15,7 @@ import json
 import logging
 from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import aiohttp
 
@@ -658,7 +658,7 @@ class MCPHttpClient:
 
                 result = await response.json()
                 logger.debug(f"Remote MCP response: {json.dumps(result)}")
-                return result
+                return cast(dict[str, Any] | None, result)
 
         except TimeoutError:
             logger.error(f"Remote MCP request '{method}' timed out after {timeout}s")

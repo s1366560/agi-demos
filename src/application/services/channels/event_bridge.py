@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.configuration.config import get_settings
 from src.domain.model.channels.message import ChannelAdapter
@@ -205,7 +205,7 @@ class ChannelEventBridge:
 
         conn = self._channel_manager.connections.get(channel_config_id)
         if conn and getattr(conn, "adapter", None):
-            return conn.adapter
+            return cast("ChannelAdapter", conn.adapter)
         return None
 
     # ------------------------------------------------------------------

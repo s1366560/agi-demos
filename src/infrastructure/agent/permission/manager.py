@@ -11,7 +11,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from .errors import PermissionDeniedError, PermissionRejectedError
 from .rules import (
@@ -291,7 +291,7 @@ class PermissionManager:
                     raise PermissionRejectedError(permission, patterns)
 
                 # Permission granted for this pattern
-                return result
+                return cast(str, result)
 
             # action == ALLOW, continue to next pattern
 

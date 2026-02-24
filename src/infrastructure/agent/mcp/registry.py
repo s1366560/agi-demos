@@ -9,7 +9,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.agent.mcp.client import MCPClient
 
@@ -492,7 +492,7 @@ class MCPServerRegistry:
             )
 
             logger.info(f"Elicitation request from {server_id} fulfilled")
-            return result
+            return cast(dict[str, Any] | None, result)
 
         except TimeoutError:
             logger.error(f"Elicitation request from {server_id} timed out")

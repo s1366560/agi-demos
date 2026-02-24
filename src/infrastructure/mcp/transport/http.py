@@ -5,7 +5,7 @@ Simple HTTP request/response transport for MCP servers.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -142,7 +142,7 @@ class HTTPTransport(BaseTransport):
             if "error" in data:
                 raise MCPTransportError(f"MCP server error: {data['error']}")
 
-            return data.get("result", {})
+            return cast(dict[str, Any], data.get("result", {}))
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP request failed: {e}")
@@ -153,7 +153,7 @@ class HTTPTransport(BaseTransport):
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self.send_request("tools/list")
-        return result.get("tools", [])
+        return cast(list[dict[str, Any]], result.get("tools", []))
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""

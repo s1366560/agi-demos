@@ -9,7 +9,7 @@ Temporal's built-in mechanisms.
 import logging
 from datetime import UTC, datetime
 
-from typing import Any
+from typing import Any, cast
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
 
@@ -68,9 +68,9 @@ class TaskService:
         Returns:
             List of task logs
         """
-        return await self._task_repo.find_by_user(
+        return cast(list[TaskLog], await self._task_repo.find_by_user(
             user_id, status=status, limit=limit, offset=offset
-        )
+        ))
 
     async def retry_task(self, task_id: str) -> bool:
         """

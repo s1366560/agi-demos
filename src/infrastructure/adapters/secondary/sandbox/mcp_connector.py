@@ -8,7 +8,7 @@ Extracted from MCPSandboxAdapter.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.adapters.secondary.sandbox.instance import MCPSandboxInstance
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
@@ -234,7 +234,7 @@ class MCPConnector:
             # Update activity timestamp
             instance.last_activity_at = datetime.now()
 
-            return result
+            return cast(dict[str, Any], result)
 
         except TimeoutError:
             raise RuntimeError(

@@ -9,7 +9,7 @@ import time as time_module
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.model.agent.hitl.hitl_types import HITLPendingException
@@ -973,7 +973,7 @@ def _format_hitl_response_as_tool_result(
         return f"User did not complete {hitl_type} request"
     formatter = _HITL_FORMATTERS.get(hitl_type)
     if formatter:
-        return formatter(response_data)
+        return cast(str, formatter(response_data))
     return f"User responded to {hitl_type} request"
 
 

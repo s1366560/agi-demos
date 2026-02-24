@@ -16,7 +16,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -115,7 +115,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 f"event_time_us={event_time_us}, type={event_type.value}, id={event_id}"
             )
 
-            return event_id
+            return cast(str, event_id)
 
         except Exception as e:
             logger.error(f"[AgentEventBus] Failed to publish to {stream_key}: {e}")
@@ -322,7 +322,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         stream_key = self._get_stream_key(conversation_id, message_id)
 
         try:
-            return await self._redis.exists(stream_key) > 0
+            return cast(bool, await self._redis.exists(stream_key) > 0)
         except Exception as e:
             logger.warning(f"[AgentEventBus] Failed to check stream existence: {e}")
             return False
@@ -365,7 +365,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             data = data.decode("utf-8")
         if data:
             try:
-                return json.loads(data)
+                return cast(dict[str, Any], json.loads(data))
             except json.JSONDecodeError:
                 return {"raw": data}
         return {}
@@ -412,7 +412,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 if isinstance(data, bytes):
                     data = data.decode()
                 meta = json.loads(data)
-                return meta.get("status") == "complete"
+                return cast(bool, meta.get("status") == "complete")
             return False
         except Exception:
             return False

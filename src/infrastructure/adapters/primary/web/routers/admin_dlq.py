@@ -9,7 +9,7 @@ Provides administrative endpoints for managing the Dead Letter Queue:
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -155,7 +155,7 @@ async def get_dlq(request: Request) -> DeadLetterQueuePort:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="DLQ service not available",
             )
-        return dlq
+        return cast(DeadLetterQueuePort, dlq)
     except AttributeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

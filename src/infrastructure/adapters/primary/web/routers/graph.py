@@ -7,7 +7,7 @@ moved to enhanced_search.py to avoid duplication.
 
 import logging
 from datetime import UTC
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -34,7 +34,7 @@ def _serialize_datetime(value: Any) -> str | None:
         return None
     # Neo4j DateTime has isoformat() method
     if hasattr(value, "isoformat"):
-        return value.isoformat()
+        return cast(str | None, value.isoformat())
     # Fallback to string conversion
     return str(value) if value else None
 

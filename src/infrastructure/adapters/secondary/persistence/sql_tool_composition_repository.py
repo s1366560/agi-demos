@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of ToolCompositionRepositoryPort using BaseReposito
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,7 +140,7 @@ class SqlToolCompositionRepository(
             delete(DBToolComposition).where(DBToolComposition.id == composition_id)
         )
         await self._session.flush()
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     @staticmethod
     def _to_domain(db_composition: DBToolComposition) -> "ToolComposition":

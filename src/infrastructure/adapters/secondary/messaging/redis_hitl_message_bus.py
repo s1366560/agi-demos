@@ -23,7 +23,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -124,7 +124,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 f"message_id={message_id}, key={response_key}"
             )
 
-            return message_id
+            return cast(str, message_id)
 
         except Exception as e:
             logger.error(f"[HITLMessageBus] Failed to publish to {stream_key}: {e}")
@@ -292,7 +292,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         try:
             acked = await self._redis.xack(stream_key, consumer_group, *message_ids)
             logger.info(f"[HITLMessageBus] Acknowledged {acked} messages in {stream_key}")
-            return acked
+            return cast(int, acked)
         except Exception as e:
             logger.error(f"[HITLMessageBus] Failed to ack messages in {stream_key}: {e}")
             raise
@@ -466,7 +466,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 # Trim to max length
                 removed = await self._redis.xtrim(stream_key, maxlen=max_len, approximate=True)
                 logger.info(f"[HITLMessageBus] Trimmed {removed} messages from {stream_key}")
-                return removed
+                return cast(int, removed)
 
         except Exception as e:
             logger.error(f"[HITLMessageBus] Failed to cleanup {stream_key}: {e}")
@@ -485,7 +485,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         stream_key = self._get_stream_key(request_id)
 
         try:
-            return await self._redis.exists(stream_key) > 0
+            return cast(bool, await self._redis.exists(stream_key) > 0)
         except Exception as e:
             logger.error(f"[HITLMessageBus] Failed to check stream existence: {e}")
             return False

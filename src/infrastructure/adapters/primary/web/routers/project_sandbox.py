@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import (
     APIRouter,
@@ -231,7 +231,7 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     from src.configuration.di_container import DIContainer
 
     container = DIContainer()
-    return container.sandbox_adapter()
+    return cast(MCPSandboxAdapter, container.sandbox_adapter())
 
 
 def get_lifecycle_service(
@@ -253,7 +253,7 @@ def get_lifecycle_service(
 
         container = DIContainer().with_db(db)
 
-    return container.project_sandbox_lifecycle_service()
+    return cast(ProjectSandboxLifecycleService, container.project_sandbox_lifecycle_service())
 
 
 def get_lifecycle_service_for_websocket(
@@ -273,7 +273,7 @@ def get_lifecycle_service_for_websocket(
 
         container = DIContainer().with_db(db)
 
-    return container.project_sandbox_lifecycle_service()
+    return cast(ProjectSandboxLifecycleService, container.project_sandbox_lifecycle_service())
 
 
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
@@ -285,7 +285,7 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     try:
         # Get container from app.state which has redis_client properly configured
         container = request.app.state.container
-        return container.sandbox_event_publisher()
+        return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
     except Exception as e:
         logger.warning(f"Could not create event publisher: {e}")
         return None

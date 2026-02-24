@@ -1,7 +1,7 @@
 """S3 Storage Adapter - Implementation of StorageServicePort for S3/MinIO."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import aioboto3
 from botocore.exceptions import ClientError
@@ -155,7 +155,7 @@ class S3StorageAdapter(StorageServicePort):
                 logger.debug(
                     f"Generated presigned URL for: {object_key} (expires in {expiration_seconds}s)"
                 )
-                return url
+                return cast(str, url)
 
             except ClientError as e:
                 logger.error(f"Failed to generate presigned URL: {object_key}, error: {e}")
@@ -208,7 +208,7 @@ class S3StorageAdapter(StorageServicePort):
                 )
                 content = await response["Body"].read()
                 logger.debug(f"Retrieved file from S3: {object_key} ({len(content)} bytes)")
-                return content
+                return cast(bytes | None, content)
 
             except ClientError as e:
                 if e.response.get("Error", {}).get("Code") == "NoSuchKey":
@@ -437,7 +437,7 @@ class S3StorageAdapter(StorageServicePort):
                     f"Generated presigned upload URL for: {object_key} "
                     f"(expires in {expiration_seconds}s)"
                 )
-                return url
+                return cast(str, url)
 
             except ClientError as e:
                 logger.error(f"Failed to generate presigned upload URL: {object_key}, error: {e}")

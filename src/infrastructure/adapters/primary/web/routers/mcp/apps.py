@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -95,7 +95,7 @@ class MCPAppToolCallResponse(BaseModel):
 def _get_mcp_app_service(request: Request, db: AsyncSession) -> MCPAppService:
     """Get MCPAppService from DI container."""
     container = get_container_with_db(request, db)
-    return container.mcp_app_service()
+    return cast(MCPAppService, container.mcp_app_service())
 
 
 async def _get_mcp_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
@@ -517,7 +517,7 @@ def _extract_html_from_result(result: Any, uri: str) -> str:
 
     if not html_content:
         raise HTTPException(status_code=404, detail=f"No content found for resource: {uri}")
-    return html_content
+    return cast(str, html_content)
 
 
 @router.post("/resources/read", response_model=MCPResourceReadResponse)

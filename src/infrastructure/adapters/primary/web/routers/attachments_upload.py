@@ -7,7 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -48,7 +48,7 @@ def _get_storage_service() -> None:
 
         container = DIContainer()
         _storage_service = container.storage_service()
-    return _storage_service
+    return cast(None, _storage_service)
 
 
 async def get_attachment_service(

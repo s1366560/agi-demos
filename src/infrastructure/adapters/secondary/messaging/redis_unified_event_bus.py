@@ -23,7 +23,7 @@ Features:
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -473,7 +473,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         stream_key = self._get_stream_key(routing_key)
 
         try:
-            return await self._redis.xack(stream_key, consumer_group, *sequence_ids)
+            return cast(int, await self._redis.xack(stream_key, consumer_group, *sequence_ids))
         except redis.RedisError as e:
             logger.error(f"Failed to ack events: {e}")
             return 0
@@ -481,14 +481,14 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
     async def stream_exists(self, routing_key: str | RoutingKey) -> bool:
         """Check if a stream exists."""
         stream_key = self._get_stream_key(routing_key)
-        return await self._redis.exists(stream_key) > 0
+        return cast(bool, await self._redis.exists(stream_key) > 0)
 
     async def get_stream_length(self, routing_key: str | RoutingKey) -> int:
         """Get the number of events in a stream."""
         stream_key = self._get_stream_key(routing_key)
 
         try:
-            return await self._redis.xlen(stream_key)
+            return cast(int, await self._redis.xlen(stream_key))
         except redis.RedisError:
             return 0
 
@@ -502,11 +502,11 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         stream_key = self._get_stream_key(routing_key)
 
         try:
-            return await self._redis.xtrim(
+            return cast(int, await self._redis.xtrim(
                 stream_key,
                 maxlen=max_length,
                 approximate=approximate,
-            )
+            ))
         except redis.RedisError as e:
             logger.error(f"Failed to trim stream {stream_key}: {e}")
             return 0
@@ -517,7 +517,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
         try:
             result = await self._redis.delete(stream_key)
-            return result > 0
+            return cast(bool, result > 0)
         except redis.RedisError as e:
             logger.error(f"Failed to delete stream {stream_key}: {e}")
             return False

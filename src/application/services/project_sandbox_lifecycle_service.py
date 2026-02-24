@@ -19,7 +19,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.exc import IntegrityError
 
@@ -388,7 +388,7 @@ class ProjectSandboxLifecycleService:
 
         handler = _status_handlers.get(existing.status)
         if handler is not None:
-            return await handler(existing, project_id)
+            return cast("SandboxInfo | None", await handler(existing, project_id))
 
         # Unknown status, fall through to create new
         return None

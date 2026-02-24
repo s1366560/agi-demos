@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -436,8 +436,8 @@ class RegisterMCPServerTool(AgentTool):
                 text = item.get("text", "")
                 if text.startswith("Error: "):
                     text = text[7:]
-                return text
-        return result.get("error_message", "Unknown error")
+                return cast(str, text)
+        return cast(str, result.get("error_message", "Unknown error"))
 
     @staticmethod
     def _parse_result(result: dict[str, Any]) -> Any:

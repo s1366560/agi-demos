@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
@@ -119,7 +119,7 @@ class PluginManagerTool(AgentTool):
         if handler is None:
             return self._error_response(f"Unsupported action: {action}")
 
-        return await handler(manager, dry_run, kwargs)
+        return cast(dict[str, Any], await handler(manager, dry_run, kwargs))
 
     def _handle_list(self, manager: Any) -> dict[str, Any]:
         plugins, diagnostics = manager.list_plugins(tenant_id=self._tenant_id)

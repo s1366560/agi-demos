@@ -17,7 +17,7 @@ Attributes:
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass
@@ -157,7 +157,7 @@ class ToolComposition:
         Returns:
             List of fallback tool names
         """
-        return self.execution_template.get("fallback_alternatives", [])
+        return cast(list[str], self.execution_template.get("fallback_alternatives", []))
 
     def get_composition_type(self) -> str:
         """
@@ -166,7 +166,7 @@ class ToolComposition:
         Returns:
             Composition type string
         """
-        return self.execution_template.get("type", "sequential")
+        return cast(str, self.execution_template.get("type", "sequential"))
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""

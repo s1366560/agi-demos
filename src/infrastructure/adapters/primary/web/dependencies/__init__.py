@@ -1,6 +1,7 @@
 # FastAPI dependencies for authentication
 
 import logging
+from typing import cast
 
 from fastapi import Request
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 def get_neo4j_client(request: Request) -> None:
     """Get Neo4j client from app state for direct graph queries."""
     try:
-        return request.app.state.container.neo4j_client
+        return cast(None, request.app.state.container.neo4j_client)
     except Exception:
         logger.warning("Failed to get neo4j_client from container")
         return None
@@ -61,7 +62,7 @@ def get_workflow_engine(request: Request) -> None:
         )
         raise RuntimeError("Workflow engine not initialized. Cannot process workflow requests.")
 
-    return state.workflow_engine
+    return cast(None, state.workflow_engine)
 
 
 def get_graph_service(request: Request) -> None:
@@ -71,7 +72,7 @@ def get_graph_service(request: Request) -> None:
     including entity extraction, search, and community detection.
     """
     try:
-        return request.app.state.container.graph_service
+        return cast(None, request.app.state.container.graph_service)
     except Exception:
         logger.warning("Failed to get graph_service from container")
         return None

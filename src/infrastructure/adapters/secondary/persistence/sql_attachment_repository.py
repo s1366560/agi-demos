@@ -16,7 +16,7 @@ Migration Benefits:
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,7 +133,7 @@ class SqlAttachmentRepository(
         deleted = result.rowcount > 0
         if deleted:
             logger.debug(f"Deleted attachment: {attachment_id}")
-        return deleted
+        return cast(bool, deleted)
 
     async def delete_expired(self) -> int:
         """Delete all expired attachments."""
@@ -148,7 +148,7 @@ class SqlAttachmentRepository(
         count = result.rowcount
         if count > 0:
             logger.info(f"Deleted {count} expired attachments")
-        return count
+        return cast(int, count)
 
     async def update_status(
         self,
@@ -167,7 +167,7 @@ class SqlAttachmentRepository(
             .values(**update_values)
         )
         await self._session.commit()
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     async def update_upload_progress(
         self,
@@ -181,7 +181,7 @@ class SqlAttachmentRepository(
             .values(uploaded_parts=uploaded_parts)
         )
         await self._session.commit()
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     async def update_sandbox_path(
         self,
@@ -195,7 +195,7 @@ class SqlAttachmentRepository(
             .values(sandbox_path=sandbox_path, status=AttachmentStatus.READY.value)
         )
         await self._session.commit()
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     # === Conversion methods ===
 

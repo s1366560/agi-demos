@@ -13,7 +13,7 @@ import functools
 import logging
 import random
 from collections.abc import Callable, Coroutine
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ def _calculate_delay(
         delay += random.uniform(-jitter_amount, jitter_amount)
 
     # Ensure non-negative
-    return max(0, delay)
+    return cast(float, max(0, delay))
 
 
 async def retry_with_backoff[T](

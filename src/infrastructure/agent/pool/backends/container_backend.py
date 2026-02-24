@@ -21,7 +21,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from ..config import AgentInstanceConfig
 from ..instance import AgentInstance, ChatRequest
@@ -494,7 +494,7 @@ class ContainerBackend(Backend):
         """Get container status."""
         try:
             container = self._docker_client.containers.get(container_info.container_id)
-            return container.status
+            return cast(str, container.status)
         except Exception:
             return "error"
 
@@ -530,7 +530,7 @@ class ContainerBackend(Backend):
     async def _get_grpc_client(self, instance_id: str) -> None:
         """Get or create gRPC client for instance."""
         if instance_id in self._grpc_clients:
-            return self._grpc_clients[instance_id]
+            return cast(None, self._grpc_clients[instance_id])
 
         container_info = self._containers[instance_id]
 
@@ -579,7 +579,7 @@ class _HttpFallbackClient:
                 url,
                 json={"graceful": graceful, "timeout_seconds": timeout_seconds},
             ) as response:
-                return await response.json()
+                return cast(dict[str, Any], await response.json())
 
     async def Execute(
         self,

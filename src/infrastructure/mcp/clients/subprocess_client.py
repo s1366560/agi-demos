@@ -16,7 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -358,7 +358,7 @@ class MCPSubprocessClient:
                 logger.debug(f"MCP response: {response_str}")
 
                 if response_str:
-                    return json.loads(response_str)
+                    return cast(dict[str, Any] | None, json.loads(response_str))
 
             except TimeoutError:
                 stderr_text = await self._read_stderr()

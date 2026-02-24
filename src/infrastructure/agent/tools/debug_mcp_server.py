@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -184,7 +184,7 @@ class DebugMCPServerTool(AgentTool):
             if isinstance(item, dict) and item.get("type") == "text":
                 text = item.get("text", "")
                 try:
-                    return json.loads(text)
+                    return cast(dict[str, Any] | None, json.loads(text))
                 except (json.JSONDecodeError, TypeError):
                     # Return raw text if not JSON
                     return {"content": text}

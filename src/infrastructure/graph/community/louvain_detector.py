@@ -9,7 +9,7 @@ This module provides:
 
 import contextlib
 import logging
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from src.infrastructure.graph.neo4j_client import Neo4jClient
@@ -378,6 +378,6 @@ class LouvainDetector:
         if result.records:
             deleted = result.records[0]["deleted"]
             logger.info(f"Deleted {deleted} stale communities for project {project_id}")
-            return deleted
+            return cast(int, deleted)
 
         return 0

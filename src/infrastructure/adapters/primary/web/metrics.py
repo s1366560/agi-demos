@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import wraps
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +229,7 @@ def track_execution(operation_name: str) -> None:
 
             try:
                 result = await func(*args, **kwargs)
-                return result
+                return cast(None, result)
             except Exception as e:
                 success = False
                 logger.error(f"Error in {operation_name}: {e}")
@@ -253,7 +253,7 @@ def track_execution(operation_name: str) -> None:
 
             try:
                 result = func(*args, **kwargs)
-                return result
+                return cast(None, result)
             except Exception as e:
                 success = False
                 logger.error(f"Error in {operation_name}: {e}")

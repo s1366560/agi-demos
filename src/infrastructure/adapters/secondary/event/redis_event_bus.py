@@ -1,7 +1,7 @@
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -46,7 +46,7 @@ class RedisEventBusAdapter(EventBusPort):
             # Ensure message is JSON serializable
             # For complex objects, use default=str or similar strategy if needed
             payload = json.dumps(message, default=str)
-            return await self._redis.publish(channel, payload)
+            return cast(int, await self._redis.publish(channel, payload))
         except Exception as e:
             logger.error(f"Failed to publish to Redis channel {channel}: {e}")
             raise
@@ -115,7 +115,7 @@ class RedisEventBusAdapter(EventBusPort):
             if isinstance(message_id, bytes):
                 message_id = message_id.decode("utf-8")
 
-            return message_id
+            return cast(str, message_id)
 
         except Exception as e:
             logger.error(f"[RedisStream] Failed to add to stream {stream_key}: {e}")
@@ -277,7 +277,7 @@ class RedisEventBusAdapter(EventBusPort):
             Number of messages acknowledged
         """
         try:
-            return await self._redis.xack(stream_key, group_name, *message_ids)
+            return cast(int, await self._redis.xack(stream_key, group_name, *message_ids))
         except Exception as e:
             logger.error(f"[RedisStream] Failed to ack messages in {stream_key}: {e}")
             raise
@@ -422,7 +422,7 @@ class RedisEventBusAdapter(EventBusPort):
             Number of messages in the stream
         """
         try:
-            return await self._redis.xlen(stream_key)
+            return cast(int, await self._redis.xlen(stream_key))
         except Exception as e:
             logger.error(f"[RedisStream] Failed to get length of {stream_key}: {e}")
             return 0
@@ -445,7 +445,7 @@ class RedisEventBusAdapter(EventBusPort):
             Number of messages removed
         """
         try:
-            return await self._redis.xtrim(stream_key, maxlen=maxlen, approximate=approximate)
+            return cast(int, await self._redis.xtrim(stream_key, maxlen=maxlen, approximate=approximate))
         except Exception as e:
             logger.error(f"[RedisStream] Failed to trim {stream_key}: {e}")
             return 0

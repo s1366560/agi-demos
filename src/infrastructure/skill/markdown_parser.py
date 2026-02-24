@@ -27,7 +27,7 @@ tools:
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -193,7 +193,7 @@ class MarkdownParser:
         description = frontmatter.get("description", "")
         if not description:
             description = frontmatter.get("desc", "") or frontmatter.get("summary", "")
-        return description
+        return cast(str, description)
 
     def _extract_trigger_patterns(self, frontmatter: dict[str, Any]) -> list[str]:
         """Extract trigger patterns from frontmatter."""

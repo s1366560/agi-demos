@@ -13,7 +13,7 @@ import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
@@ -321,7 +321,7 @@ class Neo4jClient:
 
         result = await self.execute_query(query, uuid=uuid)
         if result.records:
-            return result.records[0]["deleted"] > 0
+            return cast(bool, result.records[0]["deleted"] > 0)
         return False
 
     async def find_node_by_uuid(
@@ -477,7 +477,7 @@ class Neo4jClient:
         try:
             result = await self.execute_query(query, index_name=index_name)
             if result.records and len(result.records) > 0:
-                return result.records[0].get("dimensions")
+                return cast(int | None, result.records[0].get("dimensions"))
         except Exception as e:
             logger.warning(f"Failed to get index dimension for {index_name}: {e}")
         return None

@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp.transport.base import (
@@ -138,7 +138,7 @@ class StdioTransport(BaseTransport):
         if "error" in response:
             raise MCPTransportError(f"MCP server error: {response['error']}")
 
-        return response.get("result", {})
+        return cast(dict[str, Any], response.get("result", {}))
 
     async def stop(self) -> None:
         """Terminate subprocess."""
@@ -225,14 +225,14 @@ class StdioTransport(BaseTransport):
             raise MCPTransportClosedError("Process closed connection")
 
         logger.debug(f"Received: {line.decode()[:200]}...")
-        return json.loads(line.decode())
+        return cast(dict[str, Any], json.loads(line.decode()))
 
     # High-level API methods
 
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self._send_request("tools/list")
-        return result.get("tools", [])
+        return cast(list[dict[str, Any]], result.get("tools", []))
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""

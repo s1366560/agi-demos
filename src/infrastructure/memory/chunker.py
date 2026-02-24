@@ -6,6 +6,7 @@ Character-based chunking with configurable overlap and SHA256 hashing.
 
 import hashlib
 from dataclasses import dataclass
+from typing import cast
 
 
 @dataclass(frozen=True)
@@ -55,8 +56,10 @@ def chunk_text(
         return []
     max_chars = max(32, max_tokens * chars_per_token)
     overlap_chars = max(0, overlap_tokens * chars_per_token)
+    chunks: list[TextChunk] = []
     current: list[tuple[str, int]] = []  # (line_text, line_number)
     current_chars = 0
+
     def flush() -> None:
         if not current:
             return
@@ -72,6 +75,7 @@ def chunk_text(
                 chunk_index=len(chunks),
             )
         )
+
     def carry_overlap() -> None:
         nonlocal current, current_chars
         if overlap_chars <= 0 or not current:
@@ -88,6 +92,8 @@ def chunk_text(
                 break
         current = kept
         current_chars = sum(len(t) + 1 for t, _ in kept)
+
+    for i, line in enumerate(lines):
         line_no = i + 1
         segments = _split_line_into_segments(line, max_chars)
         for segment in segments:
@@ -97,5 +103,6 @@ def chunk_text(
                 carry_overlap()
             current.append((segment, line_no))
             current_chars += line_size
+
     flush()
     return chunks

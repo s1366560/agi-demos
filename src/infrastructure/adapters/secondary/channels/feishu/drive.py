@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, cast
 
 import httpx
 
@@ -67,7 +67,7 @@ class FeishuDriveClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get file: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def create_folder(self, name: str, parent_token: str | None = None) -> str:
         """Create a new folder.
@@ -88,7 +88,7 @@ class FeishuDriveClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create folder: {response.get('msg')}")
 
-        return response["data"]["token"]
+        return cast(str, response["data"]["token"])
 
     async def upload_file(
         self,
@@ -135,7 +135,7 @@ class FeishuDriveClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to upload file: {response.get('msg')}")
 
-        return response["data"]["file_token"]
+        return cast(str, response["data"]["file_token"])
 
     async def download_file(
         self, file_token: str, local_path: str | Path | None = None
@@ -218,7 +218,7 @@ class FeishuDriveClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to copy file: {response.get('msg')}")
 
-        return response["data"]["file_token"]
+        return cast(str, response["data"]["file_token"])
 
     async def delete_file(self, file_token: str, type: str = "file") -> None:
         """Delete a file or folder.
@@ -290,7 +290,7 @@ class FeishuDriveClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get permissions: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def transfer_file_owner(
         self,

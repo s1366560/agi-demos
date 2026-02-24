@@ -19,7 +19,7 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from src.domain.model.sandbox.project_sandbox import (
@@ -615,7 +615,7 @@ class LocalSandboxAdapter(SandboxPort):
             content = result.get("content", [])
             for item in content:
                 if item.get("type") == "text":
-                    return item.get("text", "")
+                    return cast(str | None, item.get("text", ""))
 
             return None
 

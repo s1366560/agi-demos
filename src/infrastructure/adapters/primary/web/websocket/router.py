@@ -15,7 +15,7 @@ Features:
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import orjson
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -40,7 +40,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["agent-websocket"])
 
 def get_container_from_app(websocket: WebSocket) -> DIContainer:
     """Get the DI container from the FastAPI app state."""
-    return websocket.app.state.container
+    return cast(DIContainer, websocket.app.state.container)
 
 
 @router.websocket("/ws")

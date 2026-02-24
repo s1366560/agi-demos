@@ -4,7 +4,7 @@ SQLAlchemy implementation of MCPAppRepository.
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,7 +123,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         count = result.rowcount
         if count > 0:
             logger.info("Deleted %d MCP Apps for server %s", count, server_id)
-        return count
+        return cast(int, count)
 
     async def disable_by_server(self, server_id: str) -> int:
         """Disable all MCP Apps for a server."""
@@ -143,7 +143,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         count = result.rowcount
         if count > 0:
             logger.info("Disabled %d MCP Apps for server %s", count, server_id)
-        return count
+        return cast(int, count)
 
     async def update_lifecycle_metadata(self, app_id: str, metadata: dict[str, Any]) -> bool:
         """Merge lifecycle metadata into existing app metadata."""

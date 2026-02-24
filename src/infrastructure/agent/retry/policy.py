@@ -6,7 +6,7 @@ provider-specific retry-after header support.
 
 import re
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, cast
 
 
 @dataclass
@@ -144,7 +144,7 @@ class RetryPolicy:
 
         # 2. Fall back to exponential backoff
         delay = self.initial_delay_ms * (self.backoff_factor ** (attempt - 1))
-        return min(delay, self.max_delay_ms)
+        return cast(int, min(delay, self.max_delay_ms))
 
     def should_retry(self, attempt: int, error: Exception) -> bool:
         """

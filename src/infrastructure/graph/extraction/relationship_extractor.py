@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from src.infrastructure.graph.extraction.prompts import (
@@ -215,7 +215,7 @@ class RelationshipExtractor:
                 temperature=self._temperature,
                 response_format={"type": "json_object"},
             )
-            return response.choices[0].message.content
+            return cast(str, response.choices[0].message.content)
 
         elif hasattr(self._llm_client, "ainvoke"):
             # LLMClient / UnifiedLLMClient style - uses domain Message
@@ -247,7 +247,7 @@ class RelationshipExtractor:
                 messages=graphiti_messages,
                 response_model=None,
             )
-            return response.get("content", "") if isinstance(response, dict) else str(response)
+            return cast(str, response.get("content", "") if isinstance(response, dict) else str(response))
 
         else:
             raise NotImplementedError(f"Unsupported LLM client type: {type(self._llm_client)}")
@@ -274,7 +274,7 @@ class RelationshipExtractor:
         if isinstance(data, dict):
             for key in ("relationships", "edges", "facts"):
                 if key in data:
-                    return data[key]
+                    return cast(list[dict[str, Any]], data[key])
             if "from_entity" in data:
                 return [data]
             return []
@@ -306,7 +306,7 @@ class RelationshipExtractor:
                 try:
                     data = json.loads(match)
                     if isinstance(data, dict) and "relationships" in data:
-                        return data["relationships"]
+                        return cast(list[dict[str, Any]], data["relationships"])
                     elif isinstance(data, list):
                         return data
                     elif isinstance(data, dict) and "from_entity" in data:

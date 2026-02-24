@@ -20,7 +20,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -742,9 +742,9 @@ class ContextCompressionEngine:
     def _extract_response_text(response: Any) -> str:
         """Extract text from LLM response (handles both object and dict formats)."""
         if hasattr(response, "choices") and response.choices:
-            return response.choices[0].message.content.strip()
+            return cast(str, response.choices[0].message.content.strip())
         elif isinstance(response, dict):
-            return response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            return cast(str, response.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
         return ""
 
     def get_token_distribution(

@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.channels.message import (
     ChannelConfig,
@@ -725,7 +725,7 @@ class FeishuAdapter:
         }
         parser = parsers.get(message_type)
         if parser:
-            return parser(parsed)
+            return cast(MessageContent, parser(parsed))
         return None
 
     @staticmethod
@@ -752,7 +752,7 @@ class FeishuAdapter:
         tag = element.get("tag", "")
         renderer = _simple_renderers.get(tag)
         if renderer:
-            return renderer(element)
+            return cast(tuple[str, str | None], renderer(element))
         if tag in ("code_block", "code"):
             return FeishuAdapter._render_code_element(element)
         return "", None
@@ -859,7 +859,7 @@ class FeishuAdapter:
                     )
                     response = await client.im.v1.message.areply(request)
                     if response.success() and response.data and response.data.message_id:
-                        return response.data.message_id
+                        return cast(str, response.data.message_id)
                     logger.warning(
                         "[Feishu] Reply API failed, fallback to create: "
                         f"code={response.code}, msg={response.msg}"
@@ -891,7 +891,7 @@ class FeishuAdapter:
                 raise RuntimeError(
                     f"No message_id in Feishu response (code={response.code}, msg={response.msg})"
                 )
-            return response.data.message_id
+            return cast(str, response.data.message_id)
 
         except ImportError:
             raise ImportError(
@@ -980,7 +980,7 @@ class FeishuAdapter:
                     )
                     response = await client.im.v1.message.areply(request)
                     if response.success() and response.data and response.data.message_id:
-                        return response.data.message_id
+                        return cast(str, response.data.message_id)
                 except Exception as e:
                     logger.warning(f"[Feishu] Post reply failed, fallback to create: {e}")
 
@@ -998,7 +998,7 @@ class FeishuAdapter:
             )
             response = await client.im.v1.message.acreate(request)
             if response.success() and response.data and response.data.message_id:
-                return response.data.message_id
+                return cast(str, response.data.message_id)
             raise RuntimeError(f"Failed to send post: code={response.code}, msg={response.msg}")
 
         except Exception as e:
@@ -1041,7 +1041,7 @@ class FeishuAdapter:
 
             if response.success() and response.data and response.data.file_key:
                 logger.info(f"[Feishu] File uploaded: {file_name}, key={response.data.file_key}")
-                return response.data.file_key
+                return cast(str, response.data.file_key)
 
             raise RuntimeError(f"File upload failed: code={response.code}, msg={response.msg}")
 
@@ -1078,7 +1078,7 @@ class FeishuAdapter:
 
             if response.success() and response.data and response.data.image_key:
                 logger.info(f"[Feishu] Image uploaded: key={response.data.image_key}")
-                return response.data.image_key
+                return cast(str, response.data.image_key)
 
             raise RuntimeError(f"Image upload failed: code={response.code}, msg={response.msg}")
 
@@ -1314,7 +1314,7 @@ class FeishuAdapter:
             client = self._build_rest_client()
             request = ListChatRequest.builder().page_size(1).build()
             response = await client.im.v1.chat.alist(request)
-            return response.success()
+            return cast(bool, response.success())
         except Exception as e:
             logger.warning(f"[Feishu] Health check failed: {e}")
             return False
@@ -1454,7 +1454,7 @@ class FeishuAdapter:
                 return None
             card_id = response.data.card_id
             logger.info(f"[Feishu] Created card entity: {card_id}")
-            return card_id
+            return cast(str, card_id)
         except Exception as e:
             logger.error(f"[Feishu] Create card entity error: {e}")
             return None
@@ -1561,7 +1561,7 @@ class FeishuAdapter:
                 )
                 response = await client.im.v1.message.areply(request)
                 if response.success() and response.data and response.data.message_id:
-                    return response.data.message_id
+                    return cast(str, response.data.message_id)
                 logger.warning(
                     f"[Feishu] Card entity reply failed, fallback: "
                     f"code={response.code}, msg={response.msg}"
@@ -1589,7 +1589,7 @@ class FeishuAdapter:
             )
         if not response.data or not response.data.message_id:
             raise RuntimeError("No message_id in card entity response")
-        return response.data.message_id
+        return cast(str, response.data.message_id)
 
     async def send_hitl_card_via_cardkit(
         self,

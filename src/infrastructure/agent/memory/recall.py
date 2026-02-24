@@ -7,7 +7,7 @@ a user message, injecting relevant context into the system prompt.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.memory.prompt_safety import (
     looks_like_prompt_injection,
@@ -153,9 +153,9 @@ class MemoryRecallPreprocessor:
     def _extract_graph_content(self, result: Any) -> str:
         """Extract content string from a graph search result."""
         if hasattr(result, "fact"):
-            return result.fact
+            return cast(str, result.fact)
         if hasattr(result, "content"):
-            return result.content
+            return cast(str, result.content)
         if isinstance(result, dict):
             return result.get("fact", result.get("content", str(result)))
         return ""

@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 import httpx
 
@@ -55,7 +55,7 @@ class FeishuMediaManager:
         if response.get("code") != 0:
             raise RuntimeError(f"Image upload failed: {response.get('msg')}")
 
-        return response["data"]["image_key"]
+        return cast(str, response["data"]["image_key"])
 
     async def upload_file(
         self,
@@ -106,7 +106,7 @@ class FeishuMediaManager:
         if response.get("code") != 0:
             raise RuntimeError(f"File upload failed: {response.get('msg')}")
 
-        return response["data"]["file_key"]
+        return cast(str, response["data"]["file_key"])
 
     async def download_image(self, image_key: str) -> bytes:
         """Download an image by key.

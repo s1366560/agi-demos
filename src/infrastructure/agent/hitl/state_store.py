@@ -22,7 +22,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from redis.asyncio import Redis
 
@@ -306,7 +306,7 @@ class HITLStateStore:
 
     async def get_ttl(self, state_key: str) -> int:
         """Get remaining TTL in seconds (-2 if not exists, -1 if no expiry)."""
-        return await self._redis.ttl(state_key)
+        return cast(int, await self._redis.ttl(state_key))
 
 
 # =============================================================================

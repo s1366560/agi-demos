@@ -1,7 +1,7 @@
 """Feishu Wiki (Knowledge Base) operations."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
 
@@ -59,7 +59,7 @@ class FeishuWikiClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get space: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def list_nodes(
         self, space_id: str, parent_node_token: str | None = None, page_size: int = 100
@@ -115,7 +115,7 @@ class FeishuWikiClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get node: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def create_node(
         self,
@@ -213,7 +213,7 @@ class FeishuWikiClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get node permission: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
 
 class WikiSearchResult:

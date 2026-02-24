@@ -7,7 +7,7 @@ Provides all CRUD operations, tenant resolution, and usage tracking.
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, desc, func, select
@@ -72,10 +72,10 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def _run_with_session(self, operation: Callable[[AsyncSession], Awaitable[Any]]) -> None:
         """Run operation with existing session or create a new ephemeral one."""
         if self.session:
-            return await operation(self.session)
+            return cast(None, await operation(self.session))
 
         async with async_session_factory() as session:
-            return await operation(session)
+            return cast(None, await operation(session))
 
     @staticmethod
     def _build_embedding_payload(

@@ -25,7 +25,7 @@ import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from src.domain.events.agent_events import (
     AgentCompleteEvent,
@@ -725,7 +725,7 @@ class ReActLoop:
                 elif isinstance(content, list):
                     for part in content:
                         if isinstance(part, dict) and part.get("type") == "text":
-                            return part.get("text", "")
+                            return cast(str | None, part.get("text", ""))
         return None
 
 

@@ -4,7 +4,7 @@ V2 SQLAlchemy implementation of HITLRequestRepository using BaseRepository.
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -343,7 +343,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
         if count > 0:
             logger.info(f"Marked {count} HITL requests as expired")
 
-        return count
+        return cast(int, count)
 
     async def delete(self, request_id: str) -> bool:
         """Delete an HITL request."""

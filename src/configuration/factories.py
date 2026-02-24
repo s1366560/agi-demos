@@ -7,6 +7,8 @@ for each provider, and the NativeGraphAdapter for knowledge graph operations.
 
 import logging
 
+from typing import cast
+
 from src.configuration.config import get_settings
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.llm_providers.models import OperationType
@@ -133,7 +135,7 @@ async def create_llm_client(tenant_id: str | None = None) -> LLMClient:
 
     factory = get_ai_service_factory()
     provider_config = await factory.resolve_provider(tenant_id)
-    return factory.create_unified_llm_client(provider_config)
+    return cast(LLMClient, factory.create_unified_llm_client(provider_config))
 
 
 # Deprecated: Use create_llm_client instead

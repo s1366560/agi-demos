@@ -8,7 +8,7 @@ import asyncio
 import enum
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.mcp.app import MCPAppResource
 
@@ -174,12 +174,12 @@ class MCPAppResourceResolver:
             if item.get("uri") == resource_uri:
                 text = item.get("text", "")
                 if text:
-                    return text
+                    return cast(str, text)
             # Fall back to text content
             if item.get("type") == "text":
                 text = item.get("text", "")
                 if text and ("<html" in text.lower() or "<!doctype" in text.lower()):
-                    return text
+                    return cast(str, text)
 
         # Last resort: concatenate all text
         text = self._extract_text(content)

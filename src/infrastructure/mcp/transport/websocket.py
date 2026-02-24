@@ -8,7 +8,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 
@@ -151,7 +151,7 @@ class WebSocketTransport(BaseTransport):
             await self._ws.send_json(request)
 
             result = await asyncio.wait_for(future, timeout=timeout)
-            return result
+            return cast(dict[str, Any], result)
 
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
@@ -287,7 +287,7 @@ class WebSocketTransport(BaseTransport):
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self._send_request("tools/list")
-        return result.get("tools", [])
+        return cast(list[dict[str, Any]], result.get("tools", []))
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""

@@ -4,7 +4,7 @@ Message utilities for SessionProcessor.
 Helper functions for working with conversation messages.
 """
 
-from typing import Any
+from typing import Any, cast
 
 
 def extract_user_query(messages: list[dict[str, Any]]) -> str | None:
@@ -35,7 +35,7 @@ def extract_user_query(messages: list[dict[str, Any]]) -> str | None:
                         text_parts.append(part)
                 return " ".join(text_parts) if text_parts else ""
             # Simple string content
-            return content
+            return cast(str | None, content)
     return None
 
 

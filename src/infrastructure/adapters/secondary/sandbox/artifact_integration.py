@@ -7,7 +7,7 @@ automatically detecting new files produced by tool executions and uploading them
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import get_category_from_mime
@@ -214,7 +214,7 @@ class SandboxArtifactIntegration:
         if not content:
             return None
         text = content[0].get("text", "")
-        return text.encode("utf-8")
+        return cast(bytes | None, text.encode("utf-8"))
 
     @staticmethod
     def _extract_base64_content(result: dict[str, Any]) -> bytes | None:
@@ -237,7 +237,7 @@ class SandboxArtifactIntegration:
         content = result.get("content", [])
         if content:
             text = content[0].get("text", "")
-            return text.encode("utf-8")
+            return cast(bytes | None, text.encode("utf-8"))
         return None
 
     async def _read_sandbox_file(

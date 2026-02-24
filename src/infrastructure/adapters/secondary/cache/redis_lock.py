@@ -38,6 +38,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from types import TracebackType
+from typing import cast
 from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
@@ -308,7 +309,7 @@ class RedisDistributedLock:
             Owner token if locked, None if not
         """
         try:
-            return await self._redis.get(self._key)
+            return cast(bytes | None, await self._redis.get(self._key))
         except Exception as e:
             logger.error(f"Error getting lock owner {self._key}: {e}")
             return None
@@ -321,7 +322,7 @@ class RedisDistributedLock:
             TTL in seconds, -1 if no expiry, -2 if not exists
         """
         try:
-            return await self._redis.ttl(self._key)
+            return cast(int, await self._redis.ttl(self._key))
         except Exception as e:
             logger.error(f"Error getting lock TTL {self._key}: {e}")
             return -2

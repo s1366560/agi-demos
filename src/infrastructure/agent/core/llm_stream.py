@@ -24,7 +24,7 @@ import uuid
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -777,7 +777,7 @@ class LLMStream:
             logger.info(
                 f"[LLMStream] Successfully parsed JSON after escaping control chars for {tool_name}"
             )
-            return result
+            return cast(dict[str, Any] | None, result)
         except json.JSONDecodeError:
             return None
 
@@ -790,7 +790,7 @@ class LLMStream:
                 inner = inner.replace('\\"', '"').replace("\\\\", "\\")
                 result = json.loads(inner)
                 logger.info(f"[LLMStream] Successfully parsed double-encoded JSON for {tool_name}")
-                return result
+                return cast(dict[str, Any] | None, result)
         except json.JSONDecodeError:
             pass
         return None
@@ -830,7 +830,7 @@ class LLMStream:
 
         raw_args = tracker.arguments
         try:
-            return json.loads(raw_args)
+            return cast(dict[str, Any], json.loads(raw_args))
         except json.JSONDecodeError as e:
             error_str = str(e)
             logger.warning(

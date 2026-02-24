@@ -8,7 +8,7 @@ on FastAPI endpoints using the RBAC system.
 import functools
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,7 +88,7 @@ def require_permission(permission: str) -> None:
                 )
 
             # Permission granted, proceed with the endpoint
-            return await func(*args, **kwargs)
+            return cast(None, await func(*args, **kwargs))
 
         return wrapper
 
@@ -156,7 +156,7 @@ def require_any_permission(*permissions: str) -> None:
                     detail=f"One of permissions {permissions} required",
                 )
 
-            return await func(*args, **kwargs)
+            return cast(None, await func(*args, **kwargs))
 
         return wrapper
 
@@ -223,7 +223,7 @@ def require_all_permissions(*permissions: str) -> None:
                     detail=f"Permissions required: {missing_permissions}",
                 )
 
-            return await func(*args, **kwargs)
+            return cast(None, await func(*args, **kwargs))
 
         return wrapper
 
@@ -282,7 +282,7 @@ def require_role(role: str) -> None:
                     status_code=status.HTTP_403_FORBIDDEN, detail=f"Role '{role}' required"
                 )
 
-            return await func(*args, **kwargs)
+            return cast(None, await func(*args, **kwargs))
 
         return wrapper
 

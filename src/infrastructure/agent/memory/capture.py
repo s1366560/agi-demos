@@ -12,7 +12,7 @@ import contextlib
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.infrastructure.memory.prompt_safety import looks_like_prompt_injection
 
@@ -227,7 +227,7 @@ class MemoryCapturePostprocessor:
                 if await self._is_duplicate(chunk_repo, embedding, project_id):
                     logger.debug(f"Skipping duplicate memory: {content[:50]}")
                     return False
-            return embedding
+            return cast(list[float] | bool | None, embedding)
         except Exception as e:
             logger.debug(f"Dedup check failed: {e}")
             return None

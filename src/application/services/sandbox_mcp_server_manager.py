@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.ports.services.sandbox_mcp_server_port import (
     SandboxMCPServerPort,
@@ -145,7 +145,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 timeout=MCP_STOP_TIMEOUT,
             )
             data = self._parse_tool_result(result)
-            return data.get("success", False)
+            return cast(bool, data.get("success", False))
         except Exception as e:
             logger.warning(f"Failed to stop MCP server '{server_name}': {e}")
             return False
@@ -257,7 +257,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 if not sandbox_id:
                     logger.warning("No sandbox for project %s", project_id)
                     return None
-                return await adapter.read_resource(sandbox_id, uri)
+                return cast("str | None", await adapter.read_resource(sandbox_id, uri))
 
             # Fallback: use management tool mcp_server_call_tool with
             # the "resources/read" protocol path (for future compat).
@@ -287,7 +287,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 )
                 if not sandbox_id:
                     return []
-                return await adapter.list_resources(sandbox_id)
+                return cast("list[Any]", await adapter.list_resources(sandbox_id))
             return []
         except Exception as e:
             logger.warning(f"list_resources failed: {e}")

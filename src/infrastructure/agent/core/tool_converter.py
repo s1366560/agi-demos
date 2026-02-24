@@ -4,7 +4,7 @@ Tool conversion utilities for ReAct Agent.
 Converts tool instances to ToolDefinition format used by SessionProcessor.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from .processor import ToolDefinition
 
@@ -39,11 +39,11 @@ def _is_tool_visible_to_model(tool: Any) -> bool:
 def _get_tool_parameters(tool: Any) -> dict[str, Any]:
     """Extract parameters schema from a tool instance."""
     if hasattr(tool, "get_parameters_schema"):
-        return tool.get_parameters_schema()
+        return cast(dict[str, Any], tool.get_parameters_schema())
     if hasattr(tool, "args_schema"):
         schema = tool.args_schema
         if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
+            return cast(dict[str, Any], schema.model_json_schema())
     return {"type": "object", "properties": {}, "required": []}
 
 

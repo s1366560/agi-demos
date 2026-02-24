@@ -12,7 +12,7 @@ import re
 import time
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 
@@ -1355,7 +1355,7 @@ class ChannelMessageRouter:
             )
             if msg_id:
                 logger.debug(f"[MessageRouter] Streaming card sent: {msg_id}")
-            return msg_id
+            return cast("str | None", msg_id)
         except Exception as e:
             logger.warning(f"[MessageRouter] Failed to send streaming card: {e}")
             return None

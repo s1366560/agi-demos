@@ -18,7 +18,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +296,7 @@ async def get_or_create_tool_definitions(
             definitions, cached_at = entry
             if time.time() - cached_at < _TOOL_DEFINITIONS_TTL_SECONDS:
                 logger.debug(f"Agent Session Pool: Tool definitions cache hit for {tools_hash}")
-                return definitions
+                return cast(list[Any], definitions)
             else:
                 del _tool_definitions_cache[tools_hash]
                 logger.debug(f"Agent Session Pool: Tool definitions cache expired for {tools_hash}")

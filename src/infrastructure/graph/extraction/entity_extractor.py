@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from src.infrastructure.graph.dedup import HashDeduplicator
@@ -259,7 +259,7 @@ class EntityExtractor:
                 temperature=self._temperature,
                 response_format={"type": "json_object"},
             )
-            return response.choices[0].message.content
+            return cast(str, response.choices[0].message.content)
 
         elif hasattr(self._llm_client, "ainvoke"):
             # LLMClient / UnifiedLLMClient style - uses domain Message
@@ -294,7 +294,7 @@ class EntityExtractor:
                 messages=graphiti_messages,
                 response_model=None,  # We'll parse JSON ourselves
             )
-            return response.get("content", "") if isinstance(response, dict) else str(response)
+            return cast(str, response.get("content", "") if isinstance(response, dict) else str(response))
 
         else:
             client_type = type(self._llm_client)
@@ -335,9 +335,9 @@ class EntityExtractor:
         """Extract entity list from already-parsed JSON data."""
         if isinstance(data, dict):
             if "entities" in data:
-                return data["entities"]
+                return cast(list[dict[str, Any]], data["entities"])
             if "extracted_entities" in data:
-                return data["extracted_entities"]
+                return cast(list[dict[str, Any]], data["extracted_entities"])
             if "name" in data:
                 return [data]
             return []
@@ -372,7 +372,7 @@ class EntityExtractor:
         try:
             data = json.loads(code_block_match.group(1))
             if isinstance(data, dict) and "entities" in data:
-                return data["entities"]
+                return cast(list[dict[str, Any]] | None, data["entities"])
             if isinstance(data, list):
                 return data
         except json.JSONDecodeError:
@@ -384,7 +384,7 @@ class EntityExtractor:
         json_objects = self._find_json_objects(text)
         for data in json_objects:
             if isinstance(data, dict) and "entities" in data:
-                return data["entities"]
+                return cast(list[dict[str, Any]] | None, data["entities"])
             if isinstance(data, list) and len(data) > 0:
                 if isinstance(data[0], dict) and ("name" in data[0] or "entity_type" in data[0]):
                     return data
@@ -439,7 +439,7 @@ class EntityExtractor:
                     decoder = json.JSONDecoder()
                     data, _ = decoder.raw_decode(remaining)
                     if isinstance(data, dict) and "entities" in data:
-                        return data["entities"]
+                        return cast(list[dict[str, Any]] | None, data["entities"])
                 except (json.JSONDecodeError, ValueError):
                     pass
 

@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from pydantic import BaseModel, field_validator
@@ -237,7 +237,7 @@ class WebSearchTool(AgentTool):
         response = await client.post(url, json=payload)
         response.raise_for_status()
 
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
     def _parse_tavily_response(self, tavily_data: dict[str, Any]) -> list[SearchResult]:
         """

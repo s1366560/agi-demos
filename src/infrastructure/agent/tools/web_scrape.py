@@ -7,7 +7,7 @@ including JavaScript-rendered content.
 import contextlib
 import logging
 import re
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 
@@ -199,7 +199,7 @@ class WebScrapeTool(AgentTool):
         try:
             element = await page.query_selector(selector)
             if element:
-                return await element.inner_text()
+                return cast(str, await element.inner_text())
             raise ValueError(f"Selector '{selector}' found no elements on page")
         except ValueError:
             raise
@@ -223,12 +223,12 @@ class WebScrapeTool(AgentTool):
                 if element:
                     content = await element.inner_text()
                     logger.debug(f"Found content using selector: {content_selector}")
-                    return content
+                    return cast(str, content)
             except Exception:
                 continue
 
         # Fallback to body content
-        return await page.inner_text("body")
+        return cast(str, await page.inner_text("body"))
 
     async def _scrape_page(self, url: str, selector: str | None) -> str:
         """Launch browser, navigate to URL, and extract content.

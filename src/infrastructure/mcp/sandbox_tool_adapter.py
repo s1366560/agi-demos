@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -110,7 +110,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return self._input_schema
+        return cast(dict[str, Any], self._input_schema)
 
     @property
     def ui_metadata(self) -> dict[str, Any] | None:

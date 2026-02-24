@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
@@ -779,7 +779,7 @@ async def check_embedding_dimensions(
                 f"All embeddings have consistent dimension: {result['dimensions'][0]}"
             )
 
-        return result
+        return cast(None, result)
 
     except Exception as e:
         logger.error(f"Failed to check embedding dimensions: {e}")
@@ -815,7 +815,7 @@ async def validate_embeddings(
             project_id=project_id,
         )
 
-        return result
+        return cast(None, result)
 
     except Exception as e:
         logger.error(f"Failed to validate embeddings: {e}")

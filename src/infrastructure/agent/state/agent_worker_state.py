@@ -23,7 +23,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -232,7 +232,7 @@ async def sync_mcp_sandbox_adapter_from_docker() -> int:
         count = await _mcp_sandbox_adapter.sync_from_docker()
         if count > 0:
             logger.info(f"Agent Worker: Synced {count} existing sandboxes from Docker")
-        return count
+        return cast(int, count)
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to sync sandboxes from Docker: {e}")
         return 0
@@ -758,7 +758,7 @@ def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
     """Find sandbox_id from loaded sandbox tools."""
     for tool in tools.values():
         if hasattr(tool, "sandbox_id") and tool.sandbox_id:
-            return tool.sandbox_id
+            return cast(str | None, tool.sandbox_id)
     return None
 
 
@@ -964,14 +964,14 @@ async def _match_container_to_project(
                 )
                 await loop.run_in_executor(None, lambda c=container: c.start())
                 await asyncio.sleep(2)
-            return project_sandbox_id
+            return cast(str | None, project_sandbox_id)
 
         # Also check by project path
         mounts = container.attrs.get("Mounts", [])
         for mount in mounts:
             source = mount.get("Source", "")
             if source and f"memstack_{project_id}" in source:
-                return container.name
+                return cast(str | None, container.name)
 
     return None
 
@@ -1673,7 +1673,7 @@ def _parse_mcp_server_list(content: list[Any]) -> list[Any]:
             try:
                 data = json.loads(text)
                 if isinstance(data, dict) and "servers" in data:
-                    return data["servers"]
+                    return cast(list[Any], data["servers"])
                 if isinstance(data, list):
                     return data
             except (json.JSONDecodeError, TypeError):
@@ -1691,7 +1691,7 @@ def _parse_discovered_tools(content: list[Any]) -> list[Any]:
             try:
                 data = json.loads(text)
                 if isinstance(data, dict) and "tools" in data:
-                    return data["tools"]
+                    return cast(list[Any], data["tools"])
                 if isinstance(data, list):
                     return data
             except (json.JSONDecodeError, TypeError):
@@ -2397,7 +2397,7 @@ async def unregister_hitl_waiter(request_id: str) -> bool:
         True if unregistered successfully
     """
     registry = get_session_registry()
-    return await registry.unregister_waiter(request_id)
+    return cast(bool, await registry.unregister_waiter(request_id))
 
 
 async def wait_for_hitl_response_realtime(
@@ -2418,7 +2418,7 @@ async def wait_for_hitl_response_realtime(
         Response data if delivered via Redis, None otherwise
     """
     registry = get_session_registry()
-    return await registry.wait_for_response(request_id, timeout=timeout)
+    return cast(dict[str, Any] | None, await registry.wait_for_response(request_id, timeout=timeout))
 
 
 # ============================================================================
@@ -2496,7 +2496,7 @@ async def discover_tools_with_retry(
                     f"[AgentWorker] Tool discovery succeeded for '{server_name}' "
                     f"on attempt {attempt + 1}"
                 )
-            return result
+            return cast(dict[str, Any] | None, result)
 
         except Exception as e:
             error_text = str(e)
@@ -2529,8 +2529,8 @@ def _extract_error_text(result: dict[str, Any]) -> str:
     content = result.get("content", [])
     for item in content:
         if isinstance(item, dict) and item.get("type") == "text":
-            return item.get("text", "Unknown error")
-    return result.get("error_message", "Unknown error")
+            return cast(str, item.get("text", "Unknown error"))
+    return cast(str, result.get("error_message", "Unknown error"))
 
 
 def _is_transient_error(error_text: str) -> bool:

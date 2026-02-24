@@ -20,7 +20,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
@@ -193,14 +193,14 @@ def parse_raw_arguments(raw_args: str) -> dict[str, Any] | None:
     """
     # Try 1: Direct parse
     try:
-        return json.loads(raw_args)
+        return cast(dict[str, Any] | None, json.loads(raw_args))
     except json.JSONDecodeError:
         pass
 
     # Try 2: Escape control characters and parse
     try:
         fixed_args = escape_control_chars(raw_args)
-        return json.loads(fixed_args)
+        return cast(dict[str, Any] | None, json.loads(fixed_args))
     except json.JSONDecodeError:
         pass
 
@@ -209,7 +209,7 @@ def parse_raw_arguments(raw_args: str) -> dict[str, Any] | None:
         if raw_args.startswith('"') and raw_args.endswith('"'):
             inner = raw_args[1:-1]
             inner = inner.replace('\\"', '"').replace("\\\\", "\\")
-            return json.loads(inner)
+            return cast(dict[str, Any] | None, json.loads(inner))
     except json.JSONDecodeError:
         pass
 

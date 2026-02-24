@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.model.memory.episode import Episode
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -331,7 +331,7 @@ class NativeGraphAdapter(GraphServicePort):
         try:
             result = await self._neo4j_client.execute_query(query_dim)
             if result.records and len(result.records) > 0 and result.records[0]["dim"]:
-                return result.records[0]["dim"]
+                return cast(int | None, result.records[0]["dim"])
         except Exception as e:
             logger.debug(f"Failed to get embedding_dim property: {e}")
 
@@ -345,7 +345,7 @@ class NativeGraphAdapter(GraphServicePort):
         try:
             result = await self._neo4j_client.execute_query(query_size)
             if result.records and len(result.records) > 0:
-                return result.records[0]["dim"]
+                return cast(int | None, result.records[0]["dim"])
         except Exception as e:
             logger.warning(f"Failed to get existing embedding dimension: {e}")
         return None
@@ -369,7 +369,7 @@ class NativeGraphAdapter(GraphServicePort):
         try:
             result = await self._neo4j_client.execute_query(query, dimension=dimension)
             if result.records and len(result.records) > 0:
-                return result.records[0]["cleared"]
+                return cast(int, result.records[0]["cleared"])
         except Exception as e:
             logger.error(f"Failed to clear embeddings: {e}")
         return 0

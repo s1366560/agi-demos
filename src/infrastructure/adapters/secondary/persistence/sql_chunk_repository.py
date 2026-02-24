@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 from sqlalchemy import bindparam, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,7 +74,7 @@ class SqlChunkRepository:
             MemoryChunk.project_id == project_id,
         )
         result = await self._session.execute(stmt)
-        return result.rowcount
+        return cast(int, result.rowcount)
 
     async def vector_search(
         self,

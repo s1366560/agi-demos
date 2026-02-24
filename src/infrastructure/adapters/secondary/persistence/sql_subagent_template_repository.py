@@ -7,7 +7,7 @@ Persists SubAgent templates to PostgreSQL for the Template Marketplace.
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -168,7 +168,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         DBTemplate = self._get_model()
         stmt = delete(DBTemplate).where(DBTemplate.id == template_id)
         result = await self._session.execute(stmt)
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     async def list_templates(
         self,

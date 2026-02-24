@@ -14,7 +14,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 import httpx
@@ -240,12 +240,12 @@ class StdioTransport(MCPTransport):
         if "error" in response:
             raise RuntimeError(f"MCP server error: {response['error']}")
 
-        return response.get("result", {})
+        return cast(dict[str, Any], response.get("result", {}))
 
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
-        return result.get("tools", [])
+        return cast(list[dict[str, Any]], result.get("tools", []))
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
@@ -273,7 +273,7 @@ class StdioTransport(MCPTransport):
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
-        return result.get("prompts", [])
+        return cast(list[dict[str, Any]], result.get("prompts", []))
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
@@ -322,7 +322,7 @@ class HTTPTransport(MCPTransport):
             if "error" in data:
                 raise RuntimeError(f"MCP server error: {data['error']}")
 
-            return data.get("result", {})
+            return cast(dict[str, Any], data.get("result", {}))
         except httpx.HTTPError as e:
             logger.error(f"HTTP request failed: {e}")
             raise
@@ -330,7 +330,7 @@ class HTTPTransport(MCPTransport):
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
-        return result.get("tools", [])
+        return cast(list[dict[str, Any]], result.get("tools", []))
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
@@ -358,7 +358,7 @@ class HTTPTransport(MCPTransport):
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
-        return result.get("prompts", [])
+        return cast(list[dict[str, Any]], result.get("prompts", []))
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
@@ -856,7 +856,7 @@ class WebSocketTransport(MCPTransport):
 
             # Wait for response with timeout
             result = await asyncio.wait_for(future, timeout=self.timeout)
-            return result
+            return cast(dict[str, Any], result)
 
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
@@ -869,7 +869,7 @@ class WebSocketTransport(MCPTransport):
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self.send_request("tools/list")
-        return result.get("tools", [])
+        return cast(list[dict[str, Any]], result.get("tools", []))
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """
@@ -906,7 +906,7 @@ class WebSocketTransport(MCPTransport):
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
-        return result.get("prompts", [])
+        return cast(list[dict[str, Any]], result.get("prompts", []))
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""

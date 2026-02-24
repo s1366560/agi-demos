@@ -7,7 +7,7 @@ against API abuse and ensure fair resource allocation.
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Request, Response
 from slowapi import Limiter
@@ -62,7 +62,7 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
     """
     # Don't rate limit health check endpoints
     if request.url.path in ["/health", "/readiness", "/metrics"]:
-        return await call_next(request)
+        return cast(Response, await call_next(request))
 
     limiter = get_rate_limiter()
 
@@ -88,7 +88,7 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
             headers={"Retry-After": "60"},
         )
 
-    return await call_next(request)
+    return cast(Response, await call_next(request))
 
 
 # Export the limiter for use in decorators

@@ -10,7 +10,7 @@ local sandboxes (running on user's machine, connected via WebSocket tunnel).
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from src.domain.shared_kernel import Entity
 
@@ -211,7 +211,7 @@ class ProjectSandbox(Entity):
 
         Deprecated: ORPHAN status is now tracked via metadata flag.
         """
-        return self.metadata.get("orphan", False)
+        return cast(bool, self.metadata.get("orphan", False))
 
     def can_adopt(self) -> bool:
         """Check if this orphan sandbox can be adopted.

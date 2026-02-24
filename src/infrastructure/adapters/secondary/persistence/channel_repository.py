@@ -1,7 +1,7 @@
 """Channel configuration repository."""
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -253,7 +253,7 @@ class ChannelOutboxRepository:
             )
         )
         await self._session.flush()
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     async def mark_failed(self, outbox_id: str, error_message: str) -> bool:
         """Mark outbox message as failed/dead-letter with retry backoff."""
@@ -292,7 +292,7 @@ class ChannelOutboxRepository:
             )
         )
         await self._session.flush()
-        return result.rowcount > 0
+        return cast(bool, result.rowcount > 0)
 
     async def list_pending_retry(self, limit: int = 20) -> list[ChannelOutboxModel]:
         """List outbox messages eligible for retry.

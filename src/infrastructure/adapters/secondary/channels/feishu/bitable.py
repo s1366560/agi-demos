@@ -1,7 +1,7 @@
 """Feishu Bitable (Multi-dimensional Table) operations."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
 
@@ -42,7 +42,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create Bitable: {response.get('msg')}")
 
-        return response["data"]["app_token"]
+        return cast(str, response["data"]["app_token"])
 
     async def get_app(self, app_token: str) -> dict[str, Any]:
         """Get Bitable app info.
@@ -58,7 +58,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get Bitable: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def list_tables(self, app_token: str) -> list[dict[str, Any]]:
         """List tables in a Bitable.
@@ -74,7 +74,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to list tables: {response.get('msg')}")
 
-        return response["data"].get("items", [])
+        return cast(list[dict[str, Any]], response["data"].get("items", []))
 
     async def create_table(
         self,
@@ -101,7 +101,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create table: {response.get('msg')}")
 
-        return response["data"]["table_id"]
+        return cast(str, response["data"]["table_id"])
 
     async def list_fields(
         self,
@@ -130,7 +130,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to list fields: {response.get('msg')}")
 
-        return response["data"].get("items", [])
+        return cast(list[dict[str, Any]], response["data"].get("items", []))
 
     async def create_field(
         self,
@@ -166,7 +166,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create field: {response.get('msg')}")
 
-        return response["data"]["field_id"]
+        return cast(str, response["data"]["field_id"])
 
     async def list_records(
         self,
@@ -249,7 +249,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get record: {response.get('msg')}")
 
-        return response["data"]["record"]
+        return cast(dict[str, Any], response["data"]["record"])
 
     async def create_record(
         self,
@@ -274,7 +274,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create record: {response.get('msg')}")
 
-        return response["data"]["record"]["record_id"]
+        return cast(str, response["data"]["record"]["record_id"])
 
     async def update_record(
         self,
@@ -350,7 +350,7 @@ class FeishuBitableClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to search records: {response.get('msg')}")
 
-        return response["data"].get("items", [])
+        return cast(list[dict[str, Any]], response["data"].get("items", []))
 
 
 # Field type constants

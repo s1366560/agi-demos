@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from ..types import CircuitState
 
@@ -201,7 +201,7 @@ class CircuitBreaker:
                 result = func(*args, **kwargs)
 
             await self._on_success()
-            return result
+            return cast(T, result)
 
         except Exception as e:
             # 检查是否是排除的异常

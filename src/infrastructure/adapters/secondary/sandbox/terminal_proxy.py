@@ -8,7 +8,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import docker
 from docker.errors import NotFound
@@ -191,7 +191,7 @@ class TerminalProxy:
                 if not data:
                     session.is_active = False
                     return None
-                return data.decode("utf-8", errors="replace")
+                return cast(str | None, data.decode("utf-8", errors="replace"))
             except BlockingIOError:
                 return ""
             except Exception as e:

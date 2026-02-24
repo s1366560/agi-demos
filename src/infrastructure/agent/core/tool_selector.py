@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from hashlib import blake2b
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class TokenVectorSemanticToolRanker:
         norm_b = sum(value * value for value in vec_b.values()) ** 0.5
         if norm_a == 0.0 or norm_b == 0.0:
             return 0.0
-        return dot / (norm_a * norm_b)
+        return cast(float, dot / (norm_a * norm_b))
 
 
 class _CallableSemanticToolRanker:

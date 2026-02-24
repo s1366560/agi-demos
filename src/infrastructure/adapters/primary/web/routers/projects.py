@@ -3,7 +3,7 @@
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -597,11 +597,11 @@ async def _query_active_nodes(graphiti_client: Any, project_id: str) -> int:
         )
         if hasattr(result, "records") and result.records:
             for record in result.records:
-                return record.get("active_count", 0)
+                return cast(int, record.get("active_count", 0))
         elif result and len(result) > 0:
             for record in result:
                 if hasattr(record, "get"):
-                    return record.get("active_count", 0)
+                    return cast(int, record.get("active_count", 0))
         return 0
     except Exception as e:
         logger.error(f"Failed to get active nodes from Graphiti: {e}")

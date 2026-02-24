@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager, suppress
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -57,7 +57,7 @@ def handle_db_errors(entity_type: str = "Entity") -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> None:
             try:
-                return await func(*args, **kwargs)
+                return cast(None, await func(*args, **kwargs))
             except IntegrityError as e:
                 error_str = str(e.orig) if e.orig else str(e)
                 # Check for unique constraint violation
@@ -125,7 +125,7 @@ def transactional(func: Callable[..., Any]) -> Callable[..., Any]:
 
             result = await func(self, *args, **kwargs)
             await session.commit()
-            return result
+            return cast(None, result)
         except Exception as e:
             await session.rollback()
             if isinstance(e, (RepositoryError, DuplicateEntityError, DomainConnectionError)):
@@ -510,7 +510,7 @@ class BaseRepository[T, M](ABC):
         query = delete(self._model_class).where(self._model_class.id.in_(entity_ids))
         result = await self._session.execute(query)
         await self._session.flush()
-        return result.rowcount
+        return cast(int, result.rowcount)
 
     # === Query building ===
 

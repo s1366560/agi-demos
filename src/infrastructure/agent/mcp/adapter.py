@@ -7,7 +7,7 @@ allowing MCP tools to be used seamlessly alongside native agent tools.
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.agent.mcp.registry import MCPServerRegistry
 from src.infrastructure.agent.tools.base import AgentTool
@@ -152,7 +152,7 @@ class MCPToolAdapter(AgentTool):
 
     def get_input_schema(self) -> dict[str, Any]:
         """Get the MCP tool input schema."""
-        return self.input_schema
+        return cast(dict[str, Any], self.input_schema)
 
     def get_server_id(self) -> str:
         """Get the MCP server ID."""
@@ -160,7 +160,7 @@ class MCPToolAdapter(AgentTool):
 
     def get_original_name(self) -> str:
         """Get the original MCP tool name."""
-        return self.original_name
+        return cast(str, self.original_name)
 
 
 class MCPToolFactory:

@@ -10,6 +10,7 @@ Usage:
 """
 
 import logging
+from typing import cast
 
 import redis.asyncio as redis
 
@@ -62,7 +63,7 @@ class RedisSequenceService:
             if seq == 1:
                 await self._redis.expire(key, self.SEQUENCE_TTL)
 
-            return seq
+            return cast(int, seq)
 
         except Exception as e:
             logger.error(f"Failed to get next sequence for {conversation_id}: {e}")

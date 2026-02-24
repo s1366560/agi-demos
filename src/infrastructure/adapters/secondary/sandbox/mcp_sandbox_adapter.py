@@ -13,7 +13,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import docker
 from docker.errors import ImageNotFound, NotFound
@@ -319,7 +319,7 @@ class MCPSandboxAdapter(SandboxPort):
         mounts = container.attrs.get("Mounts", [])
         for mount in mounts:
             if mount.get("Destination") == "/workspace":
-                return mount.get("Source", "")
+                return cast(str, mount.get("Source", ""))
         return ""
 
     def _build_urls_from_ports(
@@ -826,7 +826,7 @@ class MCPSandboxAdapter(SandboxPort):
                 if isinstance(item, dict):
                     text = item.get("text", "")
                     if text:
-                        return text
+                        return cast(str | None, text)
             return None
         except Exception as e:
             logger.warning("read_resource error for %s: %s", uri, e)
@@ -1026,7 +1026,7 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
             # Container exists, check if running
-            return container.status == "running"
+            return cast(bool, container.status == "running")
         except NotFound:
             # Container doesn't exist
             return False
@@ -1066,7 +1066,7 @@ class MCPSandboxAdapter(SandboxPort):
             if containers:
                 # Get sandbox ID from container labels
                 labels = containers[0].labels
-                return labels.get("memstack.sandbox.id")
+                return cast(str | None, labels.get("memstack.sandbox.id"))
         except Exception as e:
             logger.warning(f"Error looking up sandbox by project: {e}")
 
@@ -2943,7 +2943,7 @@ class MCPSandboxAdapter(SandboxPort):
                 try:
                     data = json.loads(text)
                     if isinstance(data, dict) and "servers" in data:
-                        return data["servers"]
+                        return cast(list[dict[str, Any]], data["servers"])
                     if isinstance(data, list):
                         return data
                 except (json.JSONDecodeError, TypeError):

@@ -6,7 +6,7 @@ Implements fallback hierarchy and caching for performance.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.domain.llm_providers.models import (
     NoActiveProviderError,
@@ -70,7 +70,7 @@ class ProviderResolutionService:
         if cache_key in self.cache:
             cached_provider = self.cache[cache_key]
             logger.debug(f"Cache hit for {cache_key}")
-            return cached_provider
+            return cast(ProviderConfig, cached_provider)
 
         # Resolve provider (with fallback logic)
         resolved = await self._resolve_with_fallback(tenant_id, operation_type)

@@ -13,7 +13,7 @@ The service wraps existing embedder implementations and provides:
 import asyncio
 import logging
 import math
-from typing import Protocol
+from typing import Protocol, cast
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class EmbeddingService:
         if hasattr(self._embedder, "config"):
             config = self._embedder.config
             if hasattr(config, "embedding_dim"):
-                return config.embedding_dim
+                return cast(int, config.embedding_dim)
 
         # Default dimension (common for many models)
         logger.warning("Could not determine embedding dimension from embedder, using default 1024")
@@ -322,7 +322,7 @@ class EmbeddingService:
         if magnitude1 < 1e-6 or magnitude2 < 1e-6:
             return 0.0
 
-        return dot_product / (magnitude1 * magnitude2)
+        return cast(float, dot_product / (magnitude1 * magnitude2))
 
     async def find_most_similar(
         self,

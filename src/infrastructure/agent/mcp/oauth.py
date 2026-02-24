@@ -20,7 +20,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.security.encryption_service import EncryptionService
 
@@ -147,7 +147,7 @@ class MCPAuthStorage:
 
         try:
             content = self._filepath.read_text()
-            return json.loads(content)
+            return cast(dict[str, dict[str, Any]], json.loads(content))
         except (OSError, json.JSONDecodeError):
             return {}
 

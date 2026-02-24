@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of ToolEnvironmentVariableRepository using BaseRepo
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -292,7 +292,7 @@ class SqlToolEnvironmentVariableRepository(
             f"Deleted {result.rowcount} env vars for tool={tool_name}, "
             f"tenant={tenant_id}, project={project_id}"
         )
-        return result.rowcount
+        return cast(int, result.rowcount)
 
     async def upsert(self, env_var: ToolEnvironmentVariable) -> ToolEnvironmentVariable:
         """Create or update an environment variable."""

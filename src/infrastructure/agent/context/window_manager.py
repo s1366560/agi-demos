@@ -18,7 +18,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -517,9 +517,9 @@ Summary:"""
 
         # Extract summary from response
         if hasattr(response, "choices") and response.choices:
-            return response.choices[0].message.content.strip()
+            return cast(str, response.choices[0].message.content.strip())
         elif isinstance(response, dict):
-            return response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            return cast(str, response.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
 
         return ""
 

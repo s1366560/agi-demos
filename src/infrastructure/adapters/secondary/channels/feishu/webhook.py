@@ -124,7 +124,7 @@ class FeishuEventDispatcher:
     """Dispatcher for Feishu events with filtering and middleware."""
 
     def __init__(self) -> None:
-        self._handlers: dict[str, list[Callable[..., Any]]] = {}
+        self._handlers: dict[str, list[dict[str, Any]]] = {}
         self._middleware: list[Callable[..., Any]] = []
         self._filters: list[Callable[[dict[str, Any]], bool]] = []
 

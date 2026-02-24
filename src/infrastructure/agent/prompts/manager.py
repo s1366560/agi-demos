@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ class SystemPromptManager:
         # 1. SubAgent override takes priority
         if subagent and hasattr(subagent, "system_prompt") and subagent.system_prompt:
             logger.debug(f"Using SubAgent system prompt: {subagent.name}")
-            return subagent.system_prompt
+            return cast(str, subagent.system_prompt)
         sections: list[str] = []
         # Check if we have a forced skill (highest priority injection)
         is_forced_skill = bool(

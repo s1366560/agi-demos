@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -140,7 +140,7 @@ class SandboxMCPToolWrapper(AgentTool):
             )
             error_msg = f"Tool execution failed (no details provided). Raw result: {result}"
 
-        return error_msg
+        return cast(str, error_msg)
 
     def _classify_error(
         self,
@@ -394,4 +394,4 @@ class SandboxMCPToolWrapper(AgentTool):
             kwargs,
             **call_kwargs,
         )
-        return result
+        return cast(dict[str, Any], result)

@@ -1,7 +1,7 @@
 """Feishu document (Docx) operations."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
 
@@ -55,7 +55,7 @@ class FeishuDocClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get document: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def get_document_content(
         self,
@@ -78,7 +78,7 @@ class FeishuDocClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get document content: {response.get('msg')}")
 
-        return response["data"].get("content", "")
+        return cast(str, response["data"].get("content", ""))
 
     async def list_document_blocks(
         self, document_token: str, page_size: int = 500
@@ -133,7 +133,7 @@ class FeishuDocClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get block: {response.get('msg')}")
 
-        return response["data"]
+        return cast(dict[str, Any], response["data"])
 
     async def create_block(
         self,

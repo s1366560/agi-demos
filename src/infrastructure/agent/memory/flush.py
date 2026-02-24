@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -200,7 +200,7 @@ class MemoryFlushService:
             if embedding and chunk_repo:
                 if await self._is_duplicate(chunk_repo, embedding, project_id):
                     return False
-            return embedding
+            return cast(list[float] | bool | None, embedding)
         except Exception:
             return None
 

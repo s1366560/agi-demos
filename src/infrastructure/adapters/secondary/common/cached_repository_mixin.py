@@ -11,7 +11,7 @@ Provides:
 
 import json
 import logging
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from redis.asyncio import Redis
 from sqlalchemy.orm import DeclarativeBase
@@ -201,7 +201,7 @@ class CachedRepositoryMixin:
 
         key = self._cache_key(entity_id, namespace)
         result = await self._redis.exists(key)
-        return result > 0
+        return cast(bool, result > 0)
 
     # === Cached repository operations ===
 
