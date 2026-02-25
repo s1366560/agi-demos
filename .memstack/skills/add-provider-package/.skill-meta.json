@@ -1,0 +1,9 @@
+{
+  "source": "vercel/ai",
+  "skill_name": "add-provider-package",
+  "branch": "main",
+  "source_path": "skills/add-provider-package/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

@@ -222,7 +222,7 @@ class TestMCPServerHealthMonitor:
         }
 
         # Pre-increment restart count
-        monitor._restart_counts["test-server"] = 3
+        monitor._restart_counts["sandbox-1:test-server"] = 3
 
         restarted = await monitor.restart_if_unhealthy(
             "sandbox-1",
@@ -417,7 +417,7 @@ class TestMCPServerHealthMonitor:
         }
 
         # Set existing restart count
-        monitor._restart_counts["test-server"] = 2
+        monitor._restart_counts["sandbox-1:test-server"] = 2
 
         health = await monitor.health_check("sandbox-1", "test-server")
 
@@ -497,10 +497,10 @@ class TestMCPServerHealthMonitor:
 
     async def test_reset_restart_count(self, monitor):
         """Test resetting restart count."""
-        monitor._restart_counts["test-server"] = 5
-        monitor.reset_restart_count("test-server")
+        monitor._restart_counts["sandbox-1:test-server"] = 5
+        monitor.reset_restart_count("test-server", sandbox_id="sandbox-1")
 
-        assert "test-server" not in monitor._restart_counts
+        assert "sandbox-1:test-server" not in monitor._restart_counts
 
     async def test_start_monitoring_already_running(self, monitor, mock_sandbox_adapter):
         """Test starting monitoring when already running."""

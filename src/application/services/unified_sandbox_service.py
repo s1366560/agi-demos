@@ -19,7 +19,7 @@ import contextlib
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 from sqlalchemy.exc import IntegrityError
 
@@ -213,6 +213,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
         raise RuntimeError(f"Unexpected state in get_or_create for {project_id}")
 
+    @override
     async def execute_tool(
         self,
         project_id: str,
@@ -391,6 +392,7 @@ class UnifiedSandboxService(SandboxResourcePort):
     # SandboxResourcePort Interface Implementation
     # -------------------------------------------------------------------------
 
+    @override
     async def get_sandbox_id(
         self,
         project_id: str,
@@ -417,6 +419,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
         return None
 
+    @override
     async def ensure_sandbox_ready(
         self,
         project_id: str,
@@ -440,6 +443,7 @@ class UnifiedSandboxService(SandboxResourcePort):
         )
         return info.sandbox_id
 
+    @override
     async def sync_file(
         self,
         project_id: str,
@@ -513,6 +517,7 @@ class UnifiedSandboxService(SandboxResourcePort):
             logger.error(f"Error syncing file {filename} to project {project_id}: {e}")
             return False
 
+    @override
     async def get_sandbox_info(
         self,
         project_id: str,
@@ -816,7 +821,9 @@ class UnifiedSandboxService(SandboxResourcePort):
             cpu_limit=cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
             desktop_enabled=sandbox_profile.desktop_enabled,
-            environment=cast(dict[str, str], config_override.get("environment", {})) if config_override else {},
+            environment=cast(dict[str, str], config_override.get("environment", {}))
+            if config_override
+            else {},
         )
 
         if config_override:
@@ -832,3 +839,21 @@ class UnifiedSandboxService(SandboxResourcePort):
                 config.desktop_enabled = config_override["desktop_enabled"]
 
         return config
+
+    @override
+    async def read_resource(
+        self,
+        project_id: str,
+        uri: str,
+        tenant_id: str | None = None,
+    ) -> str | None:
+        """Read a resource from an MCP server via the sandbox adapter."""
+        try:
+            sandbox_id = await self.get_sandbox_id(project_id, tenant_id or "")
+            if not sandbox_id:
+                return None
+            return await self._adapter.read_resource(sandbox_id, uri)
+            return None
+        except Exception:
+            logger.debug("read_resource not supported by adapter", exc_info=True)
+            return None

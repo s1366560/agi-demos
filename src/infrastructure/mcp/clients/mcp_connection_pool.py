@@ -9,7 +9,7 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, override
 
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
@@ -98,7 +98,9 @@ class MCPConnectionPool:
                 # Decrement created count since we're removing this connection
                 async with self._lock:
                     self._created_count -= 1
-
+                # Release semaphore for the discarded connection and re-acquire for retry
+                self._semaphore.release()
+                await self._semaphore.acquire()
         # Create a new connection
         async with self._lock:
             self._created_count += 1
@@ -198,6 +200,7 @@ class MCPConnectionPool:
             if conn is not None:
                 await self.return_connection(conn)
 
+    @override
     def __repr__(self) -> str:
         """String representation of the pool."""
         return (

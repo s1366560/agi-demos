@@ -1,6 +1,6 @@
 ---
 name: create-mcp-app
-description: This skill should be used when the user asks to "create an MCP App", "add a UI to an MCP tool", "build an interactive MCP View", "scaffold an MCP App", "build a dashboard", "create a visualization", "create an interactive form", "register an app", or needs guidance on MCP Apps SDK patterns, UI-resource registration, MCP App lifecycle, host integration, or using the register_mcp_server tool. Provides comprehensive guidance for building MCP Apps with interactive UIs.
+description: This skill should be used when the user asks to "create an MCP App", "add a UI to an MCP tool", "build an interactive MCP View", "scaffold an MCP App", or needs guidance on MCP Apps SDK patterns, UI-resource registration, MCP App lifecycle, or host integration. Provides comprehensive guidance for building MCP Apps with interactive UIs.
 ---
 
 # Create MCP App
@@ -340,40 +340,3 @@ Send debug logs to the host application (rather than just the iframe's dev conso
 await app.sendLog({ level: "info", data: "Debug message" });
 await app.sendLog({ level: "error", data: { error: err.message } });
 ```
-
-## MemStack Platform Integration
-
-When building apps within the MemStack sandbox, use these platform-specific tools to register and display apps in the Canvas panel.
-
-### Registering MCP Server Apps (register_mcp_server)
-
-For apps that need bidirectional communication with a running MCP server:
-
-```
-Tool: register_mcp_server
-Parameters:
-  - server_name: Unique name (e.g., "analytics-server")
-  - server_type: "stdio" or "sse"
-  - command: Start command for stdio (e.g., "node")
-  - args: Command arguments (e.g., ["server.js"])
-  - url: URL for SSE servers
-```
-
-**Example - stdio server:**
-```
-# Build the MCP server in sandbox first
-bash: cd /workspace && npm init -y && npm install @modelcontextprotocol/sdk @modelcontextprotocol/ext-apps
-# ... create server.ts, build UI ...
-
-register_mcp_server(
-  server_name="analytics-server",
-  server_type="stdio",
-  command="npx",
-  args=["tsx", "server.ts"]
-)
-```
-
-**Use register_mcp_server when:**
-- The app needs to call server-side tools (database queries, API calls)
-- Building interactive apps with real-time data fetching
-- The UI needs `callServerTool` for user-initiated actions

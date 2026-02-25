@@ -1,0 +1,9 @@
+{
+  "source": "vercel/ai",
+  "skill_name": "develop-ai-functions-example",
+  "branch": "main",
+  "source_path": "skills/develop-ai-functions-example/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

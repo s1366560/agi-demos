@@ -1,6 +1,6 @@
 ---
 name: migrate-oai-app
-description: This skill should be used when the user asks to "migrate from OpenAI Apps SDK", "convert OpenAI App to MCP", "port from window.openai", "migrate from skybridge", "convert openai/outputTemplate", or needs guidance on converting OpenAI Apps SDK applications to MCP Apps SDK and registering them on the MemStack platform. Provides step-by-step migration guidance with API mapping tables.
+description: This skill should be used when the user asks to "migrate from OpenAI Apps SDK", "convert OpenAI App to MCP", "port from window.openai", "migrate from skybridge", "convert openai/outputTemplate", or needs guidance on converting OpenAI Apps SDK applications to MCP Apps SDK. Provides step-by-step migration guidance with API mapping tables.
 ---
 
 # Migrate OpenAI App to MCP
@@ -165,22 +165,3 @@ Once the app loads in basic-host, confirm:
 1. App loads without console errors
 2. `ontoolinput` handler fires with tool arguments
 3. `ontoolresult` handler fires with tool result
-
-## MemStack Platform Integration
-
-After migrating the app to MCP Apps SDK, register it on the MemStack platform to render in the Canvas panel.
-
-### Registering with register_mcp_server
-
-Build a full MCP server wrapping the migrated app, then register it:
-
-```
-register_mcp_server(
-  server_name="my-migrated-app",
-  server_type="stdio",
-  command="npx",
-  args=["tsx", "server.ts"]
-)
-```
-
-This will install, start, and discover tools from the server. Any tools with `_meta.ui.resourceUri` will be auto-detected as MCP Apps and rendered in the Canvas panel.

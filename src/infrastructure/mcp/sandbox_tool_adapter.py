@@ -10,13 +10,13 @@ import asyncio
 import contextlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
 
-_mcp_bg_tasks: set[asyncio.Task[Any]] = set()
+# Background tasks are tracked per-instance (see SandboxMCPServerToolAdapter.__init__)
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -90,6 +90,9 @@ class SandboxMCPServerToolAdapter(AgentTool):
             "last_fetch_at": None,
         }
 
+        # Background tasks for this adapter instance
+        self._bg_tasks: set[asyncio.Task[Any]] = set()
+
     def _generate_tool_name(self) -> str:
         clean_server = self._server_name.replace("-", "_")
         return (
@@ -99,10 +102,12 @@ class SandboxMCPServerToolAdapter(AgentTool):
         )
 
     @property
+    @override
     def name(self) -> str:
         return self._name
 
     @property
+    @override
     def description(self) -> str:
         return self._description or (
             f"MCP tool {self._original_tool_name} from {self._server_name}"
@@ -197,6 +202,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
         # Create background task (fire and forget)
         with contextlib.suppress(RuntimeError):
+            _mcp_bg_tasks = self._bg_tasks
             _prefetch_task = asyncio.create_task(_prefetch())
             _mcp_bg_tasks.add(_prefetch_task)
             _prefetch_task.add_done_callback(_mcp_bg_tasks.discard)
@@ -209,6 +215,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         """
         return dict(self._cache_stats)
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         if not self._input_schema:
             return {"type": "object", "properties": {}, "required": []}
@@ -222,6 +229,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             schema["required"] = []
         return schema
 
+    @override
     async def execute(self, **kwargs: Any) -> str:
         """Execute the tool by proxying through sandbox's mcp_server_call_tool."""
         logger.info("Executing sandbox MCP tool: %s", self._name)

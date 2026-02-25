@@ -10,10 +10,10 @@ import asyncio
 import logging
 import socket
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 import docker
 from docker.errors import ImageNotFound, NotFound
@@ -34,7 +34,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxResourceError,
     SandboxStatus,
 )
-from src.infrastructure.adapters.secondary.sandbox.constants import (  # type: ignore[attr-defined]
+from src.infrastructure.adapters.secondary.sandbox.constants import (
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
     MCP_WEBSOCKET_PORT,
@@ -441,19 +441,24 @@ class MCPSandboxAdapter(SandboxPort):
                     await asyncio.wait_for(
                         loop.run_in_executor(
                             None,
-                            cast(Callable[[], None], lambda c=container: c.stop(timeout=stop_timeout)),
+                            cast(
+                                Callable[[], None], lambda c=container: c.stop(timeout=stop_timeout)
+                            ),
                         ),
                         timeout=overall_timeout,
                     )
                 except TimeoutError:
                     logger.warning(f"Stop timed out for container {container_name}, forcing kill")
                     await loop.run_in_executor(None, container.kill)
-            await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.remove(force=True)))
+            await loop.run_in_executor(
+                None, cast(Callable[[], None], lambda c=container: c.remove(force=True))
+            )
             return True
         except Exception as e:
             logger.warning(f"Failed to stop/remove container {container_name}: {e}")
             return False
 
+    @override
     async def create_sandbox(
         self,
         project_path: str,
@@ -567,7 +572,9 @@ class MCPSandboxAdapter(SandboxPort):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
-                lambda: self._docker.containers.run(**container_config),
+                lambda: cast(
+                    Any, self._docker.containers.run(**cast("dict[str, Any]", container_config))
+                ),
             )
 
             # Wait for container to be ready
@@ -899,6 +906,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
             return None
 
+    @override
     async def get_sandbox(self, sandbox_id: str) -> MCPSandboxInstance | None:
         """Get sandbox instance by ID.
 
@@ -950,7 +958,7 @@ class MCPSandboxAdapter(SandboxPort):
                     instance.desktop_port or 0,
                     instance.terminal_port or 0,
                 ]
-                ports_to_release = [p for p in ports_to_release if p is not None]
+                ports_to_release = [p for p in ports_to_release if p > 0]
                 instance.status = SandboxStatus.TERMINATED
                 instance.terminated_at = datetime.now()
                 del self._active_sandboxes[sandbox_id]
@@ -959,6 +967,7 @@ class MCPSandboxAdapter(SandboxPort):
         # Invalidate health check cache
         await self._last_healthy_at.delete(sandbox_id)
 
+    @override
     async def terminate_sandbox(self, sandbox_id: str) -> bool:
         """Terminate a sandbox container with proper cleanup and locking."""
         # Prevent double cleanup with cleanup lock
@@ -1024,7 +1033,7 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
             # Container exists, check if running
-            return cast(bool, container.status == "running")
+            return container.status == "running"
         except NotFound:
             # Container doesn't exist
             return False
@@ -1206,6 +1215,7 @@ class MCPSandboxAdapter(SandboxPort):
             logger.error(f"Error cleaning up project containers for {project_id}: {e}")
             return terminated_count
 
+    @override
     async def execute_code(
         self,
         request: CodeExecutionRequest,
@@ -1262,6 +1272,7 @@ class MCPSandboxAdapter(SandboxPort):
                 error=str(e),
             )
 
+    @override
     async def stream_execute(
         self,
         request: CodeExecutionRequest,
@@ -1283,6 +1294,7 @@ class MCPSandboxAdapter(SandboxPort):
             },
         }
 
+    @override
     async def list_sandboxes(
         self,
         status: SandboxStatus | None = None,
@@ -1391,14 +1403,14 @@ class MCPSandboxAdapter(SandboxPort):
 
             async with self._instance_lock:
                 self._active_sandboxes[sandbox_id] = instance
-                # Track used ports
+            # Track used ports under the port allocation lock
+            async with self._port_allocation_lock:
                 if mcp_port:
                     self._used_ports.add(mcp_port)
                 if desktop_port:
                     self._used_ports.add(desktop_port)
                 if terminal_port:
                     self._used_ports.add(terminal_port)
-
             logger.info(
                 f"Synced sandbox {sandbox_id} from Docker "
                 f"(project_id={labels.get('memstack.project_id', 'unknown')}, "
@@ -1424,7 +1436,9 @@ class MCPSandboxAdapter(SandboxPort):
             f"(no project_id label, status={container.status})"
         )
         try:
-            await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.remove(force=True)))
+            await loop.run_in_executor(
+                None, cast(Callable[[], None], lambda c=container: c.remove(force=True))
+            )
             return True
         except Exception as e:
             logger.warning(f"Failed to cleanup orphan container {container.name}: {e}")
@@ -1512,6 +1526,7 @@ class MCPSandboxAdapter(SandboxPort):
             logger.error(f"Error syncing sandboxes from Docker: {e}")
             return 0
 
+    @override
     async def get_output_files(
         self,
         sandbox_id: str,
@@ -1556,6 +1571,7 @@ class MCPSandboxAdapter(SandboxPort):
             logger.error(f"Error getting output files: {e}")
             return {}
 
+    @override
     async def cleanup_expired(
         self,
         max_age_seconds: int = 3600,
@@ -1630,7 +1646,7 @@ class MCPSandboxAdapter(SandboxPort):
                 logger.warning(f"Container not found: {sandbox_id}")
                 return {}
 
-            stats = container.stats(stream=False)
+            stats = cast("dict[str, Any]", container.stats(stream=False))
 
             # Calculate CPU percentage
             cpu_delta = (
@@ -1743,7 +1759,9 @@ class MCPSandboxAdapter(SandboxPort):
                 if container.name not in self._active_sandboxes:
                     logger.warning(f"Found orphaned sandbox container: {container.name}")
                     try:
-                        await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.stop(timeout=5)))
+                        await loop.run_in_executor(
+                            None, cast(Callable[[], None], lambda c=container: c.stop(timeout=5))
+                        )
                         await loop.run_in_executor(None, container.remove)
                         count += 1
                     except Exception as e:
@@ -2263,7 +2281,7 @@ class MCPSandboxAdapter(SandboxPort):
             loop = asyncio.get_event_loop()
             new_container = await loop.run_in_executor(
                 None,
-                lambda: self._docker.containers.run(**container_config),
+                lambda: cast(Any, self._docker.containers.run(**container_config)),
             )
 
             await self._wait_for_container_running(new_container, original_sandbox_id)
@@ -2393,6 +2411,7 @@ class MCPSandboxAdapter(SandboxPort):
         # Container is unhealthy - attempt rebuild
         return await self._attempt_sandbox_rebuild(sandbox_id, instance)
 
+    @override
     async def call_tool(
         self,
         sandbox_id: str,
@@ -2508,6 +2527,7 @@ class MCPSandboxAdapter(SandboxPort):
             "content": [{"type": "text", "text": "Tool call failed: no attempts made"}],
             "is_error": True,
         }
+
     # === Enhanced Orphan Cleanup ===
 
     async def _is_container_tracked_in_db(
@@ -2617,7 +2637,9 @@ class MCPSandboxAdapter(SandboxPort):
             container_name = container.name or container.id[:12]
             try:
                 if container.status == "running":
-                    await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.stop(timeout=5)))
+                    await loop.run_in_executor(
+                        None, cast(Callable[[], None], lambda c=container: c.stop(timeout=5))
+                    )
                 await loop.run_in_executor(None, container.remove)
                 count += 1
                 logger.info(f"Cleaned up orphan container: {container_name}")
@@ -2679,8 +2701,12 @@ class MCPSandboxAdapter(SandboxPort):
         count = await self._remove_containers_batch(containers_to_remove, loop)
 
         if count > 0:
-            self._cleanup_stats["total_cleanups"] = int(self._cleanup_stats["total_cleanups"] or 0) + 1
-            self._cleanup_stats["containers_removed"] = int(self._cleanup_stats["containers_removed"] or 0) + count
+            self._cleanup_stats["total_cleanups"] = (
+                int(self._cleanup_stats["total_cleanups"] or 0) + 1
+            )
+            self._cleanup_stats["containers_removed"] = (
+                int(self._cleanup_stats["containers_removed"] or 0) + count
+            )
             self._cleanup_stats["last_cleanup_at"] = datetime.now().isoformat()
             logger.info(f"Cleaned up {count} orphan container(s)")
 
@@ -2788,6 +2814,7 @@ class MCPSandboxAdapter(SandboxPort):
                     break
                 except Exception as e:
                     logger.error(f"MCP server health check error: {e}")
+
         self._health_check_stats["errors"] = int(self._health_check_stats["errors"] or 0) + 1
 
         self._health_check_task = asyncio.create_task(health_check_loop())
@@ -2804,7 +2831,9 @@ class MCPSandboxAdapter(SandboxPort):
 
     async def _run_health_check_cycle(self) -> None:
         """Run a single health check cycle for all active sandboxes."""
-        self._health_check_stats["total_checks"] = int(self._health_check_stats["total_checks"] or 0) + 1
+        self._health_check_stats["total_checks"] = (
+            int(self._health_check_stats["total_checks"] or 0) + 1
+        )
         self._health_check_stats["last_check_at"] = datetime.now().isoformat()
 
         for sandbox_id, _instance in list(self._active_sandboxes.items()):
@@ -2854,7 +2883,9 @@ class MCPSandboxAdapter(SandboxPort):
                         restarted = await self._restart_crashed_server(sandbox_id, server_name)
                         if restarted:
                             result["restarted"].append(server_name)
-                            self._health_check_stats["restarts_triggered"] = int(self._health_check_stats["restarts_triggered"] or 0) + 1
+                            self._health_check_stats["restarts_triggered"] = (
+                                int(self._health_check_stats["restarts_triggered"] or 0) + 1
+                            )
 
         except Exception as e:
             logger.warning(f"Failed to check MCP servers health: {e}")

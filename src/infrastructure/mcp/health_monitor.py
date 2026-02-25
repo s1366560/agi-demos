@@ -174,7 +174,7 @@ class MCPServerHealthMonitor:
                     status="unhealthy",
                     last_check=now,
                     error_message="Server not found",
-                    restart_count=self._restart_counts.get(server_name, 0),
+                    restart_count=self._restart_counts.get(f"{sandbox_id}:{server_name}", 0),
                 )
 
             if server_status == "running":
@@ -182,7 +182,7 @@ class MCPServerHealthMonitor:
                     name=server_name,
                     status="healthy",
                     last_check=now,
-                    restart_count=self._restart_counts.get(server_name, 0),
+                    restart_count=self._restart_counts.get(f"{sandbox_id}:{server_name}", 0),
                 )
             elif server_status in ("stopped", "failed", "crashed"):
                 return MCPServerHealth(
@@ -190,7 +190,7 @@ class MCPServerHealthMonitor:
                     status="unhealthy",
                     last_check=now,
                     error_message=f"Server {server_status}",
-                    restart_count=self._restart_counts.get(server_name, 0),
+                    restart_count=self._restart_counts.get(f"{sandbox_id}:{server_name}", 0),
                 )
             else:
                 return MCPServerHealth(
@@ -198,7 +198,7 @@ class MCPServerHealthMonitor:
                     status="unknown",
                     last_check=now,
                     error_message=f"Unknown status: {server_status}",
-                    restart_count=self._restart_counts.get(server_name, 0),
+                    restart_count=self._restart_counts.get(f"{sandbox_id}:{server_name}", 0),
                 )
 
         except TimeoutError:
@@ -207,7 +207,7 @@ class MCPServerHealthMonitor:
                 status="unhealthy",
                 last_check=now,
                 error_message="Health check timed out",
-                restart_count=self._restart_counts.get(server_name, 0),
+                restart_count=self._restart_counts.get(f"{sandbox_id}:{server_name}", 0),
             )
         except Exception as e:
             return MCPServerHealth(
@@ -215,7 +215,7 @@ class MCPServerHealthMonitor:
                 status="unhealthy",
                 last_check=now,
                 error_message=str(e),
-                restart_count=self._restart_counts.get(server_name, 0),
+                restart_count=self._restart_counts.get(f"{sandbox_id}:{server_name}", 0),
             )
 
     async def restart_if_unhealthy(
@@ -270,7 +270,7 @@ class MCPServerHealthMonitor:
             logger.debug(f"Server '{server_name}' is healthy, no restart needed")
             return None
 
-        current_restarts = self._restart_counts.get(server_name, 0)
+        current_restarts = self._restart_counts.get(f"{sandbox_id}:{server_name}", 0)
         if current_restarts >= max_restarts:
             logger.warning(
                 f"Server '{server_name}' exceeded max restarts "
@@ -340,12 +340,13 @@ class MCPServerHealthMonitor:
             return False
 
         # Increment restart count
-        current_restarts = self._restart_counts.get(server_name, 0)
-        self._restart_counts[server_name] = current_restarts + 1
+        restart_key = f"{sandbox_id}:{server_name}"
+        current_restarts = self._restart_counts.get(restart_key, 0)
+        self._restart_counts[restart_key] = current_restarts + 1
 
         logger.info(
             f"Successfully restarted server '{server_name}' "
-            f"(restart #{self._restart_counts[server_name]})"
+            f"(restart #{self._restart_counts[restart_key]})"
         )
         return True
 
@@ -491,17 +492,19 @@ class MCPServerHealthMonitor:
             self._server_configs[sandbox_id].pop(server_name, None)
 
         # Also clear restart count
-        self._restart_counts.pop(server_name, None)
+        self._restart_counts.pop(f"{sandbox_id}:{server_name}", None)
 
-    def reset_restart_count(self, server_name: str) -> None:
+    def reset_restart_count(self, server_name: str, sandbox_id: str = "") -> None:
         """Reset the restart count for a server.
 
         Call this after a server has been stable for a while.
 
         Args:
             server_name: MCP server name.
+            sandbox_id: Sandbox container ID (required for proper key lookup).
         """
-        self._restart_counts.pop(server_name, None)
+        key = f"{sandbox_id}:{server_name}" if sandbox_id else server_name
+        self._restart_counts.pop(key, None)
 
     # Private methods
 
@@ -576,22 +579,6 @@ class MCPServerHealthMonitor:
     @staticmethod
     def _parse_tool_result(result: dict[str, Any]) -> Any:
         """Parse tool result content, extracting JSON if present."""
-        content = result.get("content", [])
-        if not content:
-            return result
+        from src.infrastructure.mcp.utils import parse_tool_result
 
-        # Extract text from content items
-        text_parts = []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                text_parts.append(item.get("text", ""))
-
-        text = "\n".join(text_parts)
-        if not text:
-            return result
-
-        # Try to parse as JSON
-        try:
-            return json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            return text
+        return parse_tool_result(result)

@@ -185,3 +185,24 @@ class SandboxResourcePort(ABC):
         Returns:
             SandboxInfo if sandbox exists, None otherwise
         """
+
+    async def read_resource(
+        self,
+        project_id: str,
+        uri: str,
+        tenant_id: str | None = None,
+    ) -> str | None:
+        """Read a resource from an MCP server via resources/read.
+
+        This is an optional capability. Implementations that support
+        direct MCP resource reads should override this method.
+
+        Args:
+            project_id: The project ID.
+            uri: The MCP resource URI.
+            tenant_id: Optional tenant ID.
+
+        Returns:
+            HTML content string or None if not supported.
+        """
+        return None

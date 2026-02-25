@@ -78,13 +78,13 @@ from .run_context import RunContext
 
 logger = logging.getLogger(__name__)
 
+
 async def _iter_events(
     events: list["ProcessorEvent"],
 ) -> AsyncIterator["ProcessorEvent"]:
     """Tiny helper to convert a list into an async iterator."""
     for e in events:
         yield e
-
 
 
 class ProcessorState(str, Enum):
@@ -152,7 +152,6 @@ class ProcessorConfig:
     # Forced skill context (optional, for loop reinforcement)
     forced_skill_name: str | None = None
     forced_skill_tools: list[str] | None = None
-
 
 
 @dataclass
@@ -478,9 +477,7 @@ class SessionProcessor:
                     if had_tool_calls:
                         self._no_progress_steps = 0
                     else:
-                        async for evt in self._evaluate_no_tool_result(
-                            session_id, messages
-                        ):
+                        async for evt in self._evaluate_no_tool_result(session_id, messages):
                             yield evt
                         result = self._last_process_result
 
@@ -489,9 +486,7 @@ class SessionProcessor:
                     self._append_tool_results_to_messages(messages)
 
             # Emit completion events
-            async for event in self._emit_completion_events(
-                result, session_id, messages
-            ):
+            async for event in self._emit_completion_events(result, session_id, messages):
                 yield event
 
         except Exception as e:
@@ -519,14 +514,10 @@ class SessionProcessor:
     ) -> tuple[ProcessorResult, bool]:
         """Classify a step event and update loop control state."""
         event_type_raw = (
-            event.get("type")
-            if isinstance(event, dict)
-            else getattr(event, "event_type", None)
+            event.get("type") if isinstance(event, dict) else getattr(event, "event_type", None)
         )
         event_type = (
-            event_type_raw.value
-            if isinstance(event_type_raw, AgentEventType)
-            else event_type_raw
+            event_type_raw.value if isinstance(event_type_raw, AgentEventType) else event_type_raw
         )
         if event_type == AgentEventType.ERROR.value:
             return ProcessorResult.STOP, had_tool_calls
@@ -587,9 +578,7 @@ class SessionProcessor:
             return
         self._last_process_result = ProcessorResult.CONTINUE
 
-    def _append_tool_results_to_messages(
-        self, messages: list[dict[str, Any]]
-    ) -> None:
+    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
         """Append current message and tool results to the message list."""
         if not self._current_message:
             return
@@ -701,16 +690,18 @@ class SessionProcessor:
         # Inject skill reminder for multi-step forced skill execution
         if self._forced_skill_name and self._step_count > 1:
             skill_tool_msg = (
-                f" Use ONLY these tools: {', '.join(sorted(self._forced_skill_tools))}."
+                f" Prefer using these tools: {', '.join(sorted(self._forced_skill_tools))}"
+                f" for skill-specific operations, but you may use any available tool"
+                f" to complete the task."
                 if self._forced_skill_tools
                 else ""
             )
             skill_reminder = {
                 "role": "system",
                 "content": (
-                    f'[SKILL REMINDER] You are executing forced skill '
+                    f"[SKILL REMINDER] You are executing forced skill "
                     f'"/{self._forced_skill_name}". '
-                    f'Follow the skill instructions from the system prompt precisely.'
+                    f"Follow the skill instructions from the system prompt precisely."
                     + skill_tool_msg
                 ),
             }
@@ -1031,8 +1022,7 @@ class SessionProcessor:
         tool_part = self._pending_tool_calls.get(call_id)
         if not tool_part:
             logger.error(
-                "[Processor] Tool call not found in pending: "
-                "call_id=%s, tool=%s",
+                "[Processor] Tool call not found in pending: call_id=%s, tool=%s",
                 call_id,
                 tool_name,
             )
@@ -1076,9 +1066,7 @@ class SessionProcessor:
             return None
 
         yield_events: list[ProcessorEvent] = []
-        yield_events.append(
-            AgentDoomLoopDetectedEvent(tool=tool_name, input=arguments)
-        )
+        yield_events.append(AgentDoomLoopDetectedEvent(tool=tool_name, input=arguments))
         self._state = ProcessorState.WAITING_PERMISSION
 
         try:
@@ -1159,18 +1147,25 @@ class SessionProcessor:
             tool_part.status = ToolState.ERROR
             tool_part.error = f"Permission denied: {tool_def.permission}"
             tool_part.end_time = time.time()
-            return _iter_events([
-                AgentObserveEvent(
-                    tool_name=tool_name,
-                    error=f"Permission denied: {tool_def.permission}",
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-            ])
+            return _iter_events(
+                [
+                    AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=f"Permission denied: {tool_def.permission}",
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                ]
+            )
 
         if permission_rule.action == PermissionAction.ASK:
             return await self._ask_tool_permission(
-                session_id, call_id, tool_name, arguments, tool_part, tool_def,
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
+                tool_def,
             )
 
         return None
@@ -1210,13 +1205,11 @@ class SessionProcessor:
 
             # Store the permission-asked event so the orchestrator can yield it
             # *before* blocking on the response.
-            self._permission_asked_event = (
-                AgentPermissionAskedEvent(
-                    request_id=request_id,
-                    permission=permission,
-                    patterns=[tool_name],
-                    metadata={"tool": tool_name, "input": arguments},
-                )
+            self._permission_asked_event = AgentPermissionAskedEvent(
+                request_id=request_id,
+                permission=permission,
+                patterns=[tool_name],
+                metadata={"tool": tool_name, "input": arguments},
             )
 
             permission_granted = await coordinator.wait_for_response(
@@ -1229,40 +1222,46 @@ class SessionProcessor:
                 tool_part.status = ToolState.ERROR
                 tool_part.error = "Permission rejected by user"
                 tool_part.end_time = time.time()
-                return _iter_events([
-                    AgentObserveEvent(
-                        tool_name=tool_name,
-                        error="Permission rejected by user",
-                        call_id=call_id,
-                        tool_execution_id=tool_part.tool_execution_id,
-                    )
-                ])
+                return _iter_events(
+                    [
+                        AgentObserveEvent(
+                            tool_name=tool_name,
+                            error="Permission rejected by user",
+                            call_id=call_id,
+                            tool_execution_id=tool_part.tool_execution_id,
+                        )
+                    ]
+                )
 
         except TimeoutError:
             tool_part.status = ToolState.ERROR
             tool_part.error = "Permission request timed out"
             tool_part.end_time = time.time()
-            return _iter_events([
-                AgentObserveEvent(
-                    tool_name=tool_name,
-                    error="Permission request timed out",
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-            ])
+            return _iter_events(
+                [
+                    AgentObserveEvent(
+                        tool_name=tool_name,
+                        error="Permission request timed out",
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                ]
+            )
         except ValueError as e:
             logger.warning("[Processor] HITLCoordinator unavailable: %s", e)
             tool_part.status = ToolState.ERROR
             tool_part.error = "Permission request failed: no HITL context"
             tool_part.end_time = time.time()
-            return _iter_events([
-                AgentObserveEvent(
-                    tool_name=tool_name,
-                    error="Permission request failed: no HITL context",
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-            ])
+            return _iter_events(
+                [
+                    AgentObserveEvent(
+                        tool_name=tool_name,
+                        error="Permission request failed: no HITL context",
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                ]
+            )
 
         return None  # granted
 
@@ -1288,9 +1287,7 @@ class SessionProcessor:
                 "_message",
                 "Tool arguments were truncated. The content may be too large.",
             )
-            logger.error(
-                "[Processor] Tool arguments truncated for %s", tool_name
-            )
+            logger.error("[Processor] Tool arguments truncated for %s", tool_name)
             tool_part.status = ToolState.ERROR
             tool_part.error = error_msg
             tool_part.end_time = time.time()
@@ -1306,15 +1303,10 @@ class SessionProcessor:
 
         # Handle _raw arguments (failed JSON parsing in llm_stream)
         if "_raw" in arguments and len(arguments) == 1:
-            parsed = self._try_parse_raw_arguments(
-                tool_name, arguments["_raw"]
-            )
+            parsed = self._try_parse_raw_arguments(tool_name, arguments["_raw"])
             if parsed is None:
                 raw_preview = arguments["_raw"][:500]
-                error_msg = (
-                    f"Invalid JSON in tool arguments. "
-                    f"Raw arguments preview: {raw_preview}"
-                )
+                error_msg = f"Invalid JSON in tool arguments. Raw arguments preview: {raw_preview}"
                 logger.error(
                     "[Processor] Failed to parse _raw arguments for %s",
                     tool_name,
@@ -1334,10 +1326,7 @@ class SessionProcessor:
             arguments = parsed
 
         # Inject session_id for todoread/todowrite
-        if (
-            tool_name in ("todoread", "todowrite")
-            and "session_id" not in arguments
-        ):
+        if tool_name in ("todoread", "todowrite") and "session_id" not in arguments:
             arguments["session_id"] = session_id
 
         return arguments
@@ -1359,8 +1348,7 @@ class SessionProcessor:
             return s
 
         logger.warning(
-            "[Processor] Attempting to parse _raw arguments for tool %s: "
-            "%s...",
+            "[Processor] Attempting to parse _raw arguments for tool %s: %s...",
             tool_name,
             raw_args[:200] if len(raw_args) > 200 else raw_args,
         )
@@ -1381,8 +1369,7 @@ class SessionProcessor:
             fixed = _escape_control_chars(raw_args)
             result = json.loads(fixed)
             logger.info(
-                "[Processor] Parsed _raw arguments after escaping "
-                "control chars for %s",
+                "[Processor] Parsed _raw arguments after escaping control chars for %s",
                 tool_name,
             )
             return cast(dict[str, Any], result)
@@ -1396,8 +1383,7 @@ class SessionProcessor:
                 inner = inner.replace('\\"', '"').replace("\\\\", "\\")
                 result = json.loads(inner)
                 logger.info(
-                    "[Processor] Parsed double-encoded _raw arguments "
-                    "for %s",
+                    "[Processor] Parsed double-encoded _raw arguments for %s",
                     tool_name,
                 )
                 return cast(dict[str, Any], result)
@@ -1452,22 +1438,13 @@ class SessionProcessor:
 
         # MCP App UI metadata
         tool_instance = getattr(tool_def, "_tool_instance", None)
-        has_ui = (
-            getattr(tool_instance, "has_ui", False)
-            if tool_instance
-            else False
-        )
-        if (
-            not has_ui
-            and tool_name.startswith("mcp__")
-            and tool_instance
-        ):
+        has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
+        if not has_ui and tool_name.startswith("mcp__") and tool_instance:
             _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
             if _app_id_fb:
                 has_ui = True
                 logger.debug(
-                    "[MCPApp] Fallback: tool %s has app_id=%s "
-                    "but no _ui_metadata",
+                    "[MCPApp] Fallback: tool %s has app_id=%s but no _ui_metadata",
                     tool_name,
                     _app_id_fb,
                 )
@@ -1485,16 +1462,10 @@ class SessionProcessor:
                 app_id=_o_app_id,
                 tool_name=tool_name,
             )
-            _o_server = (
-                getattr(tool_instance, "_server_name", "") or ""
-            )
-            _o_project_id = (self._langfuse_context or {}).get(
-                "project_id", ""
-            )
+            _o_server = getattr(tool_instance, "_server_name", "") or ""
+            _o_project_id = (self._langfuse_context or {}).get("project_id", "")
             _observe_ui_meta = {
-                "resource_uri": self._extract_mcp_resource_uri(
-                    _hydrated_ui_meta
-                ),
+                "resource_uri": self._extract_mcp_resource_uri(_hydrated_ui_meta),
                 "server_name": _o_server,
                 "app_id": _o_app_id,
                 "title": _hydrated_ui_meta.get("title", ""),
@@ -1511,11 +1482,7 @@ class SessionProcessor:
         )
 
         if tool_instance and has_ui:
-            ui_meta = (
-                _hydrated_ui_meta
-                or getattr(tool_instance, "ui_metadata", None)
-                or {}
-            )
+            ui_meta = _hydrated_ui_meta or getattr(tool_instance, "ui_metadata", None) or {}
             app_id = (
                 getattr(tool_instance, "_last_app_id", "")
                 or getattr(tool_instance, "_app_id", "")
@@ -1524,9 +1491,7 @@ class SessionProcessor:
             if not app_id:
                 app_id = f"_synthetic_{tool_name}"
             resource_html = ""
-            fetch_fn = getattr(
-                tool_instance, "fetch_resource_html", None
-            )
+            fetch_fn = getattr(tool_instance, "fetch_resource_html", None)
             if fetch_fn:
                 try:
                     resource_html = await fetch_fn()
@@ -1537,28 +1502,19 @@ class SessionProcessor:
                         fetch_err,
                     )
             if not resource_html:
-                resource_html = (
-                    getattr(tool_instance, "_last_html", "") or ""
-                )
+                resource_html = getattr(tool_instance, "_last_html", "") or ""
             logger.debug(
-                "[MCPApp] Emitting event: tool=%s, app_id=%s, "
-                "resource_uri=%s, html_len=%d",
+                "[MCPApp] Emitting event: tool=%s, app_id=%s, resource_uri=%s, html_len=%d",
                 tool_name,
                 app_id,
                 self._extract_mcp_resource_uri(ui_meta),
                 len(resource_html),
             )
-            _server_name = (
-                getattr(tool_instance, "_server_name", "") or ""
-            )
-            _project_id = (self._langfuse_context or {}).get(
-                "project_id", ""
-            )
+            _server_name = getattr(tool_instance, "_server_name", "") or ""
+            _project_id = (self._langfuse_context or {}).get("project_id", "")
             _structured_content = None
             if isinstance(sse_result, dict):
-                _structured_content = sse_result.get(
-                    "structuredContent"
-                )
+                _structured_content = sse_result.get("structuredContent")
 
             yield AgentMCPAppResultEvent(
                 app_id=app_id,
@@ -1617,8 +1573,7 @@ class SessionProcessor:
             try:
                 pending = tool_instance.consume_pending_events()
                 logger.info(
-                    "[Processor] todowrite pending events: count=%d, "
-                    "conversation_id=%s",
+                    "[Processor] todowrite pending events: count=%d, conversation_id=%s",
                     len(pending),
                     session_id,
                 )
@@ -1640,21 +1595,16 @@ class SessionProcessor:
         refresh_count: int | None = None
         refresh_status = "not_applicable"
         if tool_name in {"plugin_manager", "register_mcp_server"}:
-            if isinstance(output_str, str) and not output_str.startswith(
-                "Error:"
-            ):
+            if isinstance(output_str, str) and not output_str.startswith("Error:"):
                 logger.info(
                     "[Processor] %s succeeded, refreshing tools",
                     tool_name,
                 )
                 refresh_count = self._refresh_tools()
-                refresh_status = (
-                    "success" if refresh_count is not None else "failed"
-                )
+                refresh_status = "success" if refresh_count is not None else "failed"
             else:
                 logger.debug(
-                    "[Processor] %s failed or returned error, "
-                    "skipping tool refresh",
+                    "[Processor] %s failed or returned error, skipping tool refresh",
                     tool_name,
                 )
                 refresh_status = "skipped"
@@ -1678,23 +1628,16 @@ class SessionProcessor:
             try:
                 for event in tool_instance.consume_pending_events():
                     if (
-                        tool_name
-                        in {"plugin_manager", "register_mcp_server"}
+                        tool_name in {"plugin_manager", "register_mcp_server"}
                         and isinstance(event, dict)
                         and event.get("type") == "toolset_changed"
                     ):
                         event_data = event.get("data")
                         if isinstance(event_data, dict):
-                            event_data.setdefault(
-                                "refresh_source", "processor"
-                            )
-                            event_data[
-                                "refresh_status"
-                            ] = refresh_status
+                            event_data.setdefault("refresh_source", "processor")
+                            event_data["refresh_status"] = refresh_status
                             if refresh_count is not None:
-                                event_data[
-                                    "refreshed_tool_count"
-                                ] = refresh_count
+                                event_data["refreshed_tool_count"] = refresh_count
                     yield event
             except Exception as pending_err:
                 logger.error(
@@ -1720,8 +1663,7 @@ class SessionProcessor:
             if event_type == "task_list_updated":
                 tasks = task_event["tasks"]
                 logger.info(
-                    "[Processor] Emitting task_list_updated: "
-                    "%d tasks for %s",
+                    "[Processor] Emitting task_list_updated: %d tasks for %s",
                     len(tasks),
                     task_event["conversation_id"],
                 )
@@ -1753,17 +1695,11 @@ class SessionProcessor:
                     content=task_event.get("content"),
                 )
                 if task_status == "in_progress":
-                    total = (
-                        self._current_task["total_tasks"]
-                        if self._current_task
-                        else 1
-                    )
+                    total = self._current_task["total_tasks"] if self._current_task else 1
                     self._current_task = {
                         "task_id": task_event["task_id"],
                         "content": task_event.get("content", ""),
-                        "order_index": task_event.get(
-                            "order_index", 0
-                        ),
+                        "order_index": task_event.get("order_index", 0),
                         "total_tasks": total,
                     }
                     yield AgentTaskStartEvent(
@@ -1817,7 +1753,11 @@ class SessionProcessor:
 
         # 2. Doom-loop
         doom_result = await self._check_doom_loop(
-            session_id, call_id, tool_name, arguments, tool_part,
+            session_id,
+            call_id,
+            tool_name,
+            arguments,
+            tool_part,
         )
         if doom_result is not None:
             async for ev in doom_result:
@@ -1832,7 +1772,11 @@ class SessionProcessor:
         if hitl_handler is not None:
             handler_method = getattr(self, hitl_handler)
             async for ev in handler_method(
-                session_id, call_id, tool_name, arguments, tool_part,
+                session_id,
+                call_id,
+                tool_name,
+                arguments,
+                tool_part,
             ):
                 yield ev
             return
@@ -1840,7 +1784,12 @@ class SessionProcessor:
         # 4. Permission check
         self._permission_asked_event = None
         perm_result = await self._check_tool_permission(
-            session_id, call_id, tool_name, arguments, tool_part, tool_def,
+            session_id,
+            call_id,
+            tool_name,
+            arguments,
+            tool_part,
+            tool_def,
         )
         # Yield permission-asked event if one was generated
         if self._permission_asked_event is not None:
@@ -1854,7 +1803,11 @@ class SessionProcessor:
         # 5. Parse & fix arguments
         self._state = ProcessorState.ACTING
         cleaned = self._parse_and_fix_arguments(
-            tool_name, arguments, tool_part, call_id, session_id,
+            tool_name,
+            arguments,
+            tool_part,
+            call_id,
+            session_id,
         )
         if cleaned is None:
             for ev in self.__arg_parse_errors:
@@ -1865,13 +1818,20 @@ class SessionProcessor:
         # 6. Invoke tool + emit observe
         try:
             async for ev in self._invoke_and_emit_observe(
-                tool_name, arguments, tool_part, tool_def, call_id,
+                tool_name,
+                arguments,
+                tool_part,
+                tool_def,
+                call_id,
             ):
                 yield ev
 
             # 7. Side effects
             async for ev in self._emit_tool_side_effects(
-                tool_name, tool_def, tool_part, session_id,
+                tool_name,
+                tool_def,
+                tool_part,
+                session_id,
             ):
                 yield ev
 
@@ -1883,9 +1843,7 @@ class SessionProcessor:
             yield AgentObserveEvent(
                 tool_name=tool_name,
                 error=str(e),
-                duration_ms=int(
-                    (time.time() - tool_part.start_time) * 1000
-                )
+                duration_ms=int((time.time() - tool_part.start_time) * 1000)
                 if tool_part.start_time
                 else None,
                 call_id=call_id,
@@ -1893,6 +1851,7 @@ class SessionProcessor:
             )
 
         self._state = ProcessorState.OBSERVING
+
     # Max bytes for tool output stored in LLM context
     async def _handle_clarification_tool(
         self,

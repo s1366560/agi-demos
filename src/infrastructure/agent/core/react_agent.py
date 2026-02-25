@@ -921,8 +921,7 @@ class ReActAgent:
 
         if best_skill and best_score >= self.skill_match_threshold:
             logger.info(
-                f"[ReActAgent] Matched skill: {best_skill.name} "
-                f"with score {best_score:.2f}"
+                f"[ReActAgent] Matched skill: {best_skill.name} with score {best_score:.2f}"
             )
             return best_skill, best_score
 
@@ -1196,19 +1195,14 @@ class ReActAgent:
             name_lower = forced_skill_name.strip().lower()
             found_skill: SkillProtocol | None = None
             for skill in cast("list[SkillProtocol]", self.skills or []):
-                if (
-                    skill.name.lower() == name_lower
-                    and skill.status.value == "active"
-                ):
+                if skill.name.lower() == name_lower and skill.status.value == "active":
                     found_skill = skill
                     break
             if found_skill is not None:
                 matched_skill = found_skill
                 skill_score = 1.0
                 is_forced = True
-                logger.info(
-                    f"[ReActAgent] Forced skill found: {found_skill.name}"
-                )
+                logger.info(f"[ReActAgent] Forced skill found: {found_skill.name}")
             else:
                 yield {
                     "type": "thought",
@@ -1497,30 +1491,18 @@ class ReActAgent:
                 }
         tools_to_use = list(current_tool_definitions)
 
-        # When a forced skill is active, restrict tools to skill's declared set
+        # When a forced skill is active, keep all core tools available
+        # but remove skill_loader to prevent loading other skills.
+        # The skill's prompt template is already injected into the system prompt,
+        # so the agent can use any core tool to fulfill the skill's instructions.
         if is_forced and matched_skill:
+            tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
             skill_tools = set(matched_skill.tools) if matched_skill.tools else set()
-            # Always keep essential system tools
-            essential_tools = {"abort", "todowrite", "todoread"}
-            allowed_tools = skill_tools | essential_tools
-            filtered_tools = [t for t in tools_to_use if t.name in allowed_tools]
-
-            if not filtered_tools:
-                # Fallback: if skill declares no tools or none match, keep all
-                # but still remove skill_loader
-                tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
-                logger.warning(
-                    f"[ReActAgent] Forced skill '{matched_skill.name}' declares no matching tools, "
-                    f"keeping full tool set minus skill_loader"
-                )
-            else:
-                tools_to_use = filtered_tools
-                logger.info(
-                    f"[ReActAgent] Forced skill tool filter: "
-                    f"declared={list(skill_tools)}, "
-                    f"available={[t.name for t in tools_to_use]}, "
-                    f"filtered_out={len(current_tool_definitions) - len(tools_to_use)}"
-                )
+            logger.info(
+                f"[ReActAgent] Forced skill '{matched_skill.name}' active: "
+                f"removed skill_loader, keeping {len(tools_to_use)} tools. "
+                f"Skill declared tools={list(skill_tools)}"
+            )
 
         self._stream_tools_to_use = tools_to_use
 
@@ -1723,7 +1705,9 @@ class ReActAgent:
             run_ctx = RunContext(
                 abort_signal=abort_signal,
                 langfuse_context=langfuse_context,
-                conversation_id=langfuse_context.get("conversation_id") if langfuse_context else None,
+                conversation_id=langfuse_context.get("conversation_id")
+                if langfuse_context
+                else None,
             )
             async for domain_event in processor.process(
                 session_id=langfuse_context["conversation_id"],
@@ -2006,7 +1990,6 @@ class ReActAgent:
             )
         )
         yield route_event
-
 
         # Phase 5: Skill matching
         for event in self._stream_match_skill(processed_user_message, forced_skill_name):
@@ -2652,7 +2635,6 @@ class ReActAgent:
     ) -> list[Any]:
         """Sort subtasks by dependency order."""
         return SubAgentSessionRunner.topological_sort_subtasks(subtasks)
-
 
     def _extract_sandbox_id_from_tools(self) -> str | None:
         """Extract sandbox_id from any available sandbox tool wrapper."""

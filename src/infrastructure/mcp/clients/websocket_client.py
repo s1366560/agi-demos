@@ -16,9 +16,10 @@ Features:
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import aiohttp
 
@@ -260,15 +261,17 @@ class MCPWebSocketClient:
         try:
             logger.info("Disconnecting MCP WebSocket client")
             self._connected = False
-            await self._cleanup_receive_task()  # type: ignore[attr-defined]
+            await self._cleanup_receive_task()
             await self._cleanup_websocket()
-            await self._cleanup_session()  # type: ignore[attr-defined]
-            self._fail_pending_requests()  # type: ignore[attr-defined]
+            await self._cleanup_session()
+            self._fail_pending_requests()
             self._tools = []
             self.server_info = None
         finally:
             async with self._cleanup_lock:
                 self._is_cleaning_up = False
+
+    async def _cleanup_receive_task(self) -> None:
         """Cancel and await the background receive task."""
         if not self._receive_task or self._receive_task.done():
             self._receive_task = None
@@ -281,6 +284,7 @@ class MCPWebSocketClient:
         except Exception as e:
             logger.warning(f"Error waiting for receive task: {e}")
         self._receive_task = None
+
     async def _cleanup_websocket(self) -> None:
         """Close the WebSocket connection with timeout."""
         if self._ws and not self._ws.closed:
@@ -291,6 +295,8 @@ class MCPWebSocketClient:
             except Exception as e:
                 logger.warning(f"Error closing WebSocket: {e}")
             self._ws = None
+
+    async def _cleanup_session(self) -> None:
         """Close the aiohttp session with timeout."""
         if self._session and not self._session.closed:
             try:
@@ -300,6 +306,8 @@ class MCPWebSocketClient:
             except Exception as e:
                 logger.warning(f"Error closing session: {e}")
             self._session = None
+
+    def _fail_pending_requests(self) -> None:
         """Fail all pending requests with a connection closed error."""
         for _request_id, future in list(self._pending_requests.items()):
             if not future.done():

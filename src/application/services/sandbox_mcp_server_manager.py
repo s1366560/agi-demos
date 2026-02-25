@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 from src.domain.ports.services.sandbox_mcp_server_port import (
     SandboxMCPServerPort,
@@ -60,6 +60,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         self._sandbox_resource = sandbox_resource
         self._app_service = app_service
 
+    @override
     async def install_and_start(
         self,
         project_id: str,
@@ -131,6 +132,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             port=start_data.get("port"),
         )
 
+    @override
     async def stop_server(
         self,
         project_id: str,
@@ -150,6 +152,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             logger.warning(f"Failed to stop MCP server '{server_name}': {e}")
             return False
 
+    @override
     async def discover_tools(
         self,
         project_id: str,
@@ -197,6 +200,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             return tools
         return []
 
+    @override
     async def call_tool(
         self,
         project_id: str,
@@ -245,23 +249,13 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         Returns HTML content string or None.
         """
         try:
-            # The sandbox resource port wraps the sandbox adapter which can
-            # do a direct resources/read on the WebSocket connection.
-            adapter = getattr(self._sandbox_resource, "_adapter", None) or getattr(
-                self._sandbox_resource, "_sandbox_adapter", None
-            )
-            if adapter and hasattr(adapter, "read_resource"):
-                sandbox_id = await self._sandbox_resource.get_sandbox_id(
-                    project_id, tenant_id or ""
-                )
-                if not sandbox_id:
-                    logger.warning("No sandbox for project %s", project_id)
-                    return None
-                return cast("str | None", await adapter.read_resource(sandbox_id, uri))
+            result = await self._sandbox_resource.read_resource(project_id, uri, tenant_id)
+            if result is not None:
+                return result
 
             # Fallback: use management tool mcp_server_call_tool with
             # the "resources/read" protocol path (for future compat).
-            logger.warning("read_resource: no adapter path, falling back to None")
+            logger.warning("read_resource: port returned None, resource not supported")
             return None
         except Exception as e:
             logger.warning(f"read_resource failed for '{uri}': {e}")
@@ -293,6 +287,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             logger.warning(f"list_resources failed: {e}")
             return []
 
+    @override
     async def test_connection(
         self,
         project_id: str,
@@ -330,7 +325,9 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 # If not a list, it might be an error dict or raw text
                 error_msg = "Unknown error"
                 if isinstance(tools, dict):
-                    error_msg = tools.get("error", tools.get("raw_output", str(tools))) or "Unknown error"
+                    error_msg = (
+                        tools.get("error", tools.get("raw_output", str(tools))) or "Unknown error"
+                    )
                 else:
                     error_msg = str(tools)
 
@@ -343,6 +340,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
 
         return status
 
+    @override
     async def list_servers(
         self,
         project_id: str,
@@ -374,23 +372,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             return []
 
     def _parse_tool_result(self, result: dict[str, Any]) -> Any:
-        """Parse tool result content, extracting JSON if present."""
-        content = result.get("content", [])
-        if not content:
-            return result
+        """Parse tool result content, extracting JSON if present.
 
-        # Extract text from content items
-        text_parts = []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                text_parts.append(item.get("text", ""))
+        Unlike the shared utility, non-JSON text is wrapped in an
+        error dict for compatibility with callers that check ``success``.
+        """
+        from src.infrastructure.mcp.utils import parse_tool_result
 
-        text = "\n".join(text_parts)
-        if not text:
-            return result
-
-        # Try to parse as JSON
-        try:
-            return json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            return {"success": False, "error": text, "raw_output": text}
+        parsed = parse_tool_result(result)
+        if isinstance(parsed, str):
+            return {"success": False, "error": parsed, "raw_output": parsed}
+        return parsed

@@ -1,0 +1,9 @@
+{
+  "source": "vercel/ai",
+  "skill_name": "capture-api-response-test-fixture",
+  "branch": "main",
+  "source_path": "skills/capture-api-response-test-fixture/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}
