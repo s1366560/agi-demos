@@ -9,7 +9,7 @@ import logging
 import math
 import warnings
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any
+from typing import Any, cast, override
 
 from pydantic import BaseModel
 
@@ -319,10 +319,33 @@ class LiteLLMClient(LLMClient):
             del trimmed[1 if keep_system_prompt else 0]
             token_count = self._estimate_effective_input_tokens(model, trimmed)
 
-        # Last resort: drop system prompt if still above limit.
+        # Last resort: try to trim system prompt content before deleting it
         if token_count > input_limit and keep_system_prompt and len(trimmed) > 1:
-            del trimmed[0]
-            token_count = self._estimate_effective_input_tokens(model, trimmed)
+            system_content = trimmed[0].get("content", "")
+            has_mandatory_skill = "<mandatory-skill" in str(system_content)
+
+            if has_mandatory_skill:
+                # Preserve mandatory-skill block, trim other sections
+                trimmed[0] = dict(trimmed[0])
+                trimmed[0]["content"] = self._trim_system_prompt_preserve_skill(
+                    str(system_content)
+                )
+                token_count = self._estimate_effective_input_tokens(model, trimmed)
+                if token_count <= input_limit:
+                    logger.info(
+                        "Trimmed system prompt while preserving mandatory-skill block"
+                    )
+
+            # Only delete system message if still over limit AND no mandatory skill
+            if token_count > input_limit:
+                if has_mandatory_skill:
+                    logger.warning(
+                        "System prompt with mandatory-skill still exceeds limit after trimming. "
+                        "Keeping it to preserve skill instructions."
+                    )
+                else:
+                    del trimmed[0]
+                    token_count = self._estimate_effective_input_tokens(model, trimmed)
 
         # Final fallback: truncate largest remaining content until within budget.
         truncate_attempts = 0
@@ -353,6 +376,56 @@ class LiteLLMClient(LLMClient):
         )
         return trimmed
 
+
+    @staticmethod
+    def _trim_system_prompt_preserve_skill(content: str) -> str:
+        """Trim system prompt content while preserving <mandatory-skill> blocks.
+
+        Removes sections that are least critical when a forced skill is active:
+        - Workspace guidelines
+        - SubAgent descriptions
+        - Mode reminders
+
+        Preserves:
+        - <mandatory-skill> block (highest priority)
+        - Environment context (needed for tool execution)
+        - Tool descriptions (needed for skill's tools)
+        """
+        import re
+
+        # Extract mandatory-skill block
+        skill_match = re.search(
+            r'(<mandatory-skill.*?</mandatory-skill>)',
+            content,
+            re.DOTALL,
+        )
+        if not skill_match:
+            return content
+
+        skill_block = skill_match.group(1)
+
+        # Remove low-priority sections
+        trimmed = content
+        # Remove subagent section
+        trimmed = re.sub(
+            r'## Available SubAgents.*?(?=\n## |\n<|\Z)',
+            '',
+            trimmed,
+            flags=re.DOTALL,
+        )
+        # Remove workspace section
+        trimmed = re.sub(
+            r'## Workspace Guidelines.*?(?=\n## |\n<|\Z)',
+            '',
+            trimmed,
+            flags=re.DOTALL,
+        )
+
+        # Ensure skill block is still present
+        if '<mandatory-skill' not in trimmed:
+            trimmed = skill_block + "\n\n" + trimmed
+
+        return trimmed.strip()
     @staticmethod
     def _is_client_error(e: Exception) -> bool:
         """Check if an exception is a client-side error (400-level).
@@ -433,6 +506,7 @@ class LiteLLMClient(LLMClient):
             return msg
         return {"role": m.role, "content": m.content}
 
+    @override
     async def generate(
         self,
         messages: list[Message] | list[dict[str, Any]],
@@ -494,6 +568,9 @@ class LiteLLMClient(LLMClient):
             lambda: litellm.acompletion(**completion_kwargs)
         )
 
+        if response is None:
+            raise ValueError("LLM response is None")
+
         if not response.choices:
             raise ValueError("No choices in response")
 
@@ -528,6 +605,7 @@ class LiteLLMClient(LLMClient):
 
         return result
 
+    @override
     async def generate_stream(
         self,
         messages: list[Message],
@@ -577,7 +655,7 @@ class LiteLLMClient(LLMClient):
         try:
             async with await rate_limiter.acquire(provider_type):
                 response = await litellm.acompletion(**completion_kwargs)
-                async for chunk in response:
+                async for chunk in cast("AsyncGenerator[Any, None]", response):
                     yield chunk
             circuit_breaker.record_success()
         except Exception as e:
@@ -592,6 +670,7 @@ class LiteLLMClient(LLMClient):
             logger.error(f"LiteLLM streaming error: {e}")
             raise
 
+    @override
     async def _generate_response(
         self,
         messages: list[Message],
@@ -644,6 +723,9 @@ class LiteLLMClient(LLMClient):
             response = await self._execute_with_resilience(
                 lambda: litellm.acompletion(**completion_kwargs)
             )
+
+            if response is None:
+                raise ValueError("LLM response is None")
 
             if not response.choices:
                 raise ValueError("No choices in response")

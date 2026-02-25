@@ -1,3 +1,4 @@
+# pyright: reportUninitializedInstanceVariable=false
 """
 Self-developed ReAct Agent - Replaces LangGraph implementation.
 
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
     from src.domain.ports.services.graph_service_port import GraphServicePort
+    from src.infrastructure.agent.routing.subagent_orchestrator import SubAgentRouterProtocol
     from src.infrastructure.agent.skill.orchestrator import SkillExecutorProtocol
 
 logger = logging.getLogger(__name__)
@@ -120,7 +122,76 @@ class ReActAgent:
         ("data", ("memory", "entity", "graph", "sql", "database", "query", "episode")),
     )
 
-    def __init__(
+    # -- Instance variable type declarations (for pyright) --
+    # _init_tool_pipeline
+    _tool_selection_pipeline: Any
+    _tool_selection_max_tools: int
+    _tool_selection_semantic_backend: str
+    _router_mode_tool_count_threshold: int
+    _tool_policy_layers: dict[str, dict[str, Any]]
+    _last_tool_selection_trace: tuple[ToolSelectionTraceStep, ...]
+    # _init_memory_hooks
+    _memory_recall: Any
+    _memory_capture: Any
+    _memory_flush: Any
+    # _init_prompt_and_context
+    prompt_manager: Any
+    context_manager: ContextWindowManager
+    context_facade: ContextFacade
+    # _init_skill_system
+    skills: list[Skill]
+    skill_match_threshold: float
+    skill_direct_execute_threshold: float
+    skill_fallback_on_error: bool
+    skill_execution_timeout: int
+    skill_executor: SkillExecutor | None
+    # _init_subagent_system
+    subagents: list[SubAgent]
+    subagent_match_threshold: float
+    _enable_subagent_as_tool: bool
+    _max_subagent_delegation_depth: int
+    _max_subagent_active_runs: int
+    _max_subagent_children_per_requester: int
+    _max_subagent_active_runs_per_lineage: int
+    _max_subagent_lane_concurrency: int
+    _subagent_announce_max_events: int
+    _subagent_announce_max_retries: int
+    _subagent_announce_retry_delay_ms: int
+    _subagent_lane_semaphore: asyncio.Semaphore
+    _subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None
+    _subagent_lifecycle_hook_failures: int
+    # _init_subagent_router
+    subagent_router: Any
+    # _init_subagent_run_registry
+    _subagent_run_registry: Any
+    _subagent_session_tasks: dict[str, asyncio.Task[Any]]
+    # _init_orchestrators
+    _event_converter: EventConverter
+    _skill_orchestrator: SkillOrchestrator
+    _subagent_orchestrator: SubAgentOrchestrator
+    _execution_router: ExecutionRouter
+    # _init_background_services
+    _background_executor: Any
+    _template_registry: Any
+    _task_decomposer: Any
+    _result_aggregator: Any
+    # _init_tool_definitions
+    tool_definitions: list[Any]
+    _use_dynamic_tools: bool
+    config: ProcessorConfig
+    # stream-phase instance state
+    _stream_preroute_completed: bool
+    _stream_active_subagent: SubAgent | None
+    _stream_skill_state: dict[str, Any]
+    _stream_memory_context: Any
+    _stream_context_result: Any
+    _stream_messages: list[dict[str, Any]]
+    _stream_cached_summary: Any
+    _stream_tools_to_use: list[ToolDefinition]
+    _stream_final_content: str
+    _stream_success: bool
+
+    def __init__(  # noqa: PLR0913
         self,
         model: str,
         tools: dict[str, Any] | None = None,  # Tool name -> Tool instance (static)
@@ -457,7 +528,7 @@ class ReActAgent:
         self.skill_execution_timeout = skill_execution_timeout
         self.skill_executor = SkillExecutor(tools or {}) if skills else None
 
-    def _init_subagent_system(
+    def _init_subagent_system(  # noqa: PLR0913
         self,
         subagents: list[SubAgent] | None,
         execution_config: ExecutionConfig,
@@ -603,7 +674,7 @@ class ReActAgent:
         )
 
         self._subagent_orchestrator = SubAgentOrchestrator(
-            router=self.subagent_router,
+            router=cast("SubAgentRouterProtocol | None", self.subagent_router),
             config=SubAgentOrchestratorConfig(
                 default_confidence_threshold=execution_config.subagent_match_threshold,
                 emit_routing_events=True,
@@ -1779,9 +1850,30 @@ class ReActAgent:
                 }
         tools_to_use = list(current_tool_definitions)
 
-        # When a forced skill is active, remove skill_loader
+        # When a forced skill is active, restrict tools to skill's declared set
         if is_forced and matched_skill:
-            tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
+            skill_tools = set(matched_skill.tools) if matched_skill.tools else set()
+            # Always keep essential system tools
+            essential_tools = {"abort", "todowrite", "todoread"}
+            allowed_tools = skill_tools | essential_tools
+            filtered_tools = [t for t in tools_to_use if t.name in allowed_tools]
+
+            if not filtered_tools:
+                # Fallback: if skill declares no tools or none match, keep all
+                # but still remove skill_loader
+                tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
+                logger.warning(
+                    f"[ReActAgent] Forced skill '{matched_skill.name}' declares no matching tools, "
+                    f"keeping full tool set minus skill_loader"
+                )
+            else:
+                tools_to_use = filtered_tools
+                logger.info(
+                    f"[ReActAgent] Forced skill tool filter: "
+                    f"declared={list(skill_tools)}, "
+                    f"available={[t.name for t in tools_to_use]}, "
+                    f"filtered_out={len(current_tool_definitions) - len(tools_to_use)}"
+                )
 
         self._stream_tools_to_use = tools_to_use
 
@@ -1801,21 +1893,6 @@ class ReActAgent:
         if not self.subagents or not self._enable_subagent_as_tool:
             return tools_to_use
 
-        from ..tools.delegate_subagent import (
-            DelegateSubAgentTool,
-            ParallelDelegateSubAgentTool,
-        )
-        from ..tools.subagent_sessions import (
-            SessionsAckTool,
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsOverviewTool,
-            SessionsSendTool,
-            SessionsSpawnTool,
-            SessionsTimelineTool,
-            SessionsWaitTool,
-            SubAgentsControlTool,
-        )
 
         enabled_subagents = [sa for sa in self.subagents if sa.enabled]
         if not enabled_subagents:
@@ -2121,6 +2198,8 @@ class ReActAgent:
             context_limit=config.context_limit,
             llm_client=config.llm_client,
             tool_provider=_tool_provider_wrapper,
+            forced_skill_name=config.forced_skill_name,
+            forced_skill_tools=config.forced_skill_tools,
         )
         logger.debug("[ReActAgent] Created processor config with tool_provider for dynamic tools")
         return new_config
@@ -2346,7 +2425,7 @@ class ReActAgent:
                 f"[ReActAgent] Skill {matched_skill.name} usage recorded: success={success}"
             )
 
-    async def stream(
+    async def stream(  # noqa: PLR0913
         self,
         conversation_id: str,
         user_message: str,
@@ -2512,6 +2591,12 @@ class ReActAgent:
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(self.config, selection_context)
+        # Pass forced skill context to processor for loop reinforcement (Fix 4)
+        if is_forced and matched_skill:
+            config.forced_skill_name = matched_skill.name
+            config.forced_skill_tools = (
+                list(matched_skill.tools) if matched_skill.tools else None
+            )
         processor = SessionProcessor(
             config=config,
             tools=tools_to_use,
@@ -2621,18 +2706,6 @@ class ReActAgent:
         ):
             return
 
-        from ..tools.delegate_subagent import (
-            DelegateSubAgentTool,
-            ParallelDelegateSubAgentTool,
-        )
-        from ..tools.subagent_sessions import (
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsOverviewTool,
-            SessionsTimelineTool,
-            SessionsWaitTool,
-            SubAgentsControlTool,
-        )
 
         nested_candidates = [sa for sa in self.subagents if sa.enabled and sa.id != subagent.id]
         if not nested_candidates:
@@ -3620,7 +3693,7 @@ class ReActAgent:
 
         return summary, tokens_used, execution_time_ms, result_success, result_error
 
-    async def _launch_subagent_session(
+    async def _launch_subagent_session(  # noqa: PLR0913
         self,
         run_id: str,
         subagent: SubAgent,

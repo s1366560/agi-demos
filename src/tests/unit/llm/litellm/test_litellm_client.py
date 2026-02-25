@@ -433,3 +433,198 @@ class TestLiteLLMClientZhipu:
         """Test provider type identification for ZhipuAI."""
         provider_type = zhipu_client._get_provider_type()
         assert provider_type == "litellm-zai"
+
+
+@pytest.mark.unit
+class TestLiteLLMClientMandatorySkillProtection:
+    """Test suite for mandatory-skill system prompt protection in LiteLLMClient."""
+
+    @pytest.fixture
+    def provider_config(self):
+        """Create a test provider configuration."""
+        return ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+    @pytest.fixture
+    def llm_config(self):
+        """Create a test LLM config."""
+        return LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=0,
+        )
+
+    @pytest.fixture
+    def client(self, provider_config, llm_config):
+        """Create a LiteLLMClient instance."""
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
+            return LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+            )
+
+    def _make_system_content_with_skill(self) -> str:
+        """Build a system prompt containing a mandatory-skill block."""
+        return (
+            "You are helpful.\n\n"
+            "## Available SubAgents (Specialized Autonomous Agents)\n"
+            "Some subagent descriptions here\n\n"
+            "## Workspace Guidelines\n"
+            "Some workspace content\n\n"
+            '<mandatory-skill name="test-skill">\n'
+            "Follow these skill instructions precisely.\n"
+            "</mandatory-skill>"
+        )
+
+    def test_trim_messages_preserves_system_with_mandatory_skill(self, client):
+        """System message with mandatory-skill must NOT be deleted even when over limit."""
+        # Arrange
+        system_content = self._make_system_content_with_skill()
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": "user request"},
+        ]
+
+        with (
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_model_input_budget",
+                return_value=50,
+            ),
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_model_max_input_tokens",
+                return_value=100,
+            ),
+            patch.object(
+                client,
+                "_estimate_effective_input_tokens",
+                return_value=999,
+            ),
+        ):
+            # Act
+            trimmed = client._trim_messages_to_input_limit(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=4096,
+            )
+
+        # Assert -- system message must survive
+        system_msgs = [m for m in trimmed if m["role"] == "system"]
+        assert len(system_msgs) == 1
+        assert "<mandatory-skill" in system_msgs[0]["content"]
+
+    def test_trim_messages_deletes_system_without_mandatory_skill(self, client):
+        """System message without mandatory-skill IS deleted when over limit."""
+        # Arrange
+        messages = [
+            {"role": "system", "content": "Plain system prompt without skills"},
+            {"role": "user", "content": "user request"},
+        ]
+
+        # Return high token count so we stay over budget after removing middle msgs
+        with (
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_model_input_budget",
+                return_value=50,
+            ),
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_model_max_input_tokens",
+                return_value=100,
+            ),
+            patch.object(
+                client,
+                "_estimate_effective_input_tokens",
+                return_value=999,
+            ),
+        ):
+            # Act
+            trimmed = client._trim_messages_to_input_limit(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=4096,
+            )
+
+        # Assert -- system message should be removed
+        system_msgs = [m for m in trimmed if m["role"] == "system"]
+        assert len(system_msgs) == 0
+
+    def test_trim_system_prompt_preserve_skill_extracts_block(self):
+        """_trim_system_prompt_preserve_skill removes SubAgent/Workspace but keeps skill."""
+        # Arrange
+        content = (
+            "You are helpful.\n\n"
+            "## Available SubAgents (Specialized Autonomous Agents)\n"
+            "Some subagent descriptions here\n\n"
+            "## Workspace Guidelines\n"
+            "Some workspace content\n\n"
+            '<mandatory-skill name="test-skill">\n'
+            "Follow these skill instructions precisely.\n"
+            "</mandatory-skill>"
+        )
+
+        # Act
+        result = LiteLLMClient._trim_system_prompt_preserve_skill(content)
+
+        # Assert -- mandatory-skill block preserved
+        assert '<mandatory-skill name="test-skill">' in result
+        assert "Follow these skill instructions precisely." in result
+        assert "</mandatory-skill>" in result
+        # Assert -- removable sections stripped
+        assert "## Available SubAgents" not in result
+        assert "Some subagent descriptions here" not in result
+        assert "## Workspace Guidelines" not in result
+        assert "Some workspace content" not in result
+        # Assert -- core intro preserved
+        assert "You are helpful." in result
+
+    def test_trim_system_prompt_preserve_skill_noop_without_block(self):
+        """_trim_system_prompt_preserve_skill returns content unchanged when no skill block."""
+        # Arrange
+        content = (
+            "You are helpful.\n\n"
+            "## Available SubAgents (Specialized Autonomous Agents)\n"
+            "Some subagent descriptions here"
+        )
+
+        # Act
+        result = LiteLLMClient._trim_system_prompt_preserve_skill(content)
+
+        # Assert -- returned unchanged
+        assert result == content
+
+    def test_trim_system_prompt_preserve_skill_restores_if_accidentally_removed(self):
+        """If regex removal accidentally deletes skill block, it gets restored."""
+        # Arrange -- skill block nested inside a SubAgent section header boundary
+        # The regex `## Available SubAgents.*?(?=\n## |\n<|\Z)` uses lookahead for `\n<`
+        # so the skill block after a section should survive. But the safety net in the code
+        # re-prepends it if lost. We test the safety net directly.
+        content = (
+            "## Available SubAgents (Specialized Autonomous Agents)\n"
+            "Subagent content\n"
+            "## Workspace Guidelines\n"
+            "Workspace content\n"
+            '<mandatory-skill name="rescue">\n'
+            "Important instructions\n"
+            "</mandatory-skill>"
+        )
+
+        # Act
+        result = LiteLLMClient._trim_system_prompt_preserve_skill(content)
+
+        # Assert -- mandatory-skill block must be present regardless
+        assert '<mandatory-skill name="rescue">' in result
+        assert "Important instructions" in result
+        assert "</mandatory-skill>" in result

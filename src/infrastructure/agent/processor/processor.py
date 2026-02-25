@@ -257,6 +257,10 @@ class ProcessorConfig:
     # When provided, _refresh_tools() can fetch updated tools at runtime
     tool_provider: Callable[[], list["ToolDefinition"]] | None = None
 
+    # Forced skill context (optional, for loop reinforcement)
+    forced_skill_name: str | None = None
+    forced_skill_tools: list[str] | None = None
+
 
 @dataclass
 class GoalCheckResult:
@@ -356,6 +360,7 @@ class SessionProcessor:
         self._state = ProcessorState.IDLE
         self._step_count = 0
         self._no_progress_steps = 0
+        self._last_process_result: ProcessorResult = ProcessorResult.CONTINUE
         self._current_message: Message | None = None
         self._pending_tool_calls: dict[str, ToolPart] = {}
         self._pending_tool_args: dict[str, str] = {}  # call_id -> accumulated raw args
@@ -373,6 +378,12 @@ class SessionProcessor:
         # Tool provider callback for dynamic tool refresh
         # When set, _refresh_tools() can update self.tools at runtime
         self._tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
+
+        # Forced skill context for loop reinforcement
+        self._forced_skill_name: str | None = config.forced_skill_name
+        self._forced_skill_tools: set[str] | None = (
+            set(config.forced_skill_tools) if config.forced_skill_tools else None
+        )
 
     @property
     def state(self) -> ProcessorState:
@@ -418,8 +429,8 @@ class SessionProcessor:
 
         try:
             new_tools = self._tool_provider()
-            if new_tools is None:
-                logger.warning("[Processor] tool_provider returned None, skipping refresh")  # type: ignore[unreachable]
+            if new_tools is None:  # pyright: ignore[reportUnnecessaryComparison]
+                logger.warning("[Processor] tool_provider returned None, skipping refresh")
                 return None
 
             # Update tools dict with new tool definitions
@@ -1162,7 +1173,7 @@ class SessionProcessor:
         """Classify tool into a category based on its description."""
         return classify_tool_by_description(tool_name, tool_def.description)
 
-    async def _process_step(
+    async def _process_step(  # noqa: PLR0912, PLR0915
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -1188,6 +1199,24 @@ class SessionProcessor:
         # Reset pending tool calls
         self._pending_tool_calls = {}
         self._pending_tool_args = {}
+
+        # Inject skill reminder for multi-step forced skill execution
+        if self._forced_skill_name and self._step_count > 1:
+            skill_tool_msg = (
+                f" Use ONLY these tools: {', '.join(sorted(self._forced_skill_tools))}."
+                if self._forced_skill_tools
+                else ""
+            )
+            skill_reminder = {
+                "role": "system",
+                "content": (
+                    f'[SKILL REMINDER] You are executing forced skill '
+                    f'"/{self._forced_skill_name}". '
+                    f'Follow the skill instructions from the system prompt precisely.'
+                    + skill_tool_msg
+                ),
+            }
+            messages.append(skill_reminder)
 
         # Prepare tools for LLM
         tools_for_llm = [t.to_openai_format() for t in self.tools.values()]
@@ -1486,7 +1515,7 @@ class SessionProcessor:
             compression_level="none",
         )
 
-    async def _execute_tool(
+    async def _execute_tool(  # noqa: PLR0911, PLR0912, PLR0915
         self,
         session_id: str,
         call_id: str,
@@ -2151,7 +2180,7 @@ class SessionProcessor:
 
         return sanitized
 
-    async def _process_tool_artifacts(
+    async def _process_tool_artifacts(  # noqa: PLR0911, PLR0912, PLR0915
         self,
         tool_name: str,
         result: Any,
@@ -2253,7 +2282,7 @@ class SessionProcessor:
                         return
 
                 # Detect MIME type for the artifact_created event
-                from src.application.services.artifact_service import (  # type: ignore[attr-defined]
+                from src.application.services.artifact_service import (
                     detect_mime_type,
                     get_category_from_mime,
                 )
@@ -2301,7 +2330,7 @@ class SessionProcessor:
                     f"size={len(file_content)}, project_id={project_id}"
                 )
 
-                def _sync_upload(
+                def _sync_upload(  # noqa: PLR0913
                     content: bytes,
                     fname: str,
                     pid: str,
@@ -2321,8 +2350,10 @@ class SessionProcessor:
                     from datetime import date
                     from urllib.parse import quote
 
-                    import boto3
-                    from botocore.config import Config as BotoConfig
+                    import boto3  # pyright: ignore[reportMissingTypeStubs]
+                    from botocore.config import (  # pyright: ignore[reportMissingTypeStubs]
+                        Config as BotoConfig,
+                    )
 
                     config_kwargs: dict[str, Any] = {
                         "connect_timeout": 10,
@@ -2395,8 +2426,8 @@ class SessionProcessor:
 
                     from src.configuration.config import get_settings
                     from src.infrastructure.agent.actor.execution import (
-                        _persist_events,
-                        _publish_event_to_stream,
+                        _persist_events,  # pyright: ignore[reportPrivateUsage]
+                        _publish_event_to_stream,  # pyright: ignore[reportPrivateUsage]
                     )
 
                     settings = get_settings()

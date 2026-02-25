@@ -19,6 +19,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from src.infrastructure.memory.prompt_safety import (
+    looks_like_prompt_injection,
+    sanitize_for_context,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -146,10 +151,10 @@ class SystemPromptManager:
                      system_prompt, it overrides all other prompts.
             Complete system prompt string.
         """
-        # 1. SubAgent override takes priority
+        # 1. SubAgent override takes priority (but still wrapped with environment context)
         if subagent and hasattr(subagent, "system_prompt") and subagent.system_prompt:
             logger.debug(f"Using SubAgent system prompt: {subagent.name}")
-            return cast(str, subagent.system_prompt)
+            return await self._wrap_subagent_prompt(cast(str, subagent.system_prompt), context)
         sections: list[str] = []
         # Check if we have a forced skill (highest priority injection)
         is_forced_skill = bool(
@@ -166,6 +171,23 @@ class SystemPromptManager:
         sections.append(env_context)
         # 7.5-10. Workspace, mode, max steps, custom rules
         await self._build_trailing_sections(sections, context)
+
+        # Add trailing skill reminder for forced skills (recency bias)
+        if is_forced_skill and context.matched_skill:
+            skill_name = context.matched_skill.get("name", "")
+            skill_tools_list = context.matched_skill.get("tools", [])
+            reminder = (
+                f'\n<skill-reminder priority="highest">'
+                f'\nRemember: You are executing forced skill "/{skill_name}". '
+                f'Follow the <mandatory-skill> instructions above precisely. '
+                + (
+                    f'Use ONLY the declared tools: {", ".join(skill_tools_list)}.'
+                    if skill_tools_list
+                    else ""
+                )
+                + '\n</skill-reminder>'
+            )
+            sections.append(reminder)
 
         return "\n\n".join(filter(None, sections))
 
@@ -193,6 +215,38 @@ class SystemPromptManager:
         is_forced_skill: bool,
     ) -> None:
         """Build tools, skills, and subagent sections."""
+        if is_forced_skill and context.matched_skill:
+            # For forced skills: only describe the skill's tools to reduce noise
+            skill_tools = context.matched_skill.get("tools", [])
+            if skill_tools:
+                filtered_context = PromptContext(
+                    model_provider=context.model_provider,
+                    mode=context.mode,
+                    tool_definitions=[
+                        t
+                        for t in context.tool_definitions
+                        if t.get("name") in skill_tools
+                    ],
+                    skills=context.skills,
+                    subagents=context.subagents,
+                    matched_skill=context.matched_skill,
+                    project_id=context.project_id,
+                    tenant_id=context.tenant_id,
+                    working_directory=context.working_directory,
+                    conversation_history_length=context.conversation_history_length,
+                    user_query=context.user_query,
+                    memory_context=context.memory_context,
+                    current_step=context.current_step,
+                    max_steps=context.max_steps,
+                )
+                tools_section = self._build_tools_section(filtered_context)
+            else:
+                tools_section = self._build_tools_section(context)
+            if tools_section:
+                sections.append(tools_section)
+            # Skip skills listing AND subagents for forced skills
+            return
+
         tools_section = self._build_tools_section(context)
         if tools_section:
             sections.append(tools_section)
@@ -228,6 +282,35 @@ class SystemPromptManager:
                 sections.append(max_steps_warning)
         if custom_rules:
             sections.append(custom_rules)
+
+    async def _wrap_subagent_prompt(
+        self,
+        subagent_prompt: str,
+        context: PromptContext,
+    ) -> str:
+        """Wrap a SubAgent system prompt with environment context and trailing sections.
+
+        SubAgent prompts replace the base prompt but still need environment context,
+        workspace guidelines, mode reminders, and custom rules for safety and
+        operational consistency.
+
+        Args:
+            subagent_prompt: The SubAgent's custom system prompt.
+            context: The prompt context containing dynamic information.
+
+        Returns:
+            Wrapped system prompt string.
+        """
+        sections: list[str] = [subagent_prompt]
+
+        # Add environment context so SubAgent knows workspace, time, step count
+        env_context = self._build_environment_context(context)
+        sections.append(env_context)
+
+        # Add trailing sections (workspace guidelines, mode reminder, custom rules)
+        await self._build_trailing_sections(sections, context)
+
+        return "\n\n".join(filter(None, sections))
 
     async def _load_base_prompt(self, provider: ModelProvider) -> str:
         """
@@ -447,7 +530,7 @@ Description: {description}"""
                 content += f"""
 
 === SKILL INSTRUCTIONS (follow these precisely) ===
-{skill["prompt_template"]}
+{sanitize_for_context(skill["prompt_template"])}
 === END SKILL INSTRUCTIONS ==="""
             content += "\n</mandatory-skill>"
         else:
@@ -456,10 +539,26 @@ RECOMMENDED SKILL: {name}
 Description: {description}
 Use these tools in order: {tools}"""
             if skill.get("prompt_template"):
-                content += f"\nGuidance: {skill['prompt_template']}"
+                content += f"\nGuidance: {sanitize_for_context(skill['prompt_template'])}"
             content += "\n</skill-recommendation>"
 
         return content
+
+    @staticmethod
+    def _sanitize_skill_content(content: str) -> str:
+        """Sanitize skill content for safe inclusion in prompts.
+
+        Logs a warning if prompt injection patterns are detected.
+
+        Args:
+            content: Raw skill content.
+
+        Returns:
+            Sanitized content safe for prompt inclusion.
+        """
+        if looks_like_prompt_injection(content):
+            logger.warning("Possible prompt injection detected in skill content")
+        return sanitize_for_context(content)
 
     async def _load_mode_reminder(self, mode: PromptMode) -> str | None:
         """
@@ -555,6 +654,7 @@ Use these tools in order: {tools}"""
         (("glm", "zhipu"), ModelProvider.ZHIPU),
         (("gpt", "openai"), ModelProvider.OPENAI),
     )
+
     @staticmethod
     def detect_model_provider(model_name: str) -> ModelProvider:
         """

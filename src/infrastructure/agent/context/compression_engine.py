@@ -335,6 +335,28 @@ class ContextCompressionEngine:
 
         # Build final message list
         result_messages = self._build_compressed_output(system_prompt, summary, messages)
+
+        # Fix 6: Verify mandatory-skill blocks survived compression
+        if "<mandatory-skill" in system_prompt:
+            system_msg = result_messages[0] if result_messages else None
+            if system_msg and system_msg.get("role") == "system":
+                if "<mandatory-skill" not in str(system_msg.get("content", "")):
+                    logger.warning(
+                        "[Compression] mandatory-skill block lost during compression, "
+                        "restoring from original system prompt"
+                    )
+                    # Re-extract and append the mandatory-skill block
+                    import re
+
+                    skill_match = re.search(
+                        r'(<mandatory-skill.*?</mandatory-skill>)',
+                        system_prompt,
+                        re.DOTALL,
+                    )
+                    if skill_match:
+                        system_msg["content"] = (
+                            str(system_msg["content"]) + "\n\n" + skill_match.group(1)
+                        )
         tokens_after = sum(self._estimate_message_tokens(m) for m in result_messages)
         duration_ms = (time.monotonic() - start_time) * 1000
 

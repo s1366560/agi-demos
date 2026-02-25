@@ -617,3 +617,117 @@ class TestRoleAwareCompression:
         assert "VERIFIED TOOL EVIDENCE" in DEEP_COMPRESS_PROMPT
         assert "OPEN TASKS/BLOCKERS" in DEEP_COMPRESS_PROMPT
         assert "Do NOT mark unverified items as completed" in DEEP_COMPRESS_PROMPT
+
+
+# =============================================================================
+# Mandatory-Skill Block Preservation Tests (Fix 6)
+# =============================================================================
+
+
+@pytest.mark.unit
+class TestMandatorySkillPreservation:
+    """Tests for Fix 6: mandatory-skill block preservation during compression."""
+
+    def _make_engine(self, **kwargs):
+        return ContextCompressionEngine(
+            estimate_tokens=simple_token_estimator,
+            estimate_message_tokens=simple_message_token_estimator,
+            **kwargs,
+        )
+
+    def test_build_compressed_output_preserves_mandatory_skill_block(self):
+        """When system_prompt contains <mandatory-skill>, _build_compressed_output keeps it."""
+        engine = self._make_engine()
+        skill_block = (
+            '<mandatory-skill name="test-skill">\n'
+            "Follow these instructions carefully.\n"
+            "</mandatory-skill>"
+        )
+        system_prompt = f"You are helpful.\n\n{skill_block}"
+
+        result = engine._build_compressed_output(
+            system_prompt=system_prompt,
+            summary=None,
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+
+        system_msg = result[0]
+        assert system_msg["role"] == "system"
+        assert "<mandatory-skill" in system_msg["content"]
+        assert "Follow these instructions carefully" in system_msg["content"]
+
+    def test_build_compressed_output_preserves_skill_with_summary(self):
+        """mandatory-skill block survives even when a summary is appended."""
+        engine = self._make_engine()
+        skill_block = (
+            '<mandatory-skill name="code-review">\n'
+            "Always review code for security issues.\n"
+            "</mandatory-skill>"
+        )
+        system_prompt = f"You are helpful.\n\n{skill_block}"
+
+        result = engine._build_compressed_output(
+            system_prompt=system_prompt,
+            summary="User asked about Python testing patterns.",
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+
+        system_msg = result[0]
+        assert "<mandatory-skill" in system_msg["content"]
+        assert "Always review code for security issues" in system_msg["content"]
+        assert "Previous conversation summary" in system_msg["content"]
+
+    def test_no_mandatory_skill_no_special_behavior(self):
+        """When system_prompt has no <mandatory-skill>, output is unchanged."""
+        engine = self._make_engine()
+        system_prompt = "You are a helpful assistant."
+
+        result = engine._build_compressed_output(
+            system_prompt=system_prompt,
+            summary="Some summary.",
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+
+        system_msg = result[0]
+        assert system_msg["role"] == "system"
+        assert "<mandatory-skill" not in system_msg["content"]
+        assert "You are a helpful assistant" in system_msg["content"]
+        assert "Some summary" in system_msg["content"]
+
+    async def test_mandatory_skill_preserved_through_l1_compression(self):
+        """End-to-end: compress() with L1_PRUNE preserves mandatory-skill block."""
+        engine = self._make_engine()
+        skill_block = (
+            '<mandatory-skill name="test-skill">\n'
+            "Follow these instructions.\n"
+            "</mandatory-skill>"
+        )
+        system_prompt = f"You are helpful.\n\n{skill_block}"
+
+        # Create enough messages with large tool outputs to exercise L1 pruning
+        messages = []
+        for i in range(20):
+            messages.append({"role": "user", "content": f"Question {i}"})
+            messages.append(
+                {"role": "assistant", "content": "Let me check.", "tool_calls": []}
+            )
+            messages.append(
+                {"role": "tool", "name": "search", "content": "x" * 20000}
+            )
+            messages.append({"role": "assistant", "content": f"Answer {i}."})
+
+        limits = ModelLimits(context=200000, input=0, output=4096)
+
+        result = await engine.compress(
+            system_prompt=system_prompt,
+            messages=messages,
+            model_limits=limits,
+            level=CompressionLevel.L1_PRUNE,
+        )
+
+        # Verify the mandatory-skill block survived in the system message
+        system_msg = result.messages[0]
+        assert system_msg["role"] == "system"
+        assert "<mandatory-skill" in system_msg["content"]
+        assert "Follow these instructions" in system_msg["content"]
+        assert "</mandatory-skill>" in system_msg["content"]
