@@ -117,9 +117,13 @@ uv run pytest src/tests/ -m "integration" -v
 | Command | Description |
 |---------|-------------|
 | `make format` | Format all code (ruff + eslint) |
-| `make lint` | Lint all code |
+| `make lint` | Lint all code (ruff + mypy + pyright + eslint) |
 | `make check` | Run all checks (format + lint + test) |
 | `make ci` | Run CI pipeline (lint + test + build) |
+| `make type-check` | Run all type checkers (mypy + pyright) |
+| `make type-check-mypy` | Run mypy only |
+| `make type-check-pyright` | Run pyright only |
+| `make hooks-install` | Install git pre-commit hooks |
 
 ### 数据库 / Database
 
@@ -360,14 +364,23 @@ Background workflows run as asyncio tasks with retry and status tracking via Tas
 - Formatter: `ruff format`
 - Linter: `ruff check` (E, F, I, N, UP, B, C4, SIM, RUF, ANN, C901, PLR091 rules)
 - Type checker: `mypy` (strict mode, tests/alembic/legacy excluded)
+- Type checker: `pyright` (strict mode, 40+ explicit error rules, same excludes as mypy)
 
 **Commands:**
 ```bash
 make format-backend    # Format Python code
-make lint-backend      # Lint Python code
+make lint-backend      # Lint Python code (ruff + mypy + pyright)
+make type-check-mypy   # Run mypy only
+make type-check-pyright # Run pyright only
 uv run ruff check src/ # Check specific directory
 uv run ruff format src/ --check  # Check formatting without changes
 ```
+
+**Pre-commit Hook (type safety enforcement):**
+- Runs automatically on `git commit` (after `make hooks-install`)
+- Checks staged Python files with `ruff check` + `pyright`
+- Only checks files in `src/`, `sdk/`, `scripts/` (excludes tests, alembic, memstack_agent)
+- See `docs/TYPE_SAFETY.md` for full type safety guidelines
 
 **Naming Conventions:**
 | Type | Convention | Example |

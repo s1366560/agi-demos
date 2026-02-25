@@ -479,6 +479,7 @@ lint-backend: ## Lint Python code
 	@echo " Linting Python code..."
 	uv run ruff check src/ sdk/
 	uv run mypy src/ --ignore-missing-imports
+	uv run pyright
 	@echo " Python code linted"
 
 lint-web: ## Lint TypeScript code
@@ -487,7 +488,17 @@ lint-web: ## Lint TypeScript code
 	cd web && pnpm run type-check
 	@echo " TypeScript code linted"
 
-type-check: lint-backend ## Type check all code (alias for lint-backend)
+type-check: type-check-mypy type-check-pyright ## Type check all code
+
+type-check-mypy: ## Run mypy type checking
+	@echo " Running mypy..."
+	uv run mypy src/ --ignore-missing-imports
+	@echo " mypy passed"
+
+type-check-pyright: ## Run pyright type checking
+	@echo " Running pyright..."
+	uv run pyright
+	@echo " pyright passed"
 
 check: format lint test ## Run all quality checks
 	@echo " All quality checks passed"

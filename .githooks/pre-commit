@@ -16,14 +16,36 @@ while IFS= read -r f; do
   fi
 done <<< "$STAGED_FILES"
 
+# --- Python checks ---
 if [[ ${#PY_FILES[@]} -gt 0 ]]; then
+  # 1. Ruff lint (fast, catches formatting and style issues)
   uv run ruff check --force-exclude --quiet "${PY_FILES[@]}"
+
+  # 2. Pyright type checking on staged files only
+  #    Filter to files within pyright's include scope (src/, sdk/, scripts/)
+  #    to avoid checking files pyright would normally exclude.
+  PYRIGHT_FILES=()
+  for f in "${PY_FILES[@]}"; do
+    if [[ "$f" == src/* || "$f" == sdk/* || "$f" == scripts/* ]]; then
+      # Skip files in directories excluded by pyrightconfig.json
+      if [[ "$f" == src/tests/* || "$f" == src/alembic/* || "$f" == src/memstack_agent/* ]]; then
+        continue
+      fi
+      PYRIGHT_FILES+=("$f")
+    fi
+  done
+
+  if [[ ${#PYRIGHT_FILES[@]} -gt 0 ]]; then
+    echo "Running pyright on ${#PYRIGHT_FILES[@]} staged file(s)..."
+    uv run pyright "${PYRIGHT_FILES[@]}"
+  fi
 fi
 
+# --- Web checks ---
 if [[ ${#WEB_FILES[@]} -gt 0 ]]; then
   pushd web >/dev/null
   pnpm exec eslint --max-warnings 0 "${WEB_FILES[@]}"
   popd >/dev/null
 fi
 
-echo "✅ pre-commit: lightweight checks passed"
+echo "pre-commit: all checks passed"
