@@ -43,10 +43,10 @@ logger = logging.getLogger(__name__)
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
 async def create_conversation(
     data: CreateConversationRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ConversationResponse:
     """Create a new conversation."""
     try:
@@ -98,6 +98,7 @@ async def create_conversation(
 
 @router.get("/conversations", response_model=PaginatedConversationsResponse)
 async def list_conversations(
+    request: Request,
     project_id: str = Query(..., description="Project ID to filter by"),
     status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number to return"),
@@ -105,7 +106,6 @@ async def list_conversations(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> PaginatedConversationsResponse:
     """List conversations for a project with pagination."""
     try:
@@ -155,11 +155,11 @@ async def list_conversations(
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ConversationResponse:
     """Get a conversation by ID."""
     try:
@@ -189,11 +189,11 @@ async def get_conversation(
 @router.get("/conversations/{conversation_id}/context-status")
 async def get_context_status(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get context window status for a conversation.
 
@@ -256,11 +256,11 @@ async def get_context_status(
 @router.delete("/conversations/{conversation_id}", status_code=204)
 async def delete_conversation(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> None:
     """Delete a conversation and all its messages."""
     try:
@@ -295,11 +295,11 @@ async def delete_conversation(
 async def update_conversation_title(
     conversation_id: str,
     data: UpdateConversationTitleRequest,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ConversationResponse:
     """Update conversation title."""
     try:
@@ -356,11 +356,11 @@ async def update_conversation_title(
 )
 async def generate_conversation_title(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ConversationResponse:
     """
     Generate and update a friendly conversation title based on the first user message.
@@ -402,7 +402,7 @@ async def generate_conversation_title(
             )
 
         # Use DB provider config (same as ReActAgent) for title generation
-        title_llm = await agent_service._get_title_llm()
+        title_llm = await agent_service.get_title_llm()
         generated_title = await agent_service.generate_conversation_title(
             first_message=first_user_message,
             llm=title_llm,
@@ -448,11 +448,11 @@ async def generate_conversation_title(
 )
 async def generate_summary(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ConversationResponse:
     """Generate an AI summary of the conversation."""
     try:
@@ -489,7 +489,7 @@ async def generate_summary(
                 detail="No messages found to generate summary from",
             )
 
-        title_llm = await agent_service._get_title_llm()
+        title_llm = await agent_service.get_title_llm()
         from src.domain.llm_providers.llm_types import Message as LLMMessage
 
         prompt = (

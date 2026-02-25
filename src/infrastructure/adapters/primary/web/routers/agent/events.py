@@ -41,7 +41,7 @@ async def _check_redis_running(redis_client: Any, conversation_id: str) -> tuple
     running_message_id = await redis_client.get(running_key)
     logger.warning(
         f"[ExecutionStatus] Redis check for {running_key}: "
-        f"value={running_message_id}, is_running={bool(running_message_id)}"
+        + f"value={running_message_id}, is_running={bool(running_message_id)}"
     )
     if not running_message_id:
         return False, None
@@ -104,12 +104,12 @@ router = APIRouter()
 @router.get("/conversations/{conversation_id}/events", response_model=EventReplayResponse)
 async def get_conversation_events(
     conversation_id: str,
+    request: Request,
     from_time_us: int = Query(0, ge=0, description="Starting event_time_us"),
     from_counter: int = Query(0, ge=0, description="Starting event_counter"),
     limit: int = Query(1000, ge=1, le=10000, description="Maximum events to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> EventReplayResponse:
     """
     Get SSE events for a conversation, used for replaying execution state.
@@ -152,6 +152,7 @@ async def get_conversation_events(
 )
 async def get_execution_status(
     conversation_id: str,
+    request: Request,
     include_recovery: bool = Query(
         False, description="Include recovery information for stream resumption"
     ),
@@ -160,7 +161,6 @@ async def get_execution_status(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ExecutionStatusResponse:
     """
     Get the current execution status of a conversation with optional recovery info.
@@ -236,12 +236,12 @@ async def get_execution_status(
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
 async def resume_execution(
     conversation_id: str,
+    request: Request,
     override_message: str | None = Query(
         None, description="Optional message to use instead of pending message"
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """
     Resume agent execution from the last checkpoint.
@@ -302,10 +302,10 @@ async def resume_execution(
 )
 async def get_workflow_status(
     conversation_id: str,
+    request: Request,
     message_id: str | None = Query(None, description="Message ID to get workflow status for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> WorkflowStatusResponse:
     """
     Get the Ray Actor status for an agent execution.

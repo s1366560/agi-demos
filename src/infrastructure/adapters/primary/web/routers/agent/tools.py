@@ -130,11 +130,11 @@ async def get_tool_capabilities(
 
 @router.get("/tools/compositions", response_model=ToolCompositionsListResponse)
 async def list_tool_compositions(
+    request: Request,
     tools: str | None = Query(None, description="Comma-separated list of tool names to filter by"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of compositions"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ToolCompositionsListResponse:
     """List tool compositions."""
     try:
@@ -180,9 +180,9 @@ async def list_tool_compositions(
 @router.get("/tools/compositions/{composition_id}", response_model=ToolCompositionResponse)
 async def get_tool_composition(
     composition_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ToolCompositionResponse:
     """Get a specific tool composition."""
     try:

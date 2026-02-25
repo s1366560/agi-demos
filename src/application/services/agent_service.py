@@ -20,7 +20,7 @@ import time as time_module
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,7 +71,7 @@ class AgentService(AgentServicePort):
     - Real-time SSE events for step_start, step_end
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         conversation_repository: ConversationRepository,
         execution_repository: AgentExecutionRepository,
@@ -229,6 +229,7 @@ class AgentService(AgentServicePort):
         ]
         return context, None
 
+    @override
     async def stream_chat_v2(
         self,
         conversation_id: str,
@@ -683,10 +684,7 @@ class AgentService(AgentServicePort):
             return False
 
         # Skip message events for different messages (only when filtering by message_id)
-        if message_id and event_message_id and event_message_id != message_id:
-            return False
-
-        return True
+        return not (message_id and event_message_id and event_message_id != message_id)
 
     def _filter_live_event(
         self,
@@ -851,6 +849,7 @@ class AgentService(AgentServicePort):
         except Exception as e:
             logger.error(f"[AgentService] Error streaming from Redis Stream: {e}", exc_info=True)
 
+    @override
     async def create_conversation(
         self,
         project_id: str,
@@ -1009,7 +1008,14 @@ class AgentService(AgentServicePort):
 
     def _generate_fallback_title(self, first_message: str) -> str:
         """Generate a fallback title from the first message when LLM fails."""
-        return self._conversation_mgr._generate_fallback_title(first_message)
+        content = first_message.strip()
+        if len(content) > 40:
+            truncated = content[:40]
+            last_space = truncated.rfind(" ")
+            if last_space > 20:
+                truncated = truncated[:last_space]
+            content = truncated + "..."
+        return content or "New Conversation"
 
     async def _trigger_title_generation(
         self,
@@ -1095,13 +1101,17 @@ class AgentService(AgentServicePort):
 
             provider_config = await get_or_create_provider_config()
             litellm_client = await get_or_create_llm_client(provider_config)
-            return UnifiedLLMClient(litellm_client=litellm_client)  # type: ignore[abstract]  # UnifiedLLMClient implements all abstract methods via delegation
+            return UnifiedLLMClient(litellm_client=litellm_client)
         except Exception as e:
             logger.warning(
                 f"[AgentService] Failed to get DB provider for title generation, "
                 f"falling back to injected LLM: {e}"
             )
             return self._llm
+
+    async def get_title_llm(self) -> "LLMClient":
+        """Get LLM client for title generation (public accessor)."""
+        return await self._get_title_llm()
 
     async def get_conversation_messages(
         self,
@@ -1137,6 +1147,7 @@ class AgentService(AgentServicePort):
     # Abstract Method Implementations for AgentServicePort
     # -------------------------------------------------------------------------
 
+    @override
     async def get_available_tools(
         self, project_id: str, tenant_id: str, agent_mode: str = "default"
     ) -> list[dict[str, Any]]:
@@ -1147,6 +1158,7 @@ class AgentService(AgentServicePort):
             agent_mode=agent_mode,
         )
 
+    @override
     async def get_conversation_context(
         self, conversation_id: str, max_messages: int = 50
     ) -> list[dict[str, Any]]:

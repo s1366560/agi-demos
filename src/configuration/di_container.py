@@ -191,13 +191,18 @@ class DIContainer:
     def neo4j_client(self) -> Any:
         """Get Neo4j client for direct driver access."""
         if self._graph_service and hasattr(self._graph_service, "client"):
-            return self._graph_service.client
+            return self._graph_service.client  # pyright: ignore[reportAttributeAccessIssue]
         return None
 
     @property
     def graph_service(self) -> Any:
         """Get the GraphServicePort for graph operations."""
         return self._graph_service
+
+    @property
+    def redis_client(self) -> "redis.Redis | None":
+        """Get the Redis client instance."""
+        return self._redis_client
 
     # === Auth Container delegates ===
 

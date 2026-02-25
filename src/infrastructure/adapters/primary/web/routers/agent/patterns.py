@@ -35,6 +35,7 @@ router = APIRouter()
 
 @router.get("/workflows/patterns", response_model=PatternsListResponse)
 async def list_patterns(
+    request: Request,
     tenant_id: str = Query(..., description="Tenant ID to filter patterns"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -44,7 +45,6 @@ async def list_patterns(
     current_user: User = Depends(get_current_user),
     user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> PatternsListResponse:
     """
     List workflow patterns for a tenant (T080).
@@ -115,11 +115,11 @@ async def list_patterns(
 @router.get("/workflows/patterns/{pattern_id}", response_model=WorkflowPatternResponse)
 async def get_pattern(
     pattern_id: str,
+    request: Request,
     tenant_id: str = Query(..., description="Tenant ID for authorization"),
     current_user: User = Depends(get_current_user),
     user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> WorkflowPatternResponse:
     """
     Get a workflow pattern by ID (T081).
@@ -175,9 +175,9 @@ async def get_pattern(
 @router.delete("/workflows/patterns/{pattern_id}", status_code=200)
 async def delete_pattern(
     pattern_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """
     Delete a workflow pattern by ID (T082) - Admin only.
@@ -210,10 +210,10 @@ async def delete_pattern(
 
 @router.post("/workflows/patterns/reset", response_model=ResetPatternsResponse)
 async def reset_patterns(
+    request: Request,
     tenant_id: str = Query(..., description="Tenant ID to reset patterns for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ResetPatternsResponse:
     """
     Reset/delete all workflow patterns for a tenant (T083) - Admin only.

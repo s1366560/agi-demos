@@ -2,6 +2,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,13 +122,13 @@ async def update_entity_type(
     return entity_type
 
 
-@router.delete("/entities/{entity_id}", status_code=204)
+@router.delete("/entities/{entity_id}", status_code=204, response_class=Response)
 async def delete_entity_type(
     project_id: str,
     entity_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     await verify_project_access(project_id, current_user, db)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
@@ -135,6 +136,7 @@ async def delete_entity_type(
 
     await db.delete(entity_type)
     await db.commit()
+    return Response(status_code=204)
 
 
 # --- Edge Types ---
@@ -204,13 +206,13 @@ async def update_edge_type(
     return edge_type
 
 
-@router.delete("/edges/{edge_id}", status_code=204)
+@router.delete("/edges/{edge_id}", status_code=204, response_class=Response)
 async def delete_edge_type(
     project_id: str,
     edge_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> Any:
+) -> Response:
     await verify_project_access(project_id, current_user, db)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
@@ -218,6 +220,7 @@ async def delete_edge_type(
 
     await db.delete(edge_type)
     await db.commit()
+    return Response(status_code=204)
 
 
 # --- Edge Maps ---
@@ -270,13 +273,13 @@ async def create_edge_map(
     return edge_map
 
 
-@router.delete("/mappings/{map_id}", status_code=204)
+@router.delete("/mappings/{map_id}", status_code=204, response_class=Response)
 async def delete_edge_map(
     project_id: str,
     map_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     await verify_project_access(project_id, current_user, db)
     edge_map = await db.get(EdgeTypeMap, map_id)
     if not edge_map or edge_map.project_id != project_id:
@@ -284,3 +287,4 @@ async def delete_edge_map(
 
     await db.delete(edge_map)
     await db.commit()
+    return Response(status_code=204)

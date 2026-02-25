@@ -206,6 +206,9 @@ ignore = [
 "src/infrastructure/agent/tools/tool_mutation_guard.py" = ["TC003"]
 "src/infrastructure/agent/tools/web_scrape.py" = ["PIE810"]
 "src/infrastructure/mcp/clients/subprocess_client.py" = ["S110"]
+
+# Schema router: FastAPI endpoints return ORM models via response_model, Any return type is standard pattern
+"src/infrastructure/adapters/primary/web/routers/schema.py" = ["ANN401"]
 "src/infrastructure/mcp/sandbox_tool_adapter.py" = ["TC003", "ANN401"]
 "src/infrastructure/mcp/transport/base.py" = ["PIE790"]
 "src/infrastructure/mcp/transport/http.py" = ["PIE790"]
@@ -462,7 +465,7 @@ convention = "google"
 max-complexity = 12  # Default 10, relaxed slightly
 
 [tool.ruff.lint.pylint]
-max-args = 10  # Default 5, raised for DI constructors and FastAPI endpoints
+max-args = 12  # Default 5, raised for DI constructors and FastAPI endpoints
 
 [tool.mypy]
 python_version = "3.12"

@@ -501,6 +501,7 @@ async def _check_has_more(
 @router.get("/conversations/{conversation_id}/messages")
 async def get_conversation_messages(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
     from_time_us: int | None = Query(
@@ -518,7 +519,6 @@ async def get_conversation_messages(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """
     Get conversation timeline from unified event stream with bidirectional pagination.
@@ -616,6 +616,7 @@ async def get_conversation_messages(
 @router.get("/conversations/{conversation_id}/execution")
 async def get_conversation_execution(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=100, description="Maximum executions to return"),
     status_filter: str | None = Query(None, description="Filter by execution status"),
@@ -623,7 +624,6 @@ async def get_conversation_execution(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get the agent execution history for a conversation."""
     try:
@@ -662,13 +662,13 @@ async def get_conversation_execution(
 @router.get("/conversations/{conversation_id}/tool-executions")
 async def get_conversation_tool_executions(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     message_id: str | None = Query(None, description="Filter by message ID"),
     limit: int = Query(100, ge=1, le=500, description="Maximum executions to return"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get the tool execution history for a conversation."""
     try:
@@ -709,6 +709,7 @@ async def get_conversation_tool_executions(
 @router.get("/conversations/{conversation_id}/status")
 async def get_conversation_execution_status(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     include_recovery_info: bool = Query(
         False, description="Include event recovery information for stream resumption"
@@ -718,7 +719,6 @@ async def get_conversation_execution_status(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get the current execution status of a conversation with optional recovery info."""
     try:
@@ -734,7 +734,7 @@ async def get_conversation_execution_status(
         if conversation.user_id != current_user.id or conversation.project_id != project_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        redis_client = container._redis_client
+        redis_client = container.redis_client
         is_running = False
         current_message_id = None
 
@@ -898,11 +898,11 @@ def _compute_timeline_data(executions: list[dict[str, Any]]) -> list[dict[str, A
 @router.get("/conversations/{conversation_id}/execution/stats")
 async def get_execution_stats(
     conversation_id: str,
+    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request | None = None,
 ) -> ExecutionStatsResponse:
     """Get execution statistics for a conversation."""
     try:

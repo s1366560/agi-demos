@@ -9,7 +9,8 @@ abstraction layer.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any, override
 
 from src.domain.llm_providers.llm_types import (
     DEFAULT_MAX_TOKENS,
@@ -77,6 +78,7 @@ class UnifiedLLMClient(LLMClient):
         """Access the underlying LiteLLM client."""
         return self._litellm_client
 
+    @override
     async def _generate_response(
         self,
         messages: list[Message],
@@ -97,9 +99,8 @@ class UnifiedLLMClient(LLMClient):
             Dictionary containing the response
         """
         try:
-            response = await self._litellm_client._generate_response(
+            response = await self._litellm_client.generate(
                 messages=messages,
-                response_model=response_model,
                 max_tokens=max_tokens,
                 model_size=model_size,
             )
@@ -108,6 +109,7 @@ class UnifiedLLMClient(LLMClient):
             logger.error(f"UnifiedLLMClient generation failed: {e}")
             raise
 
+    @override
     async def ainvoke(
         self,
         messages: list[Message] | str,
@@ -166,3 +168,44 @@ class UnifiedLLMClient(LLMClient):
             Message.user(user_message),
         ]
         return await self.ainvoke(messages, **kwargs)
+
+    @override
+    async def generate(
+        self,
+        messages: list[Message] | list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
+        langfuse_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Delegate to the underlying LiteLLM client."""
+        return await self._litellm_client.generate(
+            messages=messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            model_size=model_size,
+            langfuse_context=langfuse_context,
+            **kwargs,
+        )
+
+    @override
+    async def generate_stream(
+        self,
+        messages: list[Message],
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
+        langfuse_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[Any, None]:
+        """Delegate to the underlying LiteLLM client."""
+        async for chunk in self._litellm_client.generate_stream(
+            messages=messages,
+            max_tokens=max_tokens,
+            model_size=model_size,
+            langfuse_context=langfuse_context,
+            **kwargs,
+        ):
+            yield chunk
