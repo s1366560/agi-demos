@@ -11,6 +11,7 @@ from src.application.services.sandbox_health_service import (
     HealthStatus,
     SandboxHealthService,
 )
+from src.domain.ports.services.sandbox_port import SandboxStatus
 
 
 class TestSandboxHealthService:
@@ -35,7 +36,7 @@ class TestSandboxHealthService:
         """创建运行中的 mock sandbox."""
         sandbox = MagicMock()
         sandbox.id = "test-sandbox-123"
-        sandbox.status = "running"
+        sandbox.status = SandboxStatus.RUNNING
         sandbox.mcp_port = 18765
         sandbox.desktop_port = 16080
         sandbox.terminal_port = 17681
@@ -48,7 +49,7 @@ class TestSandboxHealthService:
         """创建已停止的 mock sandbox."""
         sandbox = MagicMock()
         sandbox.id = "test-sandbox-stopped"
-        sandbox.status = "stopped"
+        sandbox.status = SandboxStatus.STOPPED
         sandbox.mcp_port = None
         sandbox.desktop_port = None
         sandbox.terminal_port = None
@@ -149,7 +150,7 @@ class TestSandboxHealthService:
         for i in range(3):
             sb = MagicMock()
             sb.id = f"sandbox-{i}"
-            sb.status = "running"
+            sb.status = SandboxStatus.RUNNING
             sb.mcp_port = 18765 + i
             sb.mcp_client = MagicMock()
             sb.mcp_client.is_connected = True
@@ -177,7 +178,7 @@ class TestSandboxHealthService:
                 raise Exception("Network error")
             sb = MagicMock()
             sb.id = sid
-            sb.status = "running"
+            sb.status = SandboxStatus.RUNNING
             sb.mcp_port = 18765
             return sb
 

@@ -320,7 +320,7 @@ class StreamConfig:
         Returns:
             Dictionary of kwargs for litellm.acompletion()
         """
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
@@ -580,11 +580,12 @@ class LLMStream:
         try:
             # Acquire rate limit slot before calling LLM
             # This blocks if we've exceeded the provider's concurrent request limit
-            async with rate_limiter.acquire(provider_type):  # type: ignore[attr-defined]
+            async with await rate_limiter.acquire(provider_type):
                 # Call LiteLLM streaming (now that we have a slot)
                 response = await litellm.acompletion(**kwargs)
+                stream_response = cast("litellm.CustomStreamWrapper", response)
 
-                async for chunk in response:
+                async for chunk in stream_response:
                     # Process each chunk and yield events
                     async for event in self._process_chunk(chunk):
                         yield event
@@ -630,7 +631,7 @@ class LLMStream:
         self._reasoning_buffer += reasoning
         yield StreamEvent.reasoning_delta(reasoning)
 
-    async def _process_chunk(
+    async def _process_chunk(  # noqa: C901, PLR0912
         self,
         chunk: Any,
     ) -> AsyncIterator[StreamEvent]:

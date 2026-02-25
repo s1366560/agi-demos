@@ -53,6 +53,7 @@ import type {
   TextEndProps,
   ArtifactCreatedProps,
   MessageBubbleRootProps,
+  MessageBubbleCompound,
 } from './types';
 import type {
   TimelineEvent,
@@ -175,7 +176,7 @@ const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | unde
 // ========================================
 
 // Format tool output for display
-const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; content: string } => {
+const formatToolOutput = (output: unknown): { type: 'text' | 'json' | 'error'; content: string } => {
   if (!output) return { type: 'text', content: 'No output' };
 
   if (typeof output === 'string') {
@@ -186,8 +187,8 @@ const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; conte
   }
 
   if (typeof output === 'object') {
-    if (output.error || output.errorMessage || output.error_message) {
-      const errorContent = output.errorMessage || output.error_message || output.error;
+    if ('error' in output || 'errorMessage' in output || 'error_message' in output) {
+      const errorContent = ('errorMessage' in output ? output.errorMessage : 'error_message' in output ? output.error_message : 'error' in output ? output.error : undefined) as string | undefined;
       if (typeof errorContent === 'string') {
         return { type: 'error', content: errorContent };
       }
@@ -196,11 +197,11 @@ const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; conte
     try {
       return { type: 'json', content: JSON.stringify(output, null, 2) };
     } catch {
-      return { type: 'text', content: String(output) };
+      return { type: 'text', content: JSON.stringify(output) };
     }
   }
 
-  return { type: 'text', content: String(output) };
+  return { type: 'text', content: JSON.stringify(output) };
 };
 
 // Find matching observe event for act
@@ -208,13 +209,12 @@ const findMatchingObserve = (
   actEvent: ActEvent,
   events: TimelineEvent[]
 ): ObserveEvent | undefined => {
-  if (!events || !actEvent) return undefined;
   const actIndex = events.indexOf(actEvent as unknown as TimelineEvent);
   if (actIndex === -1) return undefined;
 
   for (let i = actIndex + 1; i < events.length; i++) {
-    const event = events[i]!;
-    if (event.type === 'observe') {
+    const event = events[i];
+    if (event && event.type === 'observe') {
       const observeEvent = event as unknown as ObserveEvent;
       if (actEvent.execution_id && observeEvent.execution_id) {
         if (actEvent.execution_id === observeEvent.execution_id) return observeEvent;
@@ -231,7 +231,7 @@ const findMatchingObserve = (
 // ========================================
 
 function formatBytesSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
@@ -509,11 +509,10 @@ Thought.displayName = 'MessageBubble.Thought';
 const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent }) => {
   const [expanded, setExpanded] = useState(!observeEvent);
   const { t } = useTranslation();
-  if (!event) return null;
 
   const hasError = observeEvent?.isError;
   const duration =
-    observeEvent && event ? (observeEvent.timestamp || 0) - (event.timestamp || 0) : null;
+    observeEvent ? (observeEvent.timestamp || 0) - (event.timestamp || 0) : null;
 
   const statusIcon = observeEvent ? (
     hasError ? (
@@ -590,7 +589,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
                   </div>
                   <pre className="bg-white dark:bg-slate-900 p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words">
                     <code className="text-slate-700 dark:text-slate-300 font-mono">
-                      {JSON.stringify(event.toolInput || {}, null, 2)}
+                      {JSON.stringify(event.toolInput, null, 2)}
                     </code>
                   </pre>
                 </div>
@@ -652,7 +651,7 @@ ToolExecution.displayName = 'MessageBubble.ToolExecution';
 const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
   const [expanded, setExpanded] = useState(true);
   const { t } = useTranslation();
-  const steps = event?.steps || [];
+  const steps = event.steps;
 
   if (!steps.length) return null;
 
@@ -684,7 +683,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
           {expanded && (
             <div className="px-4 pb-4">
               <div className="space-y-2 mt-2">
-                {steps.map((step: any, index: number) => (
+                {steps.map((step: { description?: string }, index: number) => (
                   <div
                     key={index}
                     className="flex items-start gap-3 p-3 bg-white/60 dark:bg-slate-800/40 rounded-lg border border-slate-200/50 dark:border-slate-700/30"
@@ -804,6 +803,24 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
     try {
       // Fetch content from the artifact URL
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
+      }
+      const responseType = response.headers.get('content-type')?.toLowerCase() || '';
+      if (responseType.includes('application/pdf')) {
+        canvasOpenTab({
+          id: event.artifactId,
+          title: event.filename,
+          type: 'preview',
+          content: url,
+          mimeType: 'application/pdf',
+          pdfVerified: true,
+          artifactId: event.artifactId,
+          artifactUrl: url,
+        });
+        setLayoutMode('canvas');
+        return;
+      }
       const content = await response.text();
 
       // Check if this is HTML content - should use preview mode with iframe
@@ -868,7 +885,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   };
 
   const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024) return `${String(bytes)} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
@@ -932,7 +949,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
               )}
               <button
                 type="button"
-                onClick={handleRefreshUrl}
+                onClick={() => { void handleRefreshUrl(); }}
                 disabled={refreshingUrl}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50"
               >
@@ -972,7 +989,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             {canOpenInCanvas && (
               <button
                 type="button"
-                onClick={handleOpenInCanvas}
+                onClick={() => { void handleOpenInCanvas(); }}
                 className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
               >
                 <PanelRight size={14} />
@@ -995,7 +1012,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             {((isImage && imageError) || (!url && artifactStatus === 'error')) && (
               <button
                 type="button"
-                onClick={handleRefreshUrl}
+                onClick={() => { void handleRefreshUrl(); }}
                 disabled={refreshingUrl}
                 className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50"
               >
@@ -1031,14 +1048,14 @@ ArtifactCreated.displayName = 'MessageBubble.ArtifactCreated';
 // ========================================
 
 // Safe content getter
-const getContent = (event: any): string => {
-  if (!event) return '';
-  return event.content || event.thought || '';
+const getContent = (event: TimelineEvent): string => {
+  if ('content' in event && typeof event.content === 'string') return event.content;
+  if ('thought' in event && typeof event.thought === 'string') return event.thought;
+  return '';
 };
 
 const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
   ({ event, isStreaming, allEvents, isPinned, onPin, onReply }) => {
-    if (!event) return null;
 
     switch (event.type) {
       case 'user_message': {
@@ -1338,7 +1355,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return null;
 
       default:
-        console.warn('Unknown event type in MessageBubble:', (event as any).type);
+        console.warn('Unknown event type in MessageBubble:', event.type);
         return null;
     }
   },
@@ -1359,7 +1376,7 @@ MessageBubbleRoot.displayName = 'MessageBubble';
 // Compound Component Export
 // ========================================
 
-export const MessageBubble = MessageBubbleRoot as any;
+export const MessageBubble = MessageBubbleRoot as MessageBubbleCompound;
 
 MessageBubble.User = UserMessage;
 MessageBubble.Assistant = AssistantMessage;

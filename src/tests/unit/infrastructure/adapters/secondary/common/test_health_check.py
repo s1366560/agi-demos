@@ -206,9 +206,9 @@ class TestNeo4jHealthChecker:
         """Create a mock Neo4j driver."""
         driver = MagicMock()
         # verify_connectivity can be sync or async depending on driver version
-        driver.verify_connectivity = MagicMock(return_value=None)
+        driver.verify_connectivity = AsyncMock(return_value=None)
         # execute_query returns (result, summary) tuple
-        driver.execute_query = MagicMock()
+        driver.execute_query = AsyncMock()
         return driver
 
     @pytest.fixture
@@ -224,7 +224,7 @@ class TestNeo4jHealthChecker:
         mock_summary = MagicMock()
         mock_summary.result_available_after = 50
         mock_result.__iter__.return_value = iter(mock_result.records)
-        mock_driver.execute_query.return_value = (mock_result, mock_summary)
+        mock_driver.execute_query.return_value = (mock_result, mock_summary, [])
 
         # Execute
         result = await checker.check()
@@ -267,7 +267,7 @@ class TestNeo4jHealthChecker:
         mock_summary = MagicMock()
         mock_summary.result_available_after = 30
         mock_result.__iter__.return_value = iter(mock_result.records)
-        mock_driver.execute_query.return_value = (mock_result, mock_summary)
+        mock_driver.execute_query.return_value = (mock_result, mock_summary, [])
 
         checker = Neo4jHealthChecker(driver=mock_driver, query="RETURN count(*) AS count")
 

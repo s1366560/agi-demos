@@ -5,9 +5,6 @@ Tests the unified event conversion logic extracted from ReActAgent.
 """
 
 import time
-from dataclasses import dataclass
-from typing import ClassVar
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,7 +12,6 @@ from src.domain.events.agent_events import (
     AgentActEvent,
     AgentArtifactCreatedEvent,
     AgentCompleteEvent,
-    AgentDomainEvent,
     AgentErrorEvent,
     AgentEventType,
     AgentObserveEvent,
@@ -42,25 +38,6 @@ def converter():
 def debug_converter():
     """Create a EventConverter with debug logging."""
     return EventConverter(debug_logging=True)
-
-
-@dataclass
-class MockSkill:
-    """Mock skill for testing."""
-
-    id: str = "test-skill-001"
-    name: str = "TestSkill"
-    tools: list[str] = None
-
-    def __post_init__(self):
-        if self.tools is None:
-            self.tools = ["tool1", "tool2", "tool3"]
-
-
-@pytest.fixture
-def mock_skill():
-    """Create a mock skill."""
-    return MockSkill()
 
 
 # ============================================================
@@ -203,11 +180,6 @@ class TestEventConverterBasic:
 
 
 # ============================================================
-# Test Work Plan and Step Events
-# ============================================================
-
-
-# ============================================================
 # Test Artifact Events
 # ============================================================
 
@@ -242,81 +214,6 @@ class TestEventConverterArtifact:
         assert result["data"]["size_bytes"] == 15000
         assert result["data"]["url"] == "https://storage.example.com/artifacts/chart.png"
         assert result["data"]["source_tool"] == "chart_generator"
-
-
-# ============================================================
-# Test Skill Event Conversion
-# ============================================================
-
-
-@pytest.mark.unit
-class TestEventConverterSkill:
-    """Test skill event conversion."""
-
-    def test_convert_skill_thought_event(self, converter, mock_skill):
-        """Test converting skill thought event."""
-        event = AgentThoughtEvent(
-            content="Executing skill step 1...",
-            thought_level="skill",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert_skill_event(event, mock_skill, current_step=0)
-
-        assert result is not None
-        assert result["type"] == "thought"
-        assert result["data"]["thought"] == "Executing skill step 1..."
-        assert result["data"]["thought_level"] == "skill"
-        assert result["data"]["skill_id"] == "test-skill-001"
-
-    def test_convert_skill_act_event(self, converter, mock_skill):
-        """Test converting skill act event."""
-        event = AgentActEvent(
-            tool_name="tool1",
-            tool_input={"param": "value"},
-            status="executing",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert_skill_event(event, mock_skill, current_step=0)
-
-        assert result is not None
-        assert result["type"] == "skill_tool_start"
-        assert result["data"]["skill_id"] == "test-skill-001"
-        assert result["data"]["skill_name"] == "TestSkill"
-        assert result["data"]["tool_name"] == "tool1"
-        assert result["data"]["step_index"] == 0
-        assert result["data"]["total_steps"] == 3
-
-    def test_convert_skill_observe_event(self, converter, mock_skill):
-        """Test converting skill observe event."""
-        event = AgentObserveEvent(
-            tool_name="tool1",
-            result="Tool executed successfully",
-            error=None,
-            duration_ms=100,
-            status="success",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert_skill_event(event, mock_skill, current_step=0)
-
-        assert result is not None
-        assert result["type"] == "skill_tool_result"
-        assert result["data"]["skill_id"] == "test-skill-001"
-        assert result["data"]["result"] == "Tool executed successfully"
-        assert result["data"]["duration_ms"] == 100
-
-    def test_convert_skill_completion_returns_none(self, converter, mock_skill):
-        """Test that skill completion events return None."""
-        # Create a mock event with SKILL_EXECUTION_COMPLETE type
-        event = MagicMock(spec=AgentDomainEvent)
-        event.event_type = AgentEventType.SKILL_EXECUTION_COMPLETE
-        event.timestamp = time.time()
-
-        result = converter.convert_skill_event(event, mock_skill, current_step=2)
-
-        assert result is None
 
 
 # ============================================================
@@ -441,77 +338,3 @@ class TestEventConverterEdgeCases:
         assert result["data"]["observation"] == "Partial result"
         # Error is also included
         assert result["data"]["error"] == "Warning: some issues"
-
-    def test_skill_event_with_none_tool_input(self, converter, mock_skill):
-        """Test skill act event with None tool_input."""
-        event = AgentActEvent(
-            tool_name="simple_tool",
-            tool_input=None,
-            status="executing",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert_skill_event(event, mock_skill, current_step=1)
-
-        assert result is not None
-        assert result["data"]["tool_input"] == {}
-
-    def test_skill_observe_with_none_duration(self, converter, mock_skill):
-        """Test skill observe event with None duration_ms."""
-        event = AgentObserveEvent(
-            tool_name="fast_tool",
-            result="Done",
-            error=None,
-            duration_ms=None,
-            status="success",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert_skill_event(event, mock_skill, current_step=0)
-
-        assert result is not None
-        assert result["data"]["duration_ms"] == 0
-
-
-# ============================================================
-# Test Protocol Compliance
-# ============================================================
-
-
-@pytest.mark.unit
-class TestSkillLikeProtocol:
-    """Test SkillLike protocol compliance."""
-
-    def test_mock_skill_implements_protocol(self, mock_skill):
-        """Test that MockSkill implements SkillLike protocol."""
-        # Protocol attributes
-        assert hasattr(mock_skill, "id")
-        assert hasattr(mock_skill, "name")
-        assert hasattr(mock_skill, "tools")
-
-        # Check types
-        assert isinstance(mock_skill.id, str)
-        assert isinstance(mock_skill.name, str)
-        assert isinstance(mock_skill.tools, list)
-
-    def test_custom_skill_object_works(self, converter):
-        """Test that any object with required attributes works."""
-
-        class CustomSkill:
-            id = "custom-001"
-            name = "CustomSkill"
-            tools: ClassVar[list] = ["a", "b"]
-
-        skill = CustomSkill()
-        event = AgentActEvent(
-            tool_name="a",
-            tool_input={},
-            status="executing",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert_skill_event(event, skill, current_step=0)
-
-        assert result is not None
-        assert result["data"]["skill_id"] == "custom-001"
-        assert result["data"]["total_steps"] == 2

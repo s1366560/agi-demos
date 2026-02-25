@@ -28,12 +28,6 @@ from src.domain.ports.agent.react_loop_port import (
     ReActLoopContext,
     ReActLoopPort,
 )
-from src.domain.ports.agent.skill_orchestrator_port import (
-    SkillExecutionRequest,
-    SkillMatchRequest,
-    SkillMatchResult,
-    SkillOrchestratorPort,
-)
 from src.domain.ports.agent.subagent_orchestrator_port import (
     SubAgentMatchRequest,
     SubAgentMatchResult,
@@ -66,11 +60,6 @@ __all__ = [
     "ReActLoopContext",
     # ReAct Loop
     "ReActLoopPort",
-    "SkillExecutionRequest",
-    "SkillMatchRequest",
-    "SkillMatchResult",
-    # Skill Orchestrator
-    "SkillOrchestratorPort",
     "StreamChunk",
     "SubAgentMatchRequest",
     "SubAgentMatchResult",

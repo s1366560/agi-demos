@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
-
+    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
@@ -71,6 +71,7 @@ class _RunTaskContext:
     base_url: str | None
     llm_client: LLMClient | None
     subtask_timeout: float
+    factory: ProcessorFactory | None = None
 
 
 class ParallelScheduler:
@@ -96,7 +97,7 @@ class ParallelScheduler:
         """
         self._config = config or ParallelSchedulerConfig()
 
-    async def execute(
+    async def execute(  # noqa: PLR0913
         self,
         subtasks: list[SubTask],
         subagent_map: dict[str, SubAgent],
@@ -110,6 +111,7 @@ class ParallelScheduler:
         project_id: str = "",
         tenant_id: str = "",
         abort_signal: asyncio.Event | None = None,
+        factory: ProcessorFactory | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute sub-tasks with dependency-aware parallel scheduling.
 
@@ -164,6 +166,7 @@ class ParallelScheduler:
             base_url=base_url,
             llm_client=llm_client,
             subtask_timeout=self._config.subtask_timeout,
+            factory=factory,
         )
 
         async for event in self._launch_and_drain_events(executions, ctx):
@@ -308,6 +311,7 @@ class ParallelScheduler:
             base_url=ctx.base_url,
             llm_client=ctx.llm_client,
             abort_signal=ctx.abort_signal,
+            factory=ctx.factory,
         )
         execution.process = process
 

@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
-
+    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
@@ -132,6 +132,7 @@ class SubAgentChain:
         project_id: str = "",
         tenant_id: str = "",
         abort_signal: asyncio.Event | None = None,
+        factory: ProcessorFactory | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute the chain sequentially.
 
@@ -223,6 +224,7 @@ class SubAgentChain:
                 base_url=base_url,
                 llm_client=llm_client,
                 abort_signal=abort_signal,
+                factory=factory,
             )
 
             # Execute and relay events

@@ -327,19 +327,7 @@ class AgentContainer:
 
         return get_event_converter()
 
-    def skill_orchestrator(self) -> Any:
-        """Get SkillOrchestrator for skill matching and execution."""
-        from src.infrastructure.agent.skill.orchestrator import create_skill_orchestrator
 
-        return create_skill_orchestrator()
-
-    def subagent_orchestrator(self) -> Any:
-        """Get SubAgentOrchestrator for sub-agent routing."""
-        from src.infrastructure.agent.routing.subagent_orchestrator import (
-            create_subagent_orchestrator,
-        )
-
-        return create_subagent_orchestrator()
 
     def attachment_processor(self) -> Any:
         """Get AttachmentProcessor for handling chat attachments."""

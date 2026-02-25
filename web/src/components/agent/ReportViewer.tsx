@@ -19,6 +19,8 @@ import {
 
 import { LazyCard, LazyButton, Typography } from '@/components/ui/lazyAntd';
 
+import { safeMarkdownComponents } from './chat/markdownPlugins';
+
 const { Text, Paragraph } = Typography;
 
 interface ReportViewerProps {
@@ -113,7 +115,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
       case 'table':
         return (
           <div className="markdown-report">
-            <ReactMarkdown>{content}</ReactMarkdown>
+            <ReactMarkdown components={safeMarkdownComponents}>{content}</ReactMarkdown>
           </div>
         );
 

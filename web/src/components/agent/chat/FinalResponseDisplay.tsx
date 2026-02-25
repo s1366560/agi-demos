@@ -18,9 +18,10 @@ import { formatDateOnly } from '@/utils/date';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { CodeBlock } from './CodeBlock';
-import { useMarkdownPlugins } from './markdownPlugins';
+import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
 
 const MARKDOWN_COMPONENTS: Components = {
+  ...safeMarkdownComponents,
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
 };
 
@@ -61,9 +62,9 @@ export function FinalResponseDisplay({
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 60) return `${String(diffMins)}m ago`;
     const diffHours = Math.floor(diffMins / 3600000);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return `${String(diffHours)}h ago`;
     return formatDateOnly(date);
   };
 
@@ -107,7 +108,7 @@ export function FinalResponseDisplay({
       url: window.location.href,
     };
 
-    if (navigator.share && navigator.canShare(shareData)) {
+    if (typeof navigator.share === 'function' && navigator.canShare(shareData)) {
       try {
         await navigator.share(shareData);
       } catch (err) {
@@ -159,7 +160,7 @@ export function FinalResponseDisplay({
           </h4>
           <div className="space-y-2">
             <button
-              onClick={handleCopy}
+              onClick={() => { void handleCopy(); }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -167,7 +168,7 @@ export function FinalResponseDisplay({
             </button>
 
             <button
-              onClick={handleExportPDF}
+              onClick={() => { void handleExportPDF(); }}
               disabled={isExporting}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -176,7 +177,7 @@ export function FinalResponseDisplay({
             </button>
 
             <button
-              onClick={handleShare}
+              onClick={() => { void handleShare(); }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
             >
               <Share2 className="w-4 h-4" />

@@ -22,9 +22,10 @@ import { useAgentV3Store } from '../../stores/agentV3';
 import { useCanvasStore, type CanvasContentType } from '../../stores/canvasStore';
 import { useLayoutModeStore } from '../../stores/layoutMode';
 import { useSandboxStore } from '../../stores/sandbox';
-import { formatDistanceToNowCN, formatReadableTime, formatDateTime } from '../../utils/date';
+import { formatDistanceToNowCN, formatTimeOnly, formatDateTime } from '../../utils/date';
 
 import { AssistantMessage } from './chat/AssistantMessage';
+import { safeMarkdownComponents } from './chat/markdownPlugins';
 import {
   UserMessage,
   AgentSection,
@@ -66,7 +67,11 @@ const MarkdownRenderer = lazy(async () => {
   await import('katex/dist/katex.min.css');
 
   const MarkdownWrapper = ({ children }: { children: string }) => (
-    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={safeMarkdownComponents}
+    >
       {children}
     </ReactMarkdown>
   );
@@ -80,7 +85,7 @@ const MarkdownRenderer = lazy(async () => {
  */
 function TimeBadge({ timestamp }: { timestamp: number }) {
   const naturalTime = formatDistanceToNowCN(timestamp);
-  const readableTime = formatReadableTime(timestamp);
+  const readableTime = formatTimeOnly(timestamp);
 
   return (
     <span
@@ -111,7 +116,8 @@ function findMatchingObserve(
   const actIndex = events.indexOf(actEvent);
 
   for (let i = actIndex + 1; i < events.length; i++) {
-    const event = events[i]!;
+    const event = events[i];
+    if (!event) continue;
     if (event.type !== 'observe') continue;
 
     // Priority 1: Match by execution_id
@@ -161,10 +167,9 @@ function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: Timel
   if (event.type !== 'act') return null;
 
   const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
-  const hasCompleted = !!observeEvent;
 
   const ToolCard =
-    hasCompleted && observeEvent ? (
+    observeEvent ? (
       <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
         <ToolExecutionCardDisplay
           toolName={event.toolName}
@@ -247,7 +252,7 @@ function WorkPlanItem({ event }: { event: TimelineEvent }) {
       <AgentSection icon="psychology">
         <ReasoningLogCard
           steps={event.steps.map((s) => s.description)}
-          summary={`Work Plan: ${event.steps.length} steps`}
+          summary={`Work Plan: ${String(event.steps.length)} steps`}
           completed={event.status === 'completed'}
           expanded={event.status !== 'completed'}
         />
@@ -498,7 +503,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
               )}
 
               <button
-                onClick={handleSubmit}
+                onClick={() => { void handleSubmit(); }}
                 disabled={isSubmitting || (!selectedOption && !customAnswer)}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -597,7 +602,7 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
               )}
 
               <button
-                onClick={handleSubmit}
+                onClick={() => { void handleSubmit(); }}
                 disabled={isSubmitting || (!selectedOption && !customDecision)}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -712,7 +717,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
               </div>
 
               <button
-                onClick={handleSubmit}
+                onClick={() => { void handleSubmit(); }}
                 disabled={isSubmitting || !requiredFilled}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -769,6 +774,27 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
 
     try {
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
+      }
+      const responseType = response.headers.get('content-type')?.toLowerCase() || '';
+      if (responseType.includes('application/pdf')) {
+        useCanvasStore.getState().openTab({
+          id: event.artifactId,
+          title: event.filename,
+          type: 'preview',
+          content: url,
+          mimeType: 'application/pdf',
+          pdfVerified: true,
+          artifactId: event.artifactId,
+          artifactUrl: url,
+        });
+        const currentMode = useLayoutModeStore.getState().mode;
+        if (currentMode !== 'canvas') {
+          useLayoutModeStore.getState().setMode('canvas');
+        }
+        return;
+      }
       const content = await response.text();
 
       // Check if this is HTML content - should use preview mode with iframe
@@ -874,7 +900,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
 
   // Format file size
   const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024) return `${String(bytes)} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
@@ -969,7 +995,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
               {isCanvasCompatible && url && (
                 <button
                   type="button"
-                  onClick={handleOpenInCanvas}
+                  onClick={() => { void handleOpenInCanvas(); }}
                   className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
                 >
                   <PanelRight size={14} />

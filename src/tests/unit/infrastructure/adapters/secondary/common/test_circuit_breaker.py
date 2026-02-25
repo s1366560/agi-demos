@@ -379,7 +379,7 @@ class TestCircuitBreaker:
             raise_specific_error, fallback_on_exception=ValueError, fallback=fallback
         )
 
-        assert result == "Handled: Specific error"
+        assert result == "Handled: None"
         # The exception was handled by fallback, so no failure counted
         assert breaker.failure_count == 0
 

@@ -22,22 +22,6 @@ class TestRefactoredArchitectureIntegration:
         converter2 = get_event_converter()
         assert converter1 is converter2
 
-    def test_skill_orchestrator_creation(self):
-        """Test SkillOrchestrator can be created."""
-        from src.infrastructure.agent.skill.orchestrator import create_skill_orchestrator
-
-        orchestrator = create_skill_orchestrator()
-        assert orchestrator is not None
-        assert hasattr(orchestrator, "match")
-
-    def test_subagent_orchestrator_creation(self):
-        """Test SubAgentOrchestrator can be created."""
-        from src.infrastructure.agent.routing.subagent_orchestrator import (
-            create_subagent_orchestrator,
-        )
-
-        orchestrator = create_subagent_orchestrator()
-        assert orchestrator is not None
 
     def test_attachment_processor_singleton(self):
         """Test AttachmentProcessor singleton pattern."""
@@ -85,16 +69,6 @@ class TestRefactoredArchitectureIntegration:
         assert extractor is not None
         assert isinstance(extractor, ArtifactExtractor)
 
-    def test_work_plan_generator_singleton(self):
-        """Test WorkPlanGenerator singleton pattern."""
-        from src.infrastructure.agent.planning.work_plan_generator import (
-            WorkPlanGenerator,
-            get_work_plan_generator,
-        )
-
-        generator = get_work_plan_generator()
-        assert generator is not None
-        assert isinstance(generator, WorkPlanGenerator)
 
     def test_react_loop_class_exists(self):
         """Test ReActLoop class exists."""
@@ -115,22 +89,6 @@ class TestDIContainerIntegration:
         container = DIContainer()
         converter = container.event_converter()
         assert converter is not None
-
-    def test_di_container_creates_skill_orchestrator(self):
-        """Test DIContainer.skill_orchestrator() works."""
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        orchestrator = container.skill_orchestrator()
-        assert orchestrator is not None
-
-    def test_di_container_creates_subagent_orchestrator(self):
-        """Test DIContainer.subagent_orchestrator() works."""
-        from src.configuration.di_container import DIContainer
-
-        container = DIContainer()
-        orchestrator = container.subagent_orchestrator()
-        assert orchestrator is not None
 
     def test_di_container_creates_attachment_processor(self):
         """Test DIContainer.attachment_processor() works."""
@@ -161,22 +119,6 @@ class TestModuleImports:
 
         assert AttachmentProcessor is not None
 
-    def test_import_skill_orchestrator(self):
-        """Test SkillOrchestrator module imports."""
-        from src.infrastructure.agent.skill.orchestrator import (
-            SkillOrchestrator,
-        )
-
-        assert SkillOrchestrator is not None
-
-    def test_import_subagent_orchestrator(self):
-        """Test SubAgentOrchestrator module imports."""
-        from src.infrastructure.agent.routing.subagent_orchestrator import (
-            SubAgentOrchestrator,
-        )
-
-        assert SubAgentOrchestrator is not None
-
     def test_import_llm_invoker(self):
         """Test LLMInvoker module imports."""
         from src.infrastructure.agent.llm.invoker import LLMInvoker
@@ -205,14 +147,6 @@ class TestModuleImports:
 
         assert ArtifactExtractor is not None
 
-    def test_import_work_plan_generator(self):
-        """Test WorkPlanGenerator module imports."""
-        from src.infrastructure.agent.planning.work_plan_generator import (
-            WorkPlanGenerator,
-        )
-
-        assert WorkPlanGenerator is not None
-
     def test_import_react_loop(self):
         """Test ReActLoop module imports."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
@@ -240,16 +174,13 @@ class TestReActAgentIntegration:
 
         assert ReActAgent is not None
 
-    def test_react_agent_uses_orchestrators(self):
-        """Test ReActAgent has orchestrator attributes."""
-        # Check class has the expected orchestrator imports in __init__
+    def test_react_agent_uses_event_converter(self):
+        """Test ReActAgent references EventConverter."""
         import inspect
 
         from src.infrastructure.agent.core.react_agent import ReActAgent
 
         init_source = inspect.getsource(ReActAgent.__init__)
 
-        # Verify orchestrators are used
-        assert "EventConverter" in init_source or "event_converter" in init_source
-        assert "SkillOrchestrator" in init_source or "skill_orchestrator" in init_source
-        assert "SubAgentOrchestrator" in init_source or "subagent_orchestrator" in init_source
+        # __init__ calls _init_orchestrators which sets up EventConverter
+        assert "_init_orchestrators" in init_source

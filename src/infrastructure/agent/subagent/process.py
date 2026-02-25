@@ -24,11 +24,12 @@ if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.agent.permission.manager import PermissionManager
-
+    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 
+from ..processor.run_context import RunContext
 from .context_bridge import ContextBridge, SubAgentContext
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,14 @@ class SubAgentProcess:
         subagent: SubAgent,
         context: SubAgentContext,
         tools: list[Any],
-        base_model: str,
+        base_model: str = "",
         base_api_key: str | None = None,
         base_url: str | None = None,
         llm_client: LLMClient | None = None,
         permission_manager: PermissionManager | None = None,
         artifact_service: ArtifactService | None = None,
         abort_signal: asyncio.Event | None = None,
+        factory: ProcessorFactory | None = None,
     ) -> None:
         """Initialize a SubAgent process.
 
@@ -71,21 +73,25 @@ class SubAgentProcess:
             subagent: The SubAgent definition.
             context: Condensed context from ContextBridge.
             tools: Filtered tool definitions for this SubAgent.
-            base_model: Base model name (used if SubAgent inherits).
-            base_api_key: API key for LLM calls.
-            base_url: Base URL for LLM API.
-            llm_client: Shared LLM client instance.
-            permission_manager: Permission manager for tool access.
-            artifact_service: Artifact service for rich outputs.
+            base_model: Base model name (used if SubAgent inherits). Legacy.
+            base_api_key: API key for LLM calls. Legacy.
+            base_url: Base URL for LLM API. Legacy.
+            llm_client: Shared LLM client instance. Legacy.
+            permission_manager: Permission manager for tool access. Legacy.
+            artifact_service: Artifact service for rich outputs. Legacy.
             abort_signal: Signal to abort execution.
+            factory: ProcessorFactory with shared deps. Preferred over individual params.
         """
         self._subagent = subagent
         self._context = context
         self._tools = tools
+        self._abort_signal = abort_signal
+        self._factory = factory
+
+        # Legacy individual deps (used when factory is not provided)
         self._llm_client = llm_client
         self._permission_manager = permission_manager
         self._artifact_service = artifact_service
-        self._abort_signal = abort_signal
 
         # Determine actual model
         if subagent.model == AgentModel.INHERIT:
@@ -95,7 +101,6 @@ class SubAgentProcess:
 
         self._api_key = base_api_key
         self._base_url = base_url
-
         # Execution state
         self._result: SubAgentResult | None = None
         self._final_content = ""
@@ -116,35 +121,39 @@ class SubAgentProcess:
         Yields:
             Dict events with subagent_id for frontend routing.
         """
-        # Lazy import to avoid circular dependencies
-        from ..core.processor import ProcessorConfig, SessionProcessor
-
         start_time = time.time()
         success = True
         error_msg: str | None = None
 
-        # Build processor config from SubAgent settings
-        config = ProcessorConfig(
-            model=self._model,
-            api_key=self._api_key,
-            base_url=self._base_url,
-            temperature=self._subagent.temperature,
-            max_tokens=self._subagent.max_tokens,
-            max_steps=self._subagent.max_iterations,
-            llm_client=self._llm_client,
-        )
+        # Build processor: prefer factory, fall back to legacy construction
+        if self._factory is not None:
+            processor = self._factory.create_for_subagent(
+                subagent=self._subagent,
+                tools=self._tools,
+            )
+        else:
+            # Legacy path: manual construction from individual params
+            from ..core.processor import ProcessorConfig, SessionProcessor
+
+            config = ProcessorConfig(
+                model=self._model,
+                api_key=self._api_key,
+                base_url=self._base_url,
+                temperature=self._subagent.temperature,
+                max_tokens=self._subagent.max_tokens,
+                max_steps=self._subagent.max_iterations,
+                llm_client=self._llm_client,
+            )
+            processor = SessionProcessor(
+                config=config,
+                tools=self._tools,
+                permission_manager=self._permission_manager,
+                artifact_service=self._artifact_service,
+            )
 
         # Build independent message list from context
         bridge = ContextBridge()
         messages = bridge.build_messages(self._context)
-
-        # Create an isolated SessionProcessor
-        processor = SessionProcessor(
-            config=config,
-            tools=self._tools,
-            permission_manager=self._permission_manager,
-            artifact_service=self._artifact_service,
-        )
 
         # Emit subagent_started event
         yield self._make_event(
@@ -161,10 +170,16 @@ class SubAgentProcess:
             # Run the independent ReAct loop
             session_id = f"subagent-{self._subagent.id}-{int(time.time())}"
 
+            run_ctx = RunContext(
+                abort_signal=self._abort_signal,
+                conversation_id=f"subagent-{self._subagent.id}",
+                trace_id=session_id,
+            )
+
             async for domain_event in processor.process(
                 session_id=session_id,
                 messages=messages,
-                abort_signal=self._abort_signal,
+                run_ctx=run_ctx,
             ):
                 # Convert and relay events with subagent prefix
                 event = self._relay_event(domain_event)

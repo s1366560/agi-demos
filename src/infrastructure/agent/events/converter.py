@@ -6,16 +6,14 @@ ReActAgent to support the Single Responsibility Principle.
 
 Handles conversion of:
 - AgentDomainEvent → SSE dict format
-- Skill execution events → SSE dict format
 - Backward compatibility transformations for frontend
 
-Reference: Extracted from react_agent.py::_convert_domain_event() and
-           _convert_skill_domain_event()
+Reference: Extracted from react_agent.py::_convert_domain_event()
 """
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 
 from src.domain.events.agent_events import (
     AgentActEvent,
@@ -33,19 +31,6 @@ from src.domain.events.event_dicts import SSEEventDict
 logger = logging.getLogger(__name__)
 
 
-class SkillLike(Protocol):
-    """Protocol for Skill-like objects to avoid circular imports."""
-
-    @property
-    def id(self) -> str: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def tools(self) -> list[Any]: ...
-
-
 class EventConverter:
     """
     Unified event converter for ReActAgent.
@@ -59,8 +44,6 @@ class EventConverter:
         # Convert standard domain events
         event_dict = converter.convert(domain_event)
 
-        # Convert skill execution events
-        event_dict = converter.convert_skill_event(domain_event, skill, step)
     """
 
     def __init__(self, debug_logging: bool = False) -> None:
@@ -192,130 +175,6 @@ class EventConverter:
 
         return event_dict
 
-    def convert_skill_event(
-        self,
-        domain_event: AgentDomainEvent,
-        skill: SkillLike,
-        current_step: int,
-    ) -> SSEEventDict | None:
-        """
-        Convert SkillExecutor domain event to SSE event format.
-
-        Args:
-            domain_event: Domain event from SkillExecutor
-            skill: The skill being executed
-            current_step: Current step index in the skill execution
-
-        Returns:
-            Converted event dict or None to skip
-        """
-        event_type = domain_event.event_type
-        timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
-
-        if event_type == AgentEventType.THOUGHT:
-            return self._convert_skill_thought(domain_event, skill, timestamp)
-
-        elif event_type == AgentEventType.ACT:
-            return self._convert_skill_act(domain_event, skill, current_step, timestamp)
-
-        elif event_type == AgentEventType.OBSERVE:
-            return self._convert_skill_observe(domain_event, skill, current_step, timestamp)
-
-        elif event_type == AgentEventType.SKILL_EXECUTION_COMPLETE:
-            # Completion handled in _execute_skill_directly
-            return None
-
-        # Skip other event types
-        return None
-
-    def _convert_skill_thought(
-        self,
-        domain_event: AgentDomainEvent,
-        skill: SkillLike,
-        timestamp: str,
-    ) -> SSEEventDict | None:
-        """Convert skill thought event."""
-        if not isinstance(domain_event, AgentThoughtEvent):
-            return None
-
-        thought_level = domain_event.thought_level
-
-        # Map skill thoughts to appropriate event types
-        if thought_level == "skill":
-            return {
-                "type": "thought",
-                "data": {
-                    "thought": domain_event.content,
-                    "thought_level": "skill",
-                    "skill_id": skill.id,
-                },
-                "timestamp": timestamp,
-            }
-        elif thought_level == "skill_complete":
-            # Skill completion thought - handled separately
-            return None
-
-        return {
-            "type": "thought",
-            "data": {
-                "thought": domain_event.content,
-                "thought_level": thought_level,
-            },
-            "timestamp": timestamp,
-        }
-
-    def _convert_skill_act(
-        self,
-        domain_event: AgentDomainEvent,
-        skill: SkillLike,
-        current_step: int,
-        timestamp: str,
-    ) -> SSEEventDict | None:
-        """Convert skill act event."""
-        if not isinstance(domain_event, AgentActEvent):
-            return None
-
-        return {
-            "type": "skill_tool_start",
-            "data": {
-                "skill_id": skill.id,
-                "skill_name": skill.name,
-                "tool_name": domain_event.tool_name,
-                "tool_input": domain_event.tool_input or {},
-                "step_index": current_step,
-                "total_steps": len(skill.tools),
-                "status": domain_event.status,
-            },
-            "timestamp": timestamp,
-        }
-
-    def _convert_skill_observe(
-        self,
-        domain_event: AgentDomainEvent,
-        skill: SkillLike,
-        current_step: int,
-        timestamp: str,
-    ) -> SSEEventDict | None:
-        """Convert skill observe event."""
-        if not isinstance(domain_event, AgentObserveEvent):
-            return None
-
-        return {
-            "type": "skill_tool_result",
-            "data": {
-                "skill_id": skill.id,
-                "skill_name": skill.name,
-                "tool_name": domain_event.tool_name,
-                "result": domain_event.result,
-                "error": domain_event.error,
-                "duration_ms": domain_event.duration_ms or 0,
-                "step_index": current_step,
-                "total_steps": len(skill.tools),
-                "status": domain_event.status,
-            },
-            "timestamp": timestamp,
-        }
-
     def convert_plan_event(self, event: dict[str, Any]) -> SSEEventDict:
         """
         Convert internal Plan Mode event to SSE event format.
@@ -326,7 +185,7 @@ class EventConverter:
         Returns:
             SSE-compatible event dict
         """
-        event_type = event.get("type", "unknown")
+        event_type: str = event.get("type", "unknown")
 
         # Map internal event types to SSE types
         type_mapping = {
@@ -339,11 +198,12 @@ class EventConverter:
             "ADJUSTMENT_APPLIED": "adjustment_applied",
         }
 
-        return {
-            "type": type_mapping.get(event_type, event_type.lower()),
-            "data": event.get("data", {}),
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        event_type_str: str = type_mapping.get(event_type, event_type.lower())
+        return SSEEventDict(
+            type=event_type_str,
+            data=event.get("data", {}),
+            timestamp=datetime.now(UTC).isoformat(),
+        )
 
 
 # Module-level singleton for convenience

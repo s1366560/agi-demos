@@ -30,7 +30,7 @@ import type { Components } from 'react-markdown';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
-import { useMarkdownPlugins } from './markdownPlugins';
+import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
 
 export interface MarkdownContentProps {
   /** Markdown content to render */
@@ -95,9 +95,10 @@ export const MarkdownContent = memo<MarkdownContentProps>(
 
     // Stable components reference
     const components: Components = useMemo(() => {
-      if (!codeActions) return {};
+      if (!codeActions) return safeMarkdownComponents as Components;
 
       return {
+        ...safeMarkdownComponents,
         pre: ({ children }) => (
           <CodeBlockWithSuspense codeActions={codeActions} loadingFallback={loadingFallback}>
             {children}

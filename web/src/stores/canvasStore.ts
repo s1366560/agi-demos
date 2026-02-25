@@ -16,6 +16,8 @@ export interface CanvasTab {
   title: string;
   type: CanvasContentType;
   content: string;
+  mimeType?: string | undefined;
+  pdfVerified?: boolean | undefined;
   language?: string | undefined;
   dirty: boolean;
   createdAt: number;
@@ -30,7 +32,7 @@ export interface CanvasTab {
   /** MCP App HTML content (when type is 'mcp-app') */
   mcpAppHtml?: string | undefined;
   /** MCP App initial tool result (when type is 'mcp-app') */
-  mcpAppToolResult?: unknown | undefined;
+  mcpAppToolResult?: unknown;
   /** MCP App tool input arguments (when type is 'mcp-app') */
   mcpAppToolInput?: Record<string, unknown> | undefined;
   /** MCP App UI metadata (when type is 'mcp-app') */

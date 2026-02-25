@@ -279,10 +279,6 @@ class Settings(BaseSettings):
     # Agent Skill System (L2 Layer) Settings
     # Threshold for skill prompt injection (0.5 = medium match score)
     agent_skill_match_threshold: float = Field(default=0.5, alias="AGENT_SKILL_MATCH_THRESHOLD")
-    # Threshold for direct skill execution (0.8 = high confidence match)
-    agent_skill_direct_execute_threshold: float = Field(
-        default=0.8, alias="AGENT_SKILL_DIRECT_EXECUTE_THRESHOLD"
-    )
     # Whether to fallback to LLM when skill execution fails
     agent_skill_fallback_on_error: bool = Field(default=True, alias="AGENT_SKILL_FALLBACK_ON_ERROR")
     # Timeout for skill direct execution in seconds

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
 
 from src.domain.model.agent.subagent import SubAgent
@@ -61,7 +62,7 @@ class BackgroundExecutor:
         """Access the state tracker."""
         return self._tracker
 
-    def launch(
+    def launch(  # noqa: PLR0913
         self,
         subagent: SubAgent,
         user_message: str,
@@ -75,6 +76,7 @@ class BackgroundExecutor:
         base_api_key: str | None = None,
         base_url: str | None = None,
         llm_client: LLMClient | None = None,
+        factory: ProcessorFactory | None = None,
     ) -> str:
         """Launch a SubAgent in the background.
 
@@ -125,6 +127,7 @@ class BackgroundExecutor:
                 base_api_key=base_api_key,
                 base_url=base_url,
                 llm_client=llm_client,
+                factory=factory,
             ),
             name=f"bg-subagent-{execution_id}",
         )
@@ -165,7 +168,7 @@ class BackgroundExecutor:
         """
         return [s.to_dict() for s in self._tracker.get_active(conversation_id)]
 
-    async def _run(
+    async def _run(  # noqa: PLR0913
         self,
         execution_id: str,
         subagent: SubAgent,
@@ -180,6 +183,7 @@ class BackgroundExecutor:
         base_api_key: str | None = None,
         base_url: str | None = None,
         llm_client: LLMClient | None = None,
+        factory: ProcessorFactory | None = None,
     ) -> None:
         """Internal execution coroutine for background SubAgent."""
         self._tracker.start(execution_id, conversation_id)
@@ -219,6 +223,7 @@ class BackgroundExecutor:
                 base_api_key=base_api_key,
                 base_url=base_url,
                 llm_client=llm_client,
+                factory=factory,
             )
 
             # Consume events (we don't yield them since this is background)

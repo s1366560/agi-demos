@@ -24,7 +24,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 try:
-    from pgvector.sqlalchemy import Vector
+    from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
 except ImportError:
     Vector = None
 
@@ -766,7 +766,9 @@ class WorkflowPattern(Base):
     steps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     # Legacy field for backward compatibility
     steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
-    tool_compositions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    tool_compositions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     success_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     # Legacy fields for backward compatibility
     success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -863,7 +865,9 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     trigger_type: Mapped[str] = mapped_column(String(20), nullable=False, default="keyword")
-    trigger_patterns: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    trigger_patterns: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
@@ -1090,7 +1094,9 @@ class MCPServer(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     runtime_status: Mapped[str] = mapped_column(String(30), default="unknown", nullable=False)
     runtime_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    discovered_tools: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    discovered_tools: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -1266,7 +1272,9 @@ class HITLRequest(IdGeneratorMixin, Base):
     # Request content (JSON)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     options: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # List of options
-    context: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # Additional context
+    context: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )  # Additional context
     request_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True
     )  # Tool-specific metadata
@@ -1565,3 +1573,12 @@ class AuditLog(IdGeneratorMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String, nullable=True)
 
     __table_args__ = (Index("ix_audit_logs_tenant_action", "tenant_id", "action"),)
+
+
+# Runtime import to register ChannelConfigModel on Base.metadata so that
+# SQLAlchemy can resolve the string reference in Project.channel_configs.
+# This must come after Base and all models above are defined to avoid
+# circular imports (channel_models.py imports Base from this module).
+from src.infrastructure.adapters.secondary.persistence.channel_models import (  # noqa: E402
+    ChannelConfigModel as ChannelConfigModel,
+)

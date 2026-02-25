@@ -7,7 +7,7 @@ Provides all CRUD operations, tenant resolution, and usage tracking.
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, cast, override
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, desc, func, select
@@ -24,22 +24,7 @@ from src.domain.llm_providers.models import (
     ProviderConfigCreate,
     ProviderConfigUpdate,
     ProviderHealth,
-    ProviderHealthCreate,
     ProviderStatus,
-    ProviderType,
-    ResolvedProvider,
-    TenantProviderMapping,
-    UsageStatistics,
-    EmbeddingConfig,
-    LLMUsageLog,
-    LLMUsageLogCreate,
-    NoActiveProviderError,
-    OperationType,
-    ProviderConfig,
-    ProviderConfigCreate,
-    ProviderConfigUpdate,
-    ProviderHealth,
-    ProviderHealthCreate,
     ProviderType,
     ResolvedProvider,
     TenantProviderMapping,
@@ -84,7 +69,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             )
         return self.session
 
-    async def _run_with_session(self, operation: Callable[[AsyncSession], Awaitable[Any]]) -> Any:
+    async def _run_with_session(self, operation: Callable[[AsyncSession], Awaitable[Any]]) -> Any:  # noqa: ANN401
         """Run operation with existing session or create a new ephemeral one."""
         if self.session:
             return await operation(self.session)
@@ -143,6 +128,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             updated_at=orm.updated_at,
         )
 
+    @override
     async def create(self, config: ProviderConfigCreate) -> ProviderConfig:
         """Create a new provider configuration with idempotent upsert on name conflict."""
 
@@ -196,6 +182,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast(ProviderConfig, await self._run_with_session(op))
 
+    @override
     async def get_by_id(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
 
@@ -209,6 +196,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast("ProviderConfig | None", await self._run_with_session(op))
 
+    @override
     async def get_by_name(self, name: str) -> ProviderConfig | None:
         """Get provider by name."""
 
@@ -221,6 +209,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast("ProviderConfig | None", await self._run_with_session(op))
 
+    @override
     async def list_all(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers."""
 
@@ -235,6 +224,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast(list[ProviderConfig], await self._run_with_session(op))
 
+    @override
     async def list_active(self) -> list[ProviderConfig]:
         """List all active providers."""
         return await self.list_all(include_inactive=False)
@@ -279,8 +269,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         updated_config: dict[str, Any],
     ) -> bool:
         """Apply embedding_config update. Returns True if config dict was modified."""
+        effective_embedding_model = config.embedding_model or orm.embedding_model
         embedding_payload = self._build_embedding_payload(
-            config.embedding_model,
+            effective_embedding_model,
             config.embedding_config,
         )
         if embedding_payload:
@@ -314,6 +305,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         orm.embedding_model = config.embedding_model
         return True
 
+    @override
     async def update(
         self, provider_id: UUID, config: ProviderConfigUpdate
     ) -> ProviderConfig | None:
@@ -355,6 +347,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return self._orm_to_config(orm)
 
+    @override
     async def delete(self, provider_id: UUID, hard_delete: bool = False) -> bool:
         """Delete provider.
 
@@ -387,6 +380,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast(bool, await self._run_with_session(op))
 
+    @override
     async def find_default_provider(self) -> ProviderConfig | None:
         """Find the default provider."""
 
@@ -401,6 +395,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast("ProviderConfig | None", await self._run_with_session(op))
 
+    @override
     async def find_first_active_provider(self) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
 
@@ -416,6 +411,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast("ProviderConfig | None", await self._run_with_session(op))
 
+    @override
     async def find_tenant_provider(
         self,
         tenant_id: str,
@@ -452,6 +448,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return cast("ProviderConfig | None", await self._run_with_session(op))
 
+    @override
     async def resolve_provider(
         self,
         tenant_id: str | None = None,
@@ -497,6 +494,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             resolution_source=resolution_source,
         )
 
+    @override
     async def create_health_check(self, health: ProviderHealth) -> ProviderHealth:
         """Create a health check entry."""
         session = await self._get_session()
@@ -523,6 +521,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             response_time_ms=orm.response_time_ms,
         )
 
+    @override
     async def get_latest_health(self, provider_id: UUID) -> ProviderHealth | None:
         """Get latest health check for provider."""
         session = await self._get_session()
@@ -546,6 +545,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             response_time_ms=orm.response_time_ms,
         )
 
+    @override
     async def create_usage_log(self, usage_log: LLMUsageLogCreate) -> LLMUsageLog:
         """Create a usage log entry."""
         session = await self._get_session()
@@ -579,6 +579,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             created_at=orm.created_at,
         )
 
+    @override
     async def get_usage_statistics(
         self,
         provider_id: UUID | None = None,
@@ -648,6 +649,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return statistics
 
+    @override
     async def assign_provider_to_tenant(
         self,
         tenant_id: str,
@@ -686,6 +688,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             created_at=orm.created_at,
         )
 
+    @override
     async def unassign_provider_from_tenant(
         self,
         tenant_id: str,
@@ -715,6 +718,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return True
 
+    @override
     async def get_tenant_providers(
         self,
         tenant_id: str,

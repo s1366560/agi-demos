@@ -10,75 +10,72 @@ import json
 
 import pytest
 
-from src.infrastructure.agent.processor.processor import SessionProcessor
 from src.infrastructure.agent.tools.executor import ToolExecutor
 
 
 @pytest.mark.unit
 class TestSanitizeToolOutputProcessor:
-    """Test SessionProcessor._sanitize_tool_output."""
+    """Test ToolExecutor._sanitize_tool_output (formerly on SessionProcessor)."""
 
-    def _make_processor_instance(self):
-        """Create a minimal SessionProcessor for testing the sanitizer."""
-        # _sanitize_tool_output is a pure method; we only need the class instance
-        # Use __new__ to skip __init__ which requires config/tools
-        proc = object.__new__(SessionProcessor)
-        return proc
+    def _make_executor_instance(self):
+        """Create a minimal ToolExecutor for testing the sanitizer."""
+        executor = object.__new__(ToolExecutor)
+        return executor
 
     def test_short_text_unchanged(self):
-        proc = self._make_processor_instance()
+        executor = self._make_executor_instance()
         output = "File exported successfully"
-        assert proc._sanitize_tool_output(output) == output
+        assert executor._sanitize_tool_output(output) == output
 
     def test_empty_string_unchanged(self):
-        proc = self._make_processor_instance()
-        assert proc._sanitize_tool_output("") == ""
+        executor = self._make_executor_instance()
+        assert executor._sanitize_tool_output("") == ""
 
     def test_none_returns_none(self):
-        proc = self._make_processor_instance()
-        assert proc._sanitize_tool_output(None) is None
+        executor = self._make_executor_instance()
+        assert executor._sanitize_tool_output(None) is None
 
     def test_base64_blob_replaced(self):
-        proc = self._make_processor_instance()
+        executor = self._make_executor_instance()
         # Simulate a base64-encoded binary blob (e.g., 1KB of random data)
         fake_b64 = base64.b64encode(b"\x00" * 1024).decode()
         output = f"Here is the data: {fake_b64} end"
-        result = proc._sanitize_tool_output(output)
+        result = executor._sanitize_tool_output(output)
         assert fake_b64 not in result
         assert "[binary data omitted]" in result
         assert "Here is the data:" in result
 
     def test_multiple_base64_blobs_replaced(self):
-        proc = self._make_processor_instance()
+        executor = self._make_executor_instance()
         blob1 = base64.b64encode(b"\xff" * 512).decode()
         blob2 = base64.b64encode(b"\xaa" * 512).decode()
         output = f"img1: {blob1}\nimg2: {blob2}"
-        result = proc._sanitize_tool_output(output)
+        result = executor._sanitize_tool_output(output)
         assert blob1 not in result
         assert blob2 not in result
         assert result.count("[binary data omitted]") == 2
 
     def test_short_base64_not_replaced(self):
         """Base64 strings shorter than 256 chars should not be stripped."""
-        proc = self._make_processor_instance()
+        executor = self._make_executor_instance()
         short_b64 = base64.b64encode(b"\x00" * 100).decode()
         assert len(short_b64) < 256
         output = f"token: {short_b64}"
-        result = proc._sanitize_tool_output(output)
+        result = executor._sanitize_tool_output(output)
         assert short_b64 in result
 
     def test_large_output_truncated(self):
-        proc = self._make_processor_instance()
+        executor = self._make_executor_instance()
         # Use chars outside base64 alphabet to test pure size truncation
         large = "hello world! " * 5_000
-        result = proc._sanitize_tool_output(large)
-        assert len(result.encode("utf-8")) <= SessionProcessor._MAX_TOOL_OUTPUT_BYTES + 100
+        result = executor._sanitize_tool_output(large)
+        assert len(result.encode("utf-8")) <= ToolExecutor._MAX_TOOL_OUTPUT_BYTES + 100
         assert "[output truncated]" in result
 
     def test_normal_json_output_unchanged(self):
-        proc = self._make_processor_instance()
+        executor = self._make_executor_instance()
         data = json.dumps({"status": "ok", "files": ["a.py", "b.py"], "count": 42})
-        assert proc._sanitize_tool_output(data) == data
+        assert executor._sanitize_tool_output(data) == data
 
 
 @pytest.mark.unit

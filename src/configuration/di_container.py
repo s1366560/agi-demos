@@ -389,11 +389,6 @@ class DIContainer:
     def event_converter(self) -> Any:
         return self._agent.event_converter()
 
-    def skill_orchestrator(self) -> Any:
-        return self._agent.skill_orchestrator()
-
-    def subagent_orchestrator(self) -> Any:
-        return self._agent.subagent_orchestrator()
 
     def attachment_processor(self) -> Any:
         return self._agent.attachment_processor()

@@ -10,6 +10,7 @@ and restarted by the background health check task.
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -85,14 +86,14 @@ class TestMCPServerHealthCheck:
         # Mock mcp_server_list to return servers with crashed status
         mock_mcp_client = AsyncMock()
         mock_mcp_client.call_tool = AsyncMock(
-            return_value={
-                "content": [
+            return_value=SimpleNamespace(
+                content=[
                     {
                         "type": "text",
                         "text": '{"servers": [{"name": "server1", "status": "crashed"}, {"name": "server2", "status": "running"}]}',
                     }
                 ]
-            }
+            )
         )
 
         # Add sandbox with MCP client
@@ -140,14 +141,14 @@ class TestMCPServerHealthCheck:
         # Mock mcp_server_list to return crashed server
         mock_mcp_client = AsyncMock()
         mock_mcp_client.call_tool = AsyncMock(
-            return_value={
-                "content": [
+            return_value=SimpleNamespace(
+                content=[
                     {
                         "type": "text",
                         "text": '{"servers": [{"name": "crashed-server", "status": "crashed"}]}',
                     }
                 ]
-            }
+            )
         )
 
         from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus

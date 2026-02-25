@@ -52,7 +52,7 @@ import { artifactService } from '@/services/artifactService';
 import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
 import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
-import { useMarkdownPlugins } from '../chat/markdownPlugins';
+import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { SelectionToolbar } from './SelectionToolbar';
@@ -72,6 +72,20 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
   }
 };
 
+const isSafePreviewUrl = (src: string): boolean => {
+  if (!src) return false;
+  if (src.startsWith('/')) return true;
+  const lower = src.toLowerCase();
+  if (lower.startsWith('data:application/pdf')) return true;
+  if (lower.startsWith('data:')) return false;
+  try {
+    const url = new URL(src, window.location.origin);
+    return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'blob:';
+  } catch {
+    return false;
+  }
+};
+
 // Tab bar
 const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undefined }>(
   ({ onBeforeCloseTab }) => {
@@ -82,7 +96,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
     const setMode = useLayoutModeStore((s) => s.setMode);
 
     const handleNewTab = useCallback(() => {
-      const id = `new-${Date.now()}`;
+      const id = `new-${String(Date.now())}`;
       openTab({ id, title: 'untitled.py', type: 'code', content: '', language: undefined });
     }, [openTab]);
 
@@ -167,11 +181,40 @@ CanvasTabBar.displayName = 'CanvasTabBar';
  * Uses Blob URL with unique origin for complete style isolation, preventing
  * any CSS leakage from or to the parent page.
  */
-const IsolatedPreviewFrame = memo<{ content: string; title: string }>(({ content, title }) => {
+const IsolatedPreviewFrame = memo<{
+  content: string;
+  title: string;
+  srcUrl?: string | undefined;
+  pdfVerified?: boolean | undefined;
+}>(
+  ({ content, title, srcUrl, pdfVerified }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const previewSrc = srcUrl || content.trim();
+  const lowerPreviewSrc = previewSrc.toLowerCase();
+  const canUsePdfSrc = isSafePreviewUrl(previewSrc);
+  const shouldSandboxPdf = (() => {
+    try {
+      const resolved = new URL(previewSrc, window.location.origin);
+      const isHttp = resolved.protocol === 'http:' || resolved.protocol === 'https:';
+      const isCrossOrigin = isHttp && resolved.origin !== window.location.origin;
+      return !isCrossOrigin;
+    } catch {
+      return true;
+    }
+  })();
+  const wantsPdfPreview =
+    pdfVerified === true ||
+    lowerPreviewSrc.startsWith('data:application/pdf');
+  const isPdfPreview = wantsPdfPreview && canUsePdfSrc;
 
   useEffect(() => {
+    if (isPdfPreview) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBlobUrl(null);
+      return;
+    }
+
     const htmlContent = content.trim();
 
     // Wrap in full HTML document with isolation
@@ -195,13 +238,33 @@ ${htmlContent}
     // Create blob URL for complete isolation (unique origin)
     const blob = new Blob([wrappedContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBlobUrl(url);
 
     return () => {
       URL.revokeObjectURL(url);
     };
-  }, [content]);
+  }, [content, isPdfPreview]);
+
+  if (wantsPdfPreview && !canUsePdfSrc) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
+        <div className="text-slate-400">Invalid PDF preview URL</div>
+      </div>
+    );
+  }
+
+  if (isPdfPreview) {
+    return (
+      <iframe
+        ref={iframeRef}
+        src={previewSrc}
+        {...(shouldSandboxPdf ? { sandbox: 'allow-same-origin allow-downloads' } : {})}
+        referrerPolicy="no-referrer"
+        className="w-full h-full border-0 bg-white rounded-b-lg"
+        title={title}
+      />
+    );
+  }
 
   if (!blobUrl) {
     return (
@@ -220,7 +283,8 @@ ${htmlContent}
       title={title}
     />
   );
-});
+  }
+);
 IsolatedPreviewFrame.displayName = 'IsolatedPreviewFrame';
 
 // Content area for a single tab
@@ -266,13 +330,24 @@ const CanvasContent = memo<{
         <div
           className={`h-full overflow-auto p-6 bg-white dark:bg-slate-900 rounded-b-lg ${MARKDOWN_PROSE_CLASSES}`}
         >
-          <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+            components={safeMarkdownComponents}
+          >
             {tab.content}
           </ReactMarkdown>
         </div>
       );
     case 'preview':
-      return <IsolatedPreviewFrame content={tab.content} title={tab.title} />;
+      return (
+        <IsolatedPreviewFrame
+          content={tab.content}
+          title={tab.title}
+          srcUrl={tab.artifactUrl}
+          pdfVerified={tab.pdfVerified}
+        />
+      );
     case 'data':
       return (
         <div className="h-full overflow-auto p-4 bg-white dark:bg-slate-900 rounded-b-lg">
@@ -325,7 +400,7 @@ const CanvasToolbar = memo<{
       textarea.value = tab.content;
       document.body.appendChild(textarea);
       textarea.select();
-      document.execCommand('copy');
+      (document as unknown as { execCommand: (cmd: string) => boolean }).execCommand('copy');
       document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => { setCopied(false); }, 2000);
@@ -387,7 +462,7 @@ const CanvasToolbar = memo<{
       {canSave && (
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => { void handleSave(); }}
           disabled={saving}
           className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
           title={t('agent.canvas.save', 'Save (Ctrl+S)')}
@@ -433,7 +508,7 @@ const CanvasToolbar = memo<{
       )}
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => { void handleCopy(); }}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
         title={t('agent.canvas.copy', 'Copy')}
       >
@@ -534,7 +609,7 @@ const CanvasEmptyState = memo(() => {
 
   const handleNew = useCallback(
     (type: CanvasContentType, title: string) => {
-      const id = `new-${Date.now()}`;
+      const id = `new-${String(Date.now())}`;
       openTab({ id, title, type, content: '', language: undefined });
     },
     [openTab]

@@ -21,9 +21,10 @@ import {
 
 import { CodeBlock } from './CodeBlock';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
-import { useMarkdownPlugins } from './markdownPlugins';
+import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
 
 const MARKDOWN_COMPONENTS: Components = {
+  ...safeMarkdownComponents,
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
 };
 

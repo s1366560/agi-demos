@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.domain.llm_providers.llm_types import LLMClient, Message
+from src.infrastructure.memory.prompt_safety import sanitize_for_context
 
 if TYPE_CHECKING:
     from typing import Any as WorkPlan  # WorkPlan not in domain model
@@ -34,7 +35,7 @@ class SynthesizeResultsUseCase:
 
     async def execute(
         self,
-        work_plan: WorkPlan,
+        work_plan: WorkPlan,  # noqa: ANN401
         original_query: str,
         step_results: list[dict[str, Any]],
         conversation_context: list[dict[str, Any]],
@@ -67,10 +68,10 @@ class SynthesizeResultsUseCase:
 You have just completed a multi-step process to answer the user's question.
 Your task is to combine all the findings into a clear, well-structured response.
 
-Original question: {original_query}
+Original question: {sanitize_for_context(original_query)}
 
 Steps completed:
-{steps_summary}
+{sanitize_for_context(steps_summary)}
 
 Provide a comprehensive response that:
 1. Directly answers the user's question
@@ -102,7 +103,7 @@ Be thorough but concise. Focus on actionable insights.
 
     def _build_steps_summary(
         self,
-        work_plan: WorkPlan,
+        work_plan: WorkPlan,  # noqa: ANN401
         step_results: list[dict[str, Any]],
     ) -> str:
         """Build a summary of steps and their results."""
@@ -131,7 +132,7 @@ Be thorough but concise. Focus on actionable insights.
 
     def _fallback_synthesis(
         self,
-        work_plan: WorkPlan,
+        work_plan: WorkPlan,  # noqa: ANN401
         step_results: list[dict[str, Any]],
     ) -> str:
         """Fallback synthesis when LLM fails."""

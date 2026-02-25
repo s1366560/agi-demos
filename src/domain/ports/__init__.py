@@ -15,11 +15,6 @@ from src.domain.ports.agent import (
     ReActLoopContext,
     # ReAct Loop
     ReActLoopPort,
-    SkillExecutionRequest,
-    SkillMatchRequest,
-    SkillMatchResult,
-    # Skill Orchestrator
-    SkillOrchestratorPort,
     StreamChunk,
     SubAgentMatchRequest,
     SubAgentMatchResult,
@@ -53,11 +48,6 @@ __all__ = [
     "ReActLoopContext",
     # ReAct Loop
     "ReActLoopPort",
-    "SkillExecutionRequest",
-    "SkillMatchRequest",
-    "SkillMatchResult",
-    # Skill Orchestrator
-    "SkillOrchestratorPort",
     "StreamChunk",
     "SubAgentMatchRequest",
     "SubAgentMatchResult",

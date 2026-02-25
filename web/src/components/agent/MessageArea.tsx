@@ -37,6 +37,7 @@ import {
   Children,
   createContext,
   useMemo,
+  isValidElement,
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -50,7 +51,7 @@ import { useConversationsStore } from '../../stores/agent/conversationsStore';
 import { useAgentV3Store } from '../../stores/agentV3';
 
 import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
-import { useMarkdownPlugins } from './chat/markdownPlugins';
+import { useMarkdownPlugins, safeMarkdownComponents } from './chat/markdownPlugins';
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ThinkingBlock } from './chat/ThinkingBlock';
 import { MessageBubble } from './MessageBubble';
@@ -61,7 +62,7 @@ import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
 import type { TimelineStep } from './timeline/ExecutionTimeline';
 import type { SubAgentGroup } from './timeline/SubAgentTimeline';
-import type { TimelineEvent } from '../../types/agent';
+import type { TimelineEvent, ObserveEvent } from '../../types/agent';
 
 // Import and re-export types from separate file
 export type {
@@ -106,17 +107,18 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   ]);
 
   // Build observe lookup by execution_id
-  const observeByExecId = new Map<string, TimelineEvent>();
+  const observeByExecId = new Map<string, ObserveEvent>();
   // Fallback: build observe lookup by toolName for events without execution_id
-  const observeByToolName = new Map<string, TimelineEvent[]>();
+  const observeByToolName = new Map<string, ObserveEvent[]>();
   for (const ev of timeline) {
     if (ev.type === 'observe') {
-      if ((ev as any).execution_id) {
-        observeByExecId.set((ev as any).execution_id, ev);
+      const obsEv = ev;
+      if (obsEv.execution_id) {
+        observeByExecId.set(obsEv.execution_id, obsEv);
       }
-      const name = (ev as any).toolName || 'unknown';
+      const name = obsEv.toolName || 'unknown';
       const list = observeByToolName.get(name) || [];
-      list.push(ev);
+      list.push(obsEv);
       observeByToolName.set(name, list);
     }
   }
@@ -132,7 +134,8 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   };
 
   for (let i = 0; i < timeline.length; i++) {
-    const event = timeline[i]!;
+    const event = timeline[i];
+    if (!event) continue;
 
     // SubAgent event grouping
     if (SUBAGENT_EVENT_TYPES.has(event.type)) {
@@ -146,31 +149,30 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
     if (event.type === 'act') {
       if (currentSteps.length === 0) groupStartIndex = i;
 
-      const act = event as any;
+      const act = event;
       // Priority 1: match by execution_id
-      let obs = act.execution_id ? observeByExecId.get(act.execution_id) : undefined;
+      let obs: ObserveEvent | undefined = act.execution_id ? observeByExecId.get(act.execution_id) : undefined;
       // Priority 2: fallback to toolName matching
       if (!obs) {
         const candidates = observeByToolName.get(act.toolName) || [];
         for (const cand of candidates) {
-          if (!consumedObserves.has(cand.id) && (cand as any).timestamp >= act.timestamp) {
+          if (!consumedObserves.has(cand.id) && cand.timestamp >= act.timestamp) {
             obs = cand;
             consumedObserves.add(cand.id);
             break;
           }
         }
       }
-      const o = obs as any;
 
       const step: TimelineStep = {
-        id: act.execution_id || act.id || `step-${i}`,
+        id: act.execution_id || act.id || `step-${String(i)}`,
         toolName: act.toolName || 'unknown',
-        status: o ? (o.isError ? 'error' : 'success') : 'running',
+        status: obs ? (obs.isError ? 'error' : 'success') : 'running',
         input: act.toolInput,
-        output: o?.toolOutput,
-        isError: o?.isError,
-        duration: o && act.timestamp && o.timestamp ? o.timestamp - act.timestamp : undefined,
-        mcpUiMetadata: o?.mcpUiMetadata,
+        output: obs?.toolOutput,
+        isError: obs?.isError,
+        duration: obs && act.timestamp && obs.timestamp ? obs.timestamp - act.timestamp : undefined,
+        mcpUiMetadata: obs?.mcpUiMetadata,
       };
       currentSteps.push(step);
     } else if (event.type === 'observe') {
@@ -213,11 +215,13 @@ function buildSubAgentGroup(
 
   // Collect consecutive SubAgent events
   for (let i = startIdx; i < timeline.length; i++) {
-    if (SUBAGENT_EVENT_TYPES.has(timeline[i]!.type)) {
-      events.push(timeline[i]!);
+    const item = timeline[i];
+    if (!item) break;
+    if (SUBAGENT_EVENT_TYPES.has(item.type)) {
+      events.push(item);
       endIndex = i;
       // Stop after terminal events
-      const t = timeline[i]!.type;
+      const t = item.type;
       if (
         t === 'subagent_completed' ||
         t === 'subagent_failed' ||
@@ -244,65 +248,81 @@ function buildSubAgentGroup(
   };
 
   for (const ev of events) {
-    const d = ev as any;
     switch (ev.type) {
-      case 'subagent_routed':
-        group.subagentId = d.subagentId || d.subagent_id || '';
-        group.subagentName = d.subagentName || d.subagent_name || '';
+      case 'subagent_routed': {
+        const d = ev;
+        group.subagentId = d.subagentId || '';
+        group.subagentName = d.subagentName || '';
         group.confidence = d.confidence;
         group.reason = d.reason;
         break;
-      case 'subagent_started':
-        group.subagentId = group.subagentId || d.subagentId || d.subagent_id || '';
-        group.subagentName = group.subagentName || d.subagentName || d.subagent_name || '';
+      }
+      case 'subagent_started': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
         group.task = d.task;
         break;
-      case 'subagent_completed':
+      }
+      case 'subagent_completed': {
+        const d = ev;
         group.status = 'success';
         group.summary = d.summary;
-        group.tokensUsed = d.tokensUsed || d.tokens_used;
-        group.executionTimeMs = d.executionTimeMs || d.execution_time_ms;
+        group.tokensUsed = d.tokensUsed;
+        group.executionTimeMs = d.executionTimeMs;
         break;
-      case 'subagent_failed':
+      }
+      case 'subagent_failed': {
+        const d = ev;
         group.status = 'error';
         group.error = d.error;
         break;
-      case 'parallel_started':
+      }
+      case 'parallel_started': {
+        const d = ev;
         group.mode = 'parallel';
         group.parallelInfo = {
-          taskCount: d.taskCount || d.task_count || 0,
-          subtasks: d.subtasks || [],
+          taskCount: d.taskCount,
+          subtasks: d.subtasks,
         };
         break;
-      case 'parallel_completed':
+      }
+      case 'parallel_completed': {
+        const d = ev;
         group.status = 'success';
         if (group.parallelInfo) {
-          group.parallelInfo.results = d.results || [];
-          group.parallelInfo.totalTimeMs = d.totalTimeMs || d.total_time_ms;
+          group.parallelInfo.results = d.results;
+          group.parallelInfo.totalTimeMs = d.totalTimeMs;
         }
-        group.executionTimeMs = d.totalTimeMs || d.total_time_ms;
+        group.executionTimeMs = d.totalTimeMs;
         break;
-      case 'chain_started':
+      }
+      case 'chain_started': {
+        const d = ev;
         group.mode = 'chain';
         group.chainInfo = {
-          stepCount: d.stepCount || d.step_count || 0,
-          chainName: d.chainName || d.chain_name || '',
+          stepCount: d.stepCount || 0,
+          chainName: d.chainName || '',
           steps: [],
         };
         break;
-      case 'chain_step_started':
+      }
+      case 'chain_step_started': {
+        const d = ev;
         if (group.chainInfo) {
           group.chainInfo.steps.push({
-            index: d.stepIndex ?? d.step_index ?? 0,
-            name: d.stepName || d.step_name || '',
-            subagentName: d.subagentName || d.subagent_name || '',
+            index: d.stepIndex,
+            name: d.stepName || '',
+            subagentName: d.subagentName || '',
             status: 'running',
           });
         }
         break;
-      case 'chain_step_completed':
+      }
+      case 'chain_step_completed': {
+        const d = ev;
         if (group.chainInfo) {
-          const idx = d.stepIndex ?? d.step_index ?? 0;
+          const idx = d.stepIndex;
           const step = group.chainInfo.steps.find((s) => s.index === idx);
           if (step) {
             step.summary = d.summary;
@@ -311,18 +331,23 @@ function buildSubAgentGroup(
           }
         }
         break;
-      case 'chain_completed':
+      }
+      case 'chain_completed': {
+        const d = ev;
         group.status = d.success !== false ? 'success' : 'error';
         if (group.chainInfo) {
-          group.chainInfo.totalTimeMs = d.totalTimeMs || d.total_time_ms;
+          group.chainInfo.totalTimeMs = d.totalTimeMs;
         }
-        group.executionTimeMs = d.totalTimeMs || d.total_time_ms;
+        group.executionTimeMs = d.totalTimeMs;
         break;
-      case 'background_launched':
+      }
+      case 'background_launched': {
+        const d = ev;
         group.status = 'background';
-        group.subagentName = group.subagentName || d.subagentName || d.subagent_name || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
         group.task = d.task;
         break;
+      }
     }
   }
 
@@ -349,7 +374,7 @@ function estimateGroupedItemHeight(item: GroupedItem): number {
     case 'user_message':
       return 100;
     case 'assistant_message': {
-      const content = ('content' in event ? (event as any).content : '') || '';
+      const content = event.content || '';
       return estimateMarkdownHeight(content);
     }
     default:
@@ -510,11 +535,7 @@ const MessageAreaContext = createContext<_MessageAreaContextValue | null>(null);
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useMessageArea = () => {
-  const context = MessageAreaContext;
-  if (!context) {
-    throw new Error('useMessageArea must be used within MessageArea');
-  }
-  return context;
+  return MessageAreaContext;
 };
 
 // ========================================
@@ -550,21 +571,24 @@ function StreamingContentMarker(_props: _MessageAreaStreamingContentProps) {
   return null;
 }
 
+// Helper type for marker components with symbol tags and displayName
+type _SymbolTagged = Record<symbol, boolean> & { displayName?: string };
+
 // Attach symbols
-(LoadingMarker as any)[LOADING_SYMBOL] = true;
-(EmptyMarker as any)[EMPTY_SYMBOL] = true;
-(ScrollIndicatorMarker as any)[SCROLL_INDICATOR_SYMBOL] = true;
-(ScrollButtonMarker as any)[SCROLL_BUTTON_SYMBOL] = true;
-(ContentMarker as any)[CONTENT_SYMBOL] = true;
-(StreamingContentMarker as any)[STREAMING_CONTENT_SYMBOL] = true;
+(LoadingMarker as unknown as _SymbolTagged)[LOADING_SYMBOL] = true;
+(EmptyMarker as unknown as _SymbolTagged)[EMPTY_SYMBOL] = true;
+(ScrollIndicatorMarker as unknown as _SymbolTagged)[SCROLL_INDICATOR_SYMBOL] = true;
+(ScrollButtonMarker as unknown as _SymbolTagged)[SCROLL_BUTTON_SYMBOL] = true;
+(ContentMarker as unknown as _SymbolTagged)[CONTENT_SYMBOL] = true;
+(StreamingContentMarker as unknown as _SymbolTagged)[STREAMING_CONTENT_SYMBOL] = true;
 
 // Set display names for testing
-(LoadingMarker as any).displayName = 'MessageAreaLoading';
-(EmptyMarker as any).displayName = 'MessageAreaEmpty';
-(ScrollIndicatorMarker as any).displayName = 'MessageAreaScrollIndicator';
-(ScrollButtonMarker as any).displayName = 'MessageAreaScrollButton';
-(ContentMarker as any).displayName = 'MessageAreaContent';
-(StreamingContentMarker as any).displayName = 'MessageAreaStreamingContent';
+(LoadingMarker as unknown as _SymbolTagged).displayName = 'MessageAreaLoading';
+(EmptyMarker as unknown as _SymbolTagged).displayName = 'MessageAreaEmpty';
+(ScrollIndicatorMarker as unknown as _SymbolTagged).displayName = 'MessageAreaScrollIndicator';
+(ScrollButtonMarker as unknown as _SymbolTagged).displayName = 'MessageAreaScrollButton';
+(ContentMarker as unknown as _SymbolTagged).displayName = 'MessageAreaContent';
+(StreamingContentMarker as unknown as _SymbolTagged).displayName = 'MessageAreaStreamingContent';
 
 // ========================================
 // Actual Sub-Component Implementations
@@ -754,18 +778,20 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Parse children to detect sub-components
     const childrenArray = Children.toArray(children);
-    const loadingChild = childrenArray.find((child: any) => child?.type?.[LOADING_SYMBOL]) as any;
-    const emptyChild = childrenArray.find((child: any) => child?.type?.[EMPTY_SYMBOL]) as any;
-    const scrollIndicatorChild = childrenArray.find(
-      (child: any) => child?.type?.[SCROLL_INDICATOR_SYMBOL]
-    ) as any;
-    const scrollButtonChild = childrenArray.find(
-      (child: any) => child?.type?.[SCROLL_BUTTON_SYMBOL]
-    ) as any;
-    const contentChild = childrenArray.find((child: any) => child?.type?.[CONTENT_SYMBOL]) as any;
-    const streamingContentChild = childrenArray.find(
-      (child: any) => child?.type?.[STREAMING_CONTENT_SYMBOL]
-    ) as any;
+    // Helper to find a child with a given symbol marker
+    const findMarkerChild = <P,>(sym: symbol): React.ReactElement<P> | undefined =>
+      childrenArray.find(
+        (child): child is React.ReactElement<P> =>
+          isValidElement(child) &&
+          typeof child.type === 'function' &&
+          (child.type as unknown as _SymbolTagged)[sym] === true
+      );
+    const loadingChild = findMarkerChild<_MessageAreaLoadingProps>(LOADING_SYMBOL);
+    const emptyChild = findMarkerChild<_MessageAreaEmptyProps>(EMPTY_SYMBOL);
+    const scrollIndicatorChild = findMarkerChild<_MessageAreaScrollIndicatorProps>(SCROLL_INDICATOR_SYMBOL);
+    const scrollButtonChild = findMarkerChild<_MessageAreaScrollButtonProps>(SCROLL_BUTTON_SYMBOL);
+    const contentChild = findMarkerChild<_MessageAreaContentProps>(CONTENT_SYMBOL);
+    const streamingContentChild = findMarkerChild<_MessageAreaStreamingContentProps>(STREAMING_CONTENT_SYMBOL);
 
     // Determine if using compound mode
     const hasSubComponents =
@@ -1059,11 +1085,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Virtualizer setup
     const estimateSize = useCallback(
-      (index: number) => estimateGroupedItemHeight(groupedItems[index]!),
+      (index: number) => { const item = groupedItems[index]; return item ? estimateGroupedItemHeight(item) : 80; },
       [groupedItems]
     );
 
- 
+
     const virtualizer = useVirtualizer({
       count: groupedItems.length,
       getScrollElement: () => containerRef.current,
@@ -1167,7 +1193,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           setFocusedMsgIndex(nextIndex);
 
           // Scroll to the focused message
-          const el = containerRef.current?.querySelector(`[data-msg-index="${nextIndex}"]`);
+          const el = containerRef.current?.querySelector(`[data-msg-index="${String(nextIndex)}"]`);
           if (el) {
             el.scrollIntoView({ block: 'center', behavior: 'smooth' });
           }
@@ -1216,7 +1242,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
                 <LoadingOutlined className="text-primary mr-2" spin />
                 <span className="text-xs text-slate-500">
-                  {scrollIndicatorChild?.props?.label || 'Loading...'}
+                  {scrollIndicatorChild?.props.label || 'Loading...'}
                 </span>
               </div>
             </div>
@@ -1241,8 +1267,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 <div className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
                   {pinnedEvents.map((event) => {
                     const content =
-                      ('content' in event ? (event as any).content : '') ||
-                      ('fullText' in event ? (event as any).fullText : '');
+                      ('content' in event ? (event as { content: string }).content : '') ||
+                      ('fullText' in event ? (event as { fullText: string }).fullText : '');
                     return (
                       <div
                         key={`pinned-${event.id}`}
@@ -1303,7 +1329,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   if (item.kind === 'timeline') {
                     return (
                       <div
-                        key={`timeline-group-${item.startIndex}`}
+                        key={`timeline-group-${String(item.startIndex)}`}
                         data-index={virtualRow.index}
                         data-msg-index={virtualRow.index}
                         ref={virtualizer.measureElement}
@@ -1312,7 +1338,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           top: 0,
                           left: 0,
                           width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
+                          transform: `translateY(${String(virtualRow.start)}px)`,
                         }}
                       >
                         <div className="flex items-start gap-3 mb-1.5">
@@ -1333,7 +1359,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   if (item.kind === 'subagent') {
                     return (
                       <div
-                        key={`subagent-group-${item.startIndex}`}
+                        key={`subagent-group-${String(item.startIndex)}`}
                         data-index={virtualRow.index}
                         data-msg-index={virtualRow.index}
                         ref={virtualizer.measureElement}
@@ -1342,7 +1368,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           top: 0,
                           left: 0,
                           width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
+                          transform: `translateY(${String(virtualRow.start)}px)`,
                         }}
                       >
                         <div className="flex items-start gap-3 mb-1.5">
@@ -1366,7 +1392,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   if (event.type === 'memory_recalled' || event.type === 'memory_captured') {
                     return (
                       <div
-                        key={event.id || `event-${index}`}
+                        key={event.id || `event-${String(index)}`}
                         data-index={virtualRow.index}
                         ref={virtualizer.measureElement}
                         style={{
@@ -1374,16 +1400,16 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           top: 0,
                           left: 0,
                           width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
+                          transform: `translateY(${String(virtualRow.start)}px)`,
                         }}
                       >
                         <div className="flex items-start gap-3 mb-1.5">
                           <div className="w-8 shrink-0" />
                           <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                             {event.type === 'memory_recalled' ? (
-                              <MemoryRecalledStep event={event as any} />
+                              <MemoryRecalledStep event={event} />
                             ) : (
-                              <MemoryCapturedStep event={event as any} />
+                              <MemoryCapturedStep event={event} />
                             )}
                           </div>
                         </div>
@@ -1394,7 +1420,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   const isFocused = focusedMsgIndex === virtualRow.index;
                   return (
                     <div
-                      key={event.id || `event-${index}`}
+                      key={event.id || `event-${String(index)}`}
                       data-index={virtualRow.index}
                       data-msg-index={virtualRow.index}
                       data-msg-id={event.id}
@@ -1404,7 +1430,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         top: 0,
                         left: 0,
                         width: '100%',
-                        transform: `translateY(${virtualRow.start}px)`,
+                          transform: `translateY(${String(virtualRow.start)}px)`,
                       }}
                       className={
                         isFocused
@@ -1437,7 +1463,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 {includeStreamingContent && (isThinkingStreaming || streamingThought) && (
                   <ThinkingBlock
                     content={streamingThought || ''}
-                    isStreaming={!!isThinkingStreaming}
+                    isStreaming={isThinkingStreaming}
                   />
                 )}
 
@@ -1474,6 +1500,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                             <ReactMarkdown
                               remarkPlugins={remarkPlugins}
                               rehypePlugins={rehypePlugins}
+                              components={safeMarkdownComponents}
                             >
                               {streamingContent}
                             </ReactMarkdown>
@@ -1491,7 +1518,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             <button
               onClick={contextValue.scroll.scrollToBottom}
               className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-all animate-fade-in"
-              title={scrollButtonChild?.props?.title || 'Scroll to bottom'}
+              title={scrollButtonChild?.props.title || 'Scroll to bottom'}
               aria-label="Scroll to bottom"
               data-testid="scroll-button"
             >
@@ -1520,7 +1547,7 @@ MessageAreaMemo.displayName = 'MessageArea';
 // Create compound component object
 const MessageAreaCompound = MessageAreaMemo as unknown as _MessageAreaCompound;
 MessageAreaCompound.Provider = ({ children }: { children: React.ReactNode }) => (
-  <MessageAreaContext.Provider value={null as any}>{children}</MessageAreaContext.Provider>
+  <MessageAreaContext.Provider value={null}>{children}</MessageAreaContext.Provider>
 );
 MessageAreaCompound.Loading = LoadingMarker;
 MessageAreaCompound.Empty = EmptyMarker;

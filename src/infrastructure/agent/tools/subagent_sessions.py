@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, override
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -118,7 +118,7 @@ def _build_lifecycle_metadata(
 class SessionsSpawnTool(AgentTool):
     """Spawn a SubAgent run as a non-blocking session."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         subagent_names: list[str],
         subagent_descriptions: dict[str, str],
@@ -164,6 +164,7 @@ class SessionsSpawnTool(AgentTool):
         self._pending_events.clear()
         return events
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -295,6 +296,7 @@ class SessionsSpawnTool(AgentTool):
             )
         return None
 
+    @override
     async def execute(
         self,
         subagent_name: str = "",
@@ -538,6 +540,7 @@ class SessionsListTool(AgentTool):
             else "tree"
         )
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -570,6 +573,7 @@ class SessionsListTool(AgentTool):
             "required": [],
         }
 
+    @override
     async def execute(
         self,
         status: str = "active",
@@ -638,6 +642,7 @@ class SessionsHistoryTool(AgentTool):
             else "tree"
         )
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -657,6 +662,7 @@ class SessionsHistoryTool(AgentTool):
             "required": [],
         }
 
+    @override
     async def execute(self, visibility: str = "", limit: int = 50, **kwargs: Any) -> str:
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
@@ -690,6 +696,7 @@ class SessionsTimelineTool(AgentTool):
         self._run_registry = run_registry
         self._conversation_id = conversation_id
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -709,6 +716,7 @@ class SessionsTimelineTool(AgentTool):
             "required": ["run_id"],
         }
 
+    @override
     async def execute(
         self,
         run_id: str = "",
@@ -862,6 +870,7 @@ class SessionsOverviewTool(AgentTool):
         )
         self._observability_stats_provider = observability_stats_provider
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -875,6 +884,7 @@ class SessionsOverviewTool(AgentTool):
             "required": [],
         }
 
+    @override
     async def execute(self, visibility: str = "", **kwargs: Any) -> str:
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
@@ -1089,6 +1099,7 @@ class SessionsWaitTool(AgentTool):
         self._run_registry = run_registry
         self._conversation_id = conversation_id
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -1110,6 +1121,7 @@ class SessionsWaitTool(AgentTool):
             "required": ["run_id"],
         }
 
+    @override
     async def execute(
         self,
         run_id: str = "",
@@ -1185,6 +1197,7 @@ class SessionsAckTool(AgentTool):
         self._conversation_id = conversation_id
         self._requester_session_key = (requester_session_key or conversation_id).strip()
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -1199,6 +1212,7 @@ class SessionsAckTool(AgentTool):
             "required": ["run_id"],
         }
 
+    @override
     async def execute(self, run_id: str = "", note: str = "", **kwargs: Any) -> str:
         if not run_id:
             return "Error: run_id is required"
@@ -1296,6 +1310,7 @@ class SessionsSendTool(AgentTool):
         self._pending_events.clear()
         return events
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -1312,6 +1327,7 @@ class SessionsSendTool(AgentTool):
             "required": ["run_id", "task"],
         }
 
+    @override
     async def execute(
         self,
         run_id: str = "",
@@ -1326,7 +1342,10 @@ class SessionsSendTool(AgentTool):
         parent_run = self._run_registry.get_run(self._conversation_id, run_id)
         if not parent_run:
             return f"Error: run_id '{run_id}' not found"
-        capacity_error = self._check_send_capacity(lineage_root_run_id)  # type: ignore[name-defined]
+        lineage_root_run_id = str(
+            parent_run.metadata.get("lineage_root_run_id") or run_id
+        ).strip()
+        capacity_error = self._check_send_capacity(lineage_root_run_id)
         if capacity_error:
             return capacity_error
         try:
@@ -1360,7 +1379,7 @@ class SessionsSendTool(AgentTool):
                 session_mode="send",
                 requester_session_key=self._requester_session_key,
                 parent_run_id=run_id,
-                lineage_root_run_id=lineage_root_run_id,  # type: ignore[name-defined]
+                lineage_root_run_id=lineage_root_run_id,
                 delegation_depth=self._delegation_depth,
                 extra={
                     **follow_up_options,
@@ -1369,7 +1388,7 @@ class SessionsSendTool(AgentTool):
             ),
             requester_session_key=self._requester_session_key,
             parent_run_id=run_id,
-            lineage_root_run_id=lineage_root_run_id,  # type: ignore[name-defined]
+            lineage_root_run_id=lineage_root_run_id,
         )
         running = self._run_registry.mark_running(self._conversation_id, child_run.run_id)
         if running:
@@ -1556,7 +1575,7 @@ class SubAgentsControlTool(AgentTool):
 
     _ACTIVE_STATUSES: ClassVar[set[SubAgentRunStatus]] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
@@ -1604,6 +1623,7 @@ class SubAgentsControlTool(AgentTool):
         self._pending_events.clear()
         return events
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -1650,6 +1670,7 @@ class SubAgentsControlTool(AgentTool):
             "required": ["action"],
         }
 
+    @override
     async def execute(
         self,
         action: str = "list",

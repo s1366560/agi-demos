@@ -566,12 +566,12 @@ class ExecutionCheckpointRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, checkpoint: ExecutionCheckpoint) -> ExecutionCheckpoint:
+    async def save(self, domain_entity: ExecutionCheckpoint) -> ExecutionCheckpoint:
         """
         Save an execution checkpoint.
 
         Args:
-            checkpoint: The checkpoint to save
+            domain_entity: The checkpoint to save
         """
 
     @abstractmethod

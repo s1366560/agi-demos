@@ -9,7 +9,7 @@ Refactored to use SandboxOrchestrator for unified sandbox service management.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -67,6 +67,7 @@ class TerminalTool(AgentTool):
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         """
         Get the parameters schema for LLM function calling.
@@ -91,6 +92,7 @@ class TerminalTool(AgentTool):
             "required": ["action"],
         }
 
+    @override
     def validate_args(self, **kwargs: Any) -> bool:
         """
         Validate tool arguments before execution.
@@ -113,6 +115,7 @@ class TerminalTool(AgentTool):
 
         return True
 
+    @override
     async def execute(self, **kwargs: Any) -> str:
         """
         Execute the terminal tool with the given arguments.
@@ -293,7 +296,13 @@ class TerminalTool(AgentTool):
         content_list = result.get("content", [])
         if not content_list:
             return success_message
-        return self._parse_legacy_text(content_list, success_message)
+        # Extract text from first content item
+        text_content = (
+            content_list[0].get("text", "")
+            if isinstance(content_list[0], dict)
+            else str(content_list[0])
+        )
+        return self._parse_legacy_text(text_content, success_message)
 
     @staticmethod
     def _extract_error_content(result: dict[str, Any], fallback: str) -> str:

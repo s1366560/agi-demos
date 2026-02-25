@@ -9,6 +9,7 @@ This is a migrated version that:
 """
 
 import logging
+from typing import override
 
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,18 +48,21 @@ class SqlExecutionCheckpointRepository(
 
     # === Interface implementation (checkpoint-specific queries) ===
 
-    async def save(self, checkpoint: ExecutionCheckpoint) -> ExecutionCheckpoint:
+    @override
+    async def save(self, domain_entity: ExecutionCheckpoint) -> ExecutionCheckpoint:
         """Save an execution checkpoint."""
-        db_checkpoint = self._to_db(checkpoint)
+        db_checkpoint = self._to_db(domain_entity)
         self._session.add(db_checkpoint)
         await self._session.flush()
-        return checkpoint
+        return domain_entity
 
+    @override
     async def save_and_commit(self, checkpoint: ExecutionCheckpoint) -> None:
         """Save a checkpoint and commit immediately."""
         await self.save(checkpoint)
         await self._session.commit()
 
+    @override
     async def get_latest(
         self,
         conversation_id: str,
@@ -78,6 +82,7 @@ class SqlExecutionCheckpointRepository(
         db_checkpoint = result.scalar_one_or_none()
         return self._to_domain(db_checkpoint) if db_checkpoint else None
 
+    @override
     async def get_by_type(
         self,
         conversation_id: str,
@@ -97,9 +102,10 @@ class SqlExecutionCheckpointRepository(
         db_checkpoints = result.scalars().all()
         return [d for c in db_checkpoints if (d := self._to_domain(c)) is not None]
 
+    @override
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all checkpoints for a conversation."""
-        await self._session.execute(
+        _ = await self._session.execute(
             delete(DBExecutionCheckpoint).where(
                 DBExecutionCheckpoint.conversation_id == conversation_id
             )
@@ -108,29 +114,31 @@ class SqlExecutionCheckpointRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_checkpoint: DBExecutionCheckpoint | None) -> ExecutionCheckpoint | None:
+    @override
+    def _to_domain(self, db_model: DBExecutionCheckpoint | None) -> ExecutionCheckpoint | None:
         """
         Convert database model to domain model.
 
         Args:
-            db_checkpoint: Database model instance or None
+            db_model: Database model instance or None
 
         Returns:
             Domain model instance or None
         """
-        if db_checkpoint is None:
+        if db_model is None:
             return None
 
         return ExecutionCheckpoint(
-            id=db_checkpoint.id,
-            conversation_id=db_checkpoint.conversation_id,
-            message_id=db_checkpoint.message_id or "",
-            checkpoint_type=db_checkpoint.checkpoint_type,
-            execution_state=db_checkpoint.execution_state or {},
-            step_number=db_checkpoint.step_number,
-            created_at=db_checkpoint.created_at,
+            id=db_model.id,
+            conversation_id=db_model.conversation_id,
+            message_id=db_model.message_id or "",
+            checkpoint_type=db_model.checkpoint_type,
+            execution_state=db_model.execution_state or {},
+            step_number=db_model.step_number,
+            created_at=db_model.created_at,
         )
 
+    @override
     def _to_db(self, domain_entity: ExecutionCheckpoint) -> DBExecutionCheckpoint:
         """
         Convert domain entity to database model.

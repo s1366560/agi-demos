@@ -23,7 +23,7 @@ class _MockTool:
 
 @pytest.mark.unit
 def test_decide_execution_path_respects_forced_subagent() -> None:
-    """Forced subagent instruction should route to SUBAGENT path."""
+    """Forced subagent instruction should route to REACT_LOOP with forced_subagent metadata."""
     agent = ReActAgent(model="test-model", tools={"read": _MockTool("read")})
     decision = agent._decide_execution_path(
         message="help me",
@@ -31,9 +31,9 @@ def test_decide_execution_path_respects_forced_subagent() -> None:
         forced_subagent_name="coder",
     )
 
-    assert decision.path == ExecutionPath.SUBAGENT
+    assert decision.path == ExecutionPath.REACT_LOOP
     assert decision.target == "coder"
-    assert decision.metadata.get("domain_lane") == "subagent"
+    assert decision.metadata.get("forced_subagent") == "coder"
     assert decision.metadata.get("router_fabric_version") == "lane-v1"
 
 
@@ -84,19 +84,40 @@ def test_selection_context_includes_policy_layers_and_agent_policy() -> None:
 
 
 @pytest.mark.unit
-def test_router_mode_threshold_skips_subagent_routing_when_below_threshold() -> None:
-    """Subagent routing should be bypassed when tool count is below router threshold."""
+def test_no_subagents_routes_to_react_loop() -> None:
+    """Without subagents, _decide_execution_path should return REACT_LOOP."""
     tools = {"read": _MockTool("read"), "write": _MockTool("write")}
     agent = ReActAgent(
         model="test-model",
         tools=tools,
         enable_subagent_as_tool=False,
-        router_mode_tool_count_threshold=10,
     )
-    agent._match_subagent = lambda _query: SimpleNamespace(  # type: ignore[assignment]
-        subagent=SimpleNamespace(name="coder"),
-        confidence=0.9,
-        match_reason="forced test match",
+
+    decision = agent._decide_execution_path(
+        message="do something",
+        conversation_context=[],
+    )
+
+    assert decision.path == ExecutionPath.REACT_LOOP
+    assert decision.metadata.get("router_fabric_version") == "lane-v1"
+
+
+@pytest.mark.unit
+def test_subagents_with_tool_mode_disabled_routes_to_react_loop() -> None:
+    """With subagents and enable_subagent_as_tool=False, routing returns REACT_LOOP."""
+    tools = {f"tool_{idx}": _MockTool(f"tool_{idx}") for idx in range(4)}
+    mock_subagent = SimpleNamespace(
+        id="sa-1", name="coder", display_name="Coder", enabled=True,
+        model=None, temperature=0.7, max_tokens=4096, max_iterations=20,
+        system_prompt="You code.", allowed_tools=["*"],
+        allowed_skills=[], allowed_mcp_servers=[],
+        trigger=SimpleNamespace(keywords=["code"]),
+    )
+    agent = ReActAgent(
+        model="test-model",
+        tools=tools,
+        subagents=[mock_subagent],
+        enable_subagent_as_tool=False,
     )
 
     decision = agent._decide_execution_path(
@@ -105,34 +126,6 @@ def test_router_mode_threshold_skips_subagent_routing_when_below_threshold() -> 
     )
 
     assert decision.path == ExecutionPath.REACT_LOOP
-    assert decision.metadata.get("router_mode_enabled") is False
-    assert decision.metadata.get("router_fabric_version") == "lane-v1"
-
-
-@pytest.mark.unit
-def test_router_mode_threshold_enables_subagent_routing_when_above_threshold() -> None:
-    """Subagent routing should run when tool count exceeds router threshold."""
-    tools = {f"tool_{idx}": _MockTool(f"tool_{idx}") for idx in range(4)}
-    agent = ReActAgent(
-        model="test-model",
-        tools=tools,
-        enable_subagent_as_tool=False,
-        router_mode_tool_count_threshold=2,
-    )
-    agent._match_subagent = lambda _query: SimpleNamespace(  # type: ignore[assignment]
-        subagent=SimpleNamespace(name="coder"),
-        confidence=0.9,
-        match_reason="forced test match",
-    )
-
-    decision = agent._decide_execution_path(
-        message="coder function",
-        conversation_context=[],
-    )
-
-    assert decision.path == ExecutionPath.SUBAGENT
-    assert decision.target == "coder"
-    assert decision.metadata.get("router_mode_enabled") is True
     assert decision.metadata.get("router_fabric_version") == "lane-v1"
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.infrastructure.agent.processor.processor import (
+from src.infrastructure.agent.processor import (
     GoalCheckResult,
     ProcessorConfig,
     SessionProcessor,
@@ -26,7 +26,7 @@ class TestProcessorDictEvents:
             return GoalCheckResult(achieved=True, source="test")
 
         processor._process_step = _mock_process_step  # type: ignore[method-assign]
-        processor._evaluate_goal_completion = _mock_goal_completion  # type: ignore[method-assign]
+        processor._goal_evaluator.evaluate_goal_completion = _mock_goal_completion  # type: ignore[method-assign]
 
         events = []
         async for event in processor.process(

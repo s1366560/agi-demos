@@ -20,7 +20,7 @@ class TestUnifiedLLMClient:
     def mock_litellm_client(self):
         """Create a mock LiteLLMClient."""
         client = MagicMock()
-        client._generate_response = AsyncMock(return_value={"content": "Test response"})
+        client.generate = AsyncMock(return_value={"content": "Test response"})
         return client
 
     @pytest.fixture
@@ -37,7 +37,7 @@ class TestUnifiedLLMClient:
         result = await adapter.ainvoke("Hello")
         assert isinstance(result, ChatResponse)
         assert result.content == "Test response"
-        mock_litellm_client._generate_response.assert_called_once()
+        mock_litellm_client.generate.assert_called_once()
 
     @pytest.mark.unit
     async def test_ainvoke_with_single_message(self, adapter, mock_litellm_client):
@@ -46,7 +46,7 @@ class TestUnifiedLLMClient:
         result = await adapter.ainvoke(messages)
         assert isinstance(result, ChatResponse)
         assert result.content == "Test response"
-        mock_litellm_client._generate_response.assert_called_once()
+        mock_litellm_client.generate.assert_called_once()
 
     @pytest.mark.unit
     async def test_ainvoke_with_system_and_user(self, adapter, mock_litellm_client):
@@ -59,7 +59,7 @@ class TestUnifiedLLMClient:
         assert result.content == "Test response"
 
         # Verify messages were passed correctly
-        call_args = mock_litellm_client._generate_response.call_args
+        call_args = mock_litellm_client.generate.call_args
         passed_messages = call_args.kwargs.get("messages") or call_args.args[0]
 
         assert len(passed_messages) == 2
@@ -81,7 +81,7 @@ class TestUnifiedLLMClient:
         assert result.content == "Test response"
 
         # Verify all messages passed correctly
-        call_args = mock_litellm_client._generate_response.call_args
+        call_args = mock_litellm_client.generate.call_args
         passed_messages = call_args.kwargs.get("messages") or call_args.args[0]
 
         assert len(passed_messages) == 4
@@ -100,7 +100,7 @@ class TestUnifiedLLMClient:
         assert result.content == "Test response"
 
         # Verify messages were constructed correctly
-        call_args = mock_litellm_client._generate_response.call_args
+        call_args = mock_litellm_client.generate.call_args
         passed_messages = call_args.kwargs.get("messages") or call_args.args[0]
 
         assert len(passed_messages) == 2
@@ -122,7 +122,7 @@ class TestUnifiedLLMClient:
     @pytest.mark.unit
     async def test_ainvoke_handles_dict_response(self, adapter, mock_litellm_client):
         """Test ainvoke handles dict response from LiteLLM."""
-        mock_litellm_client._generate_response = AsyncMock(
+        mock_litellm_client.generate = AsyncMock(
             return_value={"content": "Dict response", "usage": {"tokens": 100}}
         )
         result = await adapter.ainvoke("Test")
@@ -131,14 +131,14 @@ class TestUnifiedLLMClient:
     @pytest.mark.unit
     async def test_ainvoke_handles_string_response(self, adapter, mock_litellm_client):
         """Test ainvoke handles string response from LiteLLM."""
-        mock_litellm_client._generate_response = AsyncMock(return_value="String response")
+        mock_litellm_client.generate = AsyncMock(return_value="String response")
         result = await adapter.ainvoke("Test")
         assert result.content == "String response"
 
     @pytest.mark.unit
     async def test_ainvoke_propagates_exceptions(self, adapter, mock_litellm_client):
         """Test ainvoke propagates exceptions from LiteLLM client."""
-        mock_litellm_client._generate_response = AsyncMock(side_effect=Exception("API Error"))
+        mock_litellm_client.generate = AsyncMock(side_effect=Exception("API Error"))
         with pytest.raises(Exception) as exc_info:
             await adapter.ainvoke("Test")
         assert "API Error" in str(exc_info.value)
@@ -146,7 +146,7 @@ class TestUnifiedLLMClient:
     @pytest.mark.unit
     async def test_ainvoke_with_empty_content(self, adapter, mock_litellm_client):
         """Test ainvoke handles empty content response."""
-        mock_litellm_client._generate_response = AsyncMock(return_value={"content": ""})
+        mock_litellm_client.generate = AsyncMock(return_value={"content": ""})
         result = await adapter.ainvoke("Test")
         assert result.content == ""
 

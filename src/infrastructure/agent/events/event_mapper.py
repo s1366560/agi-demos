@@ -5,10 +5,17 @@ Handles conversion of AgentDomainEvent to SSE format for client streaming.
 REFACTORED: This module now uses AgentEventType from src.domain.events.types
 as the single source of truth. The legacy EventType is provided as an alias
 for backward compatibility.
+
+DEPRECATED (Wave 6b): EventMapper, EventBus, and get_event_bus() are dead code
+in production. The actual event pipeline uses EventConverter (converter.py)
+in react_agent.py and _relay_event() in SubAgentProcess. These classes are
+retained only for backward compatibility with test code. New code should NOT
+use EventMapper or EventBus -- use EventConverter instead.
 """
 
 import contextlib
 import json
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -87,6 +94,11 @@ class EventMapper:
     """
     Maps domain events to SSE format.
 
+    .. deprecated:: Wave 6b
+        EventMapper is dead code in production. The actual event pipeline uses
+        EventConverter (converter.py). This class is retained only for backward
+        compatibility with test code.
+
     Provides centralized event transformation logic,
     replacing scattered conversion code throughout the agent system.
     """
@@ -104,6 +116,11 @@ class EventMapper:
             include_conversation_id: Whether to include conversation_id
             include_sandbox_id: Whether to include sandbox_id
         """
+        warnings.warn(
+            "EventMapper is deprecated (Wave 6b). Use EventConverter instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._include_timestamp = include_timestamp
         self._include_conversation_id = include_conversation_id
         self._include_sandbox_id = include_sandbox_id
@@ -222,6 +239,11 @@ class EventBus:
     """
     Event bus for agent domain events.
 
+    .. deprecated:: Wave 6b
+        EventBus is dead code in production. No production code uses publish/subscribe
+        patterns -- events flow through SessionProcessor -> EventConverter -> Redis Stream.
+        This class is retained only for backward compatibility with test code.
+
     Provides publish-subscribe functionality for agent events,
     enabling loose coupling between event producers and consumers.
     """
@@ -232,6 +254,11 @@ class EventBus:
         Args:
             mapper: Optional event mapper for SSE conversion
         """
+        warnings.warn(
+            "EventBus is deprecated (Wave 6b). Events flow through EventConverter.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._mapper = mapper or EventMapper()
         self._subscribers: dict[AgentEventType, list[Callable[..., Any]]] = {}
         self._global_subscribers: list[Callable[..., Any]] = []
@@ -330,9 +357,17 @@ _global_event_bus: EventBus | None = None
 def get_event_bus() -> EventBus:
     """Get the global event bus.
 
+    .. deprecated:: Wave 6b
+        Dead code in production. Use EventConverter instead.
+
     Returns:
         The global EventBus instance
     """
+    warnings.warn(
+        "get_event_bus() is deprecated (Wave 6b). Use EventConverter instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _global_event_bus
     if _global_event_bus is None:
         _global_event_bus = EventBus()

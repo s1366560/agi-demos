@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import ToolExecutionRecord
+from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
 )
@@ -33,7 +34,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
             tool_name="test_tool",
             tool_input={"query": "test"},
             tool_output=None,
-            status="pending",
+            status=ToolExecutionStatus.RUNNING,
             error=None,
             step_number=1,
             sequence_number=1,
@@ -47,7 +48,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
         result = await v2_tool_record_repo.find_by_id("record-test-1")
         assert result is not None
         assert result.tool_name == "test_tool"
-        assert result.status == "pending"
+        assert result.status == ToolExecutionStatus.RUNNING
 
     @pytest.mark.asyncio
     async def test_save_updates_existing(
@@ -62,7 +63,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
             tool_name="test_tool",
             tool_input={"query": "test"},
             tool_output=None,
-            status="pending",
+            status=ToolExecutionStatus.RUNNING,
             error=None,
             step_number=1,
             sequence_number=1,
@@ -72,7 +73,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
         )
         await v2_tool_record_repo.save(record)
 
-        record.status = "completed"
+        record.status = ToolExecutionStatus.SUCCESS
         record.tool_output = "output"
         record.completed_at = datetime.now(UTC)
         record.duration_ms = 100
@@ -80,7 +81,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
         await v2_tool_record_repo.save(record)
 
         result = await v2_tool_record_repo.find_by_id("record-update-1")
-        assert result.status == "completed"
+        assert result.status == ToolExecutionStatus.SUCCESS
         assert result.tool_output == "output"
         assert result.duration_ms == 100
 
@@ -99,7 +100,7 @@ class TestSqlToolExecutionRecordRepositoryFind:
             tool_name="search",
             tool_input={},
             tool_output="result",
-            status="completed",
+            status=ToolExecutionStatus.SUCCESS,
             error=None,
             step_number=1,
             sequence_number=1,
@@ -132,7 +133,7 @@ class TestSqlToolExecutionRecordRepositoryFind:
             tool_name="calculate",
             tool_input={},
             tool_output="42",
-            status="completed",
+            status=ToolExecutionStatus.SUCCESS,
             error=None,
             step_number=1,
             sequence_number=1,
@@ -158,7 +159,7 @@ class TestSqlToolExecutionRecordRepositoryFind:
                 tool_name=f"tool-{i}",
                 tool_input={},
                 tool_output=f"output-{i}",
-                status="completed",
+            status=ToolExecutionStatus.SUCCESS,
                 error=None,
                 step_number=1,
                 sequence_number=i,
@@ -189,7 +190,7 @@ class TestSqlToolExecutionRecordRepositoryFind:
                 tool_name=f"tool-{i}",
                 tool_input={},
                 tool_output=f"output-{i}",
-                status="completed",
+            status=ToolExecutionStatus.SUCCESS,
                 error=None,
                 step_number=1,
                 sequence_number=1,
@@ -217,7 +218,7 @@ class TestSqlToolExecutionRecordRepositoryUpdate:
             tool_name="test",
             tool_input={},
             tool_output=None,
-            status="pending",
+            status=ToolExecutionStatus.RUNNING,
             error=None,
             step_number=1,
             sequence_number=1,
@@ -229,13 +230,13 @@ class TestSqlToolExecutionRecordRepositoryUpdate:
 
         await v2_tool_record_repo.update_status(
             call_id="call-status-1",
-            status="completed",
+            status="success",
             output="done",
             duration_ms=100,
         )
 
         result = await v2_tool_record_repo.find_by_call_id("call-status-1")
-        assert result.status == "completed"
+        assert result.status == ToolExecutionStatus.SUCCESS
         assert result.tool_output == "done"
         assert result.duration_ms == 100
         assert result.completed_at is not None
@@ -258,7 +259,7 @@ class TestSqlToolExecutionRecordRepositoryDelete:
                 tool_name="test",
                 tool_input={},
                 tool_output="output",
-                status="completed",
+            status=ToolExecutionStatus.SUCCESS,
                 error=None,
                 step_number=1,
                 sequence_number=1,

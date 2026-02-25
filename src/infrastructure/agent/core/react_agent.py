@@ -21,7 +21,6 @@ Reference: OpenCode SessionProcessor architecture
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import os
 import re
@@ -37,7 +36,6 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
-from src.domain.model.agent.subagent_result import SubAgentResult
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
 from ..config import ExecutionConfig
@@ -54,24 +52,25 @@ from ..plugins.selection_pipeline import (
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
 from ..routing import (
     ExecutionPath,
-    ExecutionRouter,
     RoutingDecision,
-    SubAgentOrchestrator,
-    SubAgentOrchestratorConfig,
 )
-from ..routing.hybrid_router import HybridRouter, HybridRouterConfig
-from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator, SkillProtocol
-from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
-from .skill_executor import SkillExecutor
+from ..skill import SkillProtocol
+from .processor import (
+    ProcessorConfig,
+    ProcessorFactory,
+    RunContext,
+    SessionProcessor,
+    ToolDefinition,
+)
 from .subagent_router import SubAgentMatch, SubAgentRouter
+from .subagent_runner import SubAgentRunnerDeps, SubAgentSessionRunner
+from .subagent_tools import SubAgentToolBuilder, SubAgentToolBuilderDeps
 from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
     from src.domain.ports.services.graph_service_port import GraphServicePort
-    from src.infrastructure.agent.routing.subagent_orchestrator import SubAgentRouterProtocol
-    from src.infrastructure.agent.skill.orchestrator import SkillExecutorProtocol
 
 logger = logging.getLogger(__name__)
 _react_bg_tasks: set[asyncio.Task[Any]] = set()
@@ -141,10 +140,8 @@ class ReActAgent:
     # _init_skill_system
     skills: list[Skill]
     skill_match_threshold: float
-    skill_direct_execute_threshold: float
     skill_fallback_on_error: bool
     skill_execution_timeout: int
-    skill_executor: SkillExecutor | None
     # _init_subagent_system
     subagents: list[SubAgent]
     subagent_match_threshold: float
@@ -159,7 +156,7 @@ class ReActAgent:
     _subagent_announce_retry_delay_ms: int
     _subagent_lane_semaphore: asyncio.Semaphore
     _subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None
-    _subagent_lifecycle_hook_failures: int
+    _subagent_lifecycle_hook_failures: list[int]
     # _init_subagent_router
     subagent_router: Any
     # _init_subagent_run_registry
@@ -167,9 +164,6 @@ class ReActAgent:
     _subagent_session_tasks: dict[str, asyncio.Task[Any]]
     # _init_orchestrators
     _event_converter: EventConverter
-    _skill_orchestrator: SkillOrchestrator
-    _subagent_orchestrator: SubAgentOrchestrator
-    _execution_router: ExecutionRouter
     # _init_background_services
     _background_executor: Any
     _template_registry: Any
@@ -180,8 +174,6 @@ class ReActAgent:
     _use_dynamic_tools: bool
     config: ProcessorConfig
     # stream-phase instance state
-    _stream_preroute_completed: bool
-    _stream_active_subagent: SubAgent | None
     _stream_skill_state: dict[str, Any]
     _stream_memory_context: Any
     _stream_context_result: Any
@@ -207,13 +199,9 @@ class ReActAgent:
         # LLM sees skill_loader tool with available skills list and decides when to load
         # Rule-based matching is now a fallback for very high confidence matches only
         skill_match_threshold: float = 0.9,  # Was 0.5, increased to reduce rule matching
-        skill_direct_execute_threshold: float = 0.95,  # Was 0.8, increased to favor LLM decision
         skill_fallback_on_error: bool = True,
         skill_execution_timeout: int = 300,  # Increased from 60 to 300 (5 minutes)
         subagent_match_threshold: float = 0.5,
-        subagent_keyword_skip_threshold: float = 0.85,
-        subagent_keyword_floor_threshold: float = 0.3,
-        subagent_llm_min_confidence: float = 0.6,
         # SubAgent-as-Tool: let LLM autonomously decide delegation
         enable_subagent_as_tool: bool = True,
         max_subagent_delegation_depth: int = 2,
@@ -288,17 +276,9 @@ class ReActAgent:
             subagents: Optional list of available subagents (L3 layer)
             skill_match_threshold: Threshold for skill prompt injection (default: 0.9)
                 High threshold means LLM decides via skill_loader tool instead of auto-matching
-            skill_direct_execute_threshold: Threshold for skill direct execution (default: 0.95)
-                High threshold means skill_loader tool is preferred over direct execution
             skill_fallback_on_error: Whether to fallback to LLM on skill error (default: True)
             skill_execution_timeout: Timeout for skill execution in seconds (default: 300)
             subagent_match_threshold: Threshold for subagent routing (default: 0.5)
-            subagent_keyword_skip_threshold: Keyword match confidence threshold to skip
-                LLM routing fallback in HybridRouter (default: 0.85).
-            subagent_keyword_floor_threshold: Lower bound for keyword fallback confidence
-                when LLM routing does not produce a strong match (default: 0.3).
-            subagent_llm_min_confidence: Minimum confidence required for LLM-based
-                routing decisions in HybridRouter (default: 0.6).
             enable_subagent_as_tool: When True, SubAgents are exposed as a
                 delegate_to_subagent tool in the ReAct loop, letting the LLM
                 decide when to delegate. When False, uses pre-routing keyword
@@ -370,11 +350,7 @@ class ReActAgent:
         )
 
         execution_config = self._init_execution_config(
-            skill_direct_execute_threshold,
             subagent_match_threshold,
-            subagent_keyword_skip_threshold,
-            subagent_keyword_floor_threshold,
-            subagent_llm_min_confidence,
             enable_subagent_as_tool,
         )
 
@@ -382,7 +358,6 @@ class ReActAgent:
             skills,
             tools,
             skill_match_threshold,
-            skill_direct_execute_threshold,
             skill_fallback_on_error,
             skill_execution_timeout,
             agent_mode,
@@ -391,7 +366,6 @@ class ReActAgent:
             subagents,
             execution_config,
             _cached_subagent_router,
-            llm_client,
             enable_subagent_as_tool,
             max_subagent_delegation_depth,
             max_subagent_active_runs,
@@ -409,23 +383,75 @@ class ReActAgent:
             subagent_run_redis_cache_ttl_seconds,
             subagent_terminal_retention_seconds,
         )
-        self._init_orchestrators(
-            skills,
-            tools,
-            skill_match_threshold,
-            skill_direct_execute_threshold,
-            skill_fallback_on_error,
-            skill_execution_timeout,
-            agent_mode,
-            execution_config,
-            model,
-            api_key,
-            base_url,
-        )
+        self._init_orchestrators()
         self._init_background_services(llm_client)
         self._init_tool_definitions(
             _cached_tool_definitions, model, api_key, base_url, temperature, max_tokens, max_steps
         )
+
+        # -- Create ProcessorFactory for shared processor creation --
+        self._processor_factory = ProcessorFactory(
+            llm_client=self._llm_client,
+            permission_manager=self.permission_manager,
+            artifact_service=self.artifact_service,
+            base_model=self.model,
+            base_api_key=self.api_key,
+            base_url=self.base_url,
+        )
+
+        # -- Wire extracted SubAgent helpers --
+        self._session_runner = SubAgentSessionRunner(
+            SubAgentRunnerDeps(
+                graph_service=self._graph_service,
+                llm_client=self._llm_client,
+                permission_manager=self.permission_manager,
+                artifact_service=self.artifact_service,
+                background_executor=self._background_executor,
+                result_aggregator=self._result_aggregator,
+                subagent_run_registry=self._subagent_run_registry,
+                subagent_lane_semaphore=self._subagent_lane_semaphore,
+                subagent_lifecycle_hook=self._subagent_lifecycle_hook,
+                subagent_lifecycle_hook_failures=self._subagent_lifecycle_hook_failures,
+                subagent_session_tasks=self._subagent_session_tasks,
+                model=self.model,
+                api_key=self.api_key,
+                base_url=self.base_url,
+                config=self.config,
+                subagents=self.subagents,
+                max_subagent_delegation_depth=self._max_subagent_delegation_depth,
+                max_subagent_active_runs=self._max_subagent_active_runs,
+                max_subagent_active_runs_per_lineage=(self._max_subagent_active_runs_per_lineage),
+                max_subagent_children_per_requester=(self._max_subagent_children_per_requester),
+                enable_subagent_as_tool=self._enable_subagent_as_tool,
+                subagent_announce_max_retries=self._subagent_announce_max_retries,
+                subagent_announce_max_events=self._subagent_announce_max_events,
+                subagent_announce_retry_delay_ms=(self._subagent_announce_retry_delay_ms),
+                factory=self._processor_factory,
+            )
+        )
+        self._tool_builder = SubAgentToolBuilder(
+            SubAgentToolBuilderDeps(
+                subagent_run_registry=self._subagent_run_registry,
+                subagents=self.subagents,
+                enable_subagent_as_tool=self._enable_subagent_as_tool,
+                max_subagent_delegation_depth=(self._max_subagent_delegation_depth),
+                max_subagent_active_runs=self._max_subagent_active_runs,
+                max_subagent_active_runs_per_lineage=(self._max_subagent_active_runs_per_lineage),
+                max_subagent_children_per_requester=(self._max_subagent_children_per_requester),
+                subagent_router=self.subagent_router,
+            )
+        )
+
+        # Cross-wire callbacks (after both objects exist)
+        self._session_runner.deps.get_current_tools_fn = self._get_current_tools
+        self._session_runner.deps.filter_tools_fn = self._subagent_filter_tools
+        self._session_runner.deps.inject_nested_tools_fn = self._subagent_inject_nested_tools
+
+        self._tool_builder.deps.get_current_tools_fn = self._get_current_tools
+        self._tool_builder.deps.get_observability_stats_fn = self._get_subagent_observability_stats
+        self._tool_builder.deps.execute_subagent_fn = self._execute_subagent
+        self._tool_builder.deps.launch_session_fn = self._launch_subagent_session
+        self._tool_builder.deps.cancel_session_fn = self._cancel_subagent_session
 
     def _init_tool_pipeline(
         self,
@@ -489,20 +515,13 @@ class ReActAgent:
 
     def _init_execution_config(
         self,
-        skill_direct_execute_threshold: float,
         subagent_match_threshold: float,
-        subagent_keyword_skip_threshold: float,
-        subagent_keyword_floor_threshold: float,
-        subagent_llm_min_confidence: float,
         enable_subagent_as_tool: bool,
     ) -> ExecutionConfig:
         """Build and validate execution configuration."""
         execution_config = ExecutionConfig(
-            skill_match_threshold=skill_direct_execute_threshold,
+            skill_match_threshold=0.95,  # Legacy: was skill_direct_execute_threshold
             subagent_match_threshold=subagent_match_threshold,
-            subagent_keyword_skip_threshold=subagent_keyword_skip_threshold,
-            subagent_keyword_floor_threshold=subagent_keyword_floor_threshold,
-            subagent_llm_min_confidence=subagent_llm_min_confidence,
             allow_direct_execution=True,
             enable_plan_mode=True,
             enable_subagent_routing=not enable_subagent_as_tool,
@@ -515,7 +534,6 @@ class ReActAgent:
         skills: list[Skill] | None,
         tools: dict[str, Any] | None,
         skill_match_threshold: float,
-        skill_direct_execute_threshold: float,
         skill_fallback_on_error: bool,
         skill_execution_timeout: int,
         agent_mode: str,
@@ -523,17 +541,14 @@ class ReActAgent:
         """Initialize Skill System (L2 layer)."""
         self.skills = skills or []
         self.skill_match_threshold = skill_match_threshold
-        self.skill_direct_execute_threshold = skill_direct_execute_threshold
         self.skill_fallback_on_error = skill_fallback_on_error
         self.skill_execution_timeout = skill_execution_timeout
-        self.skill_executor = SkillExecutor(tools or {}) if skills else None
 
     def _init_subagent_system(  # noqa: PLR0913
         self,
         subagents: list[SubAgent] | None,
         execution_config: ExecutionConfig,
         cached_subagent_router: Any | None,
-        llm_client: Any | None,
         enable_subagent_as_tool: bool,
         max_subagent_delegation_depth: int,
         max_subagent_active_runs: int,
@@ -565,8 +580,8 @@ class ReActAgent:
         self._subagent_announce_retry_delay_ms = max(0, int(subagent_announce_retry_delay_ms))
         self._subagent_lane_semaphore = asyncio.Semaphore(self._max_subagent_lane_concurrency)
         self._subagent_lifecycle_hook = subagent_lifecycle_hook
-        self._subagent_lifecycle_hook_failures = 0
-        self._init_subagent_router(subagents, execution_config, cached_subagent_router, llm_client)
+        self._subagent_lifecycle_hook_failures = [0]
+        self._init_subagent_router(subagents, execution_config, cached_subagent_router)
         self._init_subagent_run_registry(
             subagent_run_registry_path,
             subagent_run_postgres_dsn,
@@ -581,26 +596,16 @@ class ReActAgent:
         subagents: list[SubAgent] | None,
         execution_config: ExecutionConfig,
         cached_subagent_router: Any | None,
-        llm_client: Any | None,
     ) -> None:
-        """Initialize SubAgent router (cached, hybrid, or keyword)."""
+        """Initialize SubAgent router (cached or keyword)."""
         if cached_subagent_router is not None:
             self.subagent_router = cached_subagent_router
             logger.debug("ReActAgent: Using cached SubAgentRouter")
         elif subagents:
-            if llm_client:
-                self.subagent_router = HybridRouter(
-                    subagents=subagents,
-                    llm_client=llm_client,
-                    config=HybridRouterConfig.from_execution_config(execution_config),
-                    default_confidence_threshold=execution_config.subagent_match_threshold,
-                )
-                logger.info("ReActAgent: Using HybridRouter (keyword + LLM)")
-            else:
-                self.subagent_router = SubAgentRouter(
-                    subagents=subagents,
-                    default_confidence_threshold=execution_config.subagent_match_threshold,
-                )
+            self.subagent_router = SubAgentRouter(
+                subagents=subagents,
+                default_confidence_threshold=execution_config.subagent_match_threshold,
+            )
         else:
             self.subagent_router = None
 
@@ -642,55 +647,9 @@ class ReActAgent:
         )
         self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
 
-    def _init_orchestrators(
-        self,
-        skills: list[Skill] | None,
-        tools: dict[str, Any] | None,
-        skill_match_threshold: float,
-        skill_direct_execute_threshold: float,
-        skill_fallback_on_error: bool,
-        skill_execution_timeout: int,
-        agent_mode: str,
-        execution_config: ExecutionConfig,
-        model: str,
-        api_key: str | None,
-        base_url: str | None,
-    ) -> None:
+    def _init_orchestrators(self) -> None:
         """Initialize orchestrators for modular components."""
         self._event_converter = EventConverter(debug_logging=False)
-
-        self._skill_orchestrator = SkillOrchestrator(
-            skills=cast("list[SkillProtocol] | None", skills),
-            skill_executor=cast("SkillExecutorProtocol | None", self.skill_executor),
-            tools=tools,
-            config=SkillExecutionConfig(
-                match_threshold=skill_match_threshold,
-                direct_execute_threshold=skill_direct_execute_threshold,
-                fallback_on_error=skill_fallback_on_error,
-                execution_timeout=skill_execution_timeout,
-            ),
-            agent_mode=agent_mode,
-            debug_logging=False,
-        )
-
-        self._subagent_orchestrator = SubAgentOrchestrator(
-            router=cast("SubAgentRouterProtocol | None", self.subagent_router),
-            config=SubAgentOrchestratorConfig(
-                default_confidence_threshold=execution_config.subagent_match_threshold,
-                emit_routing_events=True,
-            ),
-            base_model=model,
-            base_api_key=api_key,
-            base_url=base_url,
-            debug_logging=False,
-        )
-
-        self._execution_router = ExecutionRouter(
-            config=execution_config,
-            skill_matcher=self._ExecutionRouterSkillMatcher(self),
-            subagent_matcher=self._ExecutionRouterSubAgentMatcher(self),
-            plan_evaluator=self._ExecutionRouterPlanEvaluator(self._plan_detector),
-        )
 
     def _init_background_services(self, llm_client: Any | None) -> None:
         """Initialize background SubAgent services."""
@@ -747,50 +706,6 @@ class ReActAgent:
             max_steps=max_steps,
             llm_client=self._llm_client,
         )
-
-    class _ExecutionRouterSkillMatcher:
-        """Skill matcher adapter for ExecutionRouter."""
-
-        def __init__(self, agent: ReActAgent) -> None:
-            self._agent = agent
-
-        def match(self, query: str, context: dict[str, Any]) -> str | None:
-            matched_skill, _ = self._agent._match_skill(query)
-            return matched_skill.name if matched_skill else None
-
-        def can_execute_directly(self, skill_name: str) -> bool:
-            result = self._agent._skill_orchestrator.find_by_name(skill_name)
-            return result.matched
-
-    class _ExecutionRouterSubAgentMatcher:
-        """SubAgent matcher adapter for ExecutionRouter."""
-
-        def __init__(self, agent: ReActAgent) -> None:
-            self._agent = agent
-
-        def match(self, query: str, context: dict[str, Any]) -> str | None:
-            if not bool(context.get("router_mode_enabled", True)):
-                return None
-            match = self._agent._match_subagent(query)
-            return match.subagent.name if match.subagent else None
-
-        def get_subagent(self, name: str) -> Any:
-            for subagent in self._agent.subagents:
-                if subagent.name == name:
-                    return subagent
-            return None
-
-    class _ExecutionRouterPlanEvaluator:
-        """Plan evaluator adapter for ExecutionRouter."""
-
-        def __init__(self, detector: PlanDetector) -> None:
-            self._detector = detector
-
-        def should_use_plan_mode(self, query: str, context: dict[str, Any]) -> bool:
-            return self._detector.detect(query).should_suggest
-
-        def estimate_plan_complexity(self, query: str) -> float:
-            return self._detector.detect(query).confidence
 
     def _build_tool_selection_context(
         self,
@@ -879,11 +794,12 @@ class ReActAgent:
         )
         if forced_subagent_name:
             return RoutingDecision(
-                path=ExecutionPath.SUBAGENT,
+                path=ExecutionPath.REACT_LOOP,
                 confidence=1.0,
-                reason="Forced delegation via system instruction",
+                reason="Forced delegation via system instruction (subagent-as-tool)",
                 target=forced_subagent_name,
                 metadata={
+                    "forced_subagent": forced_subagent_name,
                     "domain_lane": domain_lane,
                     "router_fabric_version": "lane-v1",
                 },
@@ -909,35 +825,17 @@ class ReActAgent:
                     "router_fabric_version": "lane-v1",
                 },
             )
-        if self.subagents and not self._enable_subagent_as_tool:
-            # Preserve legacy pre-routing behavior: when subagent-as-tool is disabled,
-            # stream() should attempt subagent matching before the ReAct loop.
-            return RoutingDecision(
-                path=ExecutionPath.SUBAGENT,
-                confidence=0.6,
-                reason="Legacy subagent pre-routing enabled",
-                metadata={
-                    "legacy_preroute": True,
-                    "domain_lane": domain_lane,
-                    "router_fabric_version": "lane-v1",
-                },
-            )
 
-        available_tool_count = self._estimate_available_tool_count()
-        router_mode_enabled = available_tool_count > self._router_mode_tool_count_threshold
-        routing_context = {
-            "recent_messages": [m.get("content", "") for m in conversation_context[-3:]],
-            "available_tool_count": available_tool_count,
-            "router_mode_enabled": router_mode_enabled,
-            "router_mode_tool_count_threshold": self._router_mode_tool_count_threshold,
-        }
-        decision = self._execution_router.decide(message, routing_context)
-        decision.metadata = dict(decision.metadata or {})
-        decision.metadata.setdefault("domain_lane", domain_lane)
-        decision.metadata.setdefault("router_fabric_version", "lane-v1")
-        decision.metadata["router_mode_enabled"] = router_mode_enabled
-        decision.metadata["available_tool_count"] = available_tool_count
-        return decision
+        # Default to ReAct loop -- prompt-driven routing replaces confidence scoring
+        return RoutingDecision(
+            path=ExecutionPath.REACT_LOOP,
+            confidence=0.5,
+            reason="Standard ReAct reasoning loop",
+            metadata={
+                "domain_lane": domain_lane,
+                "router_fabric_version": "lane-v1",
+            },
+        )
 
     def _estimate_available_tool_count(self) -> int:
         """Estimate available tool count without mutating selection trace state."""
@@ -993,10 +891,9 @@ class ReActAgent:
         return self.raw_tools, self.tool_definitions
 
     def _match_skill(self, query: str) -> tuple[SkillProtocol | None, float]:
-        """
-        Match query against available skills, filtered by agent_mode.
+        """Match query against available skills, filtered by agent_mode.
 
-        Delegates to SkillOrchestrator for modular implementation.
+        Inlined from SkillOrchestrator.match() (Wave 5.1).
 
         Args:
             query: User query
@@ -1004,24 +901,37 @@ class ReActAgent:
         Returns:
             Tuple of (best matching skill or None, match score)
         """
-        # Delegate to SkillOrchestrator
-        result = self._skill_orchestrator.match(query)
-
-        if result.matched:
-            logger.info(
-                f"[ReActAgent] Matched skill: {result.skill.name} "  # type: ignore[union-attr]
-                f"with score {result.score:.2f} (mode={result.mode.value})"
-            )
-            return result.skill, result.score
-        else:
-            logger.debug("[ReActAgent] No skill matched for query")
+        skills = cast("list[SkillProtocol]", self.skills or [])
+        if not skills:
+            logger.debug("[ReActAgent] No skills available for matching")
             return None, 0.0
+
+        best_skill: SkillProtocol | None = None
+        best_score = 0.0
+
+        for skill in skills:
+            if not skill.is_accessible_by_agent(self.agent_mode):
+                continue
+            if skill.status.value != "active":
+                continue
+            score = skill.matches_query(query)
+            if score > best_score:
+                best_score = score
+                best_skill = skill
+
+        if best_skill and best_score >= self.skill_match_threshold:
+            logger.info(
+                f"[ReActAgent] Matched skill: {best_skill.name} "
+                f"with score {best_score:.2f}"
+            )
+            return best_skill, best_score
+
+        logger.debug("[ReActAgent] No skill matched for query")
+        return None, 0.0
 
     def _match_subagent(self, query: str) -> SubAgentMatch:
         """
-        Match query against available subagents.
-
-        Delegates to SubAgentOrchestrator for modular implementation.
+        Match query against available subagents using keyword router.
 
         Args:
             query: User query
@@ -1029,66 +939,32 @@ class ReActAgent:
         Returns:
             SubAgentMatch result
         """
-        # Delegate to SubAgentOrchestrator
-        result = self._subagent_orchestrator.match(query)
+        if not self.subagent_router:
+            return SubAgentMatch(subagent=None, confidence=0.0, match_reason="no_router")
 
-        if result.matched:
+        result = self.subagent_router.match(query)
+        if result.subagent:
             logger.info(
-                f"[ReActAgent] Matched subagent: {result.subagent.name} "  # type: ignore[union-attr]
+                f"[ReActAgent] Matched subagent: {result.subagent.name} "
                 f"with confidence {result.confidence:.2f} ({result.match_reason})"
             )
-            # Convert to legacy SubAgentMatch for backward compatibility
-            return SubAgentMatch(
-                subagent=cast("SubAgent | None", result.subagent),
-                confidence=result.confidence,
-                match_reason=result.match_reason,
-            )
-        else:
-            return SubAgentMatch(subagent=None, confidence=0.0, match_reason=result.match_reason)
+        return result
 
     async def _match_subagent_async(
         self,
         query: str,
         conversation_context: list[dict[str, str]] | None = None,
     ) -> SubAgentMatch:
-        """Async match with hybrid routing (keyword + LLM semantic).
-
-        Uses SubAgentOrchestrator.match_async() which delegates to
-        HybridRouter.match_async() when available, enabling LLM-based
-        semantic routing as a fallback when keyword matching is uncertain.
+        """Async match -- delegates to sync keyword router.
 
         Args:
             query: User query.
-            conversation_context: Recent conversation for LLM context.
+            conversation_context: Unused (kept for API compatibility).
 
         Returns:
             SubAgentMatch result.
         """
-        # Build a brief context string for the LLM router
-        context_str = None
-        if conversation_context:
-            recent = conversation_context[-3:]
-            context_str = "\n".join(
-                f"{m.get('role', 'user')}: {m.get('content', '')[:200]}" for m in recent
-            )
-
-        result = await self._subagent_orchestrator.match_async(
-            query,
-            conversation_context=context_str,
-        )
-
-        if result.matched:
-            logger.info(
-                f"[ReActAgent] Matched subagent (async): {result.subagent.name} "  # type: ignore[union-attr]
-                f"with confidence {result.confidence:.2f} ({result.match_reason})"
-            )
-            return SubAgentMatch(
-                subagent=cast("SubAgent | None", result.subagent),
-                confidence=result.confidence,
-                match_reason=result.match_reason,
-            )
-        else:
-            return SubAgentMatch(subagent=None, confidence=0.0, match_reason=result.match_reason)
+        return self._match_subagent(query)
 
     async def _background_index_conversation(
         self,
@@ -1237,10 +1113,13 @@ class ReActAgent:
         )
 
         # Use SystemPromptManager to build the prompt
-        return cast(str, await self.prompt_manager.build_system_prompt(
-            context=context,
-            subagent=subagent,
-        ))
+        return cast(
+            str,
+            await self.prompt_manager.build_system_prompt(
+                context=context,
+                subagent=subagent,
+            ),
+        )
 
     async def _stream_detect_plan_mode(
         self,
@@ -1298,256 +1177,6 @@ class ReActAgent:
                 return sa
         return None
 
-    async def _stream_try_task_decomposition(
-        self,
-        *,
-        processed_user_message: str,
-        conversation_context: list[dict[str, str]],
-        project_id: str,
-        tenant_id: str,
-        conversation_id: str,
-        abort_signal: asyncio.Event | None,
-        route_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """Attempt multi-SubAgent task decomposition.
-
-        Yields events if decomposition succeeds.
-        Sets self._stream_preroute_completed = True if handled.
-        """
-        if not (self._task_decomposer and len(self.subagents) > 1):
-            return
-
-        try:
-            context_str = None
-            if conversation_context:
-                recent = conversation_context[-3:]
-                context_str = "\n".join(
-                    f"{m.get('role', 'user')}: {m.get('content', '')[:200]}" for m in recent
-                )
-            decomposition = await self._task_decomposer.decompose(
-                processed_user_message, conversation_context=context_str
-            )
-
-            if not decomposition.is_decomposed:
-                return
-
-            has_chain = any(st.dependencies for st in decomposition.subtasks)
-            all_linear = has_chain and all(
-                len(st.dependencies) <= 1 for st in decomposition.subtasks
-            )
-
-            if all_linear and has_chain:
-                async for event in self._execute_chain(
-                    subtasks=list(decomposition.subtasks),
-                    user_message=processed_user_message,
-                    conversation_context=conversation_context,
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    conversation_id=conversation_id,
-                    route_id=route_id,
-                    abort_signal=abort_signal,
-                ):
-                    yield event
-            else:
-                async for event in self._execute_parallel(
-                    subtasks=list(decomposition.subtasks),
-                    user_message=processed_user_message,
-                    conversation_context=conversation_context,
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    conversation_id=conversation_id,
-                    route_id=route_id,
-                    abort_signal=abort_signal,
-                ):
-                    yield event
-            self._stream_preroute_completed = True
-        except Exception as e:
-            logger.warning(
-                f"[ReActAgent] Task decomposition failed: {e}, falling back to single SubAgent"
-            )
-
-    async def _stream_resolve_active_subagent(
-        self,
-        *,
-        forced_subagent_name: str | None,
-        processed_user_message: str,
-        conversation_context: list[dict[str, str]],
-        conversation_id: str,
-        route_id: str,
-        trace_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """Resolve active subagent (forced or normal match) and yield routed event.
-
-        Sets self._stream_active_subagent after resolution.
-        """
-        self._stream_active_subagent = None
-
-        if forced_subagent_name:
-            self._stream_active_subagent = self._resolve_subagent_by_name(forced_subagent_name)
-            if self._stream_active_subagent:
-                yield self._build_subagent_routed_event(
-                    route_id=route_id,
-                    trace_id=trace_id,
-                    conversation_id=conversation_id,
-                    subagent=self._stream_active_subagent,
-                    confidence=1.0,
-                    reason="Forced delegation via user instruction",
-                )
-            else:
-                logger.warning(f"[ReActAgent] Forced subagent '{forced_subagent_name}' not found")
-            return
-
-        # Normal pre-routing
-        subagent_match = await self._match_subagent_async(
-            processed_user_message, conversation_context
-        )
-        self._stream_active_subagent = subagent_match.subagent
-        if self._stream_active_subagent:
-            yield self._build_subagent_routed_event(
-                route_id=route_id,
-                trace_id=trace_id,
-                conversation_id=conversation_id,
-                subagent=self._stream_active_subagent,
-                confidence=subagent_match.confidence,
-                reason=subagent_match.match_reason,
-            )
-
-    def _build_subagent_routed_event(
-        self,
-        *,
-        route_id: str,
-        trace_id: str,
-        conversation_id: str,
-        subagent: Any,
-        confidence: float,
-        reason: str,
-    ) -> dict[str, Any]:
-        """Build a subagent_routed event dict."""
-        return {
-            "type": "subagent_routed",
-            "data": {
-                "route_id": route_id,
-                "trace_id": trace_id,
-                "session_id": conversation_id,
-                "subagent_id": subagent.id,
-                "subagent_name": subagent.display_name,
-                "confidence": confidence,
-                "reason": reason,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-    async def _stream_dispatch_subagent_execution(
-        self,
-        *,
-        active_subagent: Any,
-        forced_subagent_name: str | None,
-        processed_user_message: str,
-        conversation_context: list[dict[str, str]],
-        project_id: str,
-        tenant_id: str,
-        conversation_id: str,
-        abort_signal: asyncio.Event | None,
-        route_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """Dispatch subagent execution: forced, decomposed, or single delegation.
-
-        Sets self._stream_preroute_completed = True if handled.
-        """
-        if forced_subagent_name:
-            async for event in self._execute_subagent(
-                subagent=active_subagent,
-                user_message=processed_user_message,
-                conversation_context=conversation_context,
-                project_id=project_id,
-                tenant_id=tenant_id,
-                conversation_id=conversation_id,
-                abort_signal=abort_signal,
-            ):
-                yield event
-            self._stream_preroute_completed = True
-            return
-
-        # Multi-SubAgent orchestration: decompose task if possible
-        async for event in self._stream_try_task_decomposition(
-            processed_user_message=processed_user_message,
-            conversation_context=conversation_context,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            abort_signal=abort_signal,
-            route_id=route_id,
-        ):
-            yield event
-        if self._stream_preroute_completed:
-            return
-
-        # Single SubAgent delegation (default path)
-        async for event in self._execute_subagent(
-            subagent=active_subagent,
-            user_message=processed_user_message,
-            conversation_context=conversation_context,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            abort_signal=abort_signal,
-        ):
-            yield event
-        self._stream_preroute_completed = True
-
-    async def _stream_preroute_subagent(
-        self,
-        *,
-        routing_decision: RoutingDecision,
-        forced_subagent_name: str | None,
-        processed_user_message: str,
-        conversation_context: list[dict[str, str]],
-        project_id: str,
-        tenant_id: str,
-        conversation_id: str,
-        abort_signal: asyncio.Event | None,
-        route_id: str,
-        trace_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """Handle SubAgent pre-routing (legacy and forced delegation).
-
-        Yields events and sets self._stream_preroute_completed = True if
-        subagent delegation handled the request (caller should return early).
-        """
-        self._stream_preroute_completed = False
-
-        should_preroute = routing_decision.path == ExecutionPath.SUBAGENT and (
-            forced_subagent_name is not None or not self._enable_subagent_as_tool
-        )
-        if not should_preroute:
-            return
-
-        async for event in self._stream_resolve_active_subagent(
-            forced_subagent_name=forced_subagent_name,
-            processed_user_message=processed_user_message,
-            conversation_context=conversation_context,
-            conversation_id=conversation_id,
-            route_id=route_id,
-            trace_id=trace_id,
-        ):
-            yield event
-
-        if not self._stream_active_subagent:
-            return
-
-        async for event in self._stream_dispatch_subagent_execution(
-            active_subagent=self._stream_active_subagent,
-            forced_subagent_name=forced_subagent_name,
-            processed_user_message=processed_user_message,
-            conversation_context=conversation_context,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            abort_signal=abort_signal,
-            route_id=route_id,
-        ):
-            yield event
-
     def _stream_match_skill(
         self,
         processed_user_message: str,
@@ -1563,11 +1192,23 @@ class ReActAgent:
         should_inject_prompt = False
 
         if forced_skill_name:
-            result = self._skill_orchestrator.find_by_name(forced_skill_name)
-            if result.matched:
-                matched_skill = result.skill
-                skill_score = result.score
+            # Inline find_by_name: case-insensitive name lookup (Wave 5.1)
+            name_lower = forced_skill_name.strip().lower()
+            found_skill: SkillProtocol | None = None
+            for skill in cast("list[SkillProtocol]", self.skills or []):
+                if (
+                    skill.name.lower() == name_lower
+                    and skill.status.value == "active"
+                ):
+                    found_skill = skill
+                    break
+            if found_skill is not None:
+                matched_skill = found_skill
+                skill_score = 1.0
                 is_forced = True
+                logger.info(
+                    f"[ReActAgent] Forced skill found: {found_skill.name}"
+                )
             else:
                 yield {
                     "type": "thought",
@@ -1655,11 +1296,14 @@ class ReActAgent:
             if memory_context and self._memory_recall.last_results:
                 from src.domain.events.agent_events import AgentMemoryRecalledEvent
 
-                yield cast(dict[str, Any], AgentMemoryRecalledEvent(
-                    memories=self._memory_recall.last_results,
-                    count=len(self._memory_recall.last_results),
-                    search_ms=self._memory_recall.last_search_ms,
-                ).to_event_dict())
+                yield cast(
+                    dict[str, Any],
+                    AgentMemoryRecalledEvent(
+                        memories=self._memory_recall.last_results,
+                        count=len(self._memory_recall.last_results),
+                        search_ms=self._memory_recall.last_search_ms,
+                    ).to_event_dict(),
+                )
         except Exception as e:
             logger.warning(f"[ReActAgent] Memory recall failed: {e}")
 
@@ -1745,10 +1389,13 @@ class ReActAgent:
                     if flushed > 0:
                         from src.domain.events.agent_events import AgentMemoryCapturedEvent
 
-                        yield cast(dict[str, Any], AgentMemoryCapturedEvent(
-                            captured_count=flushed,
-                            categories=["flush"],
-                        ).to_event_dict())
+                        yield cast(
+                            dict[str, Any],
+                            AgentMemoryCapturedEvent(
+                                captured_count=flushed,
+                                categories=["flush"],
+                            ).to_event_dict(),
+                        )
                 except Exception as e:
                     logger.warning(f"[ReActAgent] Pre-compaction flush failed: {e}")
 
@@ -1893,7 +1540,6 @@ class ReActAgent:
         if not self.subagents or not self._enable_subagent_as_tool:
             return tools_to_use
 
-
         enabled_subagents = [sa for sa in self.subagents if sa.enabled]
         if not enabled_subagents:
             return tools_to_use
@@ -2012,162 +1658,16 @@ class ReActAgent:
         tools_to_use: list[ToolDefinition],
     ) -> list[ToolDefinition]:
         """Build and append all SubAgent tool definitions to tools list."""
-        from ..tools.delegate_subagent import (
-            DelegateSubAgentTool,
-            ParallelDelegateSubAgentTool,
-        )
-        from ..tools.subagent_sessions import (
-            SessionsAckTool,
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsOverviewTool,
-            SessionsSendTool,
-            SessionsSpawnTool,
-            SessionsTimelineTool,
-            SessionsWaitTool,
-            SubAgentsControlTool,
-        )
-
-        def _to_td(tool_instance: Any) -> ToolDefinition:
-            return ToolDefinition(
-                name=tool_instance.name,
-                description=tool_instance.description,
-                parameters=tool_instance.get_parameters_schema(),
-                execute=tool_instance.execute,
-                _tool_instance=tool_instance,
-            )
-
-        delegate_tool = DelegateSubAgentTool(
-            subagent_names=list(subagent_map.keys()),
+        return self._tool_builder.build_subagent_tool_definitions(
+            subagent_map=subagent_map,
             subagent_descriptions=subagent_descriptions,
-            execute_callback=delegate_callback,
-            run_registry=self._subagent_run_registry,
-            conversation_id=conversation_id,
-            delegation_depth=0,
-            max_active_runs=self._max_subagent_active_runs,
-        )
-        tools_to_use.append(_to_td(delegate_tool))
-
-        sessions_spawn_tool = SessionsSpawnTool(
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
+            enabled_subagents=enabled_subagents,
+            delegate_callback=delegate_callback,
             spawn_callback=spawn_callback,
-            run_registry=self._subagent_run_registry,
-            conversation_id=conversation_id,
-            max_active_runs=self._max_subagent_active_runs,
-            max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
-            max_children_per_requester=self._max_subagent_children_per_requester,
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=self._max_subagent_delegation_depth,
-        )
-        tools_to_use.append(_to_td(sessions_spawn_tool))
-
-        sessions_send_tool = SessionsSendTool(
-            run_registry=self._subagent_run_registry,
-            conversation_id=conversation_id,
-            spawn_callback=spawn_callback,
-            max_active_runs=self._max_subagent_active_runs,
-            max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
-            max_children_per_requester=self._max_subagent_children_per_requester,
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=self._max_subagent_delegation_depth,
-        )
-        tools_to_use.append(_to_td(sessions_send_tool))
-
-        tools_to_use.append(
-            _to_td(
-                SessionsListTool(
-                    run_registry=self._subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                    visibility_default="tree",
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsHistoryTool(
-                    run_registry=self._subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                    visibility_default="tree",
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsWaitTool(
-                    run_registry=self._subagent_run_registry,
-                    conversation_id=conversation_id,
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsAckTool(
-                    run_registry=self._subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsTimelineTool(
-                    run_registry=self._subagent_run_registry,
-                    conversation_id=conversation_id,
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsOverviewTool(
-                    run_registry=self._subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                    visibility_default="tree",
-                    observability_stats_provider=self._get_subagent_observability_stats,
-                )
-            )
-        )
-
-        subagents_control_tool = SubAgentsControlTool(
-            run_registry=self._subagent_run_registry,
-            conversation_id=conversation_id,
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
             cancel_callback=cancel_callback,
-            restart_callback=spawn_callback,
-            max_active_runs=self._max_subagent_active_runs,
-            max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
-            max_children_per_requester=self._max_subagent_children_per_requester,
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=self._max_subagent_delegation_depth,
+            conversation_id=conversation_id,
+            tools_to_use=tools_to_use,
         )
-        tools_to_use.append(_to_td(subagents_control_tool))
-
-        # Inject parallel delegation tool when 2+ SubAgents available
-        if len(enabled_subagents) >= 2:
-            parallel_tool = ParallelDelegateSubAgentTool(
-                subagent_names=list(subagent_map.keys()),
-                subagent_descriptions=subagent_descriptions,
-                execute_callback=delegate_callback,
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-                delegation_depth=0,
-                max_active_runs=self._max_subagent_active_runs,
-            )
-            tools_to_use.append(_to_td(parallel_tool))
-
-        return tools_to_use
 
     def _stream_create_processor_config(
         self,
@@ -2220,11 +1720,15 @@ class ReActAgent:
         self._stream_success = True
 
         try:
+            run_ctx = RunContext(
+                abort_signal=abort_signal,
+                langfuse_context=langfuse_context,
+                conversation_id=langfuse_context.get("conversation_id") if langfuse_context else None,
+            )
             async for domain_event in processor.process(
                 session_id=langfuse_context["conversation_id"],
                 messages=messages,
-                langfuse_context=langfuse_context,
-                abort_signal=abort_signal,
+                run_ctx=run_ctx,
             ):
                 event = self._convert_domain_event(domain_event)
                 if event:
@@ -2273,10 +1777,13 @@ class ReActAgent:
                 if captured > 0:
                     from src.domain.events.agent_events import AgentMemoryCapturedEvent
 
-                    yield cast(dict[str, Any], AgentMemoryCapturedEvent(
-                        captured_count=captured,
-                        categories=self._memory_capture.last_categories,
-                    ).to_event_dict())
+                    yield cast(
+                        dict[str, Any],
+                        AgentMemoryCapturedEvent(
+                            captured_count=captured,
+                            categories=self._memory_capture.last_categories,
+                        ).to_event_dict(),
+                    )
             except Exception as e:
                 logger.warning(f"[ReActAgent] Memory capture failed: {e}")
 
@@ -2489,7 +1996,7 @@ class ReActAgent:
         )
 
         # Phase 3: Routing decision
-        routing_decision, route_id, trace_id, routing_metadata, forced_skill_name, route_event = (
+        routing_decision, _route_id, _trace_id, routing_metadata, forced_skill_name, route_event = (
             self._stream_decide_route(
                 processed_user_message=processed_user_message,
                 conversation_context=conversation_context,
@@ -2500,22 +2007,6 @@ class ReActAgent:
         )
         yield route_event
 
-        # Phase 4: SubAgent pre-routing
-        async for event in self._stream_preroute_subagent(
-            routing_decision=routing_decision,
-            forced_subagent_name=forced_subagent_name,
-            processed_user_message=processed_user_message,
-            conversation_context=conversation_context,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            abort_signal=abort_signal,
-            route_id=route_id,
-            trace_id=trace_id,
-        ):
-            yield event
-        if self._stream_preroute_completed:
-            return
 
         # Phase 5: Skill matching
         for event in self._stream_match_skill(processed_user_message, forced_skill_name):
@@ -2594,14 +2085,10 @@ class ReActAgent:
         # Pass forced skill context to processor for loop reinforcement (Fix 4)
         if is_forced and matched_skill:
             config.forced_skill_name = matched_skill.name
-            config.forced_skill_tools = (
-                list(matched_skill.tools) if matched_skill.tools else None
-            )
-        processor = SessionProcessor(
+            config.forced_skill_tools = list(matched_skill.tools) if matched_skill.tools else None
+        processor = self._processor_factory.create_for_main(
             config=config,
             tools=tools_to_use,
-            permission_manager=self.permission_manager,
-            artifact_service=self.artifact_service,
         )
 
         langfuse_context = {
@@ -2646,40 +2133,17 @@ class ReActAgent:
         project_id: str,
     ) -> str:
         """Search for relevant memories to inject into SubAgent context."""
-        if not self._graph_service or not project_id:
-            return ""
-        try:
-            from ..subagent.memory_accessor import MemoryAccessor
-
-            accessor = MemoryAccessor(
-                graph_service=self._graph_service,
-                project_id=project_id,
-                writable=False,
-            )
-            items = await accessor.search(user_message)
-            memory_context = accessor.format_for_context(items)
-            if memory_context:
-                logger.debug(
-                    f"[ReActAgent] Injecting {len(items)} memory items into SubAgent context"
-                )
-            return memory_context
-        except Exception as e:
-            logger.warning(f"[ReActAgent] Memory search failed: {e}")
-            return ""
+        return await self._session_runner.fetch_memory_context(
+            user_message,
+            project_id,
+        )
 
     def _subagent_filter_tools(
         self,
         subagent: SubAgent,
     ) -> tuple[list[ToolDefinition], set[str]]:
         """Filter tools for SubAgent permissions and return mutable collections."""
-        current_raw_tools, current_tool_definitions = self._get_current_tools()
-        if self.subagent_router:
-            filtered_raw = self.subagent_router.filter_tools(subagent, current_raw_tools)
-            filtered_tools = list(convert_tools(filtered_raw))
-        else:
-            filtered_tools = list(current_tool_definitions)
-        existing_tool_names = {tool.name for tool in filtered_tools}
-        return filtered_tools, existing_tool_names
+        return self._tool_builder.filter_tools(subagent)
 
     def _subagent_inject_nested_tools(
         self,
@@ -2694,73 +2158,17 @@ class ReActAgent:
         filtered_tools: list[ToolDefinition],
         existing_tool_names: set[str],
     ) -> None:
-        """Inject SubAgent delegation tools for nested orchestration (bounded depth).
-
-        Modifies filtered_tools and existing_tool_names in-place.
-        """
-        max_delegation_depth = self._max_subagent_delegation_depth
-        if not (
-            self.subagents
-            and self._enable_subagent_as_tool
-            and delegation_depth < max_delegation_depth
-        ):
-            return
-
-
-        nested_candidates = [sa for sa in self.subagents if sa.enabled and sa.id != subagent.id]
-        if not nested_candidates:
-            return
-
-        nested_map = {sa.name: sa for sa in nested_candidates}
-        nested_descriptions = {
-            sa.name: (sa.trigger.description if sa.trigger else sa.display_name)
-            for sa in nested_candidates
-        }
-        nested_depth = delegation_depth + 1
-
-        def _append_nested_tool(tool_instance: Any) -> None:
-            if tool_instance.name in existing_tool_names:
-                return
-            filtered_tools.append(
-                ToolDefinition(
-                    name=tool_instance.name,
-                    description=tool_instance.description,
-                    parameters=tool_instance.get_parameters_schema(),
-                    execute=tool_instance.execute,
-                    _tool_instance=tool_instance,
-                )
-            )
-            existing_tool_names.add(tool_instance.name)
-
-        delegate_cb, spawn_cb, cancel_cb = self._build_nested_subagent_callbacks(
-            nested_map=nested_map,
+        """Inject SubAgent delegation tools for nested orchestration (bounded depth)."""
+        self._tool_builder.inject_nested_tools(
+            subagent=subagent,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
-        )
-
-        self._append_nested_session_tools(
-            append_fn=_append_nested_tool,
-            conversation_id=conversation_id,
-            nested_depth=nested_depth,
-            max_delegation_depth=max_delegation_depth,
-            nested_map=nested_map,
-            nested_descriptions=nested_descriptions,
-            cancel_callback=cancel_cb,
-            restart_callback=spawn_cb,
-        )
-
-        self._append_nested_delegate_tools(
-            append_fn=_append_nested_tool,
-            nested_candidates=nested_candidates,
-            nested_map=nested_map,
-            nested_descriptions=nested_descriptions,
-            delegate_callback=delegate_cb,
-            conversation_id=conversation_id,
-            nested_depth=nested_depth,
+            filtered_tools=filtered_tools,
+            existing_tool_names=existing_tool_names,
         )
 
     def _build_nested_subagent_callbacks(
@@ -2778,85 +2186,16 @@ class ReActAgent:
         Callable[..., Coroutine[Any, Any, str]],
         Callable[..., Coroutine[Any, Any, bool]],
     ]:
-        """Build nested delegate, spawn and cancel callbacks for SubAgent tools."""
-
-        async def _nested_delegate_callback(
-            subagent_name: str,
-            task: str,
-            on_event: Callable[[dict[str, Any]], None] | None = None,
-        ) -> str:
-            target = nested_map.get(subagent_name)
-            if not target:
-                return f"SubAgent '{subagent_name}' not found"
-
-            events: list[dict[str, Any]] = []
-            async for evt in self._execute_subagent(
-                subagent=target,
-                user_message=task,
-                conversation_context=conversation_context,
-                project_id=project_id,
-                tenant_id=tenant_id,
-                conversation_id=conversation_id,
-                abort_signal=abort_signal,
-                delegation_depth=delegation_depth + 1,
-            ):
-                if on_event:
-                    event_type = evt.get("type")
-                    if event_type not in {"complete", "error"}:
-                        on_event(evt)
-                events.append(evt)
-
-            complete_evt = next(
-                (event for event in events if event.get("type") == "complete"),
-                None,
-            )
-            if not complete_evt:
-                return "SubAgent execution completed but no result returned"
-
-            data = complete_evt.get("data", {})
-            content = data.get("content", "")
-            subagent_result = data.get("subagent_result")
-            if subagent_result:
-                summary = subagent_result.get("summary", content)
-                tokens = subagent_result.get("tokens_used", 0)
-                return (
-                    f"[SubAgent '{subagent_name}' completed]\n"
-                    f"Result: {summary}\n"
-                    f"Tokens used: {tokens}"
-                )
-
-            return content or "SubAgent completed with no output"
-
-        async def _nested_spawn_callback(
-            subagent_name: str,
-            task: str,
-            run_id: str,
-            **spawn_options: Any,
-        ) -> str:
-            target = nested_map.get(subagent_name)
-            if not target:
-                raise ValueError(f"SubAgent '{subagent_name}' not found")
-            await self._launch_subagent_session(
-                run_id=run_id,
-                subagent=target,
-                user_message=task,
-                conversation_id=conversation_id,
-                conversation_context=conversation_context,
-                project_id=project_id,
-                tenant_id=tenant_id,
-                abort_signal=abort_signal,
-                model_override=(str(spawn_options.get("model") or "").strip() or None),
-                thinking_override=(str(spawn_options.get("thinking") or "").strip() or None),
-                spawn_mode=str(spawn_options.get("spawn_mode") or "run"),
-                thread_requested=bool(spawn_options.get("thread_requested")),
-                cleanup=str(spawn_options.get("cleanup") or "keep"),
-            )
-            return run_id
-
-        async def _nested_cancel_callback(run_id: str) -> bool:
-            return await self._cancel_subagent_session(run_id)
-
-        return _nested_delegate_callback, _nested_spawn_callback, _nested_cancel_callback
+        """Build nested delegate, spawn and cancel callbacks."""
+        return self._tool_builder.build_nested_subagent_callbacks(
+            nested_map=nested_map,
+            conversation_context=conversation_context,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            abort_signal=abort_signal,
+            delegation_depth=delegation_depth,
+        )
 
     def _append_nested_session_tools(
         self,
@@ -2870,69 +2209,16 @@ class ReActAgent:
         cancel_callback: Callable[..., Coroutine[Any, Any, bool]],
         restart_callback: Callable[..., Coroutine[Any, Any, str]],
     ) -> None:
-        """Append session management tools (list, history, wait, timeline, overview, control)."""
-        from ..tools.subagent_sessions import (
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsOverviewTool,
-            SessionsTimelineTool,
-            SessionsWaitTool,
-            SubAgentsControlTool,
-        )
-
-        nested_visibility = "tree" if nested_depth < max_delegation_depth else "self"
-        append_fn(
-            SessionsListTool(
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-                requester_session_key=conversation_id,
-                visibility_default=nested_visibility,
-            )
-        )
-        append_fn(
-            SessionsHistoryTool(
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-                requester_session_key=conversation_id,
-                visibility_default=nested_visibility,
-            )
-        )
-        append_fn(
-            SessionsWaitTool(
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-            )
-        )
-        append_fn(
-            SessionsTimelineTool(
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-            )
-        )
-        append_fn(
-            SessionsOverviewTool(
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-                requester_session_key=conversation_id,
-                visibility_default=nested_visibility,
-                observability_stats_provider=self._get_subagent_observability_stats,
-            )
-        )
-        append_fn(
-            SubAgentsControlTool(
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-                subagent_names=list(nested_map.keys()),
-                subagent_descriptions=nested_descriptions,
-                cancel_callback=cancel_callback,
-                restart_callback=restart_callback,
-                max_active_runs=self._max_subagent_active_runs,
-                max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
-                max_children_per_requester=self._max_subagent_children_per_requester,
-                requester_session_key=conversation_id,
-                delegation_depth=nested_depth,
-                max_delegation_depth=self._max_subagent_delegation_depth,
-            )
+        """Append session management tools."""
+        self._tool_builder.append_nested_session_tools(
+            append_fn=append_fn,
+            conversation_id=conversation_id,
+            nested_depth=nested_depth,
+            max_delegation_depth=max_delegation_depth,
+            nested_map=nested_map,
+            nested_descriptions=nested_descriptions,
+            cancel_callback=cancel_callback,
+            restart_callback=restart_callback,
         )
 
     def _append_nested_delegate_tools(
@@ -2946,34 +2232,16 @@ class ReActAgent:
         conversation_id: str,
         nested_depth: int,
     ) -> None:
-        """Append delegate and parallel-delegate tools for nested SubAgent invocation."""
-        from ..tools.delegate_subagent import (
-            DelegateSubAgentTool,
-            ParallelDelegateSubAgentTool,
-        )
-
-        nested_delegate_tool = DelegateSubAgentTool(
-            subagent_names=list(nested_map.keys()),
-            subagent_descriptions=nested_descriptions,
-            execute_callback=delegate_callback,
-            run_registry=self._subagent_run_registry,
+        """Append delegate and parallel-delegate tools."""
+        self._tool_builder.append_nested_delegate_tools(
+            append_fn=append_fn,
+            nested_candidates=nested_candidates,
+            nested_map=nested_map,
+            nested_descriptions=nested_descriptions,
+            delegate_callback=delegate_callback,
             conversation_id=conversation_id,
-            delegation_depth=nested_depth,
-            max_active_runs=self._max_subagent_active_runs,
+            nested_depth=nested_depth,
         )
-        append_fn(nested_delegate_tool)
-
-        if len(nested_candidates) >= 2:
-            nested_parallel_tool = ParallelDelegateSubAgentTool(
-                subagent_names=list(nested_map.keys()),
-                subagent_descriptions=nested_descriptions,
-                execute_callback=delegate_callback,
-                run_registry=self._subagent_run_registry,
-                conversation_id=conversation_id,
-                delegation_depth=nested_depth,
-                max_active_runs=self._max_subagent_active_runs,
-            )
-            append_fn(nested_parallel_tool)
 
     async def _execute_subagent(
         self,
@@ -2988,91 +2256,20 @@ class ReActAgent:
         model_override: str | None = None,
         thinking_override: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Execute a SubAgent in an independent ReAct loop.
-
-        Creates a SubAgentProcess with its own context window and processor,
-        forwards SSE events, and yields a final complete event with the result.
-
-        Optionally injects relevant memories from the knowledge graph when
-        graph_service is available (Phase 5.1 Memory Sharing).
-
-        Args:
-            subagent: The matched SubAgent to execute.
-            user_message: The user's original message.
-            conversation_context: Recent conversation for context bridging.
-            project_id: Project ID for scoping.
-            tenant_id: Tenant ID for scoping.
-            conversation_id: Conversation ID used to track subagent run lifecycle.
-            abort_signal: Optional signal to abort execution.
-
-        Yields:
-            SSE event dicts including subagent lifecycle and tool events.
-        """
-        from ..subagent.context_bridge import ContextBridge
-        from ..subagent.process import SubAgentProcess
-
-        # Search for relevant memories if graph service is available
-        memory_context = await self._subagent_fetch_memory_context(user_message, project_id)
-
-        # Build condensed context for the SubAgent
-        bridge = ContextBridge()
-        subagent_context = bridge.build_subagent_context(
-            user_message=user_message,
-            subagent_system_prompt=subagent.system_prompt,
-            conversation_context=conversation_context,
-            main_token_budget=self.config.context_limit,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            memory_context=memory_context,
-        )
-
-        # Filter tools for SubAgent permissions
-        filtered_tools, existing_tool_names = self._subagent_filter_tools(subagent)
-
-        # Inject SubAgent delegation tools for nested orchestration (bounded depth).
-        self._subagent_inject_nested_tools(
+        """Execute a SubAgent in an independent ReAct loop."""
+        async for evt in self._session_runner.execute_subagent(
             subagent=subagent,
+            user_message=user_message,
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
-            filtered_tools=filtered_tools,
-            existing_tool_names=existing_tool_names,
-        )
-
-        # Create independent SubAgent process
-        process = SubAgentProcess(
-            subagent=subagent,
-            context=subagent_context,
-            tools=filtered_tools,
-            base_model=(model_override or self.model),
-            base_api_key=self.api_key,
-            base_url=self.base_url,
-            llm_client=self._llm_client,
-            permission_manager=self.permission_manager,
-            artifact_service=self.artifact_service,
-            abort_signal=abort_signal,
-        )
-
-        # Execute and relay all events
-        async for event in process.execute():
-            yield event
-
-        # Get structured result
-        result = process.result
-
-        # Yield final complete event with SubAgent result
-        yield {
-            "type": "complete",
-            "data": {
-                "content": result.final_content if result else "",
-                "subagent_used": subagent.name,
-                "subagent_result": result.to_event_data() if result else None,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+            model_override=model_override,
+            thinking_override=thinking_override,
+        ):
+            yield evt
 
     async def _execute_parallel(
         self,
@@ -3085,106 +2282,18 @@ class ReActAgent:
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Execute multiple SubAgents in parallel via ParallelScheduler.
-
-        Args:
-            subtasks: Decomposed sub-tasks from TaskDecomposer.
-            user_message: Original user message.
-            conversation_context: Recent conversation history.
-            project_id: Project ID for scoping.
-            tenant_id: Tenant ID for scoping.
-            abort_signal: Optional abort signal.
-
-        Yields:
-            SSE event dicts including parallel lifecycle events.
-        """
-        from ..subagent.parallel_scheduler import ParallelScheduler
-
-        yield {
-            "type": "parallel_started",
-            "data": {
-                "task_count": len(subtasks),
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-                "subtasks": [
-                    {"id": st.id, "description": st.description, "agent": st.target_subagent}
-                    for st in subtasks
-                ],
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-        # Build subagent name -> SubAgent mapping
-        subagent_map = {sa.name: sa for sa in self.subagents}
-
-        # Get current tools
-        _, current_tool_definitions = self._get_current_tools()
-
-        scheduler = ParallelScheduler()
-        results: list[SubAgentResult] = []
-
-        async for event in scheduler.execute(
+        """Execute multiple SubAgents in parallel."""
+        async for evt in self._session_runner.execute_parallel(
             subtasks=subtasks,
-            subagent_map=subagent_map,
-            tools=current_tool_definitions,
-            base_model=self.model,
-            base_api_key=self.api_key,
-            base_url=self.base_url,
-            llm_client=self._llm_client,
+            user_message=user_message,
             conversation_context=conversation_context,
-            main_token_budget=self.config.context_limit,
             project_id=project_id,
             tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            route_id=route_id,
             abort_signal=abort_signal,
         ):
-            if route_id or conversation_id:
-                event_data = event.get("data")
-                if isinstance(event_data, dict):
-                    tagged_data = dict(event_data)
-                    if route_id:
-                        tagged_data.setdefault("route_id", route_id)
-                        tagged_data.setdefault("trace_id", route_id)
-                    if conversation_id:
-                        tagged_data.setdefault("session_id", conversation_id)
-                    event = {**event, "data": tagged_data}
-            yield event
-            # Collect results from completed subtask events
-            if event.get("type") == "subtask_completed" and event.get("data", {}).get("result"):
-                result_data = event["data"]["result"]
-                if isinstance(result_data, SubAgentResult):
-                    results.append(result_data)
-
-        # Aggregate results
-        aggregated = await self._result_aggregator.aggregate_with_llm(results)
-
-        yield {
-            "type": "parallel_completed",
-            "data": {
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-                "total_tasks": len(subtasks),
-                "completed": len(results),
-                "all_succeeded": aggregated.all_succeeded,
-                "total_tokens": aggregated.total_tokens,
-                "failed_agents": list(aggregated.failed_agents),
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-        yield {
-            "type": "complete",
-            "data": {
-                "content": aggregated.summary,
-                "orchestration_mode": "parallel",
-                "subtask_count": len(subtasks),
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+            yield evt
 
     async def _execute_chain(
         self,
@@ -3197,90 +2306,18 @@ class ReActAgent:
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Execute SubAgents as a sequential chain (pipeline).
-
-        Converts decomposed subtasks with linear dependencies into a
-        SubAgentChain and executes them sequentially.
-
-        Args:
-            subtasks: Decomposed sub-tasks with linear dependencies.
-            user_message: Original user message.
-            conversation_context: Recent conversation history.
-            project_id: Project ID for scoping.
-            tenant_id: Tenant ID for scoping.
-            abort_signal: Optional abort signal.
-
-        Yields:
-            SSE event dicts including chain lifecycle events.
-        """
-        from ..subagent.chain import ChainStep, SubAgentChain
-
-        # Build subagent name -> SubAgent mapping
-        subagent_map = {sa.name: sa for sa in self.subagents}
-
-        # Convert subtasks to ChainSteps, respecting dependency order
-        # Sort by dependency: tasks with no deps first, then those depending on them
-        ordered = self._topological_sort_subtasks(subtasks)
-        chain_steps = []
-        for i, st in enumerate(ordered):
-            agent = subagent_map.get(st.target_subagent)
-            if not agent:
-                # Use first available subagent as fallback
-                agent = self.subagents[0] if self.subagents else None
-            if agent:
-                template = "{input}" if i == 0 else "{input}\n\nPrevious result:\n{prev}"
-                chain_steps.append(
-                    ChainStep(
-                        subagent=agent,
-                        task_template=st.description + "\n\n" + template,
-                        name=st.id,
-                    )
-                )
-
-        if not chain_steps:
-            return
-
-        chain = SubAgentChain(steps=chain_steps)
-        _, current_tool_definitions = self._get_current_tools()
-
-        async for event in chain.execute(
+        """Execute SubAgents as a sequential chain."""
+        async for evt in self._session_runner.execute_chain(
+            subtasks=subtasks,
             user_message=user_message,
-            tools=current_tool_definitions,
-            base_model=self.model,
-            base_api_key=self.api_key,
-            base_url=self.base_url,
-            llm_client=self._llm_client,
             conversation_context=conversation_context,
-            main_token_budget=self.config.context_limit,
             project_id=project_id,
             tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            route_id=route_id,
             abort_signal=abort_signal,
         ):
-            if route_id or conversation_id:
-                event_data = event.get("data")
-                if isinstance(event_data, dict):
-                    tagged_data = dict(event_data)
-                    if route_id:
-                        tagged_data.setdefault("route_id", route_id)
-                        tagged_data.setdefault("trace_id", route_id)
-                    if conversation_id:
-                        tagged_data.setdefault("session_id", conversation_id)
-                    event = {**event, "data": tagged_data}
-            yield event
-
-        chain_result = chain.result
-        yield {
-            "type": "complete",
-            "data": {
-                "content": chain_result.final_summary if chain_result else "",
-                "orchestration_mode": "chain",
-                "step_count": len(chain_steps),
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+            yield evt
 
     async def _execute_background(
         self,
@@ -3291,82 +2328,27 @@ class ReActAgent:
         project_id: str,
         tenant_id: str,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Launch a SubAgent for background execution (non-blocking).
-
-        The SubAgent starts running asynchronously and results are
-        delivered via the BackgroundExecutor callback.
-
-        Args:
-            subagent: SubAgent to run in background.
-            user_message: Task description.
-            conversation_id: Parent conversation ID.
-            conversation_context: Recent conversation history.
-            project_id: Project ID.
-            tenant_id: Tenant ID.
-
-        Yields:
-            SSE event confirming background launch.
-        """
-        _, current_tool_definitions = self._get_current_tools()
-
-        execution_id = self._background_executor.launch(
+        """Launch a SubAgent for background execution."""
+        async for evt in self._session_runner.execute_background(
             subagent=subagent,
             user_message=user_message,
             conversation_id=conversation_id,
-            tools=current_tool_definitions,
-            base_model=self.model,
             conversation_context=conversation_context,
-            main_token_budget=self.config.context_limit,
             project_id=project_id,
             tenant_id=tenant_id,
-            base_api_key=self.api_key,
-            base_url=self.base_url,
-            llm_client=self._llm_client,
-        )
+        ):
+            yield evt
 
-        yield {
-            "type": "background_launched",
-            "data": {
-                "execution_id": execution_id,
-                "subagent_id": subagent.id,
-                "subagent_name": subagent.display_name,
-                "task": user_message[:200],
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-        yield {
-            "type": "complete",
-            "data": {
-                "content": (
-                    f"Task delegated to {subagent.display_name} in background "
-                    f"(ID: {execution_id}). You will be notified when it completes."
-                ),
-                "orchestration_mode": "background",
-                "execution_id": execution_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-    async def _emit_subagent_lifecycle_hook(self, event: dict[str, Any]) -> None:
-        """Emit detached SubAgent lifecycle hook event if callback is configured."""
-        if not self._subagent_lifecycle_hook:
-            return
-        try:
-            result = self._subagent_lifecycle_hook(event)
-            if inspect.isawaitable(result):
-                await result
-        except Exception:
-            self._subagent_lifecycle_hook_failures += 1
-            logger.warning(
-                "SubAgent lifecycle hook failed",
-                extra={"event_type": event.get("type"), "run_id": event.get("run_id")},
-                exc_info=True,
-            )
+    async def _emit_subagent_lifecycle_hook(
+        self,
+        event: dict[str, Any],
+    ) -> None:
+        """Emit detached SubAgent lifecycle hook event."""
+        await self._session_runner.emit_subagent_lifecycle_hook(event)
 
     def _get_subagent_observability_stats(self) -> dict[str, int]:
-        """Return subagent lifecycle observability counters for overview tools."""
-        return {"hook_failures": int(self._subagent_lifecycle_hook_failures)}
+        """Return subagent lifecycle observability counters."""
+        return self._session_runner.get_subagent_observability_stats()
 
     def _runner_resolve_overrides(
         self,
@@ -3378,50 +2360,16 @@ class ReActAgent:
         thread_requested: bool,
         normalized_cleanup: str,
     ) -> tuple[str | None, str | None, float]:
-        """Resolve model/thinking overrides from run_state metadata and attach metadata.
-
-        Returns (resolved_model, resolved_thinking, configured_timeout).
-        """
-        resolved_model = requested_model
-        resolved_thinking = requested_thinking
-        configured_timeout = 0.0
-        run_state = self._subagent_run_registry.get_run(conversation_id, run_id)
-        if not run_state:
-            return resolved_model, resolved_thinking, configured_timeout
-        try:
-            configured_timeout = float(run_state.metadata.get("run_timeout_seconds") or 0)
-        except (TypeError, ValueError):
-            configured_timeout = 0.0
-        if not resolved_model:
-            resolved_model = (
-                str(
-                    run_state.metadata.get("model")
-                    or run_state.metadata.get("model_override")
-                    or ""
-                ).strip()
-                or None
-            )
-        if not resolved_thinking:
-            resolved_thinking = (
-                str(
-                    run_state.metadata.get("thinking")
-                    or run_state.metadata.get("thinking_override")
-                    or ""
-                ).strip()
-                or None
-            )
-        self._subagent_run_registry.attach_metadata(
+        """Resolve model/thinking overrides."""
+        return self._session_runner.runner_resolve_overrides(
             conversation_id=conversation_id,
             run_id=run_id,
-            metadata={
-                "spawn_mode": normalized_spawn_mode,
-                "thread_requested": bool(thread_requested),
-                "cleanup": normalized_cleanup,
-                "model_override": resolved_model,
-                "thinking_override": resolved_thinking,
-            },
+            requested_model=requested_model,
+            requested_thinking=requested_thinking,
+            normalized_spawn_mode=normalized_spawn_mode,
+            thread_requested=thread_requested,
+            normalized_cleanup=normalized_cleanup,
         )
-        return resolved_model, resolved_thinking, configured_timeout
 
     def _runner_mark_completion(
         self,
@@ -3434,34 +2382,17 @@ class ReActAgent:
         execution_time_ms: int | None,
         started_at: float,
     ) -> None:
-        """Mark a SubAgent run as completed or failed in the registry."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
-        current = self._subagent_run_registry.get_run(conversation_id, run_id)
-        if not current or current.status not in {
-            SubAgentRunStatus.PENDING,
-            SubAgentRunStatus.RUNNING,
-        }:
-            return
-        elapsed_ms = execution_time_ms or int((time.time() - started_at) * 1000)
-        expected = [SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING]
-        if result_success:
-            self._subagent_run_registry.mark_completed(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                summary=summary,
-                tokens_used=tokens_used,
-                execution_time_ms=elapsed_ms,
-                expected_statuses=expected,
-            )
-        else:
-            self._subagent_run_registry.mark_failed(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                error=result_error or "SubAgent session failed",
-                execution_time_ms=elapsed_ms,
-                expected_statuses=expected,
-            )
+        """Mark a SubAgent run as completed or failed."""
+        self._session_runner.runner_mark_completion(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            result_success=result_success,
+            result_error=result_error,
+            summary=summary,
+            tokens_used=tokens_used,
+            execution_time_ms=execution_time_ms,
+            started_at=started_at,
+        )
 
     def _runner_mark_timeout(
         self,
@@ -3470,20 +2401,11 @@ class ReActAgent:
         configured_timeout: float,
     ) -> None:
         """Handle TimeoutError for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
-        current = self._subagent_run_registry.get_run(conversation_id, run_id)
-        if current and current.status in {
-            SubAgentRunStatus.PENDING,
-            SubAgentRunStatus.RUNNING,
-        }:
-            self._subagent_run_registry.mark_timed_out(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                reason=(f"SubAgent session exceeded timeout ({configured_timeout}s)"),
-                metadata={"timeout_seconds": configured_timeout},
-                expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
-            )
+        self._session_runner.runner_mark_timeout(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            configured_timeout=configured_timeout,
+        )
 
     def _runner_mark_cancelled(
         self,
@@ -3491,19 +2413,10 @@ class ReActAgent:
         run_id: str,
     ) -> None:
         """Handle CancelledError for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
-        current = self._subagent_run_registry.get_run(conversation_id, run_id)
-        if current and current.status in {
-            SubAgentRunStatus.PENDING,
-            SubAgentRunStatus.RUNNING,
-        }:
-            self._subagent_run_registry.mark_cancelled(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                reason="Cancelled by control tool",
-                expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
-            )
+        self._session_runner.runner_mark_cancelled(
+            conversation_id=conversation_id,
+            run_id=run_id,
+        )
 
     def _runner_mark_error(
         self,
@@ -3513,20 +2426,12 @@ class ReActAgent:
         started_at: float,
     ) -> None:
         """Handle generic Exception for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
-        current = self._subagent_run_registry.get_run(conversation_id, run_id)
-        if current and current.status in {
-            SubAgentRunStatus.PENDING,
-            SubAgentRunStatus.RUNNING,
-        }:
-            self._subagent_run_registry.mark_failed(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                error=str(exc),
-                execution_time_ms=int((time.time() - started_at) * 1000),
-                expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
-            )
+        self._session_runner.runner_mark_error(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            exc=exc,
+            started_at=started_at,
+        )
 
     async def _runner_finalize(
         self,
@@ -3544,44 +2449,21 @@ class ReActAgent:
         resolved_model_override: str | None,
         resolved_thinking_override: str | None,
     ) -> None:
-        """Finalize a SubAgent runner: persist announce, emit lifecycle hook, cleanup."""
-        if not cancelled_by_control:
-            try:
-                await self._persist_subagent_completion_announce(
-                    conversation_id=conversation_id,
-                    run_id=run_id,
-                    fallback_summary=summary,
-                    fallback_tokens_used=tokens_used,
-                    fallback_execution_time_ms=execution_time_ms,
-                    spawn_mode=normalized_spawn_mode,
-                    thread_requested=bool(thread_requested),
-                    cleanup=normalized_cleanup,
-                    model_override=resolved_model_override,
-                    thinking_override=resolved_thinking_override,
-                    max_retries=self._subagent_announce_max_retries,
-                )
-            except Exception:
-                logger.warning(
-                    "Failed to persist completion announce metadata",
-                    extra={"conversation_id": conversation_id, "run_id": run_id},
-                    exc_info=True,
-                )
-        final_run = self._subagent_run_registry.get_run(conversation_id, run_id)
-        await self._emit_subagent_lifecycle_hook(
-            {
-                "type": "subagent_ended",
-                "conversation_id": conversation_id,
-                "run_id": run_id,
-                "subagent_name": subagent.name,
-                "status": final_run.status.value if final_run else "unknown",
-                "summary": (final_run.summary if final_run else summary) or "",
-                "error": (final_run.error if final_run else "") or "",
-                "spawn_mode": normalized_spawn_mode,
-                "thread_requested": bool(thread_requested),
-                "cleanup": normalized_cleanup,
-            }
+        """Finalize a SubAgent runner."""
+        await self._session_runner.runner_finalize(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            subagent=subagent,
+            cancelled_by_control=cancelled_by_control,
+            summary=summary,
+            tokens_used=tokens_used,
+            execution_time_ms=execution_time_ms,
+            normalized_spawn_mode=normalized_spawn_mode,
+            thread_requested=thread_requested,
+            normalized_cleanup=normalized_cleanup,
+            resolved_model_override=resolved_model_override,
+            resolved_thinking_override=resolved_thinking_override,
         )
-        self._subagent_session_tasks.pop(run_id, None)
 
     async def _launch_emit_lifecycle_hooks(
         self,
@@ -3595,30 +2477,16 @@ class ReActAgent:
         requested_model_override: str | None,
         requested_thinking_override: str | None,
     ) -> None:
-        """Emit spawning + spawned lifecycle hooks for a subagent session."""
-        await self._emit_subagent_lifecycle_hook(
-            {
-                "type": "subagent_spawning",
-                "conversation_id": conversation_id,
-                "run_id": run_id,
-                "subagent_name": subagent.name,
-                "spawn_mode": normalized_spawn_mode,
-                "thread_requested": bool(thread_requested),
-                "cleanup": normalized_cleanup,
-                "model_override": requested_model_override,
-                "thinking_override": requested_thinking_override,
-            }
-        )
-        await self._emit_subagent_lifecycle_hook(
-            {
-                "type": "subagent_spawned",
-                "conversation_id": conversation_id,
-                "run_id": run_id,
-                "subagent_name": subagent.name,
-                "spawn_mode": normalized_spawn_mode,
-                "thread_requested": bool(thread_requested),
-                "cleanup": normalized_cleanup,
-            }
+        """Emit spawning + spawned lifecycle hooks."""
+        await self._session_runner.launch_emit_lifecycle_hooks(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            subagent=subagent,
+            normalized_spawn_mode=normalized_spawn_mode,
+            thread_requested=thread_requested,
+            normalized_cleanup=normalized_cleanup,
+            requested_model_override=requested_model_override,
+            requested_thinking_override=requested_thinking_override,
         )
 
     @staticmethod
@@ -3628,21 +2496,12 @@ class ReActAgent:
         model_override: str | None,
         thinking_override: str | None,
     ) -> tuple[str, str, str | None, str | None]:
-        """Normalize input parameters for subagent session launch.
-
-        Returns:
-            (normalized_spawn_mode, normalized_cleanup,
-             requested_model_override, requested_thinking_override)
-        """
-        normalized_spawn_mode = (spawn_mode or "run").strip().lower() or "run"
-        normalized_cleanup = (cleanup or "keep").strip().lower() or "keep"
-        requested_model_override = (model_override or "").strip() or None
-        requested_thinking_override = (thinking_override or "").strip() or None
-        return (
-            normalized_spawn_mode,
-            normalized_cleanup,
-            requested_model_override,
-            requested_thinking_override,
+        """Normalize input parameters for subagent session launch."""
+        return SubAgentSessionRunner.normalize_launch_params(
+            spawn_mode,
+            cleanup,
+            model_override,
+            thinking_override,
         )
 
     async def _runner_consume_and_extract(
@@ -3658,18 +2517,8 @@ class ReActAgent:
         model_override: str | None,
         thinking_override: str | None,
     ) -> tuple[str, int | None, int | None, bool, str | None]:
-        """Consume subagent events and extract completion results.
-
-        Returns:
-            (summary, tokens_used, execution_time_ms, success, error)
-        """
-        summary = ""
-        tokens_used: int | None = None
-        execution_time_ms: int | None = None
-        result_success = True
-        result_error: str | None = None
-
-        async for evt in self._execute_subagent(
+        """Consume subagent events and extract completion results."""
+        return await self._session_runner.runner_consume_and_extract(
             subagent=subagent,
             user_message=user_message,
             conversation_context=conversation_context,
@@ -3679,19 +2528,7 @@ class ReActAgent:
             abort_signal=abort_signal,
             model_override=model_override,
             thinking_override=thinking_override,
-        ):
-            if evt.get("type") != "complete":
-                continue
-            data = evt.get("data", {})
-            subagent_result = data.get("subagent_result") or {}
-            summary = subagent_result.get("summary") or data.get("content", "")
-            tokens_used = subagent_result.get("tokens_used")
-            execution_time_ms = subagent_result.get("execution_time_ms")
-            if isinstance(subagent_result, dict):
-                result_success = bool(subagent_result.get("success", True))
-                result_error = subagent_result.get("error")
-
-        return summary, tokens_used, execution_time_ms, result_success, result_error
+        )
 
     async def _launch_subagent_session(  # noqa: PLR0913
         self,
@@ -3710,127 +2547,30 @@ class ReActAgent:
         cleanup: str = "keep",
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
-        if run_id in self._subagent_session_tasks:
-            raise ValueError(f"Run {run_id} is already running")
-
-        (
-            normalized_spawn_mode,
-            normalized_cleanup,
-            requested_model_override,
-            requested_thinking_override,
-        ) = self._normalize_launch_params(spawn_mode, cleanup, model_override, thinking_override)
-        start_gate = asyncio.Event()
-
-        async def _runner() -> None:
-            await start_gate.wait()
-            started_at = time.time()
-            cancelled_by_control = False
-            resolved_model_override, resolved_thinking_override, configured_timeout = (
-                self._runner_resolve_overrides(
-                    conversation_id=conversation_id,
-                    run_id=run_id,
-                    requested_model=requested_model_override,
-                    requested_thinking=requested_thinking_override,
-                    normalized_spawn_mode=normalized_spawn_mode,
-                    thread_requested=thread_requested,
-                    normalized_cleanup=normalized_cleanup,
-                )
-            )
-
-            summary = ""
-            tokens_used: int | None = None
-            execution_time_ms: int | None = None
-            result_success = True
-            result_error: str | None = None
-
-            try:
-                lane_wait_start = time.time()
-                async with self._subagent_lane_semaphore:
-                    lane_wait_ms = int((time.time() - lane_wait_start) * 1000)
-                    if lane_wait_ms > 0:
-                        self._subagent_run_registry.attach_metadata(
-                            conversation_id=conversation_id,
-                            run_id=run_id,
-                            metadata={"lane_wait_ms": lane_wait_ms},
-                        )
-                    consume_coro = self._runner_consume_and_extract(
-                        subagent=subagent,
-                        user_message=user_message,
-                        conversation_context=conversation_context,
-                        project_id=project_id,
-                        tenant_id=tenant_id,
-                        conversation_id=conversation_id,
-                        abort_signal=abort_signal,
-                        model_override=resolved_model_override,
-                        thinking_override=resolved_thinking_override,
-                    )
-                    if configured_timeout > 0:
-                        result = await asyncio.wait_for(consume_coro, timeout=configured_timeout)
-                    else:
-                        result = await consume_coro
-                    summary, tokens_used, execution_time_ms, result_success, result_error = result
-
-                self._runner_mark_completion(
-                    conversation_id,
-                    run_id,
-                    result_success,
-                    result_error,
-                    summary,
-                    tokens_used,
-                    execution_time_ms,
-                    started_at,
-                )
-            except TimeoutError:
-                self._runner_mark_timeout(conversation_id, run_id, configured_timeout)
-            except asyncio.CancelledError:
-                cancelled_by_control = True
-                self._runner_mark_cancelled(conversation_id, run_id)
-                raise
-            except Exception as exc:
-                self._runner_mark_error(conversation_id, run_id, exc, started_at)
-            finally:
-                await self._runner_finalize(
-                    conversation_id=conversation_id,
-                    run_id=run_id,
-                    subagent=subagent,
-                    cancelled_by_control=cancelled_by_control,
-                    summary=summary,
-                    tokens_used=tokens_used,
-                    execution_time_ms=execution_time_ms,
-                    normalized_spawn_mode=normalized_spawn_mode,
-                    thread_requested=thread_requested,
-                    normalized_cleanup=normalized_cleanup,
-                    resolved_model_override=resolved_model_override,
-                    resolved_thinking_override=resolved_thinking_override,
-                )
-
-        task = asyncio.create_task(_runner(), name=f"subagent-session-{run_id}")
-        self._subagent_session_tasks[run_id] = task
-        await self._launch_emit_lifecycle_hooks(
-            conversation_id=conversation_id,
+        await self._session_runner.launch_subagent_session(
             run_id=run_id,
             subagent=subagent,
-            normalized_spawn_mode=normalized_spawn_mode,
+            user_message=user_message,
+            conversation_id=conversation_id,
+            conversation_context=conversation_context,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            abort_signal=abort_signal,
+            model_override=model_override,
+            thinking_override=thinking_override,
+            spawn_mode=spawn_mode,
             thread_requested=thread_requested,
-            normalized_cleanup=normalized_cleanup,
-            requested_model_override=requested_model_override,
-            requested_thinking_override=requested_thinking_override,
+            cleanup=cleanup,
         )
-        start_gate.set()
 
     @staticmethod
-    def _resolve_subagent_completion_outcome(status: str) -> tuple[str, str]:
+    def _resolve_subagent_completion_outcome(
+        status: str,
+    ) -> tuple[str, str]:
         """Map terminal run status to announce outcome labels."""
-        status_key = (status or "").strip().lower()
-        if status_key == "completed":
-            return "success", "completed successfully"
-        if status_key == "failed":
-            return "error", "failed"
-        if status_key == "timed_out":
-            return "timeout", "timed out"
-        if status_key == "cancelled":
-            return "cancelled", "cancelled"
-        return "unknown", status_key or "unknown"
+        return SubAgentSessionRunner.resolve_subagent_completion_outcome(
+            status,
+        )
 
     def _append_capped_announce_event(
         self,
@@ -3839,12 +2579,11 @@ class ReActAgent:
         event: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """Append announce event while enforcing bounded history size."""
-        normalized_events = list(events)
-        if len(normalized_events) >= self._subagent_announce_max_events:
-            normalized_events = normalized_events[-(self._subagent_announce_max_events - 1) :]
-            dropped_count += 1
-        normalized_events.append(event)
-        return normalized_events, dropped_count
+        return self._session_runner.append_capped_announce_event(
+            events,
+            dropped_count,
+            event,
+        )
 
     @classmethod
     def _build_subagent_completion_payload(
@@ -3860,33 +2599,18 @@ class ReActAgent:
         model_override: str | None,
         thinking_override: str | None,
     ) -> dict[str, Any]:
-        """Build normalized completion announce payload from terminal run state."""
-        outcome, status_text = cls._resolve_subagent_completion_outcome(run.status.value)
-        result_text = (run.summary or fallback_summary or "").strip() or "(not available)"
-        execution_time_ms = (
-            run.execution_time_ms
-            if run.execution_time_ms is not None
-            else fallback_execution_time_ms
+        """Build normalized completion announce payload."""
+        return SubAgentSessionRunner.build_subagent_completion_payload(
+            run=run,
+            fallback_summary=fallback_summary,
+            fallback_tokens_used=fallback_tokens_used,
+            fallback_execution_time_ms=fallback_execution_time_ms,
+            spawn_mode=spawn_mode,
+            thread_requested=thread_requested,
+            cleanup=cleanup,
+            model_override=model_override,
+            thinking_override=thinking_override,
         )
-        tokens_used = run.tokens_used if run.tokens_used is not None else fallback_tokens_used
-        return {
-            "run_id": run.run_id,
-            "conversation_id": run.conversation_id,
-            "subagent_name": run.subagent_name,
-            "status": run.status.value,
-            "outcome": outcome,
-            "status_text": status_text,
-            "result": result_text,
-            "notes": run.error or "",
-            "execution_time_ms": execution_time_ms,
-            "tokens_used": tokens_used,
-            "spawn_mode": spawn_mode,
-            "thread_requested": bool(thread_requested),
-            "cleanup": cleanup,
-            "model_override": model_override,
-            "thinking_override": thinking_override,
-            "completed_at": run.ended_at.isoformat() if run.ended_at else None,
-        }
 
     async def _persist_subagent_completion_announce(
         self,
@@ -3903,192 +2627,32 @@ class ReActAgent:
         thinking_override: str | None,
         max_retries: int,
     ) -> None:
-        """Persist terminal announce payload with retry/backoff and bounded metadata."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
-        terminal_statuses = [
-            SubAgentRunStatus.COMPLETED,
-            SubAgentRunStatus.FAILED,
-            SubAgentRunStatus.TIMED_OUT,
-            SubAgentRunStatus.CANCELLED,
-        ]
-        attempts_used = 0
-        last_error = "announce metadata update conflict"
-
-        for attempt in range(max_retries + 1):
-            attempts_used = attempt + 1
-            run = self._subagent_run_registry.get_run(conversation_id, run_id)
-            if not run or run.status not in terminal_statuses:
-                return
-
-            payload = self._build_subagent_completion_payload(
-                run=run,
-                fallback_summary=fallback_summary,
-                fallback_tokens_used=fallback_tokens_used,
-                fallback_execution_time_ms=fallback_execution_time_ms,
-                spawn_mode=spawn_mode,
-                thread_requested=thread_requested,
-                cleanup=cleanup,
-                model_override=model_override,
-                thinking_override=thinking_override,
-            )
-            announce_events = run.metadata.get("announce_events")
-            if not isinstance(announce_events, list):
-                announce_events = []
-            dropped_count = int(run.metadata.get("announce_events_dropped") or 0)
-
-            if attempt > 0:
-                retry_event = {
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "type": "completion_retry",
-                    "attempt": attempt,
-                    "run_id": run_id,
-                    "reason": last_error,
-                }
-                announce_events, dropped_count = self._append_capped_announce_event(
-                    announce_events, dropped_count, retry_event
-                )
-
-            delivered_event = {
-                "timestamp": datetime.now(UTC).isoformat(),
-                "type": "completion_delivered",
-                "attempt": attempts_used,
-                "run_id": run_id,
-                "status": payload["status"],
-            }
-            announce_events, dropped_count = self._append_capped_announce_event(
-                announce_events, dropped_count, delivered_event
-            )
-
-            try:
-                updated_run = self._subagent_run_registry.attach_metadata(
-                    conversation_id=conversation_id,
-                    run_id=run_id,
-                    metadata={
-                        "announce_payload": payload,
-                        "announce_status": "delivered",
-                        "announce_attempt_count": attempts_used,
-                        "announce_completed_at": datetime.now(UTC).isoformat(),
-                        "announce_last_error": "",
-                        "announce_events": announce_events,
-                        "announce_events_dropped": dropped_count,
-                    },
-                    expected_statuses=terminal_statuses,
-                )
-            except Exception as exc:
-                updated_run = None
-                last_error = str(exc)
-                logger.warning(
-                    "Failed to attach completion announce metadata",
-                    extra={
-                        "conversation_id": conversation_id,
-                        "run_id": run_id,
-                        "attempt": attempts_used,
-                    },
-                    exc_info=True,
-                )
-
-            if updated_run is not None:
-                return
-            if not last_error:
-                last_error = "announce metadata update conflict"
-
-            if attempt < max_retries:
-                delay_seconds = (self._subagent_announce_retry_delay_ms * (2**attempt)) / 1000.0
-                await asyncio.sleep(delay_seconds)
-
-        run = self._subagent_run_registry.get_run(conversation_id, run_id)
-        if not run or run.status not in terminal_statuses:
-            return
-        announce_events = run.metadata.get("announce_events")
-        if not isinstance(announce_events, list):
-            announce_events = []
-        dropped_count = int(run.metadata.get("announce_events_dropped") or 0)
-        giveup_event = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "type": "completion_giveup",
-            "attempt": attempts_used,
-            "run_id": run_id,
-            "reason": last_error,
-        }
-        announce_events, dropped_count = self._append_capped_announce_event(
-            announce_events, dropped_count, giveup_event
-        )
-        self._subagent_run_registry.attach_metadata(
+        """Persist terminal announce payload with retry/backoff."""
+        await self._session_runner.persist_subagent_completion_announce(
             conversation_id=conversation_id,
             run_id=run_id,
-            metadata={
-                "announce_status": "giveup",
-                "announce_attempt_count": attempts_used,
-                "announce_last_error": last_error,
-                "announce_events": announce_events,
-                "announce_events_dropped": dropped_count,
-            },
-            expected_statuses=terminal_statuses,
+            fallback_summary=fallback_summary,
+            fallback_tokens_used=fallback_tokens_used,
+            fallback_execution_time_ms=fallback_execution_time_ms,
+            spawn_mode=spawn_mode,
+            thread_requested=thread_requested,
+            cleanup=cleanup,
+            model_override=model_override,
+            thinking_override=thinking_override,
+            max_retries=max_retries,
         )
 
     async def _cancel_subagent_session(self, run_id: str) -> bool:
         """Cancel a detached SubAgent session by run_id."""
-        task = self._subagent_session_tasks.get(run_id)
-        if task and not task.done():
-            task.cancel()
-            return True
-        return False
+        return await self._session_runner.cancel_subagent_session(run_id)
 
     @staticmethod
-    def _topological_sort_subtasks(subtasks: list[Any]) -> list[Any]:
-        """Sort subtasks by dependency order (topological sort)."""
-        id_to_task = {st.id: st for st in subtasks}
-        visited = set()
-        result = []
+    def _topological_sort_subtasks(
+        subtasks: list[Any],
+    ) -> list[Any]:
+        """Sort subtasks by dependency order."""
+        return SubAgentSessionRunner.topological_sort_subtasks(subtasks)
 
-        def visit(task_id: str) -> None:
-            if task_id in visited:
-                return
-            visited.add(task_id)
-            task = id_to_task.get(task_id)
-            if task:
-                for dep in task.dependencies:
-                    visit(dep)
-                result.append(task)
-
-        for st in subtasks:
-            visit(st.id)
-        return result
-
-    async def _execute_skill_directly(
-        self,
-        skill: Skill,
-        query: str,
-        project_id: str,
-        user_id: str,
-        tenant_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """
-        Execute skill directly via SkillOrchestrator.
-
-        Delegates to SkillOrchestrator for modular implementation.
-
-        Args:
-            skill: Matched skill to execute
-            query: User query
-            project_id: Project ID for context
-            user_id: User ID for context
-            tenant_id: Tenant ID for context
-
-        Yields:
-            Event dictionaries for skill execution progress
-        """
-        # Delegate to SkillOrchestrator
-        context = SkillExecutionContext(
-            project_id=project_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            query=query,
-        )
-
-        async for event in self._skill_orchestrator.execute_directly(cast("SkillProtocol", skill), context):
-            yield event
 
     def _extract_sandbox_id_from_tools(self) -> str | None:
         """Extract sandbox_id from any available sandbox tool wrapper."""

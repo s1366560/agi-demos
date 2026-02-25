@@ -2,7 +2,7 @@
 
 This module provides a session pool mechanism similar to MCP Worker's
 _mcp_clients pattern, enabling efficient reuse of expensive-to-create
-components like tool definitions, SubAgentRouter, and SkillExecutor.
+components like tool definitions and SubAgentRouter.
 
 Key benefits:
 - Tool definition conversion cached (50-200ms -> <1ms on cache hit)
@@ -53,7 +53,6 @@ class AgentSessionContext:
 
     # Cached optional components
     subagent_router: Any | None = None  # SubAgentRouter with built keyword index
-    skill_executor: Any | None = None  # SkillExecutor instance
     resource_sync_service: Any | None = None  # SkillResourceSyncService instance
     skills: list[Any] = field(default_factory=list)  # List[Skill]
 
@@ -617,15 +616,8 @@ async def get_or_create_agent_session(
         match_threshold=subagent_match_threshold,
     )
 
-    # Create SkillExecutor and SkillResourceSyncService
-    # SkillExecutor requires pre-loaded skills, but resource_sync_service should
-    # always be available for dynamically loaded skills via skill_loader tool.
-    skill_executor = None
-    resource_sync_service = None
-
     from pathlib import Path
 
-    from src.domain.ports.services.skill_resource_port import SkillResourcePort
     from src.infrastructure.adapters.secondary.skill import (
         LocalSkillResourceAdapter,
         SandboxSkillResourceAdapter,
@@ -634,19 +626,9 @@ async def get_or_create_agent_session(
         get_mcp_sandbox_adapter,
     )
 
-    # Get sandbox adapter for resource injection
     sandbox_adapter = get_mcp_sandbox_adapter()
-
-    # Host project path: where skill files live on the host filesystem.
-    # Used by SandboxSkillResourceAdapter to find and read local SKILL.md
-    # and resource files before syncing them to the container.
     host_project_path = Path.cwd()
 
-    # Container workspace path: where files are written inside the sandbox.
-    sandbox_workspace = Path("/workspace")
-
-    # Create unified SkillResourcePort based on environment
-    skill_resource_port: SkillResourcePort | None = None
     if sandbox_adapter:
         skill_resource_port = SandboxSkillResourceAdapter(
             sandbox_adapter=sandbox_adapter,
@@ -655,17 +637,6 @@ async def get_or_create_agent_session(
     else:
         skill_resource_port = LocalSkillResourceAdapter(
             default_project_path=host_project_path,
-        )
-
-    if skills:
-        from src.infrastructure.agent.core.skill_executor import SkillExecutor
-
-        skill_executor = SkillExecutor(
-            tools=tools,
-            skill_resource_port=skill_resource_port,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            project_path=sandbox_workspace,
         )
 
     # Create SkillResourceSyncService unconditionally — needed for
@@ -699,7 +670,6 @@ async def get_or_create_agent_session(
         tool_definitions=tool_definitions,
         raw_tools=tools,
         subagent_router=subagent_router,
-        skill_executor=skill_executor,
         resource_sync_service=resource_sync_service,
         skills=skills,
         system_prompt_manager=system_prompt_manager,
@@ -894,7 +864,8 @@ async def cleanup_marked_sessions() -> int:
         for key, session in _agent_session_pool.items():
             # Check if session is marked for deletion and grace period has passed
             if hasattr(session, "_marked_for_deletion_at"):
-                if now >= session._marked_for_deletion_at:
+                deletion_at: float = getattr(session, "_marked_for_deletion_at", 0.0)
+                if now >= deletion_at:
                     keys_to_remove.append(key)
 
         for key in keys_to_remove:

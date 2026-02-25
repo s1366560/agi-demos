@@ -262,7 +262,7 @@ class TestToolConverter:
             _tool_schema = MagicMock()
             _tool_schema.is_model_visible = True
 
-            async def ainvoke(self, kwargs):
+            async def ainvoke(self, **kwargs):
                 return f"ainvoke: {kwargs}"
 
         tools = {"ainvoke_tool": AinvokeTool()}

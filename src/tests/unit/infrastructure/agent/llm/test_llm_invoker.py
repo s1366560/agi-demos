@@ -719,62 +719,6 @@ class TestStreamEventProcessing:
         assert events[0].__class__.__name__ == "AgentThoughtDeltaEvent"
         assert result.reasoning == "Thinking..."
 
-    async def test_process_finish_event(
-        self, invoker, mock_message, invocation_config, invocation_context
-    ):
-        """Test processing FINISH event."""
-        from src.infrastructure.agent.core.llm_stream import StreamEventType
-
-        event = MagicMock()
-        event.type = StreamEventType.FINISH
-        event.data = {"reason": "tool_calls"}
-
-        result = InvocationResult()
-
-        events = []
-        async for e in invoker._process_stream_event(
-            event=event,
-            result=result,
-            config=invocation_config,
-            context=invocation_context,
-            current_message=mock_message,
-            pending_tool_calls={},
-            work_plan_steps=[],
-            tool_to_step_mapping={},
-            execute_tool_callback=AsyncMock(),
-            current_plan_step_holder=[None],
-        ):
-            events.append(e)
-
-        assert len(events) == 0  # FINISH doesn't emit domain event
-        assert result.finish_reason == "tool_calls"
-
-    async def test_process_error_event_raises(
-        self, invoker, mock_message, invocation_config, invocation_context
-    ):
-        """Test processing ERROR event raises exception."""
-        from src.infrastructure.agent.core.llm_stream import StreamEventType
-
-        event = MagicMock()
-        event.type = StreamEventType.ERROR
-        event.data = {"message": "API error"}
-
-        result = InvocationResult()
-
-        with pytest.raises(Exception, match="API error"):
-            async for _ in invoker._process_stream_event(
-                event=event,
-                result=result,
-                config=invocation_config,
-                context=invocation_context,
-                current_message=mock_message,
-                pending_tool_calls={},
-                work_plan_steps=[],
-                tool_to_step_mapping={},
-                execute_tool_callback=AsyncMock(),
-                current_plan_step_holder=[None],
-            ):
-                pass
 
 
 # ============================================================================

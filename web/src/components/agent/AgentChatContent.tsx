@@ -97,7 +97,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const basePath = useMemo(() => {
       if (customBasePath) return customBasePath;
       if (urlProjectId) return `/project/${urlProjectId}/agent`;
-      return `/project/${projectId}/agent`;
+      return `/project/${projectId ?? ''}/agent`;
     }, [customBasePath, urlProjectId, projectId]);
 
     // Store state - single useShallow selector to avoid infinite re-renders
@@ -165,9 +165,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const handleResumeConversation = useCallback(
       (id: string) => {
         if (customBasePath) {
-          navigate(`${basePath}/${id}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+          void navigate(`${basePath}/${id}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
         } else {
-          navigate(`${basePath}/${id}`);
+          void navigate(`${basePath}/${id}`);
         }
       },
       [navigate, basePath, customBasePath, queryProjectId]
@@ -190,7 +190,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         subscribeSSE(projectId);
         // Try to ensure sandbox exists and get sandboxId
         // Pass projectId directly to avoid race condition with setProjectId
-        ensureSandbox(projectId).then((sandboxId) => {
+        void ensureSandbox(projectId).then((sandboxId) => {
           if (sandboxId) {
             setSandboxId(sandboxId);
           }
@@ -287,7 +287,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           const convId = store.activeConversationId;
           if (!convId) return;
           const newMode = store.isPlanMode ? 'build' : 'plan';
-          import('@/services/planService').then(({ planService }) => {
+          void import('@/services/planService').then(({ planService }) => {
             planService
               .switchMode(convId, newMode)
               .then(() => {
@@ -321,7 +321,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Load conversations
     useEffect(() => {
-      if (projectId) loadConversations(projectId);
+      if (projectId) void loadConversations(projectId);
     }, [projectId, loadConversations]);
 
     // Handle URL changes
@@ -336,10 +336,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         const alreadyStreaming =
           freshState.activeConversationId === conversationId && freshState.isStreaming;
         if (!alreadyStreaming) {
-          loadMessages(conversationId, projectId);
+          void loadMessages(conversationId, projectId);
         }
         // Load any pending HITL requests to restore dialog state after refresh
-        loadPendingHITL(conversationId);
+        void loadPendingHITL(conversationId);
       } else if (projectId && !conversationId) {
         setActiveConversation(null);
       }
@@ -402,9 +402,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       const newId = await createNewConversation(projectId);
       if (newId) {
         if (customBasePath) {
-          navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+          void navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
         } else {
-          navigate(`${basePath}/${newId}`);
+          void navigate(`${basePath}/${newId}`);
         }
       }
     }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
@@ -431,9 +431,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         });
         if (!conversationId && newId) {
           if (customBasePath) {
-            navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+            void navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
           } else {
-            navigate(`${basePath}/${newId}`);
+            void navigate(`${basePath}/${newId}`);
           }
         }
       },
@@ -455,8 +455,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       () =>
         timeline.length === 0 && !activeConversationId ? (
           <EmptyState
-            onNewConversation={handleNewConversation}
-            onSendPrompt={handleSend}
+            onNewConversation={() => { void handleNewConversation(); }}
+            onSendPrompt={(...args) => { void handleSend(...args); }}
             lastConversation={lastConversation}
             onResumeConversation={handleResumeConversation}
             projectId={projectId}
@@ -469,13 +469,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             hasEarlierMessages={hasEarlier}
             onLoadEarlier={() => {
               if (activeConversationId && projectId) {
-                loadEarlierMessages(activeConversationId, projectId);
+                void loadEarlierMessages(activeConversationId, projectId);
               }
             }}
             isLoadingEarlier={isLoadingEarlier}
             conversationId={activeConversationId}
             suggestions={suggestions}
-            onSuggestionSelect={handleSend}
+            onSuggestionSelect={(...args) => { void handleSend(...args); }}
           />
         ),
       [
@@ -492,7 +492,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         suggestions,
         loadEarlierMessages,
         projectId,
-        
+
       ]
     );
 
@@ -524,12 +524,23 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         const containerWidth =
           (e.currentTarget as HTMLElement).parentElement?.offsetWidth || window.innerWidth;
 
+        let animationFrameId: number | null = null;
+
         const onMove = (ev: MouseEvent) => {
-          const delta = ev.clientX - startX;
-          const newRatio = startRatio + delta / containerWidth;
-          setSplitRatio(newRatio);
+          // Use requestAnimationFrame to throttle updates for smoother dragging
+          if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+          }
+          animationFrameId = requestAnimationFrame(() => {
+            const delta = ev.clientX - startX;
+            const newRatio = Math.max(0.2, Math.min(0.8, startRatio + delta / containerWidth));
+            setSplitRatio(newRatio);
+          });
         };
         const onUp = () => {
+          if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+          }
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
           document.body.style.cursor = '';
@@ -594,12 +605,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             </div>
           </div>
           <InputBar
-            onSend={handleSend}
+            onSend={(...args) => { void handleSend(...args); }}
             onAbort={abortStream}
             isStreaming={isStreaming}
             disabled={isLoadingHistory}
             projectId={projectId || undefined}
-            onTogglePlanMode={handleTogglePlanMode}
+            onTogglePlanMode={() => { void handleTogglePlanMode(); }}
             isPlanMode={isPlanMode}
           />
         </div>
@@ -619,7 +630,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Export conversation as PDF
     const handleExportPdf = useCallback(() => {
       if (timeline.length === 0) return;
-      downloadConversationPdf(
+      void downloadConversationPdf(
         timeline,
         undefined,
         `conversation-${activeConversationId || 'export'}.pdf`
@@ -730,8 +741,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Task mode: chat + task panel split
     if (layoutMode === 'task') {
-      const leftPercent = `${splitRatio * 100}%`;
-      const rightPercent = `${(1 - splitRatio) * 100}%`;
+      const leftPercent = `${String(splitRatio * 100)}%`;
+      const rightPercent = `${String((1 - splitRatio) * 100)}%`;
 
       return (
         <div
@@ -741,7 +752,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Left: Chat */}
             <div
               className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent }}
+              style={{ width: leftPercent, willChange: 'width' }}
             >
               {chatColumn}
             </div>
@@ -758,7 +769,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Right: Task Panel */}
             <div
               className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
-              style={{ width: rightPercent }}
+              style={{ width: rightPercent, willChange: 'width' }}
             >
               <RightPanel
                 tasks={tasks}
@@ -780,8 +791,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Code split mode
     if (layoutMode === 'code') {
-      const leftPercent = `${splitRatio * 100}%`;
-      const rightPercent = `${(1 - splitRatio) * 100}%`;
+      const leftPercent = `${String(splitRatio * 100)}%`;
+      const rightPercent = `${String((1 - splitRatio) * 100)}%`;
 
       return (
         <div
@@ -791,7 +802,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Left: Chat */}
             <div
               className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent }}
+              style={{ width: leftPercent, willChange: 'width' }}
             >
               {chatColumn}
             </div>
@@ -808,7 +819,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Right: Sandbox Terminal */}
             <div
               className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900 mobile-full"
-              style={{ width: rightPercent }}
+              style={{ width: rightPercent, willChange: 'width' }}
             >
               {sandboxContent}
             </div>
@@ -821,8 +832,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Canvas mode: chat + artifact canvas split
     if (layoutMode === 'canvas') {
-      const leftPercent = `${splitRatio * 100}%`;
-      const rightPercent = `${(1 - splitRatio) * 100}%`;
+      const leftPercent = `${String(splitRatio * 100)}%`;
+      const rightPercent = `${String((1 - splitRatio) * 100)}%`;
 
       return (
         <div
@@ -831,8 +842,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
             {/* Left: Chat */}
             <div
-              className="h-full overflow-hidden flex flex-col transition-[width] duration-200 ease-out mobile-full"
-              style={{ width: leftPercent, minWidth: '280px' }}
+              className="h-full overflow-hidden flex flex-col mobile-full"
+              style={{ width: leftPercent, minWidth: '280px', willChange: 'width' }}
             >
               {chatColumn}
             </div>
@@ -848,11 +859,11 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
             {/* Right: Canvas Panel */}
             <div
-              className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 transition-[width] duration-200 ease-out mobile-full"
-              style={{ width: rightPercent, minWidth: '320px' }}
+              className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
+              style={{ width: rightPercent, minWidth: '320px', willChange: 'width' }}
             >
               <CanvasPanel
-                onSendPrompt={(prompt) => handleSend(prompt)}
+                onSendPrompt={(prompt) => { void handleSend(prompt); }}
                 onUpdateModelContext={(ctx) => {
                   const convId = useAgentV3Store.getState().activeConversationId;
                   if (convId) {

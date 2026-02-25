@@ -17,13 +17,19 @@ import type { Components } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 
+
 /**
  * Rehype plugin that strips empty `data` attributes from elements.
  * Prevents React warning: "An empty string was passed to the data attribute."
  */
 function rehypeStripEmptyData() {
-  return (tree: any) => {
-    const visit = (node: any) => {
+  interface HastNode {
+    type: string;
+    properties?: Record<string, unknown>;
+    children?: HastNode[];
+  }
+  return (tree: HastNode) => {
+    const visit = (node: HastNode) => {
       if (node.type === 'element' && node.properties && 'data' in node.properties) {
         if (node.properties.data === '') {
           delete node.properties.data;
@@ -42,8 +48,10 @@ const baseRemarkPlugins = [remarkGfm];
 const baseRehypePlugins = [rehypeRaw, rehypeStripEmptyData];
 
 // Cached math plugins after lazy load
-let cachedMathPlugins: { remarkMath: any; rehypeKatex: any } | null = null;
-let mathLoadPromise: Promise<{ remarkMath: any; rehypeKatex: any }> | null = null;
+type RemarkPlugin = typeof remarkGfm;
+type RehypePlugin = typeof rehypeRaw;
+let cachedMathPlugins: { remarkMath: RemarkPlugin; rehypeKatex: RehypePlugin } | null = null;
+let mathLoadPromise: Promise<{ remarkMath: RemarkPlugin; rehypeKatex: RehypePlugin }> | null = null;
 
 const MATH_PATTERN = /\$\$[\s\S]+?\$\$|\$[^\s$].*?[^\s$]\$/;
 
@@ -56,8 +64,8 @@ async function loadMathPlugins() {
       import('katex/dist/katex.min.css'),
     ]).then(([remarkMathMod, rehypeKatexMod]) => {
       cachedMathPlugins = {
-        remarkMath: remarkMathMod.default,
-        rehypeKatex: rehypeKatexMod.default,
+        remarkMath: remarkMathMod.default as RemarkPlugin,
+        rehypeKatex: rehypeKatexMod.default as unknown as RehypePlugin,
       };
       return cachedMathPlugins;
     });
@@ -76,7 +84,7 @@ export function useMarkdownPlugins(content?: string) {
   useEffect(() => {
     if (hasMath && !cachedMathPlugins && !loadAttempted.current) {
       loadAttempted.current = true;
-      loadMathPlugins().then(() => { setMathLoaded(true); });
+      void loadMathPlugins().then(() => { setMathLoaded(true); });
     }
   }, [hasMath]);
 
@@ -108,4 +116,9 @@ export const safeMarkdownComponents: Partial<Components> = {
     if (!src) return null;
     return <img src={src} {...props} />;
   },
+  table: ({ children, ...props }) => (
+    <div className="overflow-x-auto w-full">
+      <table {...props}>{children}</table>
+    </div>
+  ),
 };

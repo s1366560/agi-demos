@@ -382,7 +382,7 @@ class TestContextCompressionEngine:
         mock_llm = AsyncMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(message=MagicMock(content="Summary of conversation."))]
-        mock_llm.chat_completion.return_value = mock_response
+        mock_llm.generate.return_value = mock_response
 
         result = await engine.compress(
             system_prompt="You are helpful.",
@@ -406,7 +406,7 @@ class TestContextCompressionEngine:
         mock_response.choices = [
             MagicMock(message=MagicMock(content="Ultra-compact global summary."))
         ]
-        mock_llm.chat_completion.return_value = mock_response
+        mock_llm.generate.return_value = mock_response
 
         result = await engine.compress(
             system_prompt="You are helpful.",
@@ -574,7 +574,7 @@ class TestRoleAwareCompression:
         mock_llm = AsyncMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(message=MagicMock(content="Summary"))]
-        mock_llm.chat_completion.return_value = mock_response
+        mock_llm.generate.return_value = mock_response
 
         await engine.compress(
             system_prompt="System",
@@ -585,7 +585,7 @@ class TestRoleAwareCompression:
         )
 
         # Verify the prompt sent to LLM contains partitioned sections
-        call_args = mock_llm.chat_completion.call_args_list[0]
+        call_args = mock_llm.generate.call_args_list[0]
         prompt_content = call_args.kwargs["messages"][1]["content"]
         assert "USER MESSAGES" in prompt_content
         assert "ASSISTANT & TOOL MESSAGES" in prompt_content

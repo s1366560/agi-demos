@@ -50,6 +50,7 @@ dependencies = [
     # Ray for Actor-based agent runtime
     "ray>=2.9.0",
     "lark-oapi",
+    "neo4j>=6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -393,6 +394,8 @@ ignore = [
 "src/infrastructure/agent/core/project_react_agent.py" = ["ANN401"]
 "src/infrastructure/agent/core/tool_converter.py" = ["ANN401"]
 "src/infrastructure/agent/core/tool_selector.py" = ["ANN401"]
+"src/infrastructure/agent/core/subagent_runner.py" = ["ANN401"]
+"src/infrastructure/agent/core/subagent_tools.py" = ["ANN401"]
 
 # Infrastructure - agent doom loop and HITL (additional)
 "src/infrastructure/agent/doom_loop/detector.py" = ["ANN401"]
@@ -548,6 +551,7 @@ markers = [
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.38.1",
     "watchdog>=6.0.0",
 ]
 

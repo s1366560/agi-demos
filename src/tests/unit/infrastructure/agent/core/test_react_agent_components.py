@@ -5,7 +5,6 @@ Tests the integration between all refactored components:
 - Configuration management (AgentConfig, ConfigManager)
 - Event system (EventBus, EventMapper, SSE)
 - Tool system (ToolRegistry, ToolExecutor)
-- Execution routing (ExecutionRouter)
 
 This is Phase 6 of the refactoring plan.
 
@@ -22,7 +21,6 @@ from src.domain.events.types import AgentEventType
 from src.infrastructure.agent.config import (
     AgentConfig,
     ConfigManager,
-    ExecutionConfig,
     get_config,
     set_config,
 )
@@ -42,8 +40,6 @@ from src.infrastructure.agent.events import (
 )
 from src.infrastructure.agent.routing.execution_router import (
     ExecutionPath,
-    ExecutionRouter,
-    SkillMatcher,
 )
 from src.infrastructure.agent.tools.tool_registry import (
     Tool,
@@ -92,11 +88,11 @@ class TestErrorAndConfigIntegration:
     def test_config_validation_errors(self) -> None:
         """Should raise validation errors for invalid config."""
         with pytest.raises(ValueError):
-            config = ExecutionConfig(max_steps=-1)
+            config = AgentConfig(max_steps=-1)
             config.validate()
 
         with pytest.raises(ValueError):
-            config = ExecutionConfig(skill_match_threshold=2.0)
+            config = AgentConfig(skill_match_threshold=2.0)
             config.validate()
 
     def test_config_manager_with_error_context(self) -> None:
@@ -104,9 +100,7 @@ class TestErrorAndConfigIntegration:
         manager = ConfigManager()
         manager.set_tenant_config(
             "tenant_1",
-            AgentConfig(
-                execution=ExecutionConfig(max_steps=5),
-            ),
+            AgentConfig(max_steps=5),
         )
 
         # Get config should work
@@ -145,9 +139,7 @@ class TestEventAndConfigIntegration:
         manager.register_change_callback(on_change)
         manager.set_tenant_config(
             "tenant_1",
-            AgentConfig(
-                execution=ExecutionConfig(max_steps=15),
-            ),
+            AgentConfig(max_steps=15),
         )
 
         assert len(events) == 1
@@ -226,42 +218,6 @@ class TestToolAndEventIntegration:
         # In real implementation, executor would emit TOOL_ERROR
 
 
-class TestRouterAndToolIntegration:
-    """Tests for routing and tool system integration."""
-
-    def test_router_recommends_tool_based_on_message(self) -> None:
-        """Should recommend tool based on message content."""
-        registry = ToolRegistry()
-        registry.register(MockTool("read_file", "Read a file"))
-        registry.register(MockTool("write_file", "Write to a file"))
-
-        # Mock skill matcher that looks for keywords
-        class KeywordSkillMatcher(SkillMatcher):
-            def __init__(self, tool_names: list[str]) -> None:
-                self._tools = tool_names
-
-            async def match(
-                self,
-                message: str,
-                context: dict[str, Any],
-            ) -> str | None:
-                for tool in self._tools:
-                    if tool.replace("_", " ") in message.lower():
-                        return tool
-                return None
-
-        router = ExecutionRouter(
-            skill_matcher=KeywordSkillMatcher(["read_file", "write_file"]),
-        )
-
-        decision = router.decide(
-            message="Please read the file for me",
-            context={},
-        )
-
-        assert decision.path in (ExecutionPath.DIRECT_SKILL, ExecutionPath.REACT_LOOP)
-        assert decision.confidence > 0.0
-
 
 class TestFullIntegration:
     """Full integration tests for all components."""
@@ -273,7 +229,7 @@ class TestFullIntegration:
         _config_manager = ConfigManager()
         event_bus = EventBus()
         tool_registry = ToolRegistry()
-        router = ExecutionRouter()
+        _router_not_needed = None  # ExecutionRouter removed in Wave 1a
 
         # Register tools
         tool_registry.register(MockTool("hello", "Say hello", "Hello!"))
@@ -288,8 +244,10 @@ class TestFullIntegration:
 
         # Simulate agent flow
         # 1. Route decision
-        decision = router.decide("Say hello", {})
-        assert decision.path in (
+        # Route decision (simplified - ExecutionRouter removed, always REACT_LOOP)
+        # Just verify ExecutionPath enum still works
+        decision_path = ExecutionPath.REACT_LOOP
+        assert decision_path in (
             ExecutionPath.DIRECT_SKILL,
             ExecutionPath.REACT_LOOP,
         )
@@ -399,16 +357,12 @@ class TestConfigScenarios:
 
         manager.set_tenant_config(
             "tenant_a",
-            AgentConfig(
-                execution=ExecutionConfig(max_steps=5),
-            ),
+            AgentConfig(max_steps=5),
         )
 
         manager.set_tenant_config(
             "tenant_b",
-            AgentConfig(
-                execution=ExecutionConfig(max_steps=20),
-            ),
+            AgentConfig(max_steps=20),
         )
 
         config_a = manager.get_config("tenant_a")
@@ -424,9 +378,7 @@ class TestConfigScenarios:
         # Set tenant config with only one field changed
         manager.set_tenant_config(
             "tenant_1",
-            AgentConfig(
-                execution=ExecutionConfig(max_steps=15),
-            ),
+            AgentConfig(max_steps=15),
         )
 
         config = manager.get_config("tenant_1")
@@ -611,9 +563,7 @@ class TestGlobalSingletons:
         new_manager = ConfigManager()
         new_manager.set_tenant_config(
             "test",
-            AgentConfig(
-                execution=ExecutionConfig(max_steps=99),
-            ),
+            AgentConfig(max_steps=99),
         )
         set_config(new_manager)
 
