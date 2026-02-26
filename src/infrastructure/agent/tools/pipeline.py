@@ -212,6 +212,15 @@ class ToolPipeline:
         for event in ctx.consume_pending_events():
             if isinstance(event, ToolEvent):
                 yield event
+            else:
+                # Legacy tool events (dicts) — wrap in a ToolEvent for
+                # uniform pipeline output.  The processor inspects the
+                # ``legacy_event`` type and yields the inner dict.
+                yield ToolEvent(
+                    type="legacy_event",
+                    tool_name=tool.name,
+                    data={"event": event},
+                )
 
         # Step 9 ---- Yield completed event -------------------------------
         completed_event = ToolEvent.completed(tool.name, result)

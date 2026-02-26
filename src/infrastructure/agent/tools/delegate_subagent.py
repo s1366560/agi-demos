@@ -23,6 +23,9 @@ from typing import Any
 
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.base import AgentTool
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -518,3 +521,468 @@ class ParallelDelegateSubAgentTool(AgentTool):
             output_lines.append("")
 
         return "\n".join(output_lines)
+
+
+# ---------------------------------------------------------------------------
+# @tool_define versions (new pattern)
+# ---------------------------------------------------------------------------
+
+# Module-level DI references for @tool_define versions
+_delegate_execute_callback: Callable[..., Coroutine[Any, Any, str]] | None = None
+_delegate_run_registry: SubAgentRunRegistry | None = None
+_delegate_conversation_id: str | None = None
+_delegate_subagent_names: list[str] = []
+_delegate_subagent_descriptions: dict[str, str] = {}
+_delegate_delegation_depth: int = 0
+_delegate_max_active_runs: int | None = None
+_delegate_max_concurrency: int = 5
+
+
+def configure_delegate_subagent(
+    execute_callback: Callable[..., Coroutine[Any, Any, str]],
+    run_registry: SubAgentRunRegistry,
+    *,
+    conversation_id: str | None = None,
+    subagent_names: list[str] | None = None,
+    subagent_descriptions: dict[str, str] | None = None,
+    delegation_depth: int = 0,
+    max_active_runs: int | None = None,
+    max_concurrency: int = 5,
+) -> None:
+    """Configure dependencies for delegate_subagent_tool and parallel variant.
+
+    Called at agent startup to inject the execution callback and registry.
+    """
+    global _delegate_execute_callback, _delegate_run_registry
+    global _delegate_conversation_id, _delegate_subagent_names
+    global _delegate_subagent_descriptions, _delegate_delegation_depth
+    global _delegate_max_active_runs, _delegate_max_concurrency
+    _delegate_execute_callback = execute_callback
+    _delegate_run_registry = run_registry
+    _delegate_conversation_id = conversation_id
+    _delegate_subagent_names = subagent_names or []
+    _delegate_subagent_descriptions = subagent_descriptions or {}
+    _delegate_delegation_depth = delegation_depth
+    _delegate_max_active_runs = (
+        max_active_runs if max_active_runs and max_active_runs > 0 else None
+    )
+    _delegate_max_concurrency = max_concurrency
+
+
+@tool_define(
+    name="delegate_to_subagent",
+    description=(
+        "Delegate a task to a specialized SubAgent for independent execution. "
+        "The SubAgent will handle the task autonomously and return results."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "subagent_name": {
+                "type": "string",
+                "description": (
+                    "Name of the SubAgent to delegate to. "
+                    "Choose the best match for the task."
+                ),
+            },
+            "task": {
+                "type": "string",
+                "description": (
+                    "Clear, specific description of the task to delegate. "
+                    "Include all relevant context the SubAgent needs."
+                ),
+            },
+        },
+        "required": ["subagent_name", "task"],
+    },
+    permission="delegate",
+    category="agent",
+    tags=frozenset({"subagent", "delegation"}),
+)
+async def delegate_subagent_tool(
+    ctx: ToolContext,
+    *,
+    subagent_name: str = "",
+    task: str = "",
+) -> ToolResult:
+    """Delegate a task to a specialized SubAgent."""
+    if _delegate_execute_callback is None:
+        return ToolResult(
+            output="Error: delegate_subagent is not configured. No execute callback.",
+            is_error=True,
+        )
+
+    error = _validate_delegate_inputs(subagent_name, task)
+    if error:
+        return ToolResult(output=error, is_error=True)
+
+    started_at = time.time()
+    run_id = await _register_single_run(ctx, subagent_name, task)
+    if isinstance(run_id, str) and run_id.startswith("Error:"):
+        return ToolResult(output=run_id, is_error=True)
+
+    logger.info("[delegate_subagent_tool] Delegating to '%s': %s...", subagent_name, task[:100])
+
+    # Capture callback in local to satisfy type narrowing
+    callback = _delegate_execute_callback
+    buffered_events: list[dict[str, Any]] = []
+
+    try:
+        if _supports_on_event_arg(callback):
+            result = await callback(
+                subagent_name, task, on_event=buffered_events.append
+            )
+        else:
+            result = await callback(subagent_name, task)
+        for ev in buffered_events:
+            await ctx.emit(ev)
+        await _finalize_success(ctx, run_id, result, started_at)
+        return ToolResult(output=result, title=f"SubAgent: {subagent_name}")
+    except Exception as exc:
+        logger.error("[delegate_subagent_tool] Execution failed: %s", exc)
+        for ev in buffered_events:
+            await ctx.emit(ev)
+        await _finalize_failure(ctx, run_id, exc, started_at)
+        return ToolResult(
+            output=f"Error: SubAgent '{subagent_name}' execution failed: {exc}",
+            is_error=True,
+        )
+
+
+@tool_define(
+    name="parallel_delegate_subagents",
+    description=(
+        "Delegate multiple independent tasks to SubAgents for parallel execution. "
+        "Use when you have 2+ tasks that can run simultaneously."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "tasks": {
+                "type": "array",
+                "description": (
+                    "List of independent tasks to delegate in parallel. "
+                    "Each task is assigned to a specific SubAgent."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subagent_name": {
+                            "type": "string",
+                            "description": "Name of the SubAgent.",
+                        },
+                        "task": {
+                            "type": "string",
+                            "description": "Task description for this SubAgent.",
+                        },
+                    },
+                    "required": ["subagent_name", "task"],
+                },
+                "minItems": 2,
+            },
+        },
+        "required": ["tasks"],
+    },
+    permission="delegate",
+    category="agent",
+    tags=frozenset({"subagent", "delegation", "parallel"}),
+)
+async def parallel_delegate_subagent_tool(
+    ctx: ToolContext,
+    *,
+    tasks: Any = None,
+) -> ToolResult:
+    """Delegate multiple independent tasks to SubAgents in parallel."""
+    if _delegate_execute_callback is None:
+        return ToolResult(
+            output="Error: delegate_subagent is not configured. No execute callback.",
+            is_error=True,
+        )
+
+    parsed_tasks, error = _parse_tasks(tasks)
+    if error:
+        return ToolResult(output=error, is_error=True)
+
+    run_ids = await _register_parallel_runs_new(ctx, parsed_tasks)
+    if isinstance(run_ids, str):
+        return ToolResult(output=run_ids, is_error=True)
+
+    task_count = len(parsed_tasks)
+    logger.info("[parallel_delegate_tool] Starting %d parallel SubAgent executions", task_count)
+    start_time = time.time()
+
+    # Capture callback in local to satisfy type narrowing
+    callback = _delegate_execute_callback
+    results = await _execute_all_new(ctx, callback, parsed_tasks, run_ids)
+    elapsed_ms = (time.time() - start_time) * 1000
+
+    output = _format_results(results, task_count, elapsed_ms)
+    return ToolResult(output=output, title=f"Parallel delegation: {task_count} tasks")
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for @tool_define versions
+# ---------------------------------------------------------------------------
+
+
+def _validate_delegate_inputs(subagent_name: str, task: str) -> str | None:
+    """Validate inputs for single delegation."""
+    if not subagent_name:
+        return "Error: subagent_name is required"
+    if subagent_name not in _delegate_subagent_names:
+        avail = ", ".join(_delegate_subagent_names)
+        return f"Error: SubAgent '{subagent_name}' not found. Available: {avail}"
+    if not task:
+        return "Error: task description is required"
+    return None
+
+
+async def _register_single_run(
+    ctx: ToolContext,
+    subagent_name: str,
+    task: str,
+) -> str | None:
+    """Register a single run in the registry and emit started event."""
+    registry = _delegate_run_registry
+    conv_id = _delegate_conversation_id or ctx.conversation_id
+    if not (registry and conv_id):
+        return None
+    active = registry.count_active_runs(conv_id)
+    if _delegate_max_active_runs is not None and active >= _delegate_max_active_runs:
+        return (
+            f"Error: active SubAgent run limit reached "
+            f"({active}/{_delegate_max_active_runs})"
+        )
+    run = registry.create_run(
+        conversation_id=conv_id,
+        subagent_name=subagent_name,
+        task=task,
+        metadata={"delegation_depth": _delegate_delegation_depth},
+    )
+    running = registry.mark_running(conv_id, run.run_id)
+    if running:
+        await ctx.emit(
+            {"type": "subagent_run_started", "data": running.to_event_data()}
+        )
+    return run.run_id
+
+
+async def _finalize_success(
+    ctx: ToolContext,
+    run_id: str | None,
+    result: str,
+    started_at: float,
+) -> None:
+    """Mark a run as completed and emit event."""
+    registry = _delegate_run_registry
+    conv_id = _delegate_conversation_id or ctx.conversation_id
+    if not (registry and conv_id and run_id):
+        return
+    elapsed_ms = int((time.time() - started_at) * 1000)
+    completed = registry.mark_completed(
+        conversation_id=conv_id,
+        run_id=run_id,
+        summary=result,
+        execution_time_ms=elapsed_ms,
+    )
+    if completed:
+        await ctx.emit(
+            {"type": "subagent_run_completed", "data": completed.to_event_data()}
+        )
+
+
+async def _finalize_failure(
+    ctx: ToolContext,
+    run_id: str | None,
+    error: Exception,
+    started_at: float,
+) -> None:
+    """Mark a run as failed and emit event."""
+    registry = _delegate_run_registry
+    conv_id = _delegate_conversation_id or ctx.conversation_id
+    if not (registry and conv_id and run_id):
+        return
+    elapsed_ms = int((time.time() - started_at) * 1000)
+    failed = registry.mark_failed(
+        conversation_id=conv_id,
+        run_id=run_id,
+        error=str(error),
+        execution_time_ms=elapsed_ms,
+    )
+    if failed:
+        await ctx.emit(
+            {"type": "subagent_run_failed", "data": failed.to_event_data()}
+        )
+
+
+def _parse_tasks(tasks: Any) -> tuple[list[dict[str, Any]], str | None]:
+    """Parse and validate the tasks parameter for parallel delegation."""
+    if isinstance(tasks, str):
+        try:
+            tasks = json.loads(tasks)
+        except json.JSONDecodeError:
+            return [], "Error: 'tasks' must be a JSON array of {subagent_name, task} objects"
+
+    if not tasks or not isinstance(tasks, list):
+        return [], "Error: 'tasks' must be a non-empty array"
+
+    if len(tasks) < 2:
+        return [], "Error: parallel_delegate_subagents requires at least 2 tasks"
+
+    for i, t in enumerate(tasks):
+        err = _validate_single_task_item(i, t)
+        if err:
+            return [], err
+
+    return tasks, None
+
+
+def _validate_single_task_item(index: int, task: Any) -> str | None:
+    """Validate a single task item in the parallel tasks list."""
+    if not isinstance(task, dict):
+        return f"Error: task[{index}] must be an object with subagent_name and task"
+    name = task.get("subagent_name", "")
+    if not name or name not in _delegate_subagent_names:
+        avail = ", ".join(_delegate_subagent_names)
+        return f"Error: task[{index}] has invalid subagent_name '{name}'. Available: {avail}"
+    if not task.get("task"):
+        return f"Error: task[{index}] is missing 'task' description"
+    return None
+
+
+async def _register_parallel_runs_new(
+    ctx: ToolContext,
+    tasks: list[dict[str, Any]],
+) -> dict[int, str] | str:
+    """Register parallel runs in the registry."""
+    run_ids: dict[int, str] = {}
+    registry = _delegate_run_registry
+    conv_id = _delegate_conversation_id or ctx.conversation_id
+    if not (registry and conv_id):
+        return run_ids
+
+    task_count = len(tasks)
+    active = registry.count_active_runs(conv_id)
+    if _delegate_max_active_runs is not None and active + task_count > _delegate_max_active_runs:
+        return (
+            f"Error: active SubAgent run limit reached "
+            f"({active + task_count}/{_delegate_max_active_runs})"
+        )
+    for idx, item in enumerate(tasks):
+        run = registry.create_run(
+            conversation_id=conv_id,
+            subagent_name=item["subagent_name"],
+            task=item["task"],
+            metadata={
+                "delegation_depth": _delegate_delegation_depth,
+                "parallel_index": idx,
+                "parallel_total": task_count,
+            },
+        )
+        run_ids[idx] = run.run_id
+        running = registry.mark_running(conv_id, run.run_id)
+        if running:
+            await ctx.emit(
+                {"type": "subagent_run_started", "data": running.to_event_data()}
+            )
+    return run_ids
+
+
+async def _execute_all_new(
+    ctx: ToolContext,
+    callback: Callable[..., Coroutine[Any, Any, str]],
+    tasks: list[dict[str, Any]],
+    run_ids: dict[int, str],
+) -> list[dict[str, Any]]:
+    """Execute all parallel tasks with concurrency limit."""
+    semaphore = asyncio.Semaphore(_delegate_max_concurrency)
+    supports_event = _supports_on_event_arg(callback)
+
+    async def run_one(index: int, item: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            return await _run_single_parallel_task(
+                ctx, callback, supports_event, index, item, run_ids
+            )
+
+    coros = [run_one(i, t) for i, t in enumerate(tasks)]
+    raw_results = await asyncio.gather(*coros, return_exceptions=True)
+
+    processed: list[dict[str, Any]] = []
+    for i, r in enumerate(raw_results):
+        if isinstance(r, Exception):
+            processed.append({
+                "index": i,
+                "subagent": tasks[i].get("subagent_name", "unknown"),
+                "success": False,
+                "error": str(r),
+            })
+        elif isinstance(r, dict):
+            processed.append(r)
+        else:
+            processed.append({"error": str(r), "success": False})
+    return processed
+
+
+async def _run_single_parallel_task(
+    ctx: ToolContext,
+    callback: Callable[..., Coroutine[Any, Any, str]],
+    supports_event: bool,
+    index: int,
+    item: dict[str, Any],
+    run_ids: dict[int, str],
+) -> dict[str, Any]:
+    """Execute a single task within parallel delegation."""
+    name = item["subagent_name"]
+    task_desc = item["task"]
+    subtask_start = time.time()
+    buffered_events: list[dict[str, Any]] = []
+    try:
+        if supports_event:
+            result = await callback(name, task_desc, on_event=buffered_events.append)
+        else:
+            result = await callback(name, task_desc)
+        for ev in buffered_events:
+            await ctx.emit(ev)
+        await _finalize_success(ctx, run_ids.get(index), result, subtask_start)
+        return {"index": index, "subagent": name, "success": True, "result": result}
+    except Exception as exc:
+        logger.error("[parallel_delegate_tool] SubAgent '%s' failed: %s", name, exc)
+        for ev in buffered_events:
+            await ctx.emit(ev)
+        await _finalize_failure(ctx, run_ids.get(index), exc, subtask_start)
+        return {"index": index, "subagent": name, "success": False, "error": str(exc)}
+
+
+def _format_results(
+    results: list[dict[str, Any]],
+    task_count: int,
+    elapsed_ms: float,
+) -> str:
+    """Format parallel execution results into a readable string."""
+    succeeded = sum(1 for r in results if r.get("success"))
+    failed_count = len(results) - succeeded
+
+    logger.info(
+        "[parallel_delegate_tool] Completed %d tasks in %.0fms (%d succeeded, %d failed)",
+        task_count,
+        elapsed_ms,
+        succeeded,
+        failed_count,
+    )
+
+    header = (
+        f"[Parallel execution completed: {succeeded}/{task_count} succeeded, "
+        f"{elapsed_ms:.0f}ms total]"
+    )
+    output_lines: list[str] = [header, ""]
+    for r in sorted(results, key=lambda x: x.get("index", 0)):
+        name = r.get("subagent", "unknown")
+        if r.get("success"):
+            output_lines.append(f"--- {name} (success) ---")
+            output_lines.append(r.get("result", ""))
+        else:
+            output_lines.append(f"--- {name} (failed) ---")
+            output_lines.append(f"Error: {r.get('error', 'unknown error')}")
+        output_lines.append("")
+
+    return "\n".join(output_lines)

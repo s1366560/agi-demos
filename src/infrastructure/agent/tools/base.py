@@ -1,5 +1,10 @@
 """Base tool class for ReAct agent.
 
+.. deprecated::
+    This module is deprecated. Use the ``@tool_define`` decorator from
+    ``src.infrastructure.agent.tools.define`` to create new tools instead.
+    Existing class-based tools will be removed in a future release.
+
 This module provides the concrete AgentTool class that extends the domain-layer
 AgentToolBase with infrastructure concerns (output truncation).
 
@@ -23,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 class AgentTool(AgentToolBase):
     """Concrete base class for agent tools with output truncation.
+
+    .. deprecated::
+        Subclass ``AgentTool`` is deprecated. Use the ``@tool_define``
+        decorator to create new tools. See ``skill_tool.py`` for an example.
 
     Extends AgentToolBase (domain layer) with infrastructure concerns:
     - Output truncation to prevent excessive token usage

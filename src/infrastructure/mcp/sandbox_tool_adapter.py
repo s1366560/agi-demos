@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast, override
 
 from src.infrastructure.agent.tools.base import AgentTool
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+    from src.infrastructure.agent.tools.define import ToolInfo
 
 
 class SandboxMCPServerToolAdapter(AgentTool):
@@ -383,3 +385,412 @@ class SandboxMCPServerToolAdapter(AgentTool):
                     len(text),
                 )
                 return
+
+
+# ---------------------------------------------------------------------------
+# @tool_define migration: factory function for dynamic sandbox MCP server tools
+# ---------------------------------------------------------------------------
+
+
+def _generate_sandbox_tool_name(server_name: str, tool_name: str) -> str:
+    """Generate MCP tool name from server and tool names.
+
+    Args:
+        server_name: MCP server name (dashes replaced with underscores).
+        tool_name: Original tool name.
+
+    Returns:
+        Name in ``mcp__{server}__{tool}`` format.
+    """
+    clean_server = server_name.replace("-", "_")
+    return f"mcp__{clean_server}__{tool_name}"
+
+
+def _extract_text_from_content(content: list[Any]) -> str:
+    """Extract text from MCP content items.
+
+    Args:
+        content: List of MCP content dicts.
+
+    Returns:
+        Newline-joined text from all items.
+    """
+    texts: list[str] = []
+    for item in content:
+        if isinstance(item, dict):
+            if item.get("type") == "text":
+                texts.append(item.get("text", ""))
+            else:
+                texts.append(str(item))
+        else:
+            texts.append(str(item))
+    return "\n".join(texts)
+
+
+def _normalize_parameters_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalise MCP input_schema into a complete JSON Schema dict.
+
+    Args:
+        input_schema: Raw schema from tool definition.
+
+    Returns:
+        Schema dict guaranteed to have type, properties, required.
+    """
+    if not input_schema:
+        return {"type": "object", "properties": {}, "required": []}
+    schema = dict(input_schema)
+    if "type" not in schema:
+        schema["type"] = "object"
+    if "properties" not in schema:
+        schema["properties"] = {}
+    if "required" not in schema:
+        schema["required"] = []
+    return schema
+
+
+def _build_fetch_resource_html(
+    sandbox_adapter: MCPSandboxAdapter,
+    sandbox_id: str,
+    cache_ttl_seconds: float,
+    resource_cache: MCPResourceCache | None,
+    get_uri: Callable[[], str],
+    state: dict[str, Any],
+) -> Callable[[], Awaitable[str]]:
+    """Build the fetch_resource_html closure."""
+
+    async def _fetch_html_inline(uri: str) -> str:
+        import time
+
+        if cache_ttl_seconds > 0 and state["cached_html"] is not None:
+            age = time.time() - (state["cache_fetched_at"] or 0)
+            if age < cache_ttl_seconds:
+                state["cache_stats"]["hits"] += 1
+                return str(state["cached_html"])
+
+        state["cache_stats"]["misses"] += 1
+        try:
+            html = await sandbox_adapter.read_resource(sandbox_id, uri)
+            html = html or ""
+            if cache_ttl_seconds > 0 and html:
+                state["cached_html"] = html
+                state["cache_fetched_at"] = time.time()
+            state["cache_stats"]["last_fetch_at"] = time.time()
+            return html
+        except Exception as exc:
+            logger.warning("fetch_resource_html failed for %s: %s", uri, exc)
+            return ""
+
+    async def fetch_resource_html() -> str:
+        uri = get_uri()
+        if not uri:
+            return ""
+        if resource_cache is not None:
+            cached = await resource_cache.get(uri)
+            if cached is not None:
+                return cached
+            try:
+                html = await sandbox_adapter.read_resource(sandbox_id, uri)
+                html = html or ""
+                if html:
+                    await resource_cache.put(uri, html, ttl=cache_ttl_seconds)
+                return html
+            except Exception as exc:
+                logger.warning("fetch_resource_html failed for %s: %s", uri, exc)
+                return ""
+        return await _fetch_html_inline(uri)
+
+    return fetch_resource_html
+
+
+def _build_invalidate_cache(
+    resource_cache: MCPResourceCache | None,
+    get_uri: Callable[[], str],
+    state: dict[str, Any],
+    bg_tasks: set[asyncio.Task[Any]],
+) -> Callable[[], None]:
+    """Build the invalidate_resource_cache closure."""
+
+    def invalidate_resource_cache() -> None:
+        if resource_cache is not None:
+            uri = get_uri()
+            if uri:
+                with contextlib.suppress(RuntimeError):
+                    loop = asyncio.get_running_loop()
+                    _task = loop.create_task(resource_cache.invalidate(uri))
+                    bg_tasks.add(_task)
+                    _task.add_done_callback(bg_tasks.discard)
+        state["cached_html"] = None
+        state["cache_fetched_at"] = None
+
+    return invalidate_resource_cache
+
+
+def _build_prefetch(
+    sandbox_adapter: MCPSandboxAdapter,
+    sandbox_id: str,
+    resource_cache: MCPResourceCache | None,
+    get_uri: Callable[[], str],
+    fetch_fn: Callable[[], Awaitable[str]],
+    bg_tasks: set[asyncio.Task[Any]],
+) -> Callable[[], None]:
+    """Build the prefetch_resource_html closure."""
+
+    def prefetch_resource_html() -> None:
+        if resource_cache is not None:
+            async def _fetch(uri: str) -> str:
+                html = await sandbox_adapter.read_resource(sandbox_id, uri)
+                return html or ""
+
+            uri = get_uri()
+            if uri:
+                resource_cache.prefetch(uri, _fetch)
+            return
+
+        import asyncio as _asyncio
+
+        async def _prefetch() -> None:
+            try:
+                await fetch_fn()
+            except Exception as exc:
+                logger.warning(
+                    "Prefetch failed for %s: %s", get_uri(), exc,
+                )
+
+        with contextlib.suppress(RuntimeError):
+            _task = _asyncio.create_task(_prefetch())
+            bg_tasks.add(_task)
+            _task.add_done_callback(bg_tasks.discard)
+
+    return prefetch_resource_html
+
+
+def _build_capture_html(
+    resource_cache: MCPResourceCache | None,
+    get_uri: Callable[[], str],
+    state: dict[str, Any],
+    bg_tasks: set[asyncio.Task[Any]],
+) -> Callable[[list[Any]], None]:
+    """Build the capture_html_from_content closure."""
+
+    def capture_html_from_content(content: list[Any]) -> None:
+        import time
+
+        for item in content:
+            if not isinstance(item, dict) or item.get("type") != "text":
+                continue
+            text = item.get("text", "")
+            prefix = text.lstrip()[:80].lower()
+            if "<!doctype html" not in prefix and "<html" not in prefix:
+                continue
+            state["last_html"] = text
+            state["cached_html"] = text
+            state["cache_fetched_at"] = time.time()
+            if resource_cache is not None:
+                uri = get_uri()
+                if uri:
+                    with contextlib.suppress(RuntimeError):
+                        loop = asyncio.get_running_loop()
+                        _t = loop.create_task(resource_cache.put(uri, text))
+                        bg_tasks.add(_t)
+                        _t.add_done_callback(bg_tasks.discard)
+            return
+
+    return capture_html_from_content
+
+
+def _attach_processor_attrs(
+    info: Any,
+    *,
+    ui_metadata: dict[str, Any] | None,
+    server_name: str,
+    original_tool_name: str,
+    name: str,
+    resource_uri: str,
+    fetch_resource_html: Callable[[], Awaitable[str]],
+    invalidate_fn: Callable[[], None],
+    prefetch_fn: Callable[[], None],
+    cache_stats_fn: Callable[[], dict[str, Any]],
+) -> None:
+    """Set extra attributes on ToolInfo for processor.py compatibility.
+
+    processor.py accesses these via ``getattr(tool_instance, ...)`` where
+    ``tool_instance`` is the ToolInfo stored as ``_tool_instance`` on
+    ``ToolDefinition``.
+    """
+    has_ui = ui_metadata is not None and bool(ui_metadata.get("resourceUri", ""))
+    info.has_ui = has_ui
+    info.ui_metadata = ui_metadata
+    info._ui_metadata = ui_metadata
+    info._app_id = ""
+    info._last_app_id = ""
+    info._server_name = server_name
+    info._original_tool_name = original_tool_name
+    info._last_html = ""
+    info._name = name
+    info.resource_uri = resource_uri
+    info.fetch_resource_html = fetch_resource_html
+    info.invalidate_resource_cache = invalidate_fn
+    info.prefetch_resource_html = prefetch_fn
+    info.get_cache_stats = cache_stats_fn
+
+
+def create_sandbox_mcp_server_tool(
+    sandbox_adapter: MCPSandboxAdapter,
+    sandbox_id: str,
+    server_name: str,
+    tool_info: dict[str, Any],
+    cache_ttl_seconds: float = 60.0,
+    resource_cache: MCPResourceCache | None = None,
+) -> ToolInfo:
+    """Create a ToolInfo for a sandbox-hosted MCP server tool.
+
+    This is the ``@tool_define`` migration equivalent of
+    :class:`SandboxMCPServerToolAdapter`. Each sandbox MCP server tool has a
+    unique name/description/parameters so we build :class:`ToolInfo` directly.
+
+    The returned ``ToolInfo`` has extra attributes set on it so that
+    ``processor.py`` can access ``has_ui``, ``ui_metadata``, ``_app_id``,
+    ``_server_name``, ``_last_html``, ``fetch_resource_html``, etc. via
+    ``getattr(tool_instance, ...)``.
+
+    Args:
+        sandbox_adapter: MCPSandboxAdapter instance.
+        sandbox_id: Sandbox container ID.
+        server_name: User MCP server name.
+        tool_info: Tool definition dict (name, description, input_schema, _meta).
+        cache_ttl_seconds: Cache TTL for resource HTML (default 60s, 0 to disable).
+        resource_cache: Optional MCPResourceCache for shared caching.
+
+    Returns:
+        A :class:`ToolInfo` instance representing this sandbox MCP server tool.
+    """
+    from src.infrastructure.agent.tools.context import ToolContext
+    from src.infrastructure.agent.tools.define import ToolInfo
+    from src.infrastructure.agent.tools.result import ToolResult
+
+    original_tool_name: str = tool_info.get("name", "")
+    description: str = tool_info.get("description", "")
+    raw_schema = tool_info.get("input_schema", tool_info.get("inputSchema", {}))
+    parameters = _normalize_parameters_schema(raw_schema)
+    name = _generate_sandbox_tool_name(server_name, original_tool_name)
+
+    # -- UI metadata extraction --
+    meta = tool_info.get("_meta")
+    ui_metadata: dict[str, Any] | None = (
+        meta.get("ui") if meta and isinstance(meta, dict) else None
+    )
+
+    def _resource_uri() -> str:
+        if ui_metadata:
+            return str(ui_metadata.get("resourceUri", ""))
+        return ""
+
+    # -- Mutable state shared between closures --
+    state: dict[str, Any] = {
+        "cached_html": None,
+        "cache_fetched_at": None,
+        "last_html": "",
+        "cache_stats": {"hits": 0, "misses": 0, "last_fetch_at": None},
+    }
+    bg_tasks: set[asyncio.Task[Any]] = set()
+
+    # -- Build caching helpers --
+    fetch_resource_html = _build_fetch_resource_html(
+        sandbox_adapter=sandbox_adapter,
+        sandbox_id=sandbox_id,
+        cache_ttl_seconds=cache_ttl_seconds,
+        resource_cache=resource_cache,
+        get_uri=_resource_uri,
+        state=state,
+    )
+    invalidate_fn = _build_invalidate_cache(
+        resource_cache=resource_cache,
+        get_uri=_resource_uri,
+        state=state,
+        bg_tasks=bg_tasks,
+    )
+    prefetch_fn = _build_prefetch(
+        sandbox_adapter=sandbox_adapter,
+        sandbox_id=sandbox_id,
+        resource_cache=resource_cache,
+        get_uri=_resource_uri,
+        fetch_fn=fetch_resource_html,
+        bg_tasks=bg_tasks,
+    )
+    capture_fn = _build_capture_html(
+        resource_cache=resource_cache,
+        get_uri=_resource_uri,
+        state=state,
+        bg_tasks=bg_tasks,
+    )
+
+    # -- Execute function --
+    async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        """Execute the tool by proxying through sandbox mcp_server_call_tool."""
+        _ = ctx
+        logger.info("Executing sandbox MCP tool: %s", name)
+        try:
+            result = await sandbox_adapter.call_tool(
+                sandbox_id=sandbox_id,
+                tool_name="mcp_server_call_tool",
+                arguments={
+                    "server_name": server_name,
+                    "tool_name": original_tool_name,
+                    "arguments": json.dumps(kwargs),
+                },
+            )
+            is_error = result.get("is_error", result.get("isError", False))
+            content = result.get("content", [])
+
+            if is_error:
+                texts = _extract_text_from_content(content)
+                error_msg = texts or "Tool execution failed"
+                logger.error("Sandbox MCP tool error: %s", error_msg)
+                return ToolResult(
+                    output=f"Error: {error_msg}", is_error=True,
+                )
+
+            texts = _extract_text_from_content(content)
+            capture_fn(content)
+            # Sync _last_html attribute on ToolInfo for processor.py
+            info._last_html = state["last_html"]  # type: ignore[attr-defined]
+            return ToolResult(
+                output=texts or "Tool executed successfully (no output)",
+            )
+        except Exception as exc:
+            logger.exception(
+                "Error executing sandbox MCP tool %s: %s", name, exc,
+            )
+            return ToolResult(
+                output=f"Error executing tool: {exc}", is_error=True,
+            )
+
+    # -- Build ToolInfo --
+    info = ToolInfo(
+        name=name,
+        description=description or f"MCP tool {original_tool_name} from {server_name}",
+        parameters=parameters,
+        execute=execute,
+        permission=None,
+        category="mcp",
+        tags=frozenset({"mcp", "sandbox", server_name}),
+    )
+
+    # -- Attach extra attributes for processor.py compatibility --
+    _attach_processor_attrs(
+        info,
+        ui_metadata=ui_metadata,
+        server_name=server_name,
+        original_tool_name=original_tool_name,
+        name=name,
+        resource_uri=_resource_uri(),
+        fetch_resource_html=fetch_resource_html,
+        invalidate_fn=invalidate_fn,
+        prefetch_fn=prefetch_fn,
+        cache_stats_fn=lambda: (
+            dict(resource_cache.get_stats()) if resource_cache is not None
+            else dict(state["cache_stats"])
+        ),
+    )
+
+    return info

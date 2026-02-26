@@ -1,5 +1,10 @@
 """AgentTool abstract base class - Domain layer interface.
 
+.. deprecated::
+    This module is deprecated. Use the ``@tool_define`` decorator from
+    ``src.infrastructure.agent.tools.define`` to create new tools instead.
+    Existing class-based tools will be removed in a future release.
+
 This module defines the abstract base class for agent tools.
 Application-layer use cases depend on this interface rather than
 infrastructure implementations.
@@ -11,6 +16,7 @@ implementation details (truncation, composition logic).
 import contextlib
 import json
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -20,6 +26,10 @@ logger = logging.getLogger(__name__)
 class AgentToolBase(ABC):
     """Abstract base class for agent tools (domain layer).
 
+    .. deprecated::
+        Subclass ``AgentToolBase`` is deprecated. Use the ``@tool_define``
+        decorator to create new tools. See ``skill_tool.py`` for an example.
+
     All tools used by the ReAct agent must inherit from this class
     and implement the required methods.
 
@@ -28,6 +38,16 @@ class AgentToolBase(ABC):
     - Tools can check compatibility with other tools
     - Tools can transform their output for input to another tool
     """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        warnings.warn(
+            f"{cls.__qualname__} inherits from AgentToolBase which is deprecated. "
+            "Use the @tool_define decorator instead. "
+            "See src/infrastructure/agent/tools/define.py for details.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @property
     @abstractmethod

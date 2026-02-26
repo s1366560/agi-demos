@@ -17,6 +17,9 @@ from datetime import datetime
 from typing import Any
 
 from src.infrastructure.agent.tools.base import AgentTool
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -245,3 +248,302 @@ class MemoryGetTool(AgentTool):
         except Exception as e:
             logger.warning(f"Memory get failed: {e}")
             return json.dumps({"error": f"Failed to retrieve memory: {e}"})
+
+
+# ---------------------------------------------------------------------------
+# @tool_define version of MemorySearchTool
+# ---------------------------------------------------------------------------
+
+_memory_chunk_search: Any = None
+_memory_graph_service: Any = None
+_memory_project_id: str = ""
+
+
+def configure_memory_search(
+    chunk_search: Any,
+    graph_service: Any = None,
+    project_id: str = "",
+) -> None:
+    """Configure dependencies for the memory_search tool.
+
+    Called at agent startup to inject search services.
+    """
+    global _memory_chunk_search, _memory_graph_service, _memory_project_id
+    _memory_chunk_search = chunk_search
+    _memory_graph_service = graph_service
+    _memory_project_id = project_id
+
+
+def _format_citations(results: list[dict[str, Any]]) -> None:
+    """Add citation strings to result dicts, in-place."""
+    for r in results:
+        created = r.get("created_at", "")
+        if isinstance(created, datetime):
+            created = created.strftime("%Y-%m-%d")
+        elif isinstance(created, str) and "T" in created:
+            created = created.split("T")[0]
+        r["citation"] = f"[{r['category']} | {r['source_type']}:{r['source_id'][:8]} | {created}]"
+
+
+def _extract_graph_fields(
+    gr: Any,
+) -> tuple[str, float, str, str]:
+    """Extract content, score, uuid, created_at from a graph result."""
+    if isinstance(gr, dict):
+        content = gr.get("content", "") or gr.get("fact", "")
+        score = gr.get("score", 0.5)
+        uid = gr.get("uuid", "")
+        created = gr.get("created_at", "")
+    else:
+        content = getattr(gr, "fact", "") or getattr(gr, "content", "")
+        score = getattr(gr, "score", 0.5)
+        uid = getattr(gr, "uuid", "")
+        created = getattr(gr, "created_at", "")
+    return content, score, uid, created
+
+
+async def _search_graph_for_tool(
+    results: list[dict[str, Any]],
+    query: str,
+    max_results: int,
+) -> None:
+    """Search knowledge graph and append results in-place."""
+    if _memory_graph_service is None:
+        return
+    try:
+        graph_results = await _memory_graph_service.search(query, project_id=_memory_project_id)
+        for gr in graph_results[: max_results - len(results)]:
+            content, score, uid, created = _extract_graph_fields(gr)
+            if content:
+                results.append(
+                    {
+                        "content": content,
+                        "score": round(float(score), 3),
+                        "category": "fact",
+                        "source_type": "knowledge_graph",
+                        "source_id": str(uid),
+                        "created_at": (str(created) if created else ""),
+                    }
+                )
+    except Exception as e:
+        logger.debug("Graph search failed (non-critical): %s", e)
+
+
+@tool_define(
+    name="memory_search",
+    description=(
+        "Search the project memory for relevant context. "
+        "Use this BEFORE answering questions about prior work, "
+        "decisions, user preferences, past conversations, "
+        "or any information that may have been stored previously. "
+        "Returns ranked results with source citations."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": ("Search query describing what you want to find in memory."),
+            },
+            "max_results": {
+                "type": "integer",
+                "description": ("Maximum number of results to return (default: 5)."),
+                "default": 5,
+            },
+            "category": {
+                "type": "string",
+                "description": ("Optional filter by category: preference, fact, decision, entity."),
+                "enum": [
+                    "preference",
+                    "fact",
+                    "decision",
+                    "entity",
+                ],
+            },
+        },
+        "required": ["query"],
+    },
+    permission=None,
+    category="memory",
+)
+async def memory_search_tool(
+    ctx: ToolContext,
+    *,
+    query: str,
+    max_results: int = 5,
+    category: str | None = None,
+) -> ToolResult:
+    """Search project memory using hybrid retrieval."""
+    _ = ctx  # reserved for future use
+    if _memory_chunk_search is None:
+        return ToolResult(
+            output=json.dumps({"error": "Memory search not configured"}),
+            is_error=True,
+        )
+
+    if not query:
+        return ToolResult(
+            output=json.dumps({"error": "query parameter is required"}),
+            is_error=True,
+        )
+
+    results: list[dict[str, Any]] = []
+
+    # Search memory chunks via hybrid search
+    try:
+        chunk_results = await _memory_chunk_search.search(
+            query=query,
+            project_id=_memory_project_id,
+            limit=max_results,
+        )
+        for r in chunk_results:
+            item = {
+                "content": r.content,
+                "score": round(r.score, 3),
+                "category": r.category or "other",
+                "source_type": r.source_type or "unknown",
+                "source_id": r.source_id or "",
+                "created_at": (str(r.created_at) if r.created_at else ""),
+            }
+            if category and item["category"] != category:
+                continue
+            results.append(item)
+    except Exception as e:
+        logger.warning("Memory chunk search failed: %s", e)
+
+    # Also search knowledge graph if available
+    if _memory_graph_service and len(results) < max_results:
+        await _search_graph_for_tool(results, query, max_results)
+
+    # Format citations
+    _format_citations(results)
+
+    return ToolResult(
+        output=json.dumps(
+            {
+                "results": results[:max_results],
+                "total": len(results),
+                "query": query,
+            },
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# @tool_define version of MemoryGetTool
+# ---------------------------------------------------------------------------
+
+_memget_session_factory: Callable[..., Any] | None = None
+_memget_project_id: str = ""
+
+
+def configure_memory_get(
+    session_factory: Callable[..., Any],
+    project_id: str = "",
+) -> None:
+    """Configure dependencies for the memory_get tool.
+
+    Called at agent startup to inject the DB session factory.
+    """
+    global _memget_session_factory, _memget_project_id
+    _memget_session_factory = session_factory
+    _memget_project_id = project_id
+
+
+@tool_define(
+    name="memory_get",
+    description=(
+        "Retrieve the full content of a specific memory entry "
+        "by its source_id. Use after memory_search to get "
+        "complete details of a result."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "source_id": {
+                "type": "string",
+                "description": ("The source_id from a memory_search result."),
+            },
+        },
+        "required": ["source_id"],
+    },
+    permission=None,
+    category="memory",
+)
+async def memory_get_tool(
+    ctx: ToolContext,
+    *,
+    source_id: str,
+) -> ToolResult:
+    """Retrieve full content of a memory entry by source_id."""
+    _ = ctx  # reserved for future use
+    if not source_id:
+        return ToolResult(
+            output=json.dumps({"error": "source_id parameter is required"}),
+            is_error=True,
+        )
+
+    if _memget_session_factory is None:
+        return ToolResult(
+            output=json.dumps({"error": "Memory storage not available"}),
+            is_error=True,
+        )
+
+    try:
+        session = _memget_session_factory()
+        try:
+            from sqlalchemy import select
+
+            from src.infrastructure.adapters.secondary.persistence.models import (
+                MemoryChunk,
+            )
+
+            stmt = (
+                select(MemoryChunk)
+                .where(
+                    MemoryChunk.source_id == source_id,
+                    MemoryChunk.project_id == _memget_project_id,
+                )
+                .order_by(MemoryChunk.chunk_index)
+            )
+            result = await session.execute(stmt)
+            chunks = list(result.scalars().all())
+
+            if not chunks:
+                return ToolResult(
+                    output=json.dumps({"error": (f"No memory found for source_id: {source_id}")}),
+                    is_error=True,
+                )
+
+            items = []
+            for chunk in chunks:
+                items.append(
+                    {
+                        "content": chunk.content,
+                        "category": (chunk.category or "other"),
+                        "chunk_index": chunk.chunk_index,
+                        "created_at": (str(chunk.created_at) if chunk.created_at else ""),
+                    }
+                )
+
+            return ToolResult(
+                output=json.dumps(
+                    {
+                        "source_id": source_id,
+                        "chunks": items,
+                        "total": len(items),
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                )
+            )
+        finally:
+            await session.close()
+    except Exception as e:
+        logger.warning("Memory get failed: %s", e)
+        return ToolResult(
+            output=json.dumps({"error": f"Failed to retrieve memory: {e}"}),
+            is_error=True,
+        )

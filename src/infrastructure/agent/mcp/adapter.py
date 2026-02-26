@@ -5,12 +5,17 @@ Provides a bridge between MCP server tools and the MemStack agent system,
 allowing MCP tools to be used seamlessly alongside native agent tools.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-from typing import Any, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from src.infrastructure.agent.mcp.registry import MCPServerRegistry
 from src.infrastructure.agent.tools.base import AgentTool
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.tools.define import ToolInfo
 
 logger = logging.getLogger(__name__)
 
@@ -263,3 +268,109 @@ class MCPToolFactory:
         except Exception as e:
             logger.error(f"Failed to create tool {tool_name} for server {server_id}: {e}")
             return None
+
+
+# ---------------------------------------------------------------------------
+# @tool_define migration: factory functions for dynamic MCP tools
+# ---------------------------------------------------------------------------
+
+
+def create_mcp_tool(
+    server_id: str,
+    tool_definition: dict[str, Any],
+    registry: MCPServerRegistry,
+) -> ToolInfo:
+    """Create a ToolInfo for an MCP registry tool.
+
+    This is the ``@tool_define`` migration equivalent of
+    :class:`MCPToolAdapter`. Each MCP tool has a unique name/description/
+    parameters so we build :class:`ToolInfo` directly.
+
+    Args:
+        server_id: ID of the MCP server providing this tool.
+        tool_definition: MCP tool definition (name, description, inputSchema).
+        registry: Registry for accessing the MCP server.
+
+    Returns:
+        A :class:`ToolInfo` instance representing this MCP tool.
+    """
+    from src.infrastructure.agent.tools.context import ToolContext
+    from src.infrastructure.agent.tools.define import ToolInfo
+    from src.infrastructure.agent.tools.result import ToolResult
+
+    original_name = tool_definition.get("name", "unknown")
+    tool_description = tool_definition.get("description", "No description")
+    input_schema = tool_definition.get("inputSchema", {})
+
+    name = mcp_tool_name(server_id, original_name)
+
+    async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
+        """Execute the MCP tool via the registry."""
+        _ = ctx
+        try:
+            result = await registry.call_tool(
+                server_id=server_id,
+                tool_name=original_name,
+                arguments=kwargs,
+            )
+            if isinstance(result, str):
+                output = result
+            elif isinstance(result, dict):
+                output = json.dumps(result, indent=2, ensure_ascii=False)
+            else:
+                output = str(result)
+            return ToolResult(output=output)
+        except Exception as exc:
+            error_msg = (
+                f"MCP tool execution failed: {exc!s}"
+            )
+            logger.error(
+                "%s (server=%s, tool=%s)",
+                error_msg, server_id, original_name,
+            )
+            return ToolResult(output=error_msg, is_error=True)
+
+    return ToolInfo(
+        name=name,
+        description=f"[MCP] {tool_description}",
+        parameters=input_schema if isinstance(input_schema, dict) else {},
+        execute=execute,
+        permission=None,
+        category="mcp",
+        tags=frozenset({"mcp", server_id}),
+    )
+
+
+async def create_mcp_tools_from_server(
+    server_id: str,
+    registry: MCPServerRegistry,
+) -> list[ToolInfo]:
+    """Create ToolInfo instances for every tool on an MCP server.
+
+    This is the ``@tool_define`` migration equivalent of
+    :meth:`MCPToolFactory.create_tools_for_server`.
+
+    Args:
+        server_id: MCP server identifier.
+        registry: MCP server registry.
+
+    Returns:
+        List of :class:`ToolInfo` instances.
+    """
+    try:
+        tools = await registry.get_tools(server_id)
+        infos: list[ToolInfo] = []
+        for tool_def in tools:
+            info = create_mcp_tool(
+                server_id=server_id,
+                tool_definition=tool_def,
+                registry=registry,
+            )
+            infos.append(info)
+            logger.info("Created ToolInfo for MCP tool: %s", info.name)
+        return infos
+    except Exception as exc:
+        logger.error(
+            "Failed to create tools for server %s: %s", server_id, exc,
+        )
+        return []

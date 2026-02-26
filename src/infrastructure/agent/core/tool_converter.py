@@ -2,9 +2,15 @@
 Tool conversion utilities for ReAct Agent.
 
 Converts tool instances to ToolDefinition format used by SessionProcessor.
+Supports both legacy class-based tools (AgentToolBase subclasses) and new
+@tool_define decorator-based tools (ToolInfo instances).
 """
 
+from __future__ import annotations
+
 from typing import Any, cast
+
+from src.infrastructure.agent.tools.define import ToolInfo
 
 from .processor import ToolDefinition
 
@@ -92,16 +98,58 @@ def _make_execute_wrapper(tool_instance: Any, tool_name: str) -> Any:
     return execute_wrapper
 
 
+def _make_toolinfo_execute_wrapper(tool_info: ToolInfo) -> Any:
+    """Create an async execute wrapper for a ToolInfo-based tool.
+
+    When the ToolPipeline is active, the pipeline constructs a ToolContext
+    and passes it via _ToolAdapter.  For the legacy (non-pipeline) path,
+    the ToolDefinition.execute is called directly with **kwargs from the
+    LLM.  ToolInfo functions expect ``ctx: ToolContext`` as the first arg,
+    but the legacy processor path never supplies it.  This wrapper creates
+    a minimal ToolContext so the function still works in both paths.
+    """
+
+    async def execute_wrapper(**kwargs: Any) -> Any:
+        """Wrapper that supplies a stub ToolContext when none is provided."""
+        import asyncio
+
+        from src.infrastructure.agent.tools.context import ToolContext
+
+        ctx = ToolContext(
+            session_id="",
+            message_id="",
+            call_id="",
+            agent_name="",
+            conversation_id="",
+            abort_signal=asyncio.Event(),
+        )
+        try:
+            return await tool_info.execute(ctx, **kwargs)
+        except Exception as e:
+            return f"Error executing tool {tool_info.name}: {e!s}"
+
+    return execute_wrapper
+
+
 def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
     """
     Convert tool instances to ToolDefinition format.
+
+    Supports two input types:
+    - Legacy class-based tools (AgentToolBase subclasses): wrapped via
+      _make_execute_wrapper with the original instance stored in
+      _tool_instance.
+    - New decorator-based tools (ToolInfo instances from @tool_define):
+      wrapped via _make_toolinfo_execute_wrapper which injects a stub
+      ToolContext.  No _tool_instance is stored because ToolInfo-based
+      tools emit events through ctx.emit() instead of _pending_events.
 
     Tools whose _meta.ui.visibility is ["app"] only (not including "model")
     are excluded from the LLM tool list per SEP-1865 spec. They remain
     callable by the MCP App UI through the tool call proxy.
 
     Args:
-        tools: Dictionary of tool name -> tool instance
+        tools: Dictionary of tool name -> tool instance or ToolInfo
 
     Returns:
         List of ToolDefinition objects
@@ -109,6 +157,21 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
     definitions = []
 
     for name, tool in tools.items():
+        # Handle new @tool_define based tools (ToolInfo instances)
+        if isinstance(tool, ToolInfo):
+            definitions.append(
+                ToolDefinition(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters=tool.parameters,
+                    execute=_make_toolinfo_execute_wrapper(tool),
+                    permission=tool.permission,
+                    _tool_instance=tool,  # ToolInfo stored for pipeline detection
+                )
+            )
+            continue
+
+        # Handle legacy class-based tools (AgentToolBase subclasses)
         if not _is_tool_visible_to_model(tool):
             continue
 

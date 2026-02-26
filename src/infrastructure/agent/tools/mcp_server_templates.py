@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
 
 
 from src.infrastructure.agent.tools.base import AgentTool
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -540,3 +543,210 @@ class CreateMCPServerFromTemplateTool(AgentTool):
             f"Files created: {', '.join(files_created)}\n"
             f"Dependencies: {', '.join(template_data.get('dependencies', []))}"
         )
+
+
+# =============================================================================
+# Functional tool: @tool_define version
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Module-level DI references
+# ---------------------------------------------------------------------------
+
+_template_sandbox_adapter: SandboxPort | None = None
+_template_sandbox_id: str | None = None
+_template_workspace_path: str = "/workspace"
+
+
+def configure_create_mcp_server_from_template_tool(
+    sandbox_adapter: SandboxPort,
+    sandbox_id: str,
+    workspace_path: str = "/workspace",
+) -> None:
+    """Inject runtime dependencies for create_mcp_server_from_template_tool."""
+    global _template_sandbox_adapter, _template_sandbox_id, _template_workspace_path
+    _template_sandbox_adapter = sandbox_adapter
+    _template_sandbox_id = sandbox_id
+    _template_workspace_path = workspace_path
+
+
+# ---------------------------------------------------------------------------
+# Helper: validate inputs
+# ---------------------------------------------------------------------------
+
+
+def _template_validate_inputs(
+    template: str,
+    server_name: str,
+) -> str | None:
+    """Validate template name and server name. Returns error string or None."""
+    template_data = get_template_by_name(template)
+    if not template_data:
+        available = ", ".join(t["name"] for t in list_available_templates())
+        return f"Error: Template '{template}' not found. Available: {available}"
+    if not re.match(r"^[a-z][a-z0-9-]*$", server_name):
+        return (
+            f"Error: Invalid server name '{server_name}'. "
+            "Use lowercase letters, numbers, and dashes only."
+        )
+    if not _template_sandbox_adapter or not _template_sandbox_id:
+        return (
+            "Error: Sandbox not available. "
+            "This tool requires a running sandbox with MCP support."
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Helper: render and write files
+# ---------------------------------------------------------------------------
+
+
+async def _template_write_files(
+    template_data: dict[str, Any],
+    server_name: str,
+) -> tuple[list[str], str | None]:
+    """Render template files and write to sandbox. Returns (files_created, error)."""
+    adapter = cast("SandboxPort", _template_sandbox_adapter)
+    sid = cast(str, _template_sandbox_id)
+    files_created: list[str] = []
+
+    for file_info in template_data["files"]:
+        rendered_content = render_template_content(
+            file_info["content"],
+            {"server_name": server_name, "description": f"{server_name} MCP server"},
+        )
+        rendered_path = render_template_content(
+            file_info["path"], {"server_name": server_name}
+        )
+        full_path = f"{_template_workspace_path}/{rendered_path}"
+
+        try:
+            await adapter.call_tool(
+                sandbox_id=sid,
+                tool_name="write",
+                arguments={"path": full_path, "content": rendered_content},
+            )
+            files_created.append(rendered_path)
+            logger.debug("Created file: %s", rendered_path)
+        except Exception as e:
+            logger.error("Failed to write file %s: %s", rendered_path, e)
+            return files_created, f"Error: Failed to create file {rendered_path}: {e}"
+
+    return files_created, None
+
+
+# ---------------------------------------------------------------------------
+# Helper: install dependencies
+# ---------------------------------------------------------------------------
+
+
+async def _template_install_deps(
+    template_data: dict[str, Any],
+    server_name: str,
+) -> None:
+    """Install template dependencies in sandbox."""
+    adapter = cast("SandboxPort", _template_sandbox_adapter)
+    sid = cast(str, _template_sandbox_id)
+    deps = " ".join(template_data["dependencies"])
+    server_path = f"{_template_workspace_path}/{server_name}"
+
+    try:
+        await adapter.call_tool(
+            sandbox_id=sid,
+            tool_name="bash",
+            arguments={"command": f"cd {server_path} && pip install {deps}"},
+        )
+        logger.info("Installed dependencies: %s", deps)
+    except Exception as e:
+        logger.warning("Failed to install dependencies: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# Tool definition
+# ---------------------------------------------------------------------------
+
+
+@tool_define(
+    name="create_mcp_server_from_template",
+    description=(
+        "Create a new MCP server from a predefined template. "
+        "Available templates: web-dashboard, api-wrapper, data-processor. "
+        "Creates server files and optionally installs dependencies."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "template": {
+                "type": "string",
+                "description": (
+                    "Template name (web-dashboard, api-wrapper, data-processor)"
+                ),
+                "enum": ["web-dashboard", "api-wrapper", "data-processor"],
+            },
+            "server_name": {
+                "type": "string",
+                "description": "Name for the new server (lowercase, numbers, dashes)",
+            },
+            "install_deps": {
+                "type": "boolean",
+                "description": "Whether to install dependencies (default: true)",
+                "default": True,
+            },
+        },
+        "required": ["template", "server_name"],
+    },
+    permission="sandbox",
+    category="mcp",
+    tags=frozenset({"mcp", "template", "scaffold"}),
+)
+async def create_mcp_server_from_template_tool(
+    ctx: ToolContext,
+    *,
+    template: str,
+    server_name: str,
+    install_deps: bool = True,
+) -> ToolResult:
+    """Create a new MCP server from a predefined template."""
+    _ = ctx  # available for future use (permissions, emit, etc.)
+
+    # Validate inputs
+    validation_error = _template_validate_inputs(template, server_name)
+    if validation_error:
+        return ToolResult(output=validation_error, is_error=True)
+
+    template_data = get_template_by_name(template)
+    if not template_data:
+        return ToolResult(output=f"Template '{template}' not found.", is_error=True)
+
+    logger.info(
+        "Creating MCP server '%s' from template '%s'", server_name, template
+    )
+
+    # Render and write files
+    files_created, write_error = await _template_write_files(template_data, server_name)
+    if write_error:
+        return ToolResult(output=write_error, is_error=True)
+
+    # Install dependencies
+    if install_deps and template_data.get("dependencies"):
+        await _template_install_deps(template_data, server_name)
+
+    deps_list = template_data.get("dependencies", [])
+    output = (
+        f"Successfully created MCP server '{server_name}' "
+        f"from template '{template}'.\n"
+        f"Files created: {', '.join(files_created)}\n"
+        f"Dependencies: {', '.join(deps_list)}"
+    )
+
+    return ToolResult(
+        output=output,
+        title=f"MCP Template: {server_name}",
+        metadata={
+            "template": template,
+            "server_name": server_name,
+            "files_created": files_created,
+            "dependencies": deps_list,
+        },
+    )

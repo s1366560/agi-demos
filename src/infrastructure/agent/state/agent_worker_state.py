@@ -374,7 +374,6 @@ def get_cached_llm_clients() -> dict[str, Any]:
 # ============================================================================
 
 
-
 async def get_or_create_tools(
     project_id: str,
     tenant_id: str,
@@ -455,6 +454,12 @@ async def _get_or_create_builtin_tools(
                 "ask_clarification": ClarificationTool(),
                 "request_decision": DecisionTool(),
             }
+
+            from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
+            from src.infrastructure.agent.tools.web_search import configure_web_search
+
+            configure_web_search(redis_client=redis_client)
+            configure_web_scrape()
             logger.info(f"Agent Worker: Tool set cached for project {project_id}")
 
     return dict(_tools_cache[project_id])
@@ -505,6 +510,16 @@ async def _add_skill_loader_tool(
         if sandbox_id:
             skill_loader.set_sandbox_id(sandbox_id)
         tools["skill_loader"] = skill_loader
+
+        from src.infrastructure.agent.tools.skill_loader import configure_skill_loader_tool
+
+        configure_skill_loader_tool(
+            skill_service=getattr(skill_loader, "_skill_service", None),
+            tenant_id=tenant_id,
+            project_id=project_id,
+            agent_mode=agent_mode,
+            sandbox_id=sandbox_id or "",
+        )
         logger.info(
             f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
         )
@@ -538,6 +553,19 @@ def _add_skill_installer_tools(
             project_id=project_id,
         )
         tools["plugin_manager"] = plugin_manager
+
+        from src.infrastructure.agent.tools.plugin_manager import configure_plugin_manager
+        from src.infrastructure.agent.tools.skill_installer import configure_skill_installer
+
+        configure_skill_installer(
+            project_path=project_path,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        configure_plugin_manager(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         logger.info(f"Agent Worker: PluginManagerTool added for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillInstallerTool/PluginManagerTool: {e}")
@@ -569,6 +597,17 @@ def _add_skill_sync_tool(
         if "skill_loader" in tools:
             skill_sync_tool.set_skill_loader_tool(tools["skill_loader"])
         tools["skill_sync"] = skill_sync_tool
+
+        from src.infrastructure.agent.tools.skill_sync import configure_skill_sync
+
+        configure_skill_sync(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_id=sandbox_id,
+            session_factory=sync_session_factory,
+            skill_loader_tool=tools.get("skill_loader"),
+        )
         logger.info(f"Agent Worker: SkillSyncTool added for tenant {tenant_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillSyncTool: {e}")
@@ -620,6 +659,15 @@ def _add_env_var_tools(
         tools["get_env_var"] = get_env_var_tool
         tools["request_env_var"] = request_env_var_tool
         tools["check_env_vars"] = check_env_vars_tool
+
+        from src.infrastructure.agent.tools.env_var_tools import configure_env_var_tools
+
+        configure_env_var_tools(
+            encryption_service=encryption_service,
+            session_factory=async_session_factory,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         logger.info(
             f"Agent Worker: Environment variable tools added for tenant {tenant_id}, "
             f"project {project_id}"
@@ -636,6 +684,13 @@ def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
 
         clarification_tool = ClarificationTool()
         decision_tool = DecisionTool()
+
+        from src.infrastructure.agent.tools.clarification import configure_clarification
+        from src.infrastructure.agent.tools.decision import configure_decision
+
+        # hitl_handler is injected later by the processor/session; pass None for now
+        configure_clarification(hitl_handler=None)
+        configure_decision(hitl_handler=None)
 
         tools["ask_clarification"] = clarification_tool
         tools["request_decision"] = decision_tool
@@ -657,6 +712,14 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
 
         tools["todoread"] = TodoReadTool(session_factory=todo_session_factory)
         tools["todowrite"] = TodoWriteTool(session_factory=todo_session_factory)
+
+        from src.infrastructure.agent.tools.todo_tools import (
+            configure_todoread,
+            configure_todowrite,
+        )
+
+        configure_todoread(session_factory=todo_session_factory)
+        configure_todowrite(session_factory=todo_session_factory)
         logger.info(f"Agent Worker: Todo tools added for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create todo tools: {e}")
@@ -684,6 +747,18 @@ def _add_register_mcp_server_tool(
             session_factory=app_session_factory,
         )
         tools["register_mcp_server"] = register_server_tool
+
+        from src.infrastructure.agent.tools.register_mcp_server import (
+            configure_register_mcp_server_tool,
+        )
+
+        configure_register_mcp_server_tool(
+            session_factory=app_session_factory,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_id=sandbox_id_for_tools,
+        )
         logger.info(f"Agent Worker: RegisterMCPServerTool added for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create RegisterMCPServerTool: {e}")
@@ -701,20 +776,37 @@ def _add_memory_tools(
             async_session_factory as mem_session_factory,
         )
         from src.infrastructure.agent.tools.memory_tools import MemoryGetTool, MemorySearchTool
-        from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
         from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+        from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
         from src.infrastructure.memory.chunk_search import ChunkHybridSearch
 
         embedding_service = getattr(graph_service, "embedder", None)
         if embedding_service and redis_client:
             cached_emb = CachedEmbeddingService(embedding_service, redis_client)
-            chunk_search = ChunkHybridSearch(cast(EmbeddingService, cached_emb), mem_session_factory)
+            chunk_search = ChunkHybridSearch(
+                cast(EmbeddingService, cached_emb), mem_session_factory
+            )
             tools["memory_search"] = MemorySearchTool(
                 chunk_search=chunk_search,
                 graph_service=graph_service,
                 project_id=project_id,
             )
             tools["memory_get"] = MemoryGetTool(
+                session_factory=mem_session_factory,
+                project_id=project_id,
+            )
+
+            from src.infrastructure.agent.tools.memory_tools import (
+                configure_memory_get,
+                configure_memory_search,
+            )
+
+            configure_memory_search(
+                chunk_search=chunk_search,
+                graph_service=graph_service,
+                project_id=project_id,
+            )
+            configure_memory_get(
                 session_factory=mem_session_factory,
                 project_id=project_id,
             )
@@ -764,7 +856,6 @@ def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
     return None
 
 
-
 def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
     """Log plugin runtime diagnostics consistently."""
     message = (
@@ -778,7 +869,6 @@ def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> Non
         logger.info(message)
         return
     logger.warning(message)
-
 
 
 async def _load_project_sandbox_tools(
@@ -827,7 +917,9 @@ async def _load_project_sandbox_tools(
 
         # STEP 5: Connect to MCP and load tools
         await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
-        tools = _wrap_sandbox_tools(project_sandbox_id, await _mcp_sandbox_adapter.list_tools(project_sandbox_id))
+        tools = _wrap_sandbox_tools(
+            project_sandbox_id, await _mcp_sandbox_adapter.list_tools(project_sandbox_id)
+        )
 
         logger.info(
             f"[AgentWorker] Loaded {len(tools)} tools from sandbox {project_sandbox_id} "
@@ -835,9 +927,7 @@ async def _load_project_sandbox_tools(
         )
 
         # STEP 6: Load user MCP server tools and resolve app IDs
-        await _load_and_merge_user_mcp_tools(
-            tools, project_sandbox_id, project_id, redis_client
-        )
+        await _load_and_merge_user_mcp_tools(tools, project_sandbox_id, project_id, redis_client)
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
@@ -1109,7 +1199,6 @@ def _apply_app_matches(adapters: list[Any], project_apps: list[Any]) -> None:
             )
 
 
-
 async def _discover_single_server_tools(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
@@ -1317,7 +1406,6 @@ async def _load_user_mcp_server_tools(
     return tools
 
 
-
 async def _auto_restore_mcp_servers(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
@@ -1405,13 +1493,24 @@ async def _restore_server_with_optional_lock(
 
     if redis_client is not None:
         await _restore_with_lock(
-            sandbox_adapter, sandbox_id, project_id,
-            server, server_name, server_type, transport_config, redis_client,
+            sandbox_adapter,
+            sandbox_id,
+            project_id,
+            server,
+            server_name,
+            server_type,
+            transport_config,
+            redis_client,
         )
     else:
         await _restore_without_lock(
-            sandbox_adapter, sandbox_id, project_id,
-            server, server_name, server_type, transport_config,
+            sandbox_adapter,
+            sandbox_id,
+            project_id,
+            server,
+            server_name,
+            server_type,
+            transport_config,
         )
 
 
@@ -1436,9 +1535,7 @@ async def _restore_with_lock(
     acquired = await redis_client.set(lock_key, lock_owner, nx=True, ex=lock_ttl)
 
     if not acquired:
-        logger.debug(
-            f"[AgentWorker] Skip restore '{server_name}': lock held by another worker"
-        )
+        logger.debug(f"[AgentWorker] Skip restore '{server_name}': lock held by another worker")
         return
 
     try:
@@ -1494,19 +1591,14 @@ async def _is_server_already_running(
             timeout=10.0,
         )
         current_servers = _parse_mcp_server_list(list_result.get("content", []))
-        current_running = {
-            s.get("name") for s in current_servers if s.get("status") == "running"
-        }
+        current_running = {s.get("name") for s in current_servers if s.get("status") == "running"}
         if server_name in current_running:
             logger.debug(
-                f"[AgentWorker] Skip restore '{server_name}': "
-                f"already running (double-check)"
+                f"[AgentWorker] Skip restore '{server_name}': already running (double-check)"
             )
             return True
     except Exception as e:
-        logger.warning(
-            f"[AgentWorker] Double-check failed for '{server_name}': {e}"
-        )
+        logger.warning(f"[AgentWorker] Double-check failed for '{server_name}': {e}")
         # Continue with restore if double-check fails
     return False
 
@@ -1523,9 +1615,7 @@ async def _release_lock_if_owned(
         if current_owner == lock_owner:
             await redis_client.delete(lock_key)
     except Exception as e:
-        logger.warning(
-            f"[AgentWorker] Failed to release lock for '{server_name}': {e}"
-        )
+        logger.warning(f"[AgentWorker] Failed to release lock for '{server_name}': {e}")
 
 
 async def _maybe_persist_restore_result(
@@ -2424,7 +2514,9 @@ async def wait_for_hitl_response_realtime(
         Response data if delivered via Redis, None otherwise
     """
     registry = get_session_registry()
-    return cast(dict[str, Any] | None, await registry.wait_for_response(request_id, timeout=timeout))
+    return cast(
+        dict[str, Any] | None, await registry.wait_for_response(request_id, timeout=timeout)
+    )
 
 
 # ============================================================================

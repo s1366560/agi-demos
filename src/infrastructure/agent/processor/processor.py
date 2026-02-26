@@ -1703,32 +1703,36 @@ class SessionProcessor:
             )
 
         # Todowrite pending events
-        tool_instance = getattr(tool_def, "_tool_instance", None)
-        if (
-            tool_name == "todowrite"
-            and tool_instance
-            and hasattr(tool_instance, "consume_pending_events")
-        ):
-            try:
-                pending = tool_instance.consume_pending_events()
-                logger.info(
-                    "[Processor] todowrite pending events: count=%d, conversation_id=%s",
-                    len(pending),
-                    session_id,
-                )
-                if not pending:
-                    logger.warning(
-                        "[Processor] todowrite produced no pending events "
-                        "- tool may have failed silently"
+        # When ToolPipeline is active, events are bridged through ToolContext
+        # and consumed by the pipeline's _execute_and_finalize step 8.
+        # Only use legacy consume_pending_events when pipeline is NOT active.
+        if self._tool_pipeline is None:
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            if (
+                tool_name == "todowrite"
+                and tool_instance
+                and hasattr(tool_instance, "consume_pending_events")
+            ):
+                try:
+                    pending = tool_instance.consume_pending_events()
+                    logger.info(
+                        "[Processor] todowrite pending events: count=%d, conversation_id=%s",
+                        len(pending),
+                        session_id,
                     )
-                async for ev in self._emit_todowrite_events(pending):
-                    yield ev
-            except Exception as task_err:
-                logger.error(
-                    "Task event emission failed: %s",
-                    task_err,
-                    exc_info=True,
-                )
+                    if not pending:
+                        logger.warning(
+                            "[Processor] todowrite produced no pending events "
+                            "- tool may have failed silently"
+                        )
+                    async for ev in self._emit_todowrite_events(pending):
+                        yield ev
+                except Exception as task_err:
+                    logger.error(
+                        "Task event emission failed: %s",
+                        task_err,
+                        exc_info=True,
+                    )
 
         # Plugin/tool refresh + pending events
         refresh_count: int | None = None
@@ -1753,42 +1757,46 @@ class SessionProcessor:
                 )
                 refresh_status = "skipped"
 
-        _pending_tools = {
-            "plugin_manager",
-            "register_mcp_server",
-            "skill_sync",
-            "skill_installer",
-            "delegate_to_subagent",
-            "parallel_delegate_subagents",
-            "sessions_spawn",
-            "sessions_send",
-            "subagents",
-        }
-        if (
-            tool_name in _pending_tools
-            and tool_instance
-            and hasattr(tool_instance, "consume_pending_events")
-        ):
-            try:
-                for event in tool_instance.consume_pending_events():
-                    if (
-                        tool_name in {"plugin_manager", "register_mcp_server"}
-                        and isinstance(event, dict)
-                        and event.get("type") == "toolset_changed"
-                    ):
-                        event_data = event.get("data")
-                        if isinstance(event_data, dict):
-                            event_data.setdefault("refresh_source", "processor")
-                            event_data["refresh_status"] = refresh_status
-                            if refresh_count is not None:
-                                event_data["refreshed_tool_count"] = refresh_count
-                    yield event
-            except Exception as pending_err:
-                logger.error(
-                    "%s event emission failed: %s",
-                    tool_name,
-                    pending_err,
-                )
+        # When ToolPipeline is active, pending events are bridged through
+        # ToolContext and consumed by the pipeline. Skip legacy path.
+        if self._tool_pipeline is None:
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            _pending_tools = {
+                "plugin_manager",
+                "register_mcp_server",
+                "skill_sync",
+                "skill_installer",
+                "delegate_to_subagent",
+                "parallel_delegate_subagents",
+                "sessions_spawn",
+                "sessions_send",
+                "subagents",
+            }
+            if (
+                tool_name in _pending_tools
+                and tool_instance
+                and hasattr(tool_instance, "consume_pending_events")
+            ):
+                try:
+                    for event in tool_instance.consume_pending_events():
+                        if (
+                            tool_name in {"plugin_manager", "register_mcp_server"}
+                            and isinstance(event, dict)
+                            and event.get("type") == "toolset_changed"
+                        ):
+                            event_data = event.get("data")
+                            if isinstance(event_data, dict):
+                                event_data.setdefault("refresh_source", "processor")
+                                event_data["refresh_status"] = refresh_status
+                                if refresh_count is not None:
+                                    event_data["refreshed_tool_count"] = refresh_count
+                        yield event
+                except Exception as pending_err:
+                    logger.error(
+                        "%s event emission failed: %s",
+                        tool_name,
+                        pending_err,
+                    )
 
     async def _emit_todowrite_events(
         self,
@@ -1906,18 +1914,40 @@ class SessionProcessor:
 
         # Adapt ToolDefinition to ToolInfoProtocol
         class _ToolAdapter:
-            """Thin adapter from ToolDefinition to ToolInfoProtocol."""
+            """Thin adapter from ToolDefinition to ToolInfoProtocol.
 
-            def __init__(self, td: ToolDefinition) -> None:
+            For ToolInfo-based tools (from @tool_define), calls the
+            original execute function with the real ToolContext.
+            For legacy class-based tools, delegates to ToolDefinition
+            and bridges pending events into ToolContext.
+            """
+
+            def __init__(self, td: ToolDefinition, context: ToolContext) -> None:
                 self.name = td.name
                 self.permission = td.permission
                 self._td = td
+                self._ctx = context
 
             async def execute(self, **kwargs: Any) -> Any:
-                """Delegate to the ToolDefinition's execute callable."""
-                return await self._td.execute(**kwargs)
+                """Delegate to underlying tool with appropriate context."""
+                from src.infrastructure.agent.tools.define import ToolInfo
 
-        adapter = _ToolAdapter(tool_def)
+                tool_instance = getattr(self._td, "_tool_instance", None)
+                # ToolInfo-based tools: call with real ToolContext
+                if isinstance(tool_instance, ToolInfo):
+                    try:
+                        return await tool_instance.execute(self._ctx, **kwargs)
+                    except Exception as e:
+                        return f"Error executing tool {self.name}: {e!s}"
+
+                # Legacy class-based tools: delegate and bridge events
+                result = await self._td.execute(**kwargs)
+                if tool_instance is not None and hasattr(tool_instance, "consume_pending_events"):
+                    for event in tool_instance.consume_pending_events():
+                        await self._ctx.emit(event)
+                return result
+
+        adapter = _ToolAdapter(tool_def, ctx)
         start_time = time.time()
 
         async for event in self._tool_pipeline.execute(adapter, arguments, ctx):
@@ -2107,6 +2137,22 @@ class SessionProcessor:
                     tool_execution_id=tool_part.tool_execution_id,
                 )
                 return
+
+            elif event.type == "legacy_event":
+                # Legacy tools emit raw dict events via _pending_events.
+                # Bridge them through the pipeline as domain events.
+                legacy_evt = event.data.get("event")
+                if legacy_evt is not None:
+                    if tool_name == "todowrite" and isinstance(legacy_evt, dict):
+                        # Todowrite events need conversion via
+                        # _emit_todowrite_events.
+                        async for tw_ev in self._emit_todowrite_events([legacy_evt]):
+                            yield tw_ev
+                    else:
+                        # Other legacy events (subagent, plugin, etc.)
+                        # pass through as-is — they are already
+                        # ProcessorEvent-compatible.
+                        yield legacy_evt
 
     # ── _execute_tool orchestrator ────────────────────────────────────
 

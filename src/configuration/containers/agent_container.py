@@ -414,6 +414,18 @@ class AgentContainer:
             WebScrapeTool,
             WebSearchTool,
         )
+        from src.infrastructure.agent.tools.desktop_tool import (
+            configure_desktop,
+        )
+        from src.infrastructure.agent.tools.terminal_tool import (
+            configure_terminal,
+        )
+        from src.infrastructure.agent.tools.web_scrape import (
+            configure_web_scrape,
+        )
+        from src.infrastructure.agent.tools.web_search import (
+            configure_web_search,
+        )
 
         sandbox_orchestrator = (
             self._sandbox_orchestrator_factory() if self._sandbox_orchestrator_factory else None
@@ -425,6 +437,12 @@ class AgentContainer:
             "desktop": DesktopTool(orchestrator=sandbox_orchestrator),
             "terminal": TerminalTool(orchestrator=sandbox_orchestrator),
         }
+
+        # Configure decorator-based tool globals
+        configure_web_search(redis_client=self._redis_client)
+        configure_web_scrape()
+        configure_desktop(sandbox_orchestrator=sandbox_orchestrator)
+        configure_terminal(sandbox_orchestrator=sandbox_orchestrator)
 
         return ExecuteStepUseCase(
             llm=llm,
