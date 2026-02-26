@@ -42,6 +42,7 @@ import {
 import {
   useCanvasStore,
   useActiveCanvasTab,
+  useCanvasTabs,
   useCanvasActions,
   type CanvasTab,
   type CanvasContentType,
@@ -50,6 +51,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 
 import { artifactService } from '@/services/artifactService';
 
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
 import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
@@ -304,15 +306,13 @@ ${htmlContent}
 );
 IsolatedPreviewFrame.displayName = 'IsolatedPreviewFrame';
 
-// Content area for a single tab
+// Content area for a single non-mcp-app tab
+// MCP app tabs are rendered separately in CanvasPanel for multi-instance isolation.
 const CanvasContent = memo<{
   tab: CanvasTab;
   editMode: boolean;
   onContentChange: (content: string) => void;
-  onSendPrompt?: ((prompt: string) => void) | undefined;
-  onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
-  mcpAppRef?: React.Ref<StandardMCPAppRendererHandle> | undefined;
-}>(({ tab, editMode, onContentChange, onSendPrompt, onUpdateModelContext, mcpAppRef }) => {
+}>(({ tab, editMode, onContentChange }) => {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(
     tab.type === 'markdown' ? tab.content : undefined
   );
@@ -374,23 +374,8 @@ const CanvasContent = memo<{
         </div>
       );
     case 'mcp-app':
-      return (
-        <StandardMCPAppRenderer
-          ref={mcpAppRef}
-          toolName={tab.mcpToolName || tab.title}
-          resourceUri={tab.mcpResourceUri}
-          html={tab.mcpAppHtml}
-          toolInput={tab.mcpAppToolInput}
-          toolResult={tab.mcpAppToolResult}
-          projectId={tab.mcpProjectId}
-          serverName={tab.mcpServerName}
-          appId={tab.mcpAppId}
-          uiMetadata={tab.mcpAppUiMetadata as import('@/types/mcpApp').MCPAppUIMetadata | undefined}
-          onMessage={onSendPrompt ? (msg) => { onSendPrompt(msg.content.text); } : undefined}
-          onUpdateModelContext={onUpdateModelContext}
-          height="100%"
-        />
-      );
+      // MCP app tabs are rendered by CanvasPanel directly (multi-instance)
+      return null;
   }
 });
 CanvasContent.displayName = 'CanvasContent';
@@ -685,14 +670,18 @@ export const CanvasPanel = memo<{
   const activeTab = useActiveCanvasTab();
   const { updateContent } = useCanvasActions();
   const contentRef = useRef<HTMLDivElement>(null);
-  const mcpAppRef = useRef<StandardMCPAppRendererHandle>(null);
+  const mcpAppRefsMap = useRef<Map<string, StandardMCPAppRendererHandle>>(new Map());
   const [editMode, setEditMode] = useState(false);
   const { t } = useTranslation();
   const prevActiveTabRef = useRef<{ id: string; type: CanvasContentType } | null>(null);
   const activeTabId = activeTab?.id ?? null;
   const activeTabType = activeTab?.type ?? null;
+  const allTabs = useCanvasTabs();
+  const mcpAppTabs = useMemo(() => allTabs.filter((t) => t.type === 'mcp-app'), [allTabs]);
 
-  // SEP-1865: Teardown MCP App when switching away from an mcp-app tab
+  // Teardown MCP App when switching away from an mcp-app tab (no longer needed
+  // for error isolation since each tab has its own renderer, but still useful to
+  // release resources when the user navigates away from a tab).
   useEffect(() => {
     const prev = prevActiveTabRef.current;
     if (
@@ -700,18 +689,19 @@ export const CanvasPanel = memo<{
       prev.type === 'mcp-app' &&
       prev.id !== activeTabId
     ) {
-      mcpAppRef.current?.teardown();
+      // Do NOT teardown on tab switch -- multi-instance approach keeps all alive.
+      // Teardown only happens on close or unmount.
     }
     prevActiveTabRef.current =
       activeTabId && activeTabType ? { id: activeTabId, type: activeTabType } : null;
   }, [activeTabId, activeTabType]);
 
-  // Teardown active MCP App on page unload / navigate away
+  // Teardown ALL MCP App instances on page unload / navigate away
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (activeTabType === 'mcp-app') {
-        mcpAppRef.current?.teardown();
-      }
+      mcpAppRefsMap.current.forEach((handle) => {
+        handle.teardown();
+      });
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
@@ -719,18 +709,19 @@ export const CanvasPanel = memo<{
       // Also teardown on component unmount (route change)
       handleBeforeUnload();
     };
-  }, [activeTabType]);
+  }, []);
 
-  // SEP-1865: Send ui/resource-teardown before closing MCP App tabs
+  // Teardown specific MCP App on tab close
   const handleBeforeCloseTab = useCallback(
     (tabId: string) => {
       const tabs = useCanvasStore.getState().tabs;
       const tab = tabs.find((t) => t.id === tabId);
-      if (tab?.type === 'mcp-app' && tab.id === activeTab?.id) {
-        mcpAppRef.current?.teardown();
+      if (tab?.type === 'mcp-app') {
+        mcpAppRefsMap.current.get(tabId)?.teardown();
+        mcpAppRefsMap.current.delete(tabId);
       }
     },
-    [activeTab?.id]
+    []
   );
 
   const handleSelectionAction = useCallback(
@@ -777,14 +768,59 @@ export const CanvasPanel = memo<{
             ref={contentRef}
             className="flex-1 min-h-0 overflow-hidden relative bg-white dark:bg-slate-900"
           >
-            <CanvasContent
-              tab={activeTab}
-              editMode={editMode}
-              onContentChange={handleContentChange}
-              onSendPrompt={onSendPrompt}
-              onUpdateModelContext={onUpdateModelContext}
-              mcpAppRef={mcpAppRef}
-            />
+            {/* Multi-instance MCP app rendering: each mcp-app tab gets its own isolated renderer */}
+            {mcpAppTabs.map((tab) => (
+              <div
+                key={tab.id}
+                style={{
+                  display: tab.id === activeTabId ? 'flex' : 'none',
+                  flexDirection: 'column',
+                  height: '100%',
+                  width: '100%',
+                }}
+              >
+                <ErrorBoundary
+                  key={`eb-${tab.id}`}
+                  context={`MCP App: ${tab.title}`}
+                  showHomeButton={false}
+                >
+                  <StandardMCPAppRenderer
+                    ref={(handle) => {
+                      if (handle) {
+                        mcpAppRefsMap.current.set(tab.id, handle);
+                      } else {
+                        mcpAppRefsMap.current.delete(tab.id);
+                      }
+                    }}
+                    toolName={tab.mcpToolName || tab.title}
+                    resourceUri={tab.mcpResourceUri}
+                    html={tab.mcpAppHtml}
+                    projectId={tab.mcpProjectId}
+                    serverName={tab.mcpServerName}
+                    appId={tab.mcpAppId}
+                    onMessage={
+                      onSendPrompt
+                        ? (msg) => {
+                            if (msg.content.text) {
+                              onSendPrompt(msg.content.text);
+                            }
+                          }
+                        : undefined
+                    }
+                    onUpdateModelContext={onUpdateModelContext}
+                    height="100%"
+                  />
+                </ErrorBoundary>
+              </div>
+            ))}
+            {/* Non-mcp-app active tab content */}
+            {activeTab.type !== 'mcp-app' && (
+              <CanvasContent
+                tab={activeTab}
+                editMode={editMode}
+                onContentChange={handleContentChange}
+              />
+            )}
             {!editMode && (
               <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />
             )}
