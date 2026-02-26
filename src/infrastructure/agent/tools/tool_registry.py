@@ -3,6 +3,8 @@
 Provides centralized tool management, execution, and monitoring.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from abc import ABC, abstractmethod
@@ -10,6 +12,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, cast
+
+from src.infrastructure.agent.tools.define import ToolInfo
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +120,7 @@ class ToolRegistry:
         self._metadata: dict[str, ToolMetadata] = {}
         self._status: dict[str, ToolStatus] = {}
         self._execution_stats: dict[str, dict[str, Any]] = {}
+        self._tool_infos: dict[str, ToolInfo] = {}
 
     def register(self, tool: Tool, metadata: ToolMetadata | None = None) -> None:
         """Register a tool.
@@ -270,6 +275,85 @@ class ToolRegistry:
         """
         if name in self._status:
             self._status[name] = ToolStatus.DISABLED
+
+    # -------------------------------------------------------------------
+    # New-style ToolInfo registry (additive, does not replace _tools)
+    # -------------------------------------------------------------------
+
+    def register_info(self, info: ToolInfo) -> None:
+        """Register a ToolInfo (new-style tool definition).
+
+        Args:
+            info: The ToolInfo instance to register.
+
+        Raises:
+            ValueError: If a ToolInfo with the same name is already registered.
+        """
+        if info.name in self._tool_infos:
+            raise ValueError(f"ToolInfo '{info.name}' already registered")
+        self._tool_infos[info.name] = info
+        self._execution_stats[info.name] = {
+            "calls": 0,
+            "successes": 0,
+            "errors": 0,
+            "total_duration_ms": 0.0,
+            "avg_duration_ms": 0.0,
+            "success_rate": 0.0,
+        }
+        logger.info("Registered tool info: %s", info.name)
+
+    def unregister_info(self, name: str) -> None:
+        """Unregister a ToolInfo.
+
+        Args:
+            name: The tool name to unregister.
+        """
+        self._tool_infos.pop(name, None)
+        self._execution_stats.pop(name, None)
+
+    def get_tools(
+        self,
+        *,
+        model: str | None = None,
+        agent: str | None = None,
+        tags: frozenset[str] | None = None,
+    ) -> list[ToolInfo]:
+        """Return ToolInfo instances filtered by model, agent, and tags.
+
+        Args:
+            model: LLM model identifier for model-specific filtering.
+            agent: Agent name for agent-specific filtering.
+            tags: Required tags -- only tools with ALL of these tags are returned.
+
+        Returns:
+            Filtered list of ToolInfo.
+        """
+        tools = list(self._tool_infos.values())
+
+        if model:
+            tools = [t for t in tools if t.model_filter is None or t.model_filter(model)]
+
+        if tags:
+            tools = [t for t in tools if tags.issubset(t.tags)]
+
+        return tools
+
+    def get_tool_info(self, name: str) -> ToolInfo | None:
+        """Get a ToolInfo by name.
+
+        Args:
+            name: The tool name.
+
+        Returns:
+            The ToolInfo instance or None.
+        """
+        return self._tool_infos.get(name)
+
+    @property
+    def all_tool_names(self) -> list[str]:
+        """Return all registered tool names (both legacy and new-style)."""
+        names = set(self._tools.keys()) | set(self._tool_infos.keys())
+        return sorted(names)
 
 
 class ToolExecutor:

@@ -1,8 +1,14 @@
 """Permission management module for tool access control."""
 
 from .errors import PermissionDeniedError, PermissionError, PermissionRejectedError
-from .manager import PermissionManager, PermissionRequest
-from .rules import PermissionAction, PermissionRule
+from .manager import (
+    ApprovalScope,
+    InMemoryPermissionStore,
+    PermissionManager,
+    PermissionRequest,
+    PermissionStore,
+)
+from .rules import PermissionAction, PermissionRule, RuleScope
 
 # Global singleton instance
 _permission_manager_instance: PermissionManager | None = None
@@ -22,6 +28,8 @@ def get_permission_manager() -> PermissionManager:
 
 
 __all__ = [
+    "ApprovalScope",
+    "InMemoryPermissionStore",
     "PermissionAction",
     "PermissionDeniedError",
     "PermissionError",
@@ -29,5 +37,7 @@ __all__ = [
     "PermissionRejectedError",
     "PermissionRequest",
     "PermissionRule",
+    "PermissionStore",
+    "RuleScope",
     "get_permission_manager",
 ]

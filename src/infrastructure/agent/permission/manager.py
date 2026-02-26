@@ -11,12 +11,13 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from .errors import PermissionDeniedError, PermissionRejectedError
 from .rules import (
     PermissionAction,
     PermissionRule,
+    RuleScope,
     default_ruleset,
     evaluate_rules,
     explore_mode_ruleset,
@@ -31,6 +32,93 @@ class AgentPermissionMode(str, Enum):
     BUILD = "build"  # Full access (default)
     PLAN = "plan"  # Read-only + plan editing
     EXPLORE = "explore"  # Pure read-only (SubAgent)
+
+
+class ApprovalScope(str, Enum):
+    """Scope of an approval decision."""
+
+    ONCE = "once"  # One-time approval
+    SESSION = "session"  # Session-scoped
+    ALWAYS = "always"  # Persistent across sessions
+
+
+class PermissionStore(Protocol):
+    """Protocol for persistent permission approval storage."""
+
+    async def is_approved(
+        self,
+        permission: str,
+        target: str,
+        args: dict[str, Any] | None = None,
+    ) -> bool:
+        """Check if a permission is persistently approved."""
+        ...
+
+    async def save(
+        self,
+        permission: str,
+        pattern: str,
+        arg_pattern: str | None = None,
+    ) -> None:
+        """Save a persistent approval."""
+        ...
+
+    async def remove(self, permission: str, pattern: str) -> None:
+        """Remove a persistent approval."""
+        ...
+
+    async def list_approvals(self) -> list[dict[str, Any]]:
+        """List all persistent approvals."""
+        ...
+
+
+class InMemoryPermissionStore:
+    """In-memory implementation of PermissionStore.
+
+    Suitable for development and testing. Production should use
+    a persistent backend (database, Redis, etc.).
+    """
+
+    def __init__(self) -> None:
+        self._approvals: list[PermissionRule] = []
+
+    async def is_approved(
+        self,
+        permission: str,
+        target: str,
+        args: dict[str, Any] | None = None,
+    ) -> bool:
+        """Check if a permission is persistently approved."""
+        for rule in reversed(self._approvals):
+            if rule.matches(permission, target, args):
+                return True
+        return False
+
+    async def save(
+        self,
+        permission: str,
+        pattern: str,
+        arg_pattern: str | None = None,
+    ) -> None:
+        """Save a persistent approval."""
+        rule = PermissionRule(
+            permission=permission,
+            pattern=pattern,
+            action=PermissionAction.ALLOW,
+            scope=RuleScope.USER,
+            arg_pattern=arg_pattern,
+        )
+        self._approvals.append(rule)
+
+    async def remove(self, permission: str, pattern: str) -> None:
+        """Remove a persistent approval."""
+        self._approvals = [
+            r for r in self._approvals if not (r.permission == permission and r.pattern == pattern)
+        ]
+
+    async def list_approvals(self) -> list[dict[str, Any]]:
+        """List all persistent approvals."""
+        return [r.to_dict() for r in self._approvals]
 
 
 @dataclass
@@ -93,12 +181,17 @@ class PermissionManager:
             pass
     """
 
-    def __init__(self, ruleset: list[PermissionRule] | None = None) -> None:
+    def __init__(
+        self,
+        ruleset: list[PermissionRule] | None = None,
+        store: PermissionStore | None = None,
+    ) -> None:
         """
         Initialize permission manager.
 
         Args:
             ruleset: Initial rules. If None, uses default ruleset.
+            store: Optional persistent approval store.
         """
         self.ruleset = ruleset or default_ruleset()
         self.approved: list[PermissionRule] = []  # Runtime-approved rules
@@ -107,6 +200,7 @@ class PermissionManager:
         self._event_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None
         self._request_counter = 0
         self._current_mode = AgentPermissionMode.BUILD
+        self._store: PermissionStore | None = store
 
     def set_event_publisher(
         self,
@@ -177,6 +271,7 @@ class PermissionManager:
         self,
         permission: str,
         pattern: str,
+        args: dict[str, Any] | None = None,
     ) -> PermissionRule:
         """
         Evaluate permission for a given pattern.
@@ -189,11 +284,14 @@ class PermissionManager:
         Args:
             permission: Permission type (e.g., "read", "bash")
             pattern: Target pattern (e.g., file path, command)
+            args: Optional tool arguments for arg_pattern matching
 
         Returns:
             Matching rule with action
         """
-        return evaluate_rules(permission, pattern, self.ruleset, self.mode_rules, self.approved)
+        return evaluate_rules(
+            permission, pattern, self.ruleset, self.mode_rules, self.approved, args=args
+        )
 
     async def ask(
         self,
@@ -374,6 +472,14 @@ class PermissionManager:
                 )
             )
 
+        # Persist to store if available
+        if self._store:
+            for pattern in pending.request.always_patterns:
+                await self._store.save(
+                    pending.request.permission,
+                    pattern,
+                )
+
         pending.result["result"] = "allow"
         pending.event.set()
 
@@ -499,3 +605,38 @@ class PermissionManager:
         """
         disabled = self.get_disabled_tools(tools)
         return [t for t in tools if t not in disabled]
+
+    async def approve(
+        self,
+        permission: str,
+        pattern: str,
+        scope: ApprovalScope,
+        arg_pattern: str | None = None,
+    ) -> None:
+        """Programmatically store an approval decision.
+
+        Args:
+            permission: Permission type to approve.
+            pattern: Target pattern to approve.
+            scope: Scope of the approval (ONCE, SESSION, ALWAYS).
+            arg_pattern: Optional argument pattern constraint.
+        """
+        if scope == ApprovalScope.ALWAYS:
+            # Store persistently AND add to runtime
+            if self._store:
+                await self._store.save(permission, pattern, arg_pattern)
+            self.approved.append(
+                PermissionRule(
+                    permission, pattern, PermissionAction.ALLOW, RuleScope.USER, arg_pattern
+                )
+            )
+        elif scope == ApprovalScope.SESSION:
+            self.approved.append(
+                PermissionRule(
+                    permission,
+                    pattern,
+                    PermissionAction.ALLOW,
+                    RuleScope.SESSION,
+                    arg_pattern,
+                )
+            )

@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.commands.types import CommandResult
+    from src.infrastructure.agent.tools.pipeline import ToolPipeline
 
 
 from src.domain.model.agent.hitl_types import HITLType
@@ -208,17 +209,18 @@ class SessionProcessor:
         permission_manager: PermissionManager | None = None,
         artifact_service: Optional["ArtifactService"] = None,
         command_interceptor: Optional["CommandInterceptor"] = None,
+        tool_pipeline: Optional["ToolPipeline"] = None,
     ) -> None:
         """
         Initialize session processor.
-
-        Args:
-            config: Processor configuration
-            tools: List of available tools
-            permission_manager: Optional permission manager (creates default if None)
-            artifact_service: Optional artifact service for handling rich outputs
-            command_interceptor: Optional command interceptor for slash commands
         """
+        # Args:
+        #     config: Processor configuration
+        #     tools: List of available tools
+        #     permission_manager: Optional permission manager (creates default if None)
+        #     artifact_service: Optional artifact service for handling rich outputs
+        #     command_interceptor: Optional command interceptor for slash commands
+        #     tool_pipeline: Optional unified tool pipeline for execution
         self.config = config
         self.tools = {t.name: t for t in tools}
 
@@ -241,6 +243,8 @@ class SessionProcessor:
         # Command interceptor for slash commands
         self._command_interceptor = command_interceptor
 
+        # Optional unified tool execution pipeline
+        self._tool_pipeline = tool_pipeline
         # LLM client for streaming (with circuit breaker + rate limiter)
         self._llm_client = config.llm_client
 
@@ -1863,9 +1867,250 @@ class SessionProcessor:
                         )
                         self._current_task = None
 
+    # ── Pipeline-based tool execution ──────────────────────────────────
+
+    async def _execute_tool_via_pipeline(  # noqa: PLR0912, PLR0915
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+        tool_def: ToolDefinition,
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Execute a tool through the unified ToolPipeline.
+
+        Replaces phases 2 (doom loop), 4 (permission), and 6 (invocation)
+        when ``self._tool_pipeline`` is set.  The pipeline yields
+        ``ToolEvent`` instances that are converted to ``ProcessorEvent``.
+
+        After completion the caller should still run
+        ``_emit_tool_side_effects`` using the stashed ``self._last_*``
+        values populated by this method.
+        """
+        assert self._tool_pipeline is not None  # caller guarantees
+
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        # Build a ToolContext from processor state
+        ctx = ToolContext(
+            session_id=session_id,
+            message_id=call_id,
+            call_id=call_id,
+            agent_name=(self._langfuse_context or {}).get("agent_name", "main"),
+            conversation_id=session_id,
+            abort_signal=self._abort_event or asyncio.Event(),
+            messages=[],
+        )
+
+        # Adapt ToolDefinition to ToolInfoProtocol
+        class _ToolAdapter:
+            """Thin adapter from ToolDefinition to ToolInfoProtocol."""
+
+            def __init__(self, td: ToolDefinition) -> None:
+                self.name = td.name
+                self.permission = td.permission
+                self._td = td
+
+            async def execute(self, **kwargs: Any) -> Any:
+                """Delegate to the ToolDefinition's execute callable."""
+                return await self._td.execute(**kwargs)
+
+        adapter = _ToolAdapter(tool_def)
+        start_time = time.time()
+
+        async for event in self._tool_pipeline.execute(adapter, arguments, ctx):
+            if event.type == "started":
+                self._state = ProcessorState.ACTING
+
+            elif event.type == "completed":
+                end_time = time.time()
+                # Extract the full ToolResult from event data
+                tool_result: ToolResult | None = event.data.get("_result")
+                if tool_result is not None:
+                    output_str = tool_result.output
+                    sse_result: Any = tool_result.metadata if tool_result.metadata else output_str
+                    raw_result: Any = tool_result
+                else:
+                    output_str = ""
+                    sse_result = ""
+                    raw_result = ""
+
+                # Update tool_part
+                tool_part.status = ToolState.COMPLETED
+                tool_part.output = self._artifact_handler.sanitize_tool_output(output_str)
+                tool_part.end_time = end_time
+
+                # MCP App UI metadata (same logic as _invoke_and_emit_observe)
+                tool_instance = getattr(tool_def, "_tool_instance", None)
+                has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
+                if not has_ui and tool_name.startswith("mcp__") and tool_instance:
+                    _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
+                    if _app_id_fb:
+                        has_ui = True
+
+                _observe_ui_meta: dict[str, Any] | None = None
+                _hydrated_ui_meta: dict[str, Any] = {}
+                if tool_instance and has_ui:
+                    _o_app_id = (
+                        getattr(tool_instance, "_last_app_id", "")
+                        or getattr(tool_instance, "_app_id", "")
+                        or ""
+                    )
+                    _hydrated_ui_meta = await self._hydrate_mcp_ui_metadata(
+                        tool_instance=tool_instance,
+                        app_id=_o_app_id,
+                        tool_name=tool_name,
+                    )
+                    _o_server = getattr(tool_instance, "_server_name", "") or ""
+                    _o_project_id = (self._langfuse_context or {}).get("project_id", "")
+                    _observe_ui_meta = {
+                        "resource_uri": self._extract_mcp_resource_uri(_hydrated_ui_meta),
+                        "server_name": _o_server,
+                        "app_id": _o_app_id,
+                        "title": _hydrated_ui_meta.get("title", ""),
+                        "project_id": _o_project_id,
+                    }
+
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    result=sse_result,
+                    duration_ms=event.data.get(
+                        "duration_ms",
+                        int((end_time - start_time) * 1000),
+                    ),
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                    ui_metadata=_observe_ui_meta,
+                )
+
+                # Emit AgentMCPAppResultEvent if tool has UI
+                if tool_instance and has_ui:
+                    ui_meta = _hydrated_ui_meta or getattr(tool_instance, "ui_metadata", None) or {}
+                    app_id = (
+                        getattr(tool_instance, "_last_app_id", "")
+                        or getattr(tool_instance, "_app_id", "")
+                        or ""
+                    )
+                    if not app_id:
+                        app_id = f"_synthetic_{tool_name}"
+                    resource_html = ""
+                    fetch_fn = getattr(tool_instance, "fetch_resource_html", None)
+                    if fetch_fn:
+                        try:
+                            resource_html = await fetch_fn()
+                        except Exception as fetch_err:
+                            logger.warning(
+                                "[MCPApp] fetch_resource_html failed for %s: %s",
+                                tool_name,
+                                fetch_err,
+                            )
+                    if not resource_html:
+                        resource_html = getattr(tool_instance, "_last_html", "") or ""
+                    _server_name = getattr(tool_instance, "_server_name", "") or ""
+                    _project_id = (self._langfuse_context or {}).get("project_id", "")
+                    _structured_content = None
+                    if isinstance(sse_result, dict):
+                        _structured_content = sse_result.get("structuredContent")
+
+                    yield AgentMCPAppResultEvent(
+                        app_id=app_id,
+                        tool_name=tool_name,
+                        tool_result=sse_result,
+                        tool_input=arguments if arguments else None,
+                        resource_html=resource_html,
+                        resource_uri=self._extract_mcp_resource_uri(ui_meta),
+                        ui_metadata=ui_meta,
+                        tool_execution_id=(tool_part.tool_execution_id),
+                        project_id=_project_id,
+                        server_name=_server_name,
+                        structured_content=_structured_content,
+                    )
+
+                # Stash for _emit_tool_side_effects
+                self._last_sse_result = sse_result
+                self._last_raw_result = raw_result
+                self._last_output_str = output_str
+
+            elif event.type == "denied":
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Permission denied"
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Permission denied",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                return
+
+            elif event.type == "doom_loop":
+                yield AgentDoomLoopDetectedEvent(tool=tool_name, input=arguments)
+                # Replicate existing doom-loop permission-ask flow
+                self._state = ProcessorState.WAITING_PERMISSION
+                try:
+                    permission_result = await asyncio.wait_for(
+                        self.permission_manager.ask(
+                            permission="doom_loop",
+                            patterns=[tool_name],
+                            session_id=session_id,
+                            metadata={
+                                "tool": tool_name,
+                                "input": arguments,
+                            },
+                        ),
+                        timeout=self.config.permission_timeout,
+                    )
+                    if permission_result == "reject":
+                        tool_part.status = ToolState.ERROR
+                        tool_part.error = "Doom loop detected and rejected by user"
+                        tool_part.end_time = time.time()
+                        yield AgentObserveEvent(
+                            tool_name=tool_name,
+                            error="Doom loop detected and rejected",
+                            call_id=call_id,
+                            tool_execution_id=(tool_part.tool_execution_id),
+                        )
+                        return
+                except TimeoutError:
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Permission request timed out"
+                    tool_part.end_time = time.time()
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error="Permission request timed out",
+                        call_id=call_id,
+                        tool_execution_id=(tool_part.tool_execution_id),
+                    )
+                    return
+                # Permission granted for doom loop — pipeline already returned,
+                # so we have nothing more to process from it.
+                return
+
+            elif event.type == "permission_asked":
+                yield AgentPermissionAskedEvent(
+                    request_id="",
+                    permission=tool_def.permission or tool_name,
+                    patterns=[tool_name],
+                    metadata={"tool": tool_name, "input": arguments},
+                )
+
+            elif event.type == "aborted":
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Tool execution aborted"
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Tool execution aborted",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                return
+
     # ── _execute_tool orchestrator ────────────────────────────────────
 
-    async def _execute_tool(  # noqa: PLR0912
+    async def _execute_tool(  # noqa: PLR0912, PLR0915, PLR0911
         self,
         session_id: str,
         call_id: str,
@@ -1921,6 +2166,67 @@ class SessionProcessor:
                 yield ev
             return
 
+        # ── Pipeline shortcut ── (phases 2, 4, 6 handled by pipeline)
+        if self._tool_pipeline is not None:
+            # 5. Parse & fix arguments (still needed before pipeline)
+            self._state = ProcessorState.ACTING
+            cleaned = self._parse_and_fix_arguments(
+                tool_name,
+                arguments,
+                tool_part,
+                call_id,
+                session_id,
+            )
+            if cleaned is None:
+                for ev in self.__arg_parse_errors:
+                    yield ev
+                return
+            arguments = cleaned
+
+            try:
+                # 6. Pipeline execution (doom loop + permission + invoke)
+                async for ev in self._execute_tool_via_pipeline(
+                    session_id,
+                    call_id,
+                    tool_name,
+                    arguments,
+                    tool_part,
+                    tool_def,
+                ):
+                    yield ev
+
+                # 7. Side effects (same as non-pipeline path)
+                async for ev in self._emit_tool_side_effects(
+                    tool_name,
+                    tool_def,
+                    tool_part,
+                    session_id,
+                ):
+                    yield ev
+
+            except Exception as e:
+                logger.error(
+                    "Tool execution error (pipeline): %s",
+                    e,
+                    exc_info=True,
+                )
+                tool_part.status = ToolState.ERROR
+                tool_part.error = str(e)
+                tool_part.end_time = time.time()
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=str(e),
+                    duration_ms=(
+                        int((time.time() - tool_part.start_time) * 1000)
+                        if tool_part.start_time
+                        else None
+                    ),
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+
+            self._state = ProcessorState.OBSERVING
+            return
         # 4. Permission check
         self._permission_asked_event = None
         perm_result = await self._check_tool_permission(

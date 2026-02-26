@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.permission.manager import PermissionManager
+    from src.infrastructure.agent.tools.pipeline import ToolPipeline
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 
@@ -47,6 +48,7 @@ class ProcessorFactory:
         base_model: Default model name (used when SubAgent inherits).
         base_api_key: API key for LLM calls.
         base_url: Base URL for LLM API.
+        tool_pipeline: ToolPipeline | None = None
     """
 
     llm_client: LLMClient | None = None
@@ -56,6 +58,7 @@ class ProcessorFactory:
     base_model: str = ""
     base_api_key: str | None = None
     base_url: str | None = None
+    tool_pipeline: ToolPipeline | None = None
 
     def create_for_subagent(
         self,
@@ -100,6 +103,7 @@ class ProcessorFactory:
             tools=tools,
             permission_manager=self.permission_manager,
             artifact_service=self.artifact_service,
+            tool_pipeline=self.tool_pipeline,
         )
 
     def create_for_main(
@@ -125,4 +129,5 @@ class ProcessorFactory:
             permission_manager=self.permission_manager,
             artifact_service=self.artifact_service,
             command_interceptor=self.command_interceptor,
+            tool_pipeline=self.tool_pipeline,
         )

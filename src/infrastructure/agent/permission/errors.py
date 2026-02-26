@@ -5,7 +5,6 @@ class PermissionError(Exception):
     """Base class for permission errors."""
 
 
-
 class PermissionDeniedError(PermissionError):
     """Raised when a permission is denied by rule."""
 

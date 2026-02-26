@@ -12,9 +12,17 @@ Aligned with vendor/opencode's truncation strategy:
 Reference: vendor/opencode/packages/opencode/src/tool/read.ts
 """
 
+from __future__ import annotations
+
 import logging
+import time
 from dataclasses import dataclass
-from typing import Any
+from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +30,13 @@ logger = logging.getLogger(__name__)
 MAX_OUTPUT_BYTES = 50 * 1024  # 50KB max output size
 MAX_LINE_LENGTH = 2000  # Max characters per line
 DEFAULT_READ_LIMIT = 2000  # Default lines to read
+
+
+class TruncateDirection(Enum):
+    """Direction for output truncation."""
+
+    HEAD = "head"  # Keep beginning, truncate end (default)
+    TAIL = "tail"  # Keep end, truncate beginning
 
 
 @dataclass
@@ -246,6 +261,8 @@ class OutputTruncator:
         self,
         max_bytes: int = MAX_OUTPUT_BYTES,
         max_line_length: int = MAX_LINE_LENGTH,
+        max_lines: int = DEFAULT_READ_LIMIT,
+        output_dir: Path | None = None,
     ) -> None:
         """
         Initialize output truncator.
@@ -253,9 +270,13 @@ class OutputTruncator:
         Args:
             max_bytes: Maximum output size in bytes
             max_line_length: Maximum characters per line
+            max_lines: Default line limit for line-based truncation
+            output_dir: Directory for persisting full output on truncation
         """
         self.max_bytes = max_bytes
         self.max_line_length = max_line_length
+        self.max_lines = max_lines
+        self._output_dir = output_dir or Path("/tmp/memstack-tool-output")
 
     def truncate(self, content: str) -> TruncationResult:
         """Truncate content by byte size."""
@@ -292,6 +313,99 @@ class OutputTruncator:
             self.max_bytes,
         )
 
+    def truncate_to_result(
+        self,
+        output: str,
+        direction: TruncateDirection = TruncateDirection.HEAD,
+        tool_name: str | None = None,
+    ) -> ToolResult:
+        """Truncate output and return a structured ToolResult.
+
+        If truncated, saves full output to disk and adds a hint about the
+        full output location.
+
+        Args:
+            output: Raw output string to truncate.
+            direction: Keep HEAD (beginning) or TAIL (end) of output.
+            tool_name: Optional tool name for the saved file prefix.
+
+        Returns:
+            ToolResult with truncated output and truncation metadata.
+        """
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if not output:
+            return ToolResult(output="")
+
+        content_bytes = output.encode("utf-8")
+        total_bytes = len(content_bytes)
+        total_lines = output.count("\n") + 1
+
+        if total_bytes <= self.max_bytes:
+            return ToolResult(output=output)
+
+        # Truncate based on direction
+        if direction == TruncateDirection.TAIL:
+            truncated_bytes = content_bytes[-self.max_bytes :]
+        else:
+            truncated_bytes = content_bytes[: self.max_bytes]
+
+        truncated_content = truncated_bytes.decode("utf-8", errors="ignore")
+
+        # Persist full output to disk
+        full_path = self._save_to_disk(output, tool_name)
+        hint = self._build_truncation_hint(full_path, total_lines, total_bytes)
+
+        if direction == TruncateDirection.TAIL:
+            final_output = f"{hint}\n...\n{truncated_content}"
+        else:
+            final_output = f"{truncated_content}\n...\n{hint}"
+
+        return ToolResult(
+            output=final_output,
+            was_truncated=True,
+            original_bytes=total_bytes,
+            full_output_path=str(full_path),
+        )
+
+    def _save_to_disk(self, output: str, tool_name: str | None = None) -> Path:
+        """Save full output to a temp file. Creates output_dir if needed."""
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = int(time.time() * 1000)
+        prefix = f"{tool_name}_" if tool_name else ""
+        filename = f"{prefix}{timestamp}.txt"
+        path = self._output_dir / filename
+        path.write_text(output, encoding="utf-8")
+        return path
+
+    def _build_truncation_hint(self, full_path: Path, total_lines: int, total_bytes: int) -> str:
+        """Build a user-facing hint about truncated output."""
+        return (
+            f"[Output truncated: {total_lines} lines, {total_bytes} bytes. "
+            f"Full output saved to {full_path}. "
+            f"Use grep to search or read with offset/limit to view "
+            f"specific sections.]"
+        )
+
+    @classmethod
+    def cleanup_old_files(
+        cls,
+        output_dir: Path | None = None,
+        max_age_days: int = 7,
+    ) -> int:
+        """Remove output files older than max_age_days. Returns count removed."""
+        target_dir = output_dir or Path("/tmp/memstack-tool-output")
+        if not target_dir.exists():
+            return 0
+
+        cutoff = time.time() - (max_age_days * 86400)
+        removed = 0
+        for file_path in target_dir.iterdir():
+            if file_path.is_file() and file_path.stat().st_mtime < cutoff:
+                file_path.unlink()
+                removed += 1
+        return removed
+
 
 # Convenience exports
 __all__ = [
@@ -299,6 +413,7 @@ __all__ = [
     "MAX_LINE_LENGTH",
     "MAX_OUTPUT_BYTES",
     "OutputTruncator",
+    "TruncateDirection",
     "TruncationResult",
     "format_file_output",
     "truncate_by_bytes",

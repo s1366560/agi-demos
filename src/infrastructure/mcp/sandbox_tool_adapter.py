@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast, override
 
 from src.infrastructure.agent.tools.base import AgentTool
+from src.infrastructure.mcp.resource_cache import MCPResourceCache
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         server_name: str,
         tool_info: dict[str, Any],
         cache_ttl_seconds: float = 60.0,
+        resource_cache: MCPResourceCache | None = None,
     ) -> None:
         """Initialize the adapter.
 
@@ -51,6 +53,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             server_name: User MCP server name.
             tool_info: Tool definition dict (name, description, input_schema, _meta).
             cache_ttl_seconds: Cache TTL for resource HTML (default: 60s, 0 to disable).
+            resource_cache: Optional MCPResourceCache service for shared caching.
         """
         # Extract and compute tool name/description first (needed for super().__init__)
         self._server_name = server_name
@@ -99,6 +102,9 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
         # Background tasks for this adapter instance
         self._bg_tasks: set[asyncio.Task[Any]] = set()
+
+        # Injected cache service (preferred when available)
+        self._resource_cache = resource_cache
 
     @staticmethod
     def _generate_tool_name_static(server_name: str, tool_name: str) -> str:
@@ -168,13 +174,33 @@ class SandboxMCPServerToolAdapter(AgentTool):
         Returns:
             HTML content string, or empty string on failure.
         """
-        import time
-
         uri = self.resource_uri
         if not uri:
             return ""
 
-        # Check cache
+        # Use injected cache service if available
+        if self._resource_cache is not None:
+            cached = await self._resource_cache.get(uri)
+            if cached is not None:
+                return cached
+
+            try:
+                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+                html = html or ""
+                if html:
+                    await self._resource_cache.put(uri, html, ttl=self._cache_ttl_seconds)
+                return html
+            except Exception as e:
+                logger.warning("fetch_resource_html failed for %s: %s", uri, e)
+                return ""
+
+        # Fallback: inline caching (legacy path)
+        return await self._fetch_resource_html_inline(uri)
+
+    async def _fetch_resource_html_inline(self, uri: str) -> str:
+        """Legacy inline caching path for fetch_resource_html."""
+        import time
+
         if self._cache_ttl_seconds > 0 and self._cached_html is not None:
             cache_age = time.time() - (self._cache_fetched_at or 0)
             if cache_age < self._cache_ttl_seconds:
@@ -202,6 +228,14 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
     def invalidate_resource_cache(self) -> None:
         """Invalidate the cached resource HTML."""
+        if self._resource_cache is not None:
+            uri = self.resource_uri
+            if uri:
+                with contextlib.suppress(RuntimeError):
+                    loop = asyncio.get_running_loop()
+                    _task = loop.create_task(self._resource_cache.invalidate(uri))
+                    self._bg_tasks.add(_task)
+                    _task.add_done_callback(self._bg_tasks.discard)
         self._cached_html = None
         self._cache_fetched_at = None
         logger.debug("Resource HTML cache invalidated for %s", self.resource_uri)
@@ -212,7 +246,19 @@ class SandboxMCPServerToolAdapter(AgentTool):
         Starts an async task to fetch and cache the HTML.
         Useful for warming the cache before the first request.
         """
-        import asyncio
+        if self._resource_cache is not None:
+
+            async def _fetch(uri: str) -> str:
+                html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
+                return html or ""
+
+            uri = self.resource_uri
+            if uri:
+                self._resource_cache.prefetch(uri, _fetch)
+            return
+
+        # Fallback: legacy prefetch
+        import asyncio as _asyncio
 
         async def _prefetch() -> None:
             try:
@@ -224,7 +270,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         # Create background task (fire and forget)
         with contextlib.suppress(RuntimeError):
             _mcp_bg_tasks = self._bg_tasks
-            _prefetch_task = asyncio.create_task(_prefetch())
+            _prefetch_task = _asyncio.create_task(_prefetch())
             _mcp_bg_tasks.add(_prefetch_task)
             _prefetch_task.add_done_callback(_mcp_bg_tasks.discard)
 
@@ -232,8 +278,10 @@ class SandboxMCPServerToolAdapter(AgentTool):
         """Get cache statistics.
 
         Returns:
-            Dict with hits, misses, last_fetch_at
+            Dict with hits, misses, and size or last_fetch_at.
         """
+        if self._resource_cache is not None:
+            return dict(self._resource_cache.get_stats())
         return dict(self._cache_stats)
 
     @override
@@ -320,7 +368,18 @@ class SandboxMCPServerToolAdapter(AgentTool):
                 self._last_html: str = text
                 self._cached_html = text
                 self._cache_fetched_at = time.time()
+                # Also store in injected cache service if available
+                if self._resource_cache is not None:
+                    uri = self.resource_uri
+                    if uri:
+                        with contextlib.suppress(RuntimeError):
+                            loop = asyncio.get_running_loop()
+                            _task = loop.create_task(self._resource_cache.put(uri, text))
+                            self._bg_tasks.add(_task)
+                            _task.add_done_callback(self._bg_tasks.discard)
                 logger.debug(
-                    "Captured HTML from tool result for %s (%d bytes)", self._name, len(text)
+                    "Captured HTML from tool result for %s (%d bytes)",
+                    self._name,
+                    len(text),
                 )
                 return

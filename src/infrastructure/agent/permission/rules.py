@@ -6,6 +6,14 @@ from enum import Enum
 from typing import Any
 
 
+class RuleScope(str, Enum):
+    """Scope of a permission rule."""
+
+    AGENT = "agent"  # Agent-level (most broad)
+    USER = "user"  # User-level
+    SESSION = "session"  # Session-level (most specific)
+
+
 class PermissionAction(Enum):
     """Permission action types - Reference: OpenCode permission/next.ts"""
 
@@ -30,29 +38,65 @@ class PermissionRule:
     permission: str
     pattern: str
     action: PermissionAction
+    scope: RuleScope = RuleScope.AGENT
+    arg_pattern: str | None = None
 
-    def matches(self, permission: str, target: str) -> bool:
-        """
-        Check if this rule matches the given permission and target.
+    def matches(
+        self,
+        permission: str,
+        target: str,
+        args: dict[str, Any] | None = None,
+    ) -> bool:
+        """Check if this rule matches the given permission, target, and optionally args.
 
         Args:
             permission: The permission being requested
             target: The target (file path, command, etc.)
+            args: Optional tool arguments to match against arg_pattern
 
         Returns:
             True if this rule matches
         """
-        return fnmatch.fnmatch(permission, self.permission) and fnmatch.fnmatch(
-            target, self.pattern
-        )
+        if not (
+            fnmatch.fnmatch(permission, self.permission) and fnmatch.fnmatch(target, self.pattern)
+        ):
+            return False
+        if self.arg_pattern is None:
+            return True
+        if args is None:
+            return True  # No args to check; pattern matches permission+target
+        return self._match_arg_pattern(args)
+
+    def _match_arg_pattern(self, args: dict[str, Any]) -> bool:
+        """Match arg_pattern against tool arguments.
+
+        Format: "key:value_glob" where key is the argument name and value_glob
+        is a glob pattern matched against str(arg_value).
+        """
+        if not self.arg_pattern:
+            return True
+        colon_idx = self.arg_pattern.find(":")
+        if colon_idx < 0:
+            return True  # Malformed pattern, treat as match
+        key = self.arg_pattern[:colon_idx].strip()
+        value_pattern = self.arg_pattern[colon_idx + 1 :].strip()
+        arg_value = args.get(key)
+        if arg_value is None:
+            return False
+        return fnmatch.fnmatch(str(arg_value), value_pattern)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
-        return {
+        result: dict[str, Any] = {
             "permission": self.permission,
             "pattern": self.pattern,
             "action": self.action.value,
         }
+        if self.scope != RuleScope.AGENT:
+            result["scope"] = self.scope.value
+        if self.arg_pattern is not None:
+            result["arg_pattern"] = self.arg_pattern
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PermissionRule":
@@ -61,6 +105,8 @@ class PermissionRule:
             permission=data["permission"],
             pattern=data["pattern"],
             action=PermissionAction(data["action"]),
+            scope=RuleScope(data["scope"]) if "scope" in data else RuleScope.AGENT,
+            arg_pattern=data.get("arg_pattern"),
         )
 
 
@@ -68,6 +114,7 @@ def evaluate_rules(
     permission: str,
     pattern: str,
     *rulesets: list[PermissionRule],
+    args: dict[str, Any] | None = None,
 ) -> PermissionRule:
     """
     Evaluate permission against multiple rulesets.
@@ -81,6 +128,7 @@ def evaluate_rules(
         permission: The permission type being requested
         pattern: The target pattern to check
         *rulesets: Variable number of rule lists to check
+        args: Optional tool arguments for arg_pattern matching
 
     Returns:
         The matching rule, or a default ASK rule
@@ -93,7 +141,7 @@ def evaluate_rules(
 
     # Find last matching rule (last match wins)
     for rule in reversed(merged):
-        if rule.matches(permission, pattern):
+        if rule.matches(permission, pattern, args):
             return rule
 
     # Default to ASK

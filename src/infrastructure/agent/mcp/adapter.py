@@ -7,12 +7,17 @@ allowing MCP tools to be used seamlessly alongside native agent tools.
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, cast, override
 
 from src.infrastructure.agent.mcp.registry import MCPServerRegistry
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
+
+
+def mcp_tool_name(server_id: str, tool_name: str) -> str:
+    """Build standardized MCP tool name with double underscore separator."""
+    return f"mcp__{server_id}__{tool_name}"
 
 
 class MCPToolAdapter(AgentTool):
@@ -48,12 +53,13 @@ class MCPToolAdapter(AgentTool):
 
         # Initialize base class with MCP-prefixed name
         super().__init__(
-            name=f"mcp_{server_id}_{tool_name}",
+            name=mcp_tool_name(server_id, tool_name),
             description=f"[MCP] {tool_description}",
         )
 
         self.original_name = tool_name
 
+    @override
     async def execute(self, **kwargs: Any) -> str:
         """
         Execute the MCP tool via the registry.
@@ -85,6 +91,7 @@ class MCPToolAdapter(AgentTool):
             logger.error(f"{error_msg} (server={self.server_id}, tool={self.original_name})")
             return error_msg
 
+    @override
     def validate_args(self, **kwargs: Any) -> bool:
         """
         Validate arguments against the MCP input schema.
@@ -148,8 +155,9 @@ class MCPToolAdapter(AgentTool):
         if not python_type:
             return True  # Unknown type, allow
 
-        return isinstance(value, python_type)  # type: ignore[arg-type]
+        return isinstance(value, python_type)
 
+    @override
     def get_input_schema(self) -> dict[str, Any]:
         """Get the MCP tool input schema."""
         return cast(dict[str, Any], self.input_schema)
