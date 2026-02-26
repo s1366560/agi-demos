@@ -150,9 +150,20 @@ class RegisterMCPServerTool(AgentTool):
             if install_error:
                 return install_error
 
+            # Persist MCPServer to DB so recovery mechanisms can restore it
+            server_id = await self._persist_server_to_db(
+                server_name=server_name,
+                server_type=server_type,
+                transport_config=transport_config,
+            )
+
             tools, discover_error = await self._discover_tools(server_name)
             if discover_error:
                 return discover_error
+
+            # Update discovered tools on the DB record for recovery fidelity
+            if server_id:
+                await self._update_server_discovered_tools(server_id, tools)
 
             tool_names = [t.get("name", "unknown") for t in tools]
             app_tools = await self._detect_and_persist_apps(server_name, tools)
@@ -321,7 +332,120 @@ class RegisterMCPServerTool(AgentTool):
         )
         return lifecycle_result
 
-    async def _detect_and_persist_apps(self, server_name: str, tools: list[dict[str, Any]]) -> list[str]:
+    async def _persist_server_to_db(
+        self,
+        server_name: str,
+        server_type: str,
+        transport_config: dict[str, Any],
+    ) -> str | None:
+        """Persist MCPServer to DB for recovery after sandbox restart.
+
+        If a server with the same name already exists in the project,
+        update it instead of creating a duplicate. Returns server_id or None.
+        """
+        if not self._session_factory:
+            logger.warning(
+                "Cannot persist MCPServer '%s': no session_factory",
+                server_name,
+            )
+            return None
+
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+            SqlMCPServerRepository,
+        )
+
+        try:
+            async with self._session_factory() as session:
+                repo = SqlMCPServerRepository(session)
+                existing = await repo.get_by_name(
+                    project_id=self._project_id,
+                    name=server_name,
+                )
+                if existing:
+                    # Re-registration: update transport config and re-enable
+                    await repo.update(
+                        server_id=existing.id,
+                        server_type=server_type,
+                        transport_config=transport_config,
+                        enabled=True,
+                    )
+                    await repo.update_runtime_metadata(
+                        server_id=existing.id,
+                        runtime_status="running",
+                    )
+                    await session.commit()
+                    logger.info(
+                        "Updated existing MCPServer '%s' (id=%s) in DB",
+                        server_name,
+                        existing.id,
+                    )
+                    return existing.id
+                else:
+                    server_id = await repo.create(
+                        tenant_id=self._tenant_id,
+                        project_id=self._project_id,
+                        name=server_name,
+                        description=f"Agent-registered MCP server ({server_type})",
+                        server_type=server_type,
+                        transport_config=transport_config,
+                        enabled=True,
+                    )
+                    await repo.update_runtime_metadata(
+                        server_id=server_id,
+                        runtime_status="running",
+                    )
+                    await session.commit()
+                    logger.info(
+                        "Persisted new MCPServer '%s' (id=%s) to DB",
+                        server_name,
+                        server_id,
+                    )
+                    return server_id
+        except Exception as e:
+            logger.warning(
+                "Failed to persist MCPServer '%s' to DB: %s",
+                server_name,
+                e,
+            )
+            return None
+
+    async def _update_server_discovered_tools(
+        self,
+        server_id: str,
+        tools: list[dict[str, Any]],
+    ) -> None:
+        """Update discovered tools on the MCPServer DB record."""
+        if not self._session_factory:
+            return
+
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+            SqlMCPServerRepository,
+        )
+
+        try:
+            async with self._session_factory() as session:
+                repo = SqlMCPServerRepository(session)
+                await repo.update_discovered_tools(
+                    server_id=server_id,
+                    tools=tools,
+                    last_sync_at=datetime.now(UTC),
+                )
+                await session.commit()
+                logger.info(
+                    "Updated discovered tools for MCPServer %s: %d tools",
+                    server_id,
+                    len(tools),
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to update discovered tools for MCPServer %s: %s",
+                server_id,
+                e,
+            )
+
+    async def _detect_and_persist_apps(
+        self, server_name: str, tools: list[dict[str, Any]]
+    ) -> list[str]:
         """Detect tools with UI metadata and persist as MCP Apps."""
         app_tools = []
         for t in tools:
