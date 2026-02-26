@@ -49,7 +49,7 @@ class MCPAppService:
             tenant_id=tenant_id,
             server_name=server_name,
             tools=tools,
-            source=MCPAppSource.TOOL_DISCOVERY,  # type: ignore[attr-defined]
+            source=MCPAppSource.USER_ADDED,  # Auto-discovered tools treated as user-added
         )
 
     async def detect_apps_from_tools(

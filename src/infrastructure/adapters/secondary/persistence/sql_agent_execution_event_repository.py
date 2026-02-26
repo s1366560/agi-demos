@@ -15,6 +15,7 @@ Migration Benefits:
 """
 
 import logging
+from typing import override
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -55,19 +56,20 @@ class SqlAgentExecutionEventRepository(
 
     # === Interface implementation (event-specific queries) ===
 
-    async def save(self, event: AgentExecutionEvent) -> AgentExecutionEvent:
+    @override
+    async def save(self, domain_entity: AgentExecutionEvent) -> AgentExecutionEvent:
         """Save an agent execution event with idempotency guarantee."""
         stmt = (
             insert(DBAgentExecutionEvent)
             .values(
-                id=event.id,
-                conversation_id=event.conversation_id,
-                message_id=event.message_id,
-                event_type=str(event.event_type),
-                event_data=event.event_data,
-                event_time_us=event.event_time_us,
-                event_counter=event.event_counter,
-                created_at=event.created_at,
+                id=domain_entity.id,
+                conversation_id=domain_entity.conversation_id,
+                message_id=domain_entity.message_id,
+                event_type=str(domain_entity.event_type),
+                event_data=domain_entity.event_data,
+                event_time_us=domain_entity.event_time_us,
+                event_counter=domain_entity.event_counter,
+                created_at=domain_entity.created_at,
             )
             .on_conflict_do_nothing(
                 index_elements=["conversation_id", "event_time_us", "event_counter"]
@@ -75,12 +77,14 @@ class SqlAgentExecutionEventRepository(
         )
         await self._session.execute(stmt)
         await self._session.flush()
-        return event
-    async def save_and_commit(self, event: AgentExecutionEvent) -> None:
+        return domain_entity
+    @override
+    async def save_and_commit(self, domain_entity: AgentExecutionEvent) -> None:
         """Save an event and commit immediately."""
-        await self.save(event)
+        await self.save(domain_entity)
         await self._session.commit()
 
+    @override
     async def save_batch(self, events: list[AgentExecutionEvent]) -> None:
         """Save multiple events efficiently with idempotency guarantee."""
         if not events:
@@ -109,6 +113,7 @@ class SqlAgentExecutionEventRepository(
         await self._session.execute(stmt)
         await self._session.flush()
 
+    @override
     async def get_events(
         self,
         conversation_id: str,
@@ -134,7 +139,7 @@ class SqlAgentExecutionEventRepository(
             # Backward pagination
             before_counter_val = before_counter if before_counter is not None else 0
             query = query.where(
-                tuple_(literal(before_time_us), literal(before_counter_val))
+                tuple_(time_col, counter_col) < tuple_(literal(before_time_us), literal(before_counter_val))
             )
 
             if event_types:
@@ -148,7 +153,7 @@ class SqlAgentExecutionEventRepository(
             # Forward pagination
             if from_time_us > 0 or from_counter > 0:
                 query = query.where(
-                    tuple_(literal(from_time_us), literal(from_counter))
+                    tuple_(time_col, counter_col) > tuple_(literal(from_time_us), literal(from_counter))
                 )
 
             if event_types:
@@ -161,6 +166,7 @@ class SqlAgentExecutionEventRepository(
 
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
+    @override
     async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]:
         """Get the last (event_time_us, event_counter) for a conversation."""
         result = await self._session.execute(
@@ -180,6 +186,7 @@ class SqlAgentExecutionEventRepository(
             return (0, 0)
         return (row[0], row[1])
 
+    @override
     async def get_events_by_message(
         self,
         message_id: str,
@@ -196,6 +203,7 @@ class SqlAgentExecutionEventRepository(
         db_events = result.scalars().all()
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
+    @override
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all events for a conversation."""
         await self._session.execute(
@@ -205,6 +213,7 @@ class SqlAgentExecutionEventRepository(
         )
         await self._session.flush()
 
+    @override
     async def list_by_conversation(
         self,
         conversation_id: str,
@@ -217,6 +226,7 @@ class SqlAgentExecutionEventRepository(
             limit=limit,
         )
 
+    @override
     async def get_message_events(
         self,
         conversation_id: str,
@@ -238,6 +248,7 @@ class SqlAgentExecutionEventRepository(
         db_events = list(reversed(result.scalars().all()))
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
+    @override
     async def get_message_events_after(
         self,
         conversation_id: str,
@@ -261,6 +272,7 @@ class SqlAgentExecutionEventRepository(
         db_events = result.scalars().all()
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
+    @override
     async def count_messages(self, conversation_id: str) -> int:
         """Count message events in a conversation."""
         result = await self._session.execute(
@@ -275,22 +287,24 @@ class SqlAgentExecutionEventRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_event: DBAgentExecutionEvent | None) -> AgentExecutionEvent | None:
+    @override
+    def _to_domain(self, db_model: DBAgentExecutionEvent | None) -> AgentExecutionEvent | None:
         """Convert database model to domain model."""
-        if db_event is None:
+        if db_model is None:
             return None
 
         return AgentExecutionEvent(
-            id=db_event.id,
-            conversation_id=db_event.conversation_id,
-            message_id=db_event.message_id or "",
-            event_type=db_event.event_type,
-            event_data=db_event.event_data or {},
-            event_time_us=db_event.event_time_us,
-            event_counter=db_event.event_counter,
-            created_at=db_event.created_at,
+            id=db_model.id,
+            conversation_id=db_model.conversation_id,
+            message_id=db_model.message_id or "",
+            event_type=db_model.event_type,
+            event_data=db_model.event_data or {},
+            event_time_us=db_model.event_time_us,
+            event_counter=db_model.event_counter,
+            created_at=db_model.created_at,
         )
 
+    @override
     def _to_db(self, domain_entity: AgentExecutionEvent) -> DBAgentExecutionEvent:
         """Convert domain entity to database model."""
         return DBAgentExecutionEvent(
@@ -304,6 +318,7 @@ class SqlAgentExecutionEventRepository(
             created_at=domain_entity.created_at,
         )
 
+    @override
     def _update_fields(
         self, db_model: DBAgentExecutionEvent, domain_entity: AgentExecutionEvent
     ) -> None:

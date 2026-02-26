@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -31,9 +31,13 @@ TOOL_DESCRIPTION = (
     "Any tool that declares _meta.ui.resourceUri will auto-render its UI in "
     "the Canvas panel when called.\n\n"
     "The MCP server MUST implement resources/read to serve HTML for _meta.ui tools. "
-    "HTML is fetched live from the server each time, never cached in the database.\n\n"
-    "Example for stdio server:\n"
-    "  server_type='stdio', command='node', args=['server.js']\n\n"
+    "HTML is fetched live from the server each time, never cached in the database. "
+    "The read_resource handler MUST return: "
+    '{"contents": [{"uri": "...", "mimeType": "text/html", "text": "..."}]}\n\n'
+    "IMPORTANT: Use absolute paths for server scripts in args. "
+    "Example: args=['/workspace/my-server/server.py']\n\n"
+    "Example for stdio server (recommended for sandbox):\n"
+    "  server_type='stdio', command='python', args=['/workspace/my-server/server.py']\n\n"
     "Example for SSE server:\n"
     "  server_type='sse', url='http://localhost:3001/sse'\n\n"
     "Example for HTTP server:\n"
@@ -72,6 +76,7 @@ class RegisterMCPServerTool(AgentTool):
         self._pending_events.clear()
         return events
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -117,6 +122,7 @@ class RegisterMCPServerTool(AgentTool):
             "required": ["server_name", "server_type"],
         }
 
+    @override
     def validate_args(self, **kwargs: Any) -> bool:
         server_name = kwargs.get("server_name", "")
         server_type = kwargs.get("server_type", "")
@@ -126,6 +132,7 @@ class RegisterMCPServerTool(AgentTool):
             return False
         return not (server_type in ("sse", "http", "websocket") and not kwargs.get("url"))
 
+    @override
     async def execute(self, **kwargs: Any) -> str:
         """Register, start, and discover tools from an MCP server."""
         server_name = kwargs.get("server_name", "")
@@ -179,13 +186,16 @@ class RegisterMCPServerTool(AgentTool):
                     lifecycle_result["probe"].get("missing_tools"),
                 )
 
+            namespaced_app_tools = [f"mcp__{server_name}__{name}" for name in app_tools]
+
             result = (
                 f"MCP server '{server_name}' registered and started successfully.\n"
-                f"Discovered {len(tool_names)} tool(s): {', '.join(tool_names)}"
+                f"Discovered {len(namespaced_tool_names)} tool(s): {', '.join(namespaced_tool_names)}"
             )
-            if app_tools:
+            if namespaced_app_tools:
                 result += (
-                    f"\n\nDetected {len(app_tools)} MCP App(s) with UI: {', '.join(app_tools)}"
+                    f"\n\nDetected {len(namespaced_app_tools)} MCP App(s) with UI: "
+                    f"{', '.join(namespaced_app_tools)}"
                 )
             return result
 

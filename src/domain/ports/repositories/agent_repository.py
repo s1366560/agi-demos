@@ -388,21 +388,21 @@ class AgentExecutionEventRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, event: AgentExecutionEvent) -> AgentExecutionEvent:
+    async def save(self, domain_entity: AgentExecutionEvent) -> AgentExecutionEvent:
         """
         Save an agent execution event.
 
         Args:
-            event: The event to save
+            domain_entity: The event to save
         """
 
     @abstractmethod
-    async def save_and_commit(self, event: AgentExecutionEvent) -> None:
+    async def save_and_commit(self, domain_entity: AgentExecutionEvent) -> None:
         """
         Save an event and commit immediately.
 
         Args:
-            event: The event to save
+            domain_entity: The event to save
         """
 
     @abstractmethod

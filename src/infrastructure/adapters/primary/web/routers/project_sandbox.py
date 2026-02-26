@@ -8,6 +8,7 @@ Provides REST API endpoints for managing persistent sandboxes per project:
 
 import asyncio
 import contextlib
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -1093,11 +1094,67 @@ async def _relay_mcp_browser_to_upstream(websocket: WebSocket, upstream_ws: Any)
             await upstream_ws.close()
 
 
+# Expected mimeType for MCP App UI resources per @mcp-ui/client spec
+_MCP_APP_MIME_TYPE = "text/html;profile=mcp-app"
+
+
+def _normalize_mcp_resource_mime_type(message: str) -> str:
+    """Rewrite ``text/html`` -> ``text/html;profile=mcp-app`` in resource content.
+
+    The ``@mcp-ui/client`` library requires exactly ``text/html;profile=mcp-app``
+    as the mimeType for UI resources.  Sandbox MCP servers often return plain
+    ``text/html``.  This function patches the JSON-RPC response in-flight so
+    that the client-side validation succeeds.
+
+    Only modifies messages that look like a JSON-RPC result containing a
+    ``contents`` array (i.e. ``resources/read`` responses).  All other messages
+    pass through unchanged.
+    """
+    try:
+        data = json.loads(message)
+    except (json.JSONDecodeError, TypeError):
+        return message
+
+    result = data.get("result") if isinstance(data, dict) else None
+    if not isinstance(result, dict):
+        return message
+
+    contents = result.get("contents")
+    if not isinstance(contents, list):
+        return message
+
+    modified = False
+    for item in contents:
+        if not isinstance(item, dict):
+            continue
+        mime = item.get("mimeType", "")
+        # Normalize plain text/html (case-insensitive) to the profile variant
+        if mime.lower().strip() == "text/html":
+            item["mimeType"] = _MCP_APP_MIME_TYPE
+            modified = True
+
+    if modified:
+        logger.debug(
+            "MCP proxy: normalized mimeType to %s in resources/read response",
+            _MCP_APP_MIME_TYPE,
+        )
+        return json.dumps(data, ensure_ascii=False)
+
+    return message
+
+
 async def _relay_mcp_upstream_to_browser(websocket: WebSocket, upstream_ws: Any) -> None:
-    """Forward JSON-RPC messages from MCP server to browser."""
+    """Forward JSON-RPC messages from MCP server to browser.
+
+    Normalizes ``mimeType`` in ``resources/read`` responses so that the
+    ``@mcp-ui/client`` library (which expects ``text/html;profile=mcp-app``)
+    can render the resource.  Sandbox MCP servers commonly return plain
+    ``text/html`` which is rejected by the client-side validator.
+    """
     try:
         async for message in upstream_ws:
             if isinstance(message, str):
+                message = _normalize_mcp_resource_mime_type(message)
                 await websocket.send_text(message)
             else:
                 await websocket.send_bytes(message)
@@ -1296,6 +1353,7 @@ async def proxy_project_terminal_websocket(
     proxy = get_terminal_proxy()
     session: TerminalSession | None = None
 
+    output_task: asyncio.Task[None] | None = None
     try:
         # Create or get session using terminal proxy (docker exec)
         if session_id:
@@ -1337,7 +1395,7 @@ async def proxy_project_terminal_websocket(
 
     finally:
         # Cleanup
-        if "output_task" in locals():
+        if output_task is not None:
             output_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await output_task

@@ -186,18 +186,6 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         )
         tools = self._parse_tool_result(result)
         if isinstance(tools, list):
-            # Auto-detect MCP Apps (tools with _meta.ui.resourceUri)
-            if self._app_service and tools:
-                try:
-                    _ = await self._app_service.detect_apps_from_tools(
-                        server_id="",  # resolved by service from server_name
-                        project_id=project_id,
-                        tenant_id=tenant_id,
-                        server_name=server_name,
-                        tools=cast(list[dict[str, Any]], tools),
-                    )
-                except Exception as e:
-                    logger.warning(f"MCP App auto-detection failed: {e}")
             return cast(list[dict[str, Any]], tools)
         return []
 

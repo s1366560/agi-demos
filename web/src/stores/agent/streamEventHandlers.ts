@@ -401,7 +401,10 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const actionText = changed.action || 'update';
       const pluginText = changed.plugin_name ? ` ${changed.plugin_name}` : '';
-      const refreshStateText = changed.refresh_status ? ` · refresh=${changed.refresh_status}` : '';
+      const refreshStateText =
+        changed.refresh_status && changed.refresh_status !== 'deferred' && changed.refresh_status !== 'not_applicable'
+          ? ` · refresh=${changed.refresh_status}`
+          : '';
       const refreshCountText =
         typeof changed.refreshed_tool_count === 'number'
           ? ` (${changed.refreshed_tool_count} tools)`
@@ -1209,26 +1212,32 @@ export function createStreamEventHandlers(
 
       const shouldWaitForStoreLookup = !!appId && !resourceUri && !htmlContent;
 
-      // Always invalidate cached resource so fresh HTML is used
+      // Always invalidate cached resource so fresh HTML is used.
+      // When appId exists, the async store lookup is the SOLE path that opens
+      // the tab — it has richer metadata (storeUri, title, serverName) and we
+      // must avoid the sync path also opening a tab with a different tabKey,
+      // which would create a duplicate.
       if (appId) {
         import('../mcpAppStore').then(({ useMCPAppStore }) => {
           const store = useMCPAppStore.getState();
           store.invalidateResource(appId);
 
-          if (!resourceUri) {
-            const app = store.apps[appId];
-            const storeUri = app?.ui_metadata?.resourceUri;
-            if (storeUri) {
-              openMCPAppTab(storeUri, {
-                title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
-                toolName: app?.tool_name || toolName || undefined,
-                serverName: app?.server_name || serverName || undefined,
-                uiMetadata: (app?.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
-              });
-              return;
-            }
+          const app = store.apps[appId];
+          // Prefer resourceUri from the event, then from the store, then undefined
+          const resolvedUri = resourceUri || (app?.ui_metadata?.resourceUri as string | undefined);
 
-            if (shouldWaitForStoreLookup) {
+          if (resolvedUri || htmlContent) {
+            openMCPAppTab(resolvedUri, {
+              title:
+                (app?.ui_metadata?.title as string) || uiMetadata.title || toolName || 'MCP App',
+              toolName: app?.tool_name || toolName || undefined,
+              serverName: app?.server_name || serverName || undefined,
+              uiMetadata: (app?.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
+            });
+          } else if (shouldWaitForStoreLookup) {
+            // No URI and no HTML — only open if the app has UI hints
+            const hasUiHint = !!(app?.ui_metadata?.title || app?.tool_name);
+            if (hasUiHint) {
               openMCPAppTab(undefined, {
                 title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
                 toolName: app?.tool_name || toolName || undefined,
@@ -1238,9 +1247,11 @@ export function createStreamEventHandlers(
             }
           }
         });
-      }
-
-      if (!shouldWaitForStoreLookup) {
+      } else if (htmlContent || resourceUri) {
+        // No appId — open directly with whatever we have (sync path).
+        // Only open a Canvas tab if we have actual content to display.
+        // Non-UI tools (e.g. echo) produce no htmlContent and no resourceUri,
+        // and opening an empty tab causes 'content length: 0' errors.
         openMCPAppTab(resourceUri, {
           title: uiMetadata.title || toolName || 'MCP App',
           uiMetadata,

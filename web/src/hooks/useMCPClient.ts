@@ -110,6 +110,10 @@ export function useMCPClient({
   const isInGracePeriodRef = useRef(false);
   isInGracePeriodRef.current = isInGracePeriod;
 
+  // Deferred cleanup timeout ref -- prevents WebSocket teardown during React
+  // reconciliation-triggered unmount/remount cycles (e.g. when a sibling tab
+  // is added to the Canvas and the parent re-renders the keyed list).
+  const deferredCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const token = useAuthStore((s) => s.token);
 
   /**
@@ -316,18 +320,34 @@ export function useMCPClient({
   // Auto-connect when enabled and projectId available
   // Use stable dependency array to prevent reconnection loops
   useEffect(() => {
+    // If there's a pending deferred cleanup from a previous unmount, cancel it.
+    // This means the component was remounted in the same render cycle (React
+    // reconciliation) with the same deps -- no need to tear down the WebSocket.
+    if (deferredCleanupRef.current) {
+      clearTimeout(deferredCleanupRef.current);
+      deferredCleanupRef.current = null;
+    }
+
     if (enabledRef.current && projectIdRef.current && tokenRef.current) {
       connectRef.current();
     }
 
     return () => {
-      // Cleanup on unmount or when projectId/token/enabled fundamentally changes
-      clearTimers();
-      cancelGracePeriod();
-      if (clientRef.current) {
-        clientRef.current.close().catch(() => {});
-        clientRef.current = null;
-      }
+      // Defer the actual WebSocket teardown by a short timeout.
+      // If the component is remounted (same render cycle) the effect body above
+      // will cancel this timeout, preserving the existing connection.
+      // If the component is truly unmounted or deps changed, the timeout fires
+      // and cleans up the WebSocket normally.
+      const DEFERRED_CLEANUP_MS = 100;
+      deferredCleanupRef.current = setTimeout(() => {
+        deferredCleanupRef.current = null;
+        clearTimers();
+        cancelGracePeriod();
+        if (clientRef.current) {
+          clientRef.current.close().catch(() => {});
+          clientRef.current = null;
+        }
+      }, DEFERRED_CLEANUP_MS);
     };
     // Only re-run when projectId/token/enabled identity changes (not connect callback)
     // eslint-disable-next-line react-hooks/exhaustive-deps

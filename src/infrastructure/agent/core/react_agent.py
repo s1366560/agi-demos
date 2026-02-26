@@ -723,7 +723,7 @@ class ReActAgent:
         )
         deny_tools: list[str] = []
         if effective_mode == "plan":
-            deny_tools = ["plugin_manager", "register_mcp_server", "skill_installer", "skill_sync"]
+            deny_tools = ["plugin_manager", "skill_installer", "skill_sync"]
         metadata: dict[str, Any] = {
             "user_message": user_message,
             "conversation_history": conversation_context,
@@ -2013,6 +2013,16 @@ class ReActAgent:
             processed_user_message=processed_user_message,
             conversation_context=conversation_context,
         )
+
+        # Phase 6b: Inject matched skill's declared tools into selection context
+        # so the tool selection pipeline can pin them (survive semantic budget + deny lists)
+        if matched_skill and matched_skill.tools:
+            skill_pinned = list(matched_skill.tools)
+            cast(dict[str, Any], selection_context.metadata)["skill_pinned_tools"] = skill_pinned
+            logger.info(
+                f"[ReActAgent] Skill '{matched_skill.name}' declares tools={skill_pinned}, "
+                f"injecting into selection context for pipeline pinning"
+            )
 
         # Phase 7: Memory recall
         async for event in self._stream_recall_memory(processed_user_message, project_id):

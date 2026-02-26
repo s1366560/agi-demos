@@ -80,13 +80,34 @@ export const useCanvasStore = create<CanvasState>()(
         activeTabId: null,
 
         openTab: (tab) =>
-          { set((state) => {
-            const existing = state.tabs.find((t) => t.id === tab.id);
+          set((state) => {
+            // MCP-aware dedup: match by mcpResourceUri or mcpAppId before falling
+            // back to the generic id check.  This prevents duplicate MCP app tabs
+            // when different callers compute slightly different tab ids for the
+            // same logical app (e.g. one using resourceUri, another using appId).
+            let existing: CanvasTab | undefined;
+            if (tab.type === 'mcp-app') {
+              if ((tab as CanvasTab).mcpResourceUri) {
+                existing = state.tabs.find(
+                  (t) => t.type === 'mcp-app' && t.mcpResourceUri === (tab as CanvasTab).mcpResourceUri
+                );
+              }
+              if (!existing && (tab as CanvasTab).mcpAppId) {
+                existing = state.tabs.find(
+                  (t) => t.type === 'mcp-app' && t.mcpAppId === (tab as CanvasTab).mcpAppId
+                );
+              }
+            }
+            if (!existing) {
+              existing = state.tabs.find((t) => t.id === tab.id);
+            }
             if (existing) {
               // Merge new data into existing tab (preserves history/dirty state)
               return {
-                tabs: state.tabs.map((t) => (t.id === tab.id ? { ...t, ...tab, dirty: t.dirty } : t)),
-                activeTabId: tab.id,
+                tabs: state.tabs.map((t) =>
+                  t.id === existing.id ? { ...t, ...tab, id: existing.id, dirty: t.dirty } : t
+                ),
+                activeTabId: existing.id,
               };
             }
             const newTab: CanvasTab = {
@@ -100,7 +121,7 @@ export const useCanvasStore = create<CanvasState>()(
               tabs: [...state.tabs, newTab],
               activeTabId: newTab.id,
             };
-          }); },
+          }),
 
         closeTab: (id, force) =>
           { set((state) => {

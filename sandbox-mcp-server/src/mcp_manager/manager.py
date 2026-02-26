@@ -299,7 +299,7 @@ class MCPServerManager:
         except Exception as e:
             logger.error(f"Failed to start MCP server '{name}': {e}")
             error_msg = str(e)
-            stderr_text = await self._capture_server_stderr(name)
+            stderr_text = await self._capture_server_output(name)
             if stderr_text:
                 error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
             return {"success": False, "error": error_msg}
@@ -316,33 +316,67 @@ class MCPServerManager:
         # Check if process has exited (returncode is set when process ends)
         return server.process.returncode is None
 
-    async def _capture_server_stderr(self, name: str) -> str:
-        """Read available stderr from a managed server process.
+    async def _capture_server_output(self, name: str) -> str:
+        """Read available stderr and stdout from a managed server process.
 
-        Useful for diagnosing why a server failed to start or crashed.
-        Returns up to 2000 chars of stderr, or empty string if unavailable.
+        Captures diagnostic output for error reporting when a server fails
+        to start or crashes. Reads stderr first (most useful for errors),
+        then stdout if the process has exited. Uses multiple read attempts
+        with increasing delays to catch buffered output.
 
-        Note: This uses a short timeout and may return empty if no data
-        is immediately available (process still running with no stderr output).
+        Returns up to 4000 chars of combined output, or empty string if unavailable.
         """
         server = self._tracker.get_server(name)
-        if not server or not server.process or not server.process.stderr:
+        if not server or not server.process:
             return ""
-        try:
-            # Try to read stderr with a very short timeout
-            # Use read(n) which may block, so we wrap in wait_for
-            # If process is still running and has no stderr, this will timeout
-            stderr_bytes = await asyncio.wait_for(
-                server.process.stderr.read(4096),
-                timeout=0.5,
-            )
-            if stderr_bytes:
-                return stderr_bytes.decode("utf-8", errors="replace")[:2000]
-        except asyncio.TimeoutError:
-            # No stderr data available within timeout - this is normal for running processes
-            logger.debug(f"No stderr data available for '{name}' within timeout")
-        except Exception as e:
-            logger.debug(f"Could not read stderr for '{name}': {e}")
+
+        output_parts: list[str] = []
+        process = server.process
+
+        # Read stderr (primary diagnostic source)
+        if process.stderr:
+            stderr_text = await self._read_stream_with_retry(process.stderr, "stderr", name)
+            if stderr_text:
+                output_parts.append(stderr_text)
+
+        # Read stdout only if process has exited (avoid blocking on running process)
+        if process.returncode is not None and process.stdout:
+            stdout_text = await self._read_stream_with_retry(process.stdout, "stdout", name)
+            if stdout_text:
+                output_parts.append(f"--- stdout ---\n{stdout_text}")
+
+        combined = "\n".join(output_parts)
+        return combined[:4000] if combined else ""
+
+    async def _read_stream_with_retry(
+        self, stream: asyncio.StreamReader, label: str, name: str,
+    ) -> str:
+        """Read from an asyncio stream with retry for buffered output.
+
+        Tries up to 3 reads with increasing timeouts (0.5s, 1.0s, 0.5s)
+        to capture output that may still be buffering.
+        """
+        collected = b""
+        timeouts = [0.5, 1.0, 0.5]
+        for timeout in timeouts:
+            try:
+                chunk = await asyncio.wait_for(stream.read(4096), timeout=timeout)
+                if chunk:
+                    collected += chunk
+                else:
+                    # EOF reached
+                    break
+            except asyncio.TimeoutError:
+                # No more data available right now
+                if collected:
+                    break  # We have some data, stop waiting
+                # Otherwise try again with next timeout
+                continue
+            except Exception as e:
+                logger.debug(f"Could not read {label} for '{name}': {e}")
+                break
+        if collected:
+            return collected.decode("utf-8", errors="replace")
         return ""
 
     async def stop_server(self, name: str) -> Dict[str, Any]:
@@ -483,7 +517,7 @@ class MCPServerManager:
         if not self._is_process_alive(name):
             server.status = ServerStatus.CRASHED
             server.error = "Process exited unexpectedly"
-            stderr_text = await self._capture_server_stderr(name)
+            stderr_text = await self._capture_server_output(name)
             if stderr_text:
                 server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
             raise RuntimeError(
@@ -506,12 +540,12 @@ class MCPServerManager:
             if not self._is_process_alive(name):
                 server.status = ServerStatus.CRASHED
                 server.error = "Process died during tool discovery"
-                stderr_text = await self._capture_server_stderr(name)
+                stderr_text = await self._capture_server_output(name)
                 if stderr_text:
                     server.error += f"\n--- stderr ---\n{stderr_text[:2000]}"
 
             # Capture stderr for debugging
-            stderr_text = await self._capture_server_stderr(name)
+            stderr_text = await self._capture_server_output(name)
             if stderr_text:
                 server.error += f"\n--- Server stderr ---\n{stderr_text[:2000]}"
 
@@ -568,7 +602,7 @@ class MCPServerManager:
         if not self._is_process_alive(server_name):
             server.status = ServerStatus.CRASHED
             server.error = "Process exited unexpectedly"
-            stderr_text = await self._capture_server_stderr(server_name)
+            stderr_text = await self._capture_server_output(server_name)
             if stderr_text:
                 server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
             return MCPCallResult(
@@ -607,7 +641,7 @@ class MCPServerManager:
             if not self._is_process_alive(server_name):
                 server.status = ServerStatus.CRASHED
                 server.error = f"Process died during tool call: {tool_name}"
-                stderr_text = await self._capture_server_stderr(server_name)
+                stderr_text = await self._capture_server_output(server_name)
                 if stderr_text:
                     server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
                 return MCPCallResult(
@@ -939,7 +973,7 @@ class MCPServerManager:
 
         # Check if process is still running before attempting initialization
         if server.process and server.process.returncode is not None:
-            stderr_text = await self._capture_server_stderr(server.name)
+            stderr_text = await self._capture_server_output(server.name)
             exit_code = server.process.returncode
             error_msg = f"MCP server '{server.name}' exited immediately with code {exit_code}"
             if stderr_text:
@@ -978,7 +1012,7 @@ class MCPServerManager:
         except Exception as e:
             # Check if process exited during initialization
             if server.process and server.process.returncode is not None:
-                stderr_text = await self._capture_server_stderr(server.name)
+                stderr_text = await self._capture_server_output(server.name)
                 exit_code = server.process.returncode
                 error_msg = (
                     f"MCP server '{server.name}' exited with code {exit_code} during initialization"
@@ -988,7 +1022,7 @@ class MCPServerManager:
                 logger.error(error_msg)
                 raise RuntimeError(error_msg) from e
 
-            stderr_text = await self._capture_server_stderr(server.name)
+            stderr_text = await self._capture_server_output(server.name)
             if stderr_text:
                 raise RuntimeError(
                     f"Failed to initialize MCP for '{server.name}': {e}\n"
@@ -1011,7 +1045,7 @@ class MCPServerManager:
 
         server = self._tracker.get_server(name)
         if server and server.process and server.process.returncode is not None:
-            stderr_text = await self._capture_server_stderr(name)
+            stderr_text = await self._capture_server_output(name)
             exit_code = server.process.returncode
             error_msg = f"MCP server '{name}' exited with code {exit_code}"
             if stderr_text:
@@ -1063,7 +1097,7 @@ class MCPServerManager:
                     # Check if process exited
                     if server and server.process and server.process.returncode is not None:
                         conn._pending.pop(request_id, None)
-                        stderr_text = await self._capture_server_stderr(name)
+                        stderr_text = await self._capture_server_output(name)
                         exit_code = server.process.returncode
                         error_msg = f"MCP server '{name}' exited with code {exit_code}"
                         if stderr_text:
@@ -1376,7 +1410,7 @@ class MCPServerManager:
                 pass  # Notifications are best-effort
 
         except Exception as e:
-            stderr_text = await self._capture_server_stderr(server.name)
+            stderr_text = await self._capture_server_output(server.name)
             if stderr_text:
                 raise RuntimeError(
                     f"Failed to initialize network MCP for '{server.name}': {e}\n"
@@ -1447,7 +1481,7 @@ class MCPServerManager:
         except Exception as e:
             await session.close()
             self._ws_connections.pop(server.name, None)
-            stderr_text = await self._capture_server_stderr(server.name)
+            stderr_text = await self._capture_server_output(server.name)
             if stderr_text:
                 raise RuntimeError(
                     f"Failed to init WebSocket MCP for '{server.name}': {e}\n"

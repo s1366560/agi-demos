@@ -205,6 +205,10 @@ def semantic_ranker_stage(
     if user_message:
         history.append({"role": "user", "content": str(user_message)})
 
+    # Merge skill-pinned tools into always_include so they survive budget pruning
+    skill_pinned = set(_read_str_list(context.metadata, "skill_pinned_tools"))
+    always_include = set(CORE_TOOLS) | skill_pinned
+
     selector = get_tool_selector()
     semantic_backend = (
         str(context.metadata.get("semantic_backend", "embedding_vector")).strip().lower()
@@ -215,6 +219,7 @@ def semantic_ranker_stage(
             conversation_history=history,
             project_id=context.project_id,
             max_tools=max_tools,
+            always_include=always_include,
             metadata={
                 "user_message": str(user_message or ""),
                 "semantic_backend": semantic_backend,
@@ -243,9 +248,13 @@ def policy_stage(
         policy_context=policy_context,
     )
 
+    # Skill-pinned tools get same protection as CORE_TOOLS against deny lists
+    skill_pinned = set(_read_str_list(context.metadata, "skill_pinned_tools"))
+    protected_tools = CORE_TOOLS | skill_pinned
+
     filtered: dict[str, Any] = {}
     for name, tool in tools.items():
-        if name in CORE_TOOLS:
+        if name in protected_tools:
             filtered[name] = tool
             continue
         if allow_tools and name not in allow_tools:

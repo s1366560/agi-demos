@@ -196,7 +196,7 @@ export interface PolicyFilteredEventData {
   budget_exceeded_stages?: string[] | undefined;
 }
 
-export type ToolsetRefreshStatus = 'success' | 'failed' | 'skipped' | 'not_applicable';
+export type ToolsetRefreshStatus = 'success' | 'failed' | 'skipped' | 'deferred' | 'not_applicable';
 
 export interface ToolsetChangedEventData {
   source: string;

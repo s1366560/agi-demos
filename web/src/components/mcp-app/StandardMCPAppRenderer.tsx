@@ -454,6 +454,9 @@ export const StandardMCPAppRenderer = forwardRef<
 
     // Handler for ui/message from the app (SEP-1865 section: MCP Apps Specific Messages)
     // Also handles ui/update-model-context if the app sends context via the message channel.
+    //
+    // @mcp-ui/client validates ui/message with schema: { role: 'user', content: ContentBlock[] }
+    // where content is an ARRAY of content blocks. We extract the first text block.
     const handleMessage = useCallback(
       async (params: any) => {
         // Route ui/update-model-context
@@ -462,11 +465,23 @@ export const StandardMCPAppRenderer = forwardRef<
           return {};
         }
         // Route regular ui/message
-        if (onMessage && params?.content?.text) {
-          onMessage({
-            role: params.role || 'user',
-            content: { type: 'text', text: params.content.text },
-          });
+        // content can be either:
+        //   - An array of ContentBlock: [{type:'text', text:'...'}] (per @mcp-ui/client spec)
+        //   - A single object: {type:'text', text:'...'} (legacy/simplified format)
+        if (onMessage) {
+          let text: string | undefined;
+          if (Array.isArray(params?.content)) {
+            const textBlock = params.content.find((b: any) => b?.type === 'text' && b?.text);
+            text = textBlock?.text;
+          } else if (typeof params?.content?.text === 'string') {
+            text = params.content.text;
+          }
+          if (text) {
+            onMessage({
+              role: params.role || 'user',
+              content: { type: 'text', text },
+            });
+          }
         }
         return {};
       },
@@ -499,7 +514,7 @@ export const StandardMCPAppRenderer = forwardRef<
         effectiveProjectId,
         serverName,
         hasOnReadResource: !!effectiveUri, // effectiveUri determines if onReadResource is provided
-        hasClient: !!(effectiveHtml && !shouldUseFallback && mcpClient),
+        hasClient: !!(!shouldUseFallback && mcpClient),
       });
     }, [effectiveHtml, effectiveUri, effectiveProjectId, serverName, shouldUseFallback, mcpClient]);
 
@@ -610,7 +625,7 @@ export const StandardMCPAppRenderer = forwardRef<
               {...(toolCancelled != null ? { toolCancelled } : {})}
               {...(toolResult != null ? { toolResult: toolResult as any } : {})}
               {...(hostContext != null ? { hostContext: hostContext as any } : {})}
-              {...(effectiveHtml && !shouldUseFallback && mcpClient
+              {...(!shouldUseFallback && mcpClient
                 ? { client: mcpClient as any }
                 : {})}
               {...(effectiveUri ? { onReadResource: handleReadResource as any } : {})}

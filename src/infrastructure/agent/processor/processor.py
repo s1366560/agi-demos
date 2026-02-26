@@ -1601,7 +1601,12 @@ class SessionProcessor:
                     tool_name,
                 )
                 refresh_count = self._refresh_tools()
-                refresh_status = "success" if refresh_count is not None else "failed"
+                if refresh_count is not None:
+                    refresh_status = "success"
+                elif self._tool_provider is None:
+                    refresh_status = "deferred"
+                else:
+                    refresh_status = "failed"
             else:
                 logger.debug(
                     "[Processor] %s failed or returned error, skipping tool refresh",

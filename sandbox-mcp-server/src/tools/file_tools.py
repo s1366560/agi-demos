@@ -15,22 +15,35 @@ from src.server.websocket_server import MCPTool
 
 logger = logging.getLogger(__name__)
 
+# Additional paths outside workspace that tools are allowed to access.
+# These are common system directories that agents legitimately need to read/list.
+_EXTRA_ALLOWED_PATHS = [
+    Path("/tmp"),
+    Path("/var/tmp"),
+    Path("/etc"),
+]
 
-def _resolve_path(path: str, workspace_dir: str) -> Path:
+def _resolve_path(
+    path: str,
+    workspace_dir: str,
+    allow_extra_paths: bool = False,
+) -> Path:
     """
     Resolve a path relative to workspace directory.
 
-    Ensures the path stays within the workspace for security.
+    Ensures the path stays within the workspace (or within the
+    extra-allowed paths if allow_extra_paths=True) for security.
 
     Args:
         path: User-provided path
         workspace_dir: Workspace root directory
+        allow_extra_paths: If True, also permits paths under _EXTRA_ALLOWED_PATHS
 
     Returns:
         Resolved absolute path
 
     Raises:
-        ValueError: If path escapes workspace
+        ValueError: If path escapes allowed directories
     """
     workspace = Path(workspace_dir).resolve()
 
@@ -43,10 +56,21 @@ def _resolve_path(path: str, workspace_dir: str) -> Path:
     # Security check: ensure path is within workspace
     try:
         resolved.relative_to(workspace)
+        return resolved
     except ValueError:
-        raise ValueError(f"Path '{path}' is outside workspace directory")
+        pass
 
-    return resolved
+    # Check extra allowed paths if enabled
+    if allow_extra_paths:
+        for allowed in _EXTRA_ALLOWED_PATHS:
+            try:
+                allowed_resolved = allowed.resolve()
+                resolved.relative_to(allowed_resolved)
+                return resolved
+            except ValueError:
+                continue
+
+    raise ValueError(f"Path '{path}' is outside workspace directory")
 
 
 # =============================================================================
@@ -76,7 +100,7 @@ async def read_file(
         Dict with file contents and metadata
     """
     try:
-        resolved = _resolve_path(file_path, _workspace_dir)
+        resolved = _resolve_path(file_path, _workspace_dir, allow_extra_paths=True)
 
         if not resolved.exists():
             return {
@@ -371,8 +395,29 @@ async def glob_files(
         List of matching file paths
     """
     try:
+        workspace = Path(_workspace_dir).resolve()
+
+        # Handle absolute patterns like /workspace/**/*.py
+        # pathlib.glob() rejects non-relative patterns, so we convert them
+        if os.path.isabs(pattern):
+            pattern_path = Path(pattern)
+            # Check if the absolute pattern starts with the workspace dir
+            try:
+                rel_pattern = str(pattern_path.relative_to(workspace))
+                pattern = rel_pattern
+            except ValueError:
+                # Pattern is outside workspace - also try unresolved workspace
+                try:
+                    rel_pattern = str(pattern_path.relative_to(Path(_workspace_dir)))
+                    pattern = rel_pattern
+                except ValueError:
+                    return {
+                        "content": [{"type": "text", "text": f"Error: Absolute pattern '{pattern}' is outside workspace directory"}],
+                        "isError": True,
+                    }
+
         if path:
-            base_dir = _resolve_path(path, _workspace_dir)
+            base_dir = _resolve_path(path, _workspace_dir, allow_extra_paths=True)
         else:
             base_dir = Path(_workspace_dir)
 
@@ -481,7 +526,7 @@ async def grep_files(
     """
     try:
         if path:
-            base_dir = _resolve_path(path, _workspace_dir)
+            base_dir = _resolve_path(path, _workspace_dir, allow_extra_paths=True)
         else:
             base_dir = Path(_workspace_dir)
 
@@ -618,11 +663,79 @@ def create_grep_tool() -> MCPTool:
 # =============================================================================
 
 
+# Maximum number of entries to collect during recursive listing to prevent
+# extremely long output that overwhelms the agent's context window.
+_MAX_RECURSIVE_ENTRIES = 500
+
+
+def _walk_directory(
+    root: Path,
+    current: Path,
+    items: list,
+    max_depth: int,
+    current_depth: int,
+    include_hidden: bool,
+    excludes: set,
+) -> None:
+    """Recursively walk a directory with depth limit and exclude support.
+
+    Collects paths into `items` list. Stops descending into excluded
+    directories and respects max_depth.
+    """
+    if current_depth > max_depth:
+        return
+    if len(items) >= _MAX_RECURSIVE_ENTRIES:
+        return
+
+    try:
+        children = sorted(
+            current.iterdir(),
+            key=lambda p: (not p.is_dir(), p.name.lower()),
+        )
+    except PermissionError:
+        return
+
+    for child in children:
+        if len(items) >= _MAX_RECURSIVE_ENTRIES:
+            return
+
+        name = child.name
+
+        # Skip hidden items unless requested
+        if not include_hidden and name.startswith("."):
+            continue
+
+        # Check excludes — supports both exact names and simple glob patterns
+        if name in excludes:
+            continue
+        # Handle *.ext style patterns in excludes
+        skip = False
+        for exc in excludes:
+            if exc.startswith("*") and name.endswith(exc[1:]):
+                skip = True
+                break
+        if skip:
+            continue
+
+        items.append(child)
+
+        if child.is_dir():
+            _walk_directory(
+                root, child, items,
+                max_depth=max_depth,
+                current_depth=current_depth + 1,
+                include_hidden=include_hidden,
+                excludes=excludes,
+            )
+
+
 async def list_directory(
     path: str = ".",
     recursive: bool = False,
     include_hidden: bool = False,
     detailed: bool = False,
+    max_depth: int = 5,
+    exclude: Optional[list] = None,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -634,13 +747,16 @@ async def list_directory(
         recursive: Whether to list recursively
         include_hidden: Whether to include hidden files/directories
         detailed: Whether to show detailed info (permissions, size, etc.)
+        max_depth: Maximum recursion depth for recursive listing (default: 5)
+        exclude: Additional directory/file names to exclude from recursive listing.
+            Default excludes always applied: node_modules, .git, __pycache__, etc.
         _workspace_dir: Workspace directory
 
     Returns:
         Formatted directory listing
     """
     try:
-        resolved = _resolve_path(path, _workspace_dir)
+        resolved = _resolve_path(path, _workspace_dir, allow_extra_paths=True)
 
         if not resolved.exists():
             return {
@@ -663,9 +779,28 @@ async def list_directory(
         entries = []
 
         if recursive:
-            # Recursive listing using rglob
-            pattern = "**/*" if include_hidden else "*"
-            items = sorted(resolved.rglob(pattern), key=lambda p: (not p.name.startswith("."), p.name.lower()))
+            # Default directories to exclude from recursive listing — these
+            # produce massive output and are almost never what the caller wants.
+            default_excludes = {
+                "node_modules", ".git", "__pycache__", ".next", "dist",
+                ".cache", ".venv", "venv", ".tox", ".mypy_cache",
+                ".pytest_cache", ".ruff_cache", "build", ".eggs",
+                "*.egg-info", ".gradle", ".m2", "target",
+            }
+            # Merge user-provided excludes
+            excludes = default_excludes | set(exclude) if exclude else default_excludes
+
+            # Depth-limited recursive listing to avoid unbounded traversal.
+            # We walk the tree manually instead of using rglob so we can
+            # enforce max_depth and skip excluded directories.
+            items = []
+            _walk_directory(
+                resolved, resolved, items,
+                max_depth=max_depth,
+                current_depth=0,
+                include_hidden=include_hidden,
+                excludes=excludes,
+            )
         else:
             # Non-recursive
             items = sorted(
@@ -724,7 +859,12 @@ async def list_directory(
 
         result = f"{header}\n" + "\n".join(entries)
 
-        if recursive and len(entries) > 50:
+        if recursive and len(entries) >= _MAX_RECURSIVE_ENTRIES:
+            result += (
+                f"\n... truncated at {_MAX_RECURSIVE_ENTRIES} entries"
+                f" (max_depth={max_depth}, excludes: {', '.join(sorted(list(excludes)[:5]))}...)"
+            )
+        elif recursive and len(entries) > 50:
             result += f"\n... ({len(entries)} total entries)"
 
         return {
@@ -793,6 +933,16 @@ def create_list_tool() -> MCPTool:
                     "type": "boolean",
                     "description": "Show detailed info (permissions, size, modification time)",
                     "default": False,
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Maximum recursion depth (default: 5). Only used with recursive=true.",
+                    "default": 5,
+                },
+                "exclude": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Additional directory/file names to exclude from recursive listing. Defaults already exclude node_modules, .git, __pycache__, .next, dist, etc.",
                 },
             },
         },
