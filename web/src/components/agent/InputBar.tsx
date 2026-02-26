@@ -45,10 +45,47 @@ import { VoiceWaveform } from './chat/VoiceWaveform';
 import { useFileUpload, type PendingAttachment } from './FileUploader';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
-import type { SkillResponse } from '@/types/agent';
+import type { SkillResponse, SlashItem } from '@/types/agent';
 
 import type { MentionPopoverHandle } from './chat/MentionPopover';
 import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
+
+// Web Speech API types (not in default TS lib)
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly length: number;
+  readonly isFinal: boolean;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: Event) => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognition;
+}
 
 interface InputBarProps {
   onSend: (
@@ -73,7 +110,7 @@ const getFileIcon = (mimeType: string) => {
 };
 
 const formatSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
@@ -100,7 +137,7 @@ export const InputBar = memo<InputBarProps>(
     const fileInputRef = useRef<HTMLInputElement>(null);
     const slashDropdownRef = useRef<SlashCommandDropdownHandle>(null);
     const dragCounter = useRef(0);
-    const recognitionRef = useRef<any>(null);
+    const recognitionRef = useRef<SpeechRecognition | null>(null);
 
     const { attachments, addFiles, removeAttachment, retryAttachment, clearAll } = useFileUpload({
       projectId,
@@ -124,7 +161,7 @@ export const InputBar = memo<InputBarProps>(
       const minHeight = 56;
       const containerHeight = target.parentElement?.clientHeight ?? 400;
       const nextHeight = Math.max(minHeight, Math.min(target.scrollHeight, containerHeight));
-      target.style.height = `${nextHeight}px`;
+      target.style.height = `${String(nextHeight)}px`;
     }, []);
 
     const handleSend = useCallback(() => {
@@ -135,9 +172,9 @@ export const InputBar = memo<InputBarProps>(
         pendingCount > 0
       )
         return;
-      const fileMetadataList = uploadedAttachments
-        .filter((a) => a.fileMetadata !== undefined)
-        .map((a) => a.fileMetadata!);
+      const fileMetadataList = uploadedAttachments.flatMap((a) =>
+        a.fileMetadata !== undefined ? [a.fileMetadata] : []
+      );
       const messageContent =
         inputMode === 'command' ? `[command] ${content.trim()}` : content.trim();
       onSend(
@@ -237,25 +274,32 @@ export const InputBar = memo<InputBarProps>(
         return;
       }
 
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) return;
+      const win = window as unknown as Record<string, unknown>;
+      const SpeechRecognitionCtor = (win.SpeechRecognition ?? win.webkitSpeechRecognition) as
+        | SpeechRecognitionConstructor
+        | undefined;
+      if (!SpeechRecognitionCtor) return;
 
-      const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognitionCtor();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = document.documentElement.lang || 'en-US';
 
       let finalTranscript = '';
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interim += transcript;
+          const result = event.results[i];
+          if (result && result.length > 0) {
+            const alt = result[0];
+            if (!alt) continue;
+            const transcript = alt.transcript;
+            if (result.isFinal) {
+              finalTranscript += transcript;
+            } else {
+              interim += transcript;
+            }
           }
         }
         setContent((prev) => {
@@ -279,14 +323,22 @@ export const InputBar = memo<InputBarProps>(
       setIsListening(true);
     }, [isListening]);
 
-    const handleSkillSelect = useCallback((skill: SkillResponse) => {
-      setSelectedSkill(skill);
-      setSlashDropdownVisible(false);
-      setContent('');
-      setSlashQuery('');
-      // Focus textarea for typing the message
-      textareaRef.current?.focus();
-    }, []);
+    const handleSlashSelect = useCallback((item: SlashItem) => {
+      if (item.kind === 'skill') {
+        setSelectedSkill(item.data);
+        setSlashDropdownVisible(false);
+        setContent('');
+        setSlashQuery('');
+        // Focus textarea for typing the message
+        textareaRef.current?.focus();
+      } else {
+        setSlashDropdownVisible(false);
+        setSlashQuery('');
+        const cmdText = `/${item.data.name}`;
+        onSend(cmdText);
+        setContent('');
+      }
+    }, [onSend]);
 
     const handleRemoveSkill = useCallback(() => {
       setSelectedSkill(null);
@@ -340,9 +392,9 @@ export const InputBar = memo<InputBarProps>(
           }
           if (e.key === 'Enter') {
             e.preventDefault();
-            const skill = slashDropdownRef.current?.getSelectedSkill();
-            if (skill) {
-              handleSkillSelect(skill);
+            const item = slashDropdownRef.current?.getSelectedItem();
+            if (item) {
+              handleSlashSelect(item);
             }
             return;
           }
@@ -368,7 +420,7 @@ export const InputBar = memo<InputBarProps>(
       [
         handleSend,
         handleMentionSelect,
-        handleSkillSelect,
+        handleSlashSelect,
         disabled,
         isStreaming,
         slashDropdownVisible,
@@ -446,8 +498,7 @@ export const InputBar = memo<InputBarProps>(
     const handlePaste = useCallback(
       (e: React.ClipboardEvent) => {
         if (disabled) return;
-        const items = e.clipboardData?.items;
-        if (!items) return;
+        const items = e.clipboardData.items;
 
         const files: File[] = [];
         for (const item of items) {
@@ -635,7 +686,7 @@ export const InputBar = memo<InputBarProps>(
               ref={slashDropdownRef}
               query={slashQuery}
               visible={slashDropdownVisible}
-              onSelect={handleSkillSelect}
+              onSelect={handleSlashSelect}
               onClose={() => { setSlashDropdownVisible(false); }}
               selectedIndex={slashSelectedIndex}
               onSelectedIndexChange={setSlashSelectedIndex}

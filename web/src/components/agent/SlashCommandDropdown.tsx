@@ -1,36 +1,39 @@
 /**
- * SlashCommandDropdown - Skill autocomplete dropdown for /skill-name commands
+ * SlashCommandDropdown - Autocomplete dropdown for /commands and /skills
  *
- * Shows available skills when user types "/" at the start of input.
+ * Shows available commands and skills when user types "/" at the start of input.
  * Supports keyboard navigation (up/down/enter/escape) and click selection.
  */
 
 import {
+  Fragment,
   useState,
   useEffect,
   useRef,
   useCallback,
   useImperativeHandle,
+  useMemo,
   forwardRef,
   memo,
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Zap, Hash, Brain, Sparkles } from 'lucide-react';
+import { Zap, Hash, Brain, Sparkles, Terminal } from 'lucide-react';
 
+import { commandAPI } from '@/services/commandService';
 import { skillAPI } from '@/services/skillService';
 
-import type { SkillResponse } from '@/types/agent';
+import type { CommandInfo, SkillResponse, SlashItem } from '@/types/agent';
 
 export interface SlashCommandDropdownHandle {
-  getSelectedSkill: () => SkillResponse | null;
+  getSelectedItem: () => SlashItem | null;
 }
 
 interface SlashCommandDropdownProps {
   query: string;
   visible: boolean;
-  onSelect: (skill: SkillResponse) => void;
+  onSelect: (item: SlashItem) => void;
   onClose: () => void;
   selectedIndex: number;
   onSelectedIndexChange: (index: number) => void;
@@ -53,13 +56,14 @@ export const SlashCommandDropdown = memo(
   forwardRef<SlashCommandDropdownHandle, SlashCommandDropdownProps>(
     ({ query, visible, onSelect, selectedIndex, onSelectedIndexChange }, ref) => {
       const { t } = useTranslation();
+      const [commands, setCommands] = useState<CommandInfo[]>([]);
       const [skills, setSkills] = useState<SkillResponse[]>([]);
       const [loading, setLoading] = useState(false);
       const [loaded, setLoaded] = useState(false);
       const listRef = useRef<HTMLDivElement>(null);
       const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-      // Fetch skills once when dropdown opens
+      // Fetch commands and skills once when dropdown opens
       useEffect(() => {
         if (!visible || loaded) return;
 
@@ -67,22 +71,17 @@ export const SlashCommandDropdown = memo(
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true);
 
-        skillAPI
-          .list({ status: 'active', limit: 50 })
-          .then((res) => {
-            if (!cancelled) {
-              setSkills(res.skills || []);
-              setLoaded(true);
-              setLoading(false);
-            }
-          })
-          .catch(() => {
-            if (!cancelled) {
-              setSkills([]);
-              setLoaded(true);
-              setLoading(false);
-            }
-          });
+        void Promise.all([
+          commandAPI.list().catch(() => ({ commands: [] })),
+          skillAPI.list({ status: 'active', limit: 50 }).catch(() => ({ skills: [] })),
+        ]).then(([cmdRes, skillRes]) => {
+          if (!cancelled) {
+            setCommands(cmdRes.commands);
+            setSkills(skillRes.skills);
+            setLoaded(true);
+            setLoading(false);
+          }
+        });
 
         return () => {
           cancelled = true;
@@ -97,27 +96,51 @@ export const SlashCommandDropdown = memo(
         }
       }, [visible]);
 
-      // Filter skills by query
-      const filteredSkills = skills.filter((skill) => {
-        if (!query) return true;
-        const q = query.toLowerCase();
-        return (
-          skill.name.toLowerCase().includes(q) ||
-          (skill.description ?? '').toLowerCase().includes(q)
-        );
-      });
+      const filteredCommands = useMemo(
+        () =>
+          commands.filter((cmd) => {
+            if (!query) return true;
+            const q = query.toLowerCase();
+            return (
+              cmd.name.toLowerCase().includes(q) ||
+              (cmd.description || '').toLowerCase().includes(q)
+            );
+          }),
+        [commands, query]
+      );
 
-      // Expose imperative handle for parent to get selected skill
+      const filteredSkills = useMemo(
+        () =>
+          skills.filter((skill) => {
+            if (!query) return true;
+            const q = query.toLowerCase();
+            return (
+              skill.name.toLowerCase().includes(q) ||
+              (skill.description || '').toLowerCase().includes(q)
+            );
+          }),
+        [skills, query]
+      );
+
+      const unifiedList: SlashItem[] = useMemo(
+        () => [
+          ...filteredCommands.map((cmd) => ({ kind: 'command' as const, data: cmd })),
+          ...filteredSkills.map((skill) => ({ kind: 'skill' as const, data: skill })),
+        ],
+        [filteredCommands, filteredSkills]
+      );
+
+      // Expose imperative handle for parent to get selected item
       useImperativeHandle(
         ref,
         () => ({
-          getSelectedSkill: () => {
-            if (filteredSkills.length === 0) return null;
-            const idx = Math.min(selectedIndex, filteredSkills.length - 1);
-            return filteredSkills[idx] ?? null;
+          getSelectedItem: () => {
+            if (unifiedList.length === 0) return null;
+            const idx = Math.min(selectedIndex, unifiedList.length - 1);
+            return unifiedList[idx] ?? null;
           },
         }),
-        [filteredSkills, selectedIndex]
+        [unifiedList, selectedIndex]
       );
 
       // Scroll selected item into view
@@ -130,14 +153,14 @@ export const SlashCommandDropdown = memo(
 
       // Clamp selected index when filtered list changes
       useEffect(() => {
-        if (selectedIndex >= filteredSkills.length) {
-          onSelectedIndexChange(Math.max(0, filteredSkills.length - 1));
+        if (selectedIndex >= unifiedList.length && unifiedList.length > 0) {
+          onSelectedIndexChange(Math.max(0, unifiedList.length - 1));
         }
-      }, [filteredSkills.length, selectedIndex, onSelectedIndexChange]);
+      }, [unifiedList.length, selectedIndex, onSelectedIndexChange]);
 
       const handleItemClick = useCallback(
-        (skill: SkillResponse) => {
-          onSelect(skill);
+        (item: SlashItem) => {
+          onSelect(item);
         },
         [onSelect]
       );
@@ -156,77 +179,118 @@ export const SlashCommandDropdown = memo(
           <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {loading
-                ? t('agent.slashCommand.loading', 'Loading skills...')
+                ? t('agent.slashCommand.loading', 'Loading...')
                 : query
-                  ? t('agent.slashCommand.matching', 'Skills matching "{{query}}"', { query })
-                  : t('agent.slashCommand.title', 'Skills')}
+                  ? unifiedList.length === 0
+                    ? t('agent.slashCommand.noMatch', 'No matches for "{{query}}"', { query })
+                    : t('agent.slashCommand.matching', 'Matching "{{query}}"', { query })
+                  : t('agent.slashCommand.title', 'Commands & Skills')}
             </span>
           </div>
 
-          {/* Skills list */}
+          {/* List */}
           {loading ? (
             <div className="px-3 py-4 text-center text-sm text-slate-400">
               {t('agent.slashCommand.loading', 'Loading...')}
             </div>
-          ) : filteredSkills.length === 0 ? (
+          ) : unifiedList.length === 0 ? (
             <div className="px-3 py-4 text-center text-sm text-slate-400">
               {query
-                ? t('agent.slashCommand.noMatch', 'No skills matching "{{query}}"', { query })
-                : t('agent.slashCommand.noSkills', 'No active skills available')}
+                ? t('agent.slashCommand.noMatch', 'No matches for "{{query}}"', { query })
+                : t('agent.slashCommand.noItems', 'No commands or skills available')}
             </div>
           ) : (
             <div className="py-1">
-              {filteredSkills.map((skill, index) => (
-                <div
-                  key={skill.id}
-                  ref={(el) => {
-                    if (el) itemRefs.current.set(index, el);
-                  }}
-                  onClick={() => { handleItemClick(skill); }}
-                  onMouseEnter={() => { onSelectedIndexChange(index); }}
-                  className={`
-                  px-3 py-2 cursor-pointer flex items-start gap-3 transition-colors
-                  ${
-                    index === selectedIndex
-                      ? 'bg-primary/8 dark:bg-primary/15'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                  }
-                `}
-                >
-                  {/* Icon */}
-                  <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                    <Zap size={14} className="text-primary" />
-                  </div>
+              {unifiedList.map((item, index) => {
+                const isFirstCommand = item.kind === 'command' && index === 0;
+                const isFirstSkill = item.kind === 'skill' && index === filteredCommands.length;
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                        /{skill.name}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-                        {triggerTypeIcon(skill.trigger_type)}
-                        {skill.trigger_type}
-                      </span>
-                      {skill.scope !== 'project' && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                          {skill.scope}
-                        </span>
+                return (
+                  <Fragment key={`${item.kind}-${item.kind === 'command' ? item.data.name : item.data.id}`}>
+                    {isFirstCommand && (
+                      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
+                        {t('agent.slashCommand.groupCommands', 'Commands')}
+                      </div>
+                    )}
+                    {isFirstSkill && (
+                      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
+                        {t('agent.slashCommand.groupSkills', 'Skills')}
+                      </div>
+                    )}
+                    <div
+                      ref={(el) => {
+                        if (el) itemRefs.current.set(index, el);
+                      }}
+                      onClick={() => { handleItemClick(item); }}
+                      onMouseEnter={() => { onSelectedIndexChange(index); }}
+                      className={`
+                        px-3 py-2 cursor-pointer flex items-start gap-3 transition-colors
+                        ${
+                          index === selectedIndex
+                            ? 'bg-primary/8 dark:bg-primary/15'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                        }
+                      `}
+                    >
+                      {item.kind === 'command' ? (
+                        <>
+                          {/* Command Icon */}
+                          <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+                            <Terminal size={14} className="text-amber-500" />
+                          </div>
+                          {/* Command Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                                /{item.data.name}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                                {item.data.category}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                              {item.data.description}
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Skill Icon */}
+                          <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                            <Zap size={14} className="text-primary" />
+                          </div>
+                          {/* Skill Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                                /{item.data.name}
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                                {triggerTypeIcon(item.data.trigger_type)}
+                                {item.data.trigger_type}
+                              </span>
+                              {item.data.scope !== 'project' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                                  {item.data.scope}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                              {item.data.description}
+                            </p>
+                          </div>
+                          {/* Usage count */}
+                          {item.data.usage_count > 0 && (
+                            <span className="flex-shrink-0 text-[10px] text-slate-400 mt-1">
+                              {item.data.usage_count} uses
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
-                      {skill.description}
-                    </p>
-                  </div>
-
-                  {/* Usage count */}
-                  {skill.usage_count > 0 && (
-                    <span className="flex-shrink-0 text-[10px] text-slate-400 mt-1">
-                      {skill.usage_count} uses
-                    </span>
-                  )}
-                </div>
-              ))}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
 

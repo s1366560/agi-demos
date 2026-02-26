@@ -55,6 +55,8 @@ from src.domain.events.agent_events import (
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
+    from src.infrastructure.agent.commands.interceptor import CommandInterceptor
+    from src.infrastructure.agent.commands.types import CommandResult
 
 
 from src.domain.model.agent.hitl_types import HITLType
@@ -205,6 +207,7 @@ class SessionProcessor:
         tools: list[ToolDefinition],
         permission_manager: PermissionManager | None = None,
         artifact_service: Optional["ArtifactService"] = None,
+        command_interceptor: Optional["CommandInterceptor"] = None,
     ) -> None:
         """
         Initialize session processor.
@@ -214,6 +217,7 @@ class SessionProcessor:
             tools: List of available tools
             permission_manager: Optional permission manager (creates default if None)
             artifact_service: Optional artifact service for handling rich outputs
+            command_interceptor: Optional command interceptor for slash commands
         """
         self.config = config
         self.tools = {t.name: t for t in tools}
@@ -233,6 +237,9 @@ class SessionProcessor:
 
         # Artifact service for rich output handling
         self._artifact_service = artifact_service
+
+        # Command interceptor for slash commands
+        self._command_interceptor = command_interceptor
 
         # LLM client for streaming (with circuit breaker + rate limiter)
         self._llm_client = config.llm_client
@@ -452,6 +459,13 @@ class SessionProcessor:
         yield AgentStartEvent()
         self._state = ProcessorState.THINKING
 
+        # --- Command interception: handle slash commands before ReAct loop ---
+        cmd_events = await self._try_intercept_command(messages)
+        if cmd_events is not None:
+            for evt in cmd_events:
+                yield evt
+            return
+
         try:
             result = ProcessorResult.CONTINUE
 
@@ -473,13 +487,14 @@ class SessionProcessor:
                         break
 
                 # Evaluate goal if no tool calls and still continuing
-                if result == ProcessorResult.CONTINUE:
-                    if had_tool_calls:
-                        self._no_progress_steps = 0
-                    else:
-                        async for evt in self._evaluate_no_tool_result(session_id, messages):
-                            yield evt
-                        result = self._last_process_result
+                result, progress_events = await self._evaluate_goal_progress(
+                    result,
+                    had_tool_calls,
+                    session_id,
+                    messages,
+                )
+                for evt in progress_events:
+                    yield evt
 
                 # Append tool results to messages for next iteration
                 if result == ProcessorResult.CONTINUE:
@@ -505,6 +520,33 @@ class SessionProcessor:
                 code="MAX_STEPS_EXCEEDED",
             )
         return None
+
+    async def _evaluate_goal_progress(
+        self,
+        result: ProcessorResult,
+        had_tool_calls: bool,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> tuple[ProcessorResult, list[ProcessorEvent]]:
+        """Evaluate progress when the step loop is still CONTINUE.
+
+        If there were tool calls, reset the no-progress counter.
+        Otherwise, run the no-tool-result evaluator to check for goal achievement.
+
+        Returns:
+            Tuple of (updated result, list of events to yield).
+        """
+        if result != ProcessorResult.CONTINUE:
+            return result, []
+
+        events: list[ProcessorEvent] = []
+        if had_tool_calls:
+            self._no_progress_steps = 0
+        else:
+            async for evt in self._evaluate_no_tool_result(session_id, messages):
+                events.append(evt)
+            result = self._last_process_result
+        return result, events
 
     def _classify_step_event(
         self,
@@ -636,6 +678,99 @@ class SessionProcessor:
     def _extract_user_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Extract the latest user query from messages."""
         return extract_user_query(messages)
+
+    def _build_command_context(self) -> dict[str, Any]:
+        """Build context dict for command handlers."""
+        ctx: dict[str, Any] = {
+            "model_name": self.config.model,
+            "tools": list(self.tools.keys()),
+        }
+        if self._langfuse_context:
+            ctx["conversation_id"] = self._langfuse_context.get("conversation_id")
+            ctx["project_id"] = self._langfuse_context.get("project_id")
+            ctx["tenant_id"] = self._langfuse_context.get("tenant_id")
+            ctx["user_id"] = self._langfuse_context.get("user_id")
+        return ctx
+
+    async def _try_intercept_command(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> list[ProcessorEvent] | None:
+        """Attempt to intercept a slash command from the latest user message.
+
+        Returns:
+            A list of ProcessorEvent objects if a command was handled,
+            or None if the message is not a slash command (fall through to
+            the ReAct loop).
+        """
+        if self._command_interceptor is None:
+            return None
+
+        user_query = self._extract_user_query(messages)
+        if not user_query:
+            return None
+
+        if not self._command_interceptor.is_command(user_query):
+            return None
+
+        context = self._build_command_context()
+        result = await self._command_interceptor.try_intercept(user_query, context)
+        if result is None:
+            return None
+
+        # Collect all events from _emit_command_result into a list.
+        events: list[ProcessorEvent] = []
+        async for evt in self._emit_command_result(result):
+            events.append(evt)
+
+        # Append a completion event so the frontend closes the stream.
+        events.append(AgentCompleteEvent(trace_url=None))
+        self._state = ProcessorState.COMPLETED
+        return events
+
+    async def _emit_command_result(
+        self,
+        result: "CommandResult",
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Convert a CommandResult into the standard SSE event stream.
+
+        For ReplyResult: emit text start/delta/end events.
+        For ToolCallResult: delegate to existing tool execution.
+        For SkillTriggerResult: emit a status event (skill routing is handled upstream).
+        """
+        from src.infrastructure.agent.commands.types import (
+            ReplyResult,
+            SkillTriggerResult,
+            ToolCallResult,
+        )
+
+        if isinstance(result, ReplyResult):
+            yield AgentTextStartEvent()
+            yield AgentTextDeltaEvent(delta=result.text)
+            yield AgentTextEndEvent(full_text=result.text)
+        elif isinstance(result, ToolCallResult):
+            tool_def = self.tools.get(result.tool_name)
+            if tool_def is None:
+                yield AgentTextStartEvent()
+                err_msg = f"Unknown tool: {result.tool_name}"
+                yield AgentTextDeltaEvent(delta=err_msg)
+                yield AgentTextEndEvent(full_text=err_msg)
+            else:
+                yield AgentActEvent(tool_name=result.tool_name, tool_input=result.args)
+                try:
+                    raw = await tool_def.execute(result.args)
+                    output = str(raw) if raw is not None else ""
+                    yield AgentObserveEvent(
+                        tool_name=result.tool_name,
+                        result=output,
+                    )
+                except Exception as exc:
+                    yield AgentObserveEvent(
+                        tool_name=result.tool_name,
+                        error=str(exc),
+                    )
+        elif isinstance(result, SkillTriggerResult):
+            yield AgentStatusEvent(status=f"Triggering skill: {result.skill_id}")
 
     def _is_conversational_response(self) -> bool:
         """Check if the current turn is a conversational text-only response.

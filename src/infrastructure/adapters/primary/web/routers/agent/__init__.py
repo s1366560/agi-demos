@@ -6,12 +6,26 @@ All endpoints have been fully migrated from agent_legacy.py.
 
 from fastapi import APIRouter
 
-from . import config, conversations, events, hitl, messages, patterns, plans, templates, tools
+from . import (
+    commands,
+    config,
+    conversations,
+    events,
+    hitl,
+    messages,
+    patterns,
+    plans,
+    templates,
+    tools,
+)
 from .schemas import (
     CapabilityDomainSummary,
     CapabilitySummaryResponse,
     ChatRequest,
     ClarificationResponseRequest,
+    CommandArgInfo,
+    CommandInfo,
+    CommandsListResponse,
     ConversationResponse,
     CreateConversationRequest,
     DecisionResponseRequest,
@@ -44,6 +58,7 @@ from .utils import get_container_with_db
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 
 # Include all sub-routers (fully modular structure)
+router.include_router(commands.router)
 router.include_router(conversations.router)
 router.include_router(messages.router)
 router.include_router(tools.router)
@@ -60,6 +75,9 @@ __all__ = [
     # Schemas
     "ChatRequest",
     "ClarificationResponseRequest",
+    "CommandArgInfo",
+    "CommandInfo",
+    "CommandsListResponse",
     "ConversationResponse",
     "CreateConversationRequest",
     "DecisionResponseRequest",

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
+    from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.permission.manager import PermissionManager
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
@@ -42,6 +43,7 @@ class ProcessorFactory:
         llm_client: Shared LLM client instance (circuit breaker + rate limiter).
         permission_manager: Permission manager for tool access control.
         artifact_service: Artifact service for rich outputs.
+        command_interceptor: Command interceptor for slash commands (main agent only).
         base_model: Default model name (used when SubAgent inherits).
         base_api_key: API key for LLM calls.
         base_url: Base URL for LLM API.
@@ -50,6 +52,7 @@ class ProcessorFactory:
     llm_client: LLMClient | None = None
     permission_manager: PermissionManager | None = None
     artifact_service: ArtifactService | None = None
+    command_interceptor: CommandInterceptor | None = None
     base_model: str = ""
     base_api_key: str | None = None
     base_url: str | None = None
@@ -121,4 +124,5 @@ class ProcessorFactory:
             tools=tools,
             permission_manager=self.permission_manager,
             artifact_service=self.artifact_service,
+            command_interceptor=self.command_interceptor,
         )

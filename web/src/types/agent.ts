@@ -104,6 +104,7 @@ export interface WorkPlan {
   id: string;
   conversation_id: string;
   status: PlanStatus;
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   steps: PlanStep[];
   current_step_index: number;
   workflow_pattern_id?: string | undefined;
@@ -545,7 +546,7 @@ export interface ObserveEventData {
   execution_id?: string | undefined; // Legacy alias
   tool_execution_id?: string | undefined; // Backend field name for act/observe matching
   error?: string | undefined; // Error message if tool execution failed
-  result?: unknown | undefined; // Raw result from tool execution (may be string or object)
+  result?: unknown;
 }
 
 /**
@@ -789,7 +790,7 @@ export interface PlanStepCompleteEventData {
   step_id: string;
   step_number: number;
   status: 'completed' | 'failed' | 'skipped';
-  result?: unknown | undefined;
+  result?: unknown;
   error?: string | undefined;
 }
 
@@ -977,6 +978,7 @@ export interface AgentExecutionWithDetails {
   // Multi-level thinking fields
   work_level_thought?: string | undefined;
   task_level_thought?: string | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   plan_steps?: PlanStep[] | undefined;
   current_step_index?: number | undefined;
   workflow_pattern_id?: string | undefined;
@@ -1686,7 +1688,7 @@ export interface SkillToolResultEventData {
   skill_id: string;
   skill_name: string;
   tool_name: string;
-  result?: unknown | undefined;
+  result?: unknown;
   error?: string | undefined;
   duration_ms: number;
   step_index: number;
@@ -1700,7 +1702,7 @@ export interface SkillToolResultEventData {
 export interface SkillToolExecution {
   tool_name: string;
   tool_input: Record<string, unknown>;
-  result?: unknown | undefined;
+  result?: unknown;
   error?: string | undefined;
   status: 'running' | 'completed' | 'error';
   duration_ms?: number | undefined;
@@ -1939,7 +1941,7 @@ export interface MCPToolCallRequest {
  */
 export interface MCPToolCallResponse {
   success: boolean;
-  result?: unknown | undefined;
+  result?: unknown;
   error?: string | undefined;
   execution_time_ms: number;
 }
@@ -3501,3 +3503,31 @@ export interface BackgroundLaunchedEventData {
   subagent_name: string;
   task: string;
 }
+
+// === Command Types (Slash Command System) ===
+
+export interface CommandArgInfo {
+  name: string;
+  description: string;
+  arg_type: string;
+  required: boolean;
+  choices: string[] | null;
+}
+
+export interface CommandInfo {
+  name: string;
+  description: string;
+  category: string;
+  scope: string;
+  aliases: string[];
+  args: CommandArgInfo[];
+}
+
+export interface CommandsListResponse {
+  commands: CommandInfo[];
+  total: number;
+}
+
+export type SlashItem =
+  | { kind: 'command'; data: CommandInfo }
+  | { kind: 'skill'; data: SkillResponse };

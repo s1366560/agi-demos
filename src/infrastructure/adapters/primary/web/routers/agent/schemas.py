@@ -424,3 +424,31 @@ class WorkflowStatusResponse(BaseModel):
     current_step: int | None = None
     total_steps: int | None = None
     error: str | None = None
+
+
+# === Command Schemas ===
+
+
+class CommandArgInfo(BaseModel):
+    """Command argument specification for API response."""
+    name: str
+    description: str
+    arg_type: str
+    required: bool = False
+    choices: list[str] | None = None
+
+
+class CommandInfo(BaseModel):
+    """Single command definition for API response."""
+    name: str
+    description: str
+    category: str
+    scope: str
+    aliases: list[str] = Field(default_factory=list)
+    args: list[CommandArgInfo] = Field(default_factory=list)
+
+
+class CommandsListResponse(BaseModel):
+    """Response for listing available commands."""
+    commands: list[CommandInfo]
+    total: int

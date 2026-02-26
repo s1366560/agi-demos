@@ -38,6 +38,9 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
+from ..commands.builtins import register_builtin_commands
+from ..commands.interceptor import CommandInterceptor
+from ..commands.registry import CommandRegistry
 from ..config import ExecutionConfig
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
@@ -389,11 +392,17 @@ class ReActAgent:
             _cached_tool_definitions, model, api_key, base_url, temperature, max_tokens, max_steps
         )
 
+        # -- Create CommandRegistry and interceptor for slash commands --
+        command_registry = CommandRegistry()
+        register_builtin_commands(command_registry)
+        command_interceptor = CommandInterceptor(command_registry)
+
         # -- Create ProcessorFactory for shared processor creation --
         self._processor_factory = ProcessorFactory(
             llm_client=self._llm_client,
             permission_manager=self.permission_manager,
             artifact_service=self.artifact_service,
+            command_interceptor=command_interceptor,
             base_model=self.model,
             base_api_key=self.api_key,
             base_url=self.base_url,
