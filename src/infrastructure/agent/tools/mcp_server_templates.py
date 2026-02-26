@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -56,7 +56,7 @@ async def list_tools():
             },
             "_meta": {
                 "ui": {
-                    "resourceUri": "app://{{server_name}}/dashboard",
+                    "resourceUri": "ui://{{server_name}}/dashboard",
                     "title": "{{server_name}} Dashboard"
                 }
             }
@@ -89,7 +89,7 @@ async def list_resources():
     """List available resources."""
     return [
         {
-            "uri": "app://{{server_name}}/dashboard",
+            "uri": "ui://{{server_name}}/dashboard",
             "name": "Dashboard UI",
             "mimeType": "text/html"
         }
@@ -97,9 +97,10 @@ async def list_resources():
 
 
 @server.read_resource()
-async def read_resource(uri: str):
+async def read_resource(uri):
     """Read resource content."""
-    if uri == "app://{{server_name}}/dashboard":
+    uri = str(uri)
+    if uri == "ui://{{server_name}}/dashboard":
         html = """
         <!DOCTYPE html>
         <html>
@@ -402,15 +403,25 @@ class CreateMCPServerFromTemplateTool(AgentTool):
             sandbox_id: Sandbox container ID
             workspace_path: Path to workspace in sandbox
         """
+        super().__init__(
+            name="create_mcp_server_from_template",
+            description=(
+                "Create a new MCP server from a predefined template. "
+                "Available templates: web-dashboard, api-wrapper, data-processor. "
+                "Creates server files and optionally installs dependencies."
+            ),
+        )
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
         self._workspace_path = workspace_path
 
     @property
+    @override
     def name(self) -> str:
         return "create_mcp_server_from_template"
 
     @property
+    @override
     def description(self) -> str:
         return (
             "Create a new MCP server from a predefined template. "
@@ -441,6 +452,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
             "required": ["template", "server_name"],
         }
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return self.parameters
 

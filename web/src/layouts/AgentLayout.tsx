@@ -26,6 +26,7 @@ import { Search, History, GitBranch } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
+import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { AgentSidebar } from '@/components/layout/AppSidebar';
 import { LazyTooltip } from '@/components/ui/lazyAntd';
@@ -161,6 +162,7 @@ export const AgentLayout: React.FC = () => {
 
             {/* Quick Actions */}
             <div className="flex items-center gap-1">
+              <AppLauncher />
               <LazyTooltip title="View execution history">
                 <button
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"

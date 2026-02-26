@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -28,6 +29,60 @@ from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository
 from .utils import ensure_project_access, get_container_with_db
 
 logger = logging.getLogger(__name__)
+
+# SEP-1865 tool-visibility cache.
+# Maps (project_id, server_name, tool_name) -> (visibility_list, expiry_time).
+# Avoids querying the sandbox on every proxy call.
+_TOOL_VISIBILITY_CACHE: dict[tuple[str, str, str], tuple[list[str], float]] = {}
+_TOOL_VISIBILITY_TTL = 60.0  # seconds
+
+
+async def _get_cached_tool_visibility(
+    mcp_manager: Any,
+    project_id: str,
+    server_name: str,
+    tool_name: str,
+) -> list[str]:
+    """Return the SEP-1865 visibility list for *tool_name*, with caching.
+
+    Falls back to the spec default ``["model", "app"]`` on errors.
+    """
+    key = (project_id, server_name, tool_name)
+    cached = _TOOL_VISIBILITY_CACHE.get(key)
+    if cached is not None:
+        vis, expiry = cached
+        if time.monotonic() < expiry:
+            return vis
+
+    vis = await mcp_manager.get_tool_visibility(
+        project_id=project_id,
+        server_name=server_name,
+        tool_name=tool_name,
+    )
+    _TOOL_VISIBILITY_CACHE[key] = (vis, time.monotonic() + _TOOL_VISIBILITY_TTL)
+    return vis
+
+
+def _reject_if_not_app_visible(
+    visibility: list[str],
+    tool_name: str,
+) -> MCPAppToolCallResponse | None:
+    """Return an error response if *tool_name* is not app-visible."""
+    if "app" in visibility:
+        return None
+    return MCPAppToolCallResponse(
+        content=[
+            {
+                "type": "text",
+                "text": (f"Tool '{tool_name}' is not callable by apps (visibility={visibility})"),
+            }
+        ],
+        is_error=True,
+        error_message=(
+            f"SEP-1865: tool '{tool_name}' visibility {visibility} does not include 'app'"
+        ),
+        error_code=-32000,
+    )
 
 
 if TYPE_CHECKING:
@@ -188,6 +243,18 @@ async def proxy_tool_call_direct(
         await ensure_project_access(db, body.project_id, tenant_id)
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
+
+        # SEP-1865: Enforce tool visibility
+        visibility = await _get_cached_tool_visibility(
+            mcp_manager,
+            body.project_id,
+            body.server_name,
+            body.tool_name,
+        )
+        rejected = _reject_if_not_app_visible(visibility, body.tool_name)
+        if rejected:
+            return rejected
+
         result = await mcp_manager.call_tool(
             project_id=body.project_id,
             server_name=body.server_name,
@@ -295,10 +362,6 @@ async def proxy_tool_call(
 
     This endpoint is called by the AppBridge when the app needs to
     invoke tools on its server (bidirectional communication).
-
-    TODO(SEP-1865): Enforce tool visibility - reject calls to tools
-    where _meta.ui.visibility does not include "app". Requires caching
-    the server's tools/list result to avoid per-call latency.
     """
     service = _get_mcp_app_service(request, db)
     app = await service.get_app(app_id)
@@ -309,6 +372,18 @@ async def proxy_tool_call(
     try:
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
+
+        # SEP-1865: Enforce tool visibility
+        visibility = await _get_cached_tool_visibility(
+            mcp_manager,
+            app.project_id,
+            app.server_name,
+            body.tool_name,
+        )
+        rejected = _reject_if_not_app_visible(visibility, body.tool_name)
+        if rejected:
+            return rejected
+
         result = await mcp_manager.call_tool(
             project_id=app.project_id,
             server_name=app.server_name,
@@ -430,29 +505,41 @@ class MCPResourceReadResponse(BaseModel):
 def _extract_server_name_from_uri(uri: str) -> str | None:
     """Extract server name from MCP app resource URI.
 
-    Supported URI schemes:
-    - ui://server-name/path -> server-name
-    - app://server-name/path -> server-name
-    - mcp-app://server-name/path -> server-name
+    SEP-1865 mandates the ``ui://`` scheme.  Legacy schemes (``app://``,
+    ``mcp-app://``) are still accepted for backward compatibility but a
+    deprecation warning is logged.
 
     Examples:
     - ui://pick-color/mcp-app.html -> pick-color
-    - app://color-picker -> color-picker
-    - mcp-app://my-server/index.html -> my-server
+    - app://color-picker -> color-picker  (deprecated)
+    - mcp-app://my-server/index.html -> my-server  (deprecated)
     """
-    # List of supported URI scheme prefixes
-    prefixes = ["ui://", "app://", "mcp-app://"]
+    # SEP-1865: canonical scheme
+    canonical_prefix = "ui://"
+    # Legacy schemes kept for backward compat only
+    legacy_prefixes = ["app://", "mcp-app://"]
 
-    for prefix in prefixes:
-        if uri.startswith(prefix):
-            # Remove prefix
-            rest = uri[len(prefix) :]
-            # Extract first path segment as server name
-            if "/" in rest:
-                return rest.split("/")[0]
-            return rest if rest else None
+    prefix: str | None = None
+    if uri.startswith(canonical_prefix):
+        prefix = canonical_prefix
+    else:
+        for lp in legacy_prefixes:
+            if uri.startswith(lp):
+                logger.warning(
+                    "Deprecated URI scheme %r in %r; SEP-1865 requires ui:// scheme",
+                    lp,
+                    uri,
+                )
+                prefix = lp
+                break
 
-    return None
+    if prefix is None:
+        return None
+
+    rest = uri[len(prefix) :]
+    if "/" in rest:
+        return rest.split("/")[0]
+    return rest if rest else None
 
 
 async def _retry_resource_after_reinstall(
@@ -588,6 +675,7 @@ async def proxy_resource_read(
         # and retry — handles the case where the management server was restarted
         # and lost its in-memory server registry.
         need_retry = False
+        result: Any = None  # Initialize to avoid possibly unbound
         try:
             result = await _read_resource()
             if result.is_error:

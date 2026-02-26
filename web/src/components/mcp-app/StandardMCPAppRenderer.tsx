@@ -40,7 +40,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import { buildHostStyles } from './hostStyles';
 
-import type { MCPAppUIMetadata } from '@/types/mcpApp';
+import type { MCPAppUIMetadata, MCPAppDisplayMode } from '@/types/mcpApp';
 
 /**
  * Prefix for synthetic (auto-discovered) MCP App IDs that have no DB record.
@@ -54,6 +54,9 @@ const LazyAppRenderer = React.lazy(async () => {
   const mod = await import('@mcp-ui/client');
   return { default: mod.AppRenderer };
 });
+
+/** Valid display modes for MCP App ui/request-display-mode handling */
+const VALID_DISPLAY_MODES: readonly MCPAppDisplayMode[] = ['inline', 'fullscreen', 'pip'];
 
 /** Imperative handle exposed to parent for lifecycle management */
 export interface StandardMCPAppRendererHandle {
@@ -147,6 +150,7 @@ export const StandardMCPAppRenderer = forwardRef<
     // Defer hostContext until the app bridge is connected to avoid
     // "Not connected" errors from @mcp-ui/client setHostContext.
     const [appInitialized, setAppInitialized] = useState(false);
+    const [displayMode, setDisplayMode] = useState<MCPAppDisplayMode>('inline');
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Mode A: Direct WebSocket MCP client (low-latency, 2-hop)
@@ -289,8 +293,8 @@ export const StandardMCPAppRenderer = forwardRef<
               styles: hostStyles,
               platform: 'web' as const,
               userAgent: 'memstack',
-              displayMode: 'inline' as const,
-              availableDisplayModes: ['inline'],
+              displayMode: displayMode,
+              availableDisplayModes: ['inline', 'fullscreen', 'pip'],
               locale: navigator.language,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               containerDimensions:
@@ -299,7 +303,7 @@ export const StandardMCPAppRenderer = forwardRef<
                   : undefined,
             }
           : undefined,
-      [appInitialized, computedTheme, hostStyles, containerSize.width, containerSize.height]
+      [appInitialized, computedTheme, hostStyles, containerSize.width, containerSize.height, displayMode]
     );
 
     // Handler for resources/read requests (when html prop is not provided)
@@ -498,6 +502,49 @@ export const StandardMCPAppRenderer = forwardRef<
         hasClient: !!(effectiveHtml && !shouldUseFallback && mcpClient),
       });
     }, [effectiveHtml, effectiveUri, effectiveProjectId, serverName, shouldUseFallback, mcpClient]);
+
+    // Listen for ui/request-display-mode JSON-RPC messages from MCP App iframes.
+    // The @mcp-ui/client library does NOT expose a callback for this method,
+    // so we handle it manually via the postMessage bridge.
+    useEffect(() => {
+      const handleDisplayModeRequest = (event: MessageEvent<unknown>): void => {
+        // Only process object payloads that look like JSON-RPC
+        if (typeof event.data !== 'object' || event.data === null) return;
+
+        const data = event.data as Record<string, unknown>;
+        if (data.jsonrpc !== '2.0' || data.method !== 'ui/request-display-mode') return;
+
+        // Validate params.mode
+        const params = data.params as Record<string, unknown> | undefined;
+        const requestedMode = params?.mode;
+        if (
+          typeof requestedMode !== 'string' ||
+          !VALID_DISPLAY_MODES.includes(requestedMode as MCPAppDisplayMode)
+        ) {
+          return;
+        }
+
+        // Update local state
+        setDisplayMode(requestedMode as MCPAppDisplayMode);
+
+        // Send JSON-RPC success response back to the source iframe
+        if (event.source) {
+          (event.source as Window).postMessage(
+            {
+              jsonrpc: '2.0',
+              id: data.id,
+              result: { mode: requestedMode },
+            },
+            event.origin
+          );
+        }
+      };
+
+      window.addEventListener('message', handleDisplayModeRequest);
+      return () => {
+        window.removeEventListener('message', handleDisplayModeRequest);
+      };
+    }, []);
 
     if (error) {
       return (

@@ -36,6 +36,7 @@ import {
   Save,
   Loader2,
   AppWindow,
+  Pin,
 } from 'lucide-react';
 
 import {
@@ -91,7 +92,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
   ({ onBeforeCloseTab }) => {
     const tabs = useCanvasStore((s) => s.tabs);
     const activeTabId = useCanvasStore((s) => s.activeTabId);
-    const { setActiveTab, closeTab, openTab } = useCanvasActions();
+    const { setActiveTab, closeTab, openTab, togglePin } = useCanvasActions();
     const { t } = useTranslation();
     const setMode = useLayoutModeStore((s) => s.setMode);
 
@@ -144,12 +145,28 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleClose(tab.id);
+                  togglePin(tab.id);
                 }}
-                className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                className={`ml-0.5 p-0.5 rounded transition-all ${
+                  tab.pinned
+                    ? 'text-primary opacity-100'
+                    : 'opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
               >
-                <X size={12} />
+                <Pin size={12} fill={tab.pinned ? 'currentColor' : 'none'} />
               </button>
+              {!tab.pinned && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClose(tab.id);
+                  }}
+                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
           ))}
           <button
@@ -671,6 +688,38 @@ export const CanvasPanel = memo<{
   const mcpAppRef = useRef<StandardMCPAppRendererHandle>(null);
   const [editMode, setEditMode] = useState(false);
   const { t } = useTranslation();
+  const prevActiveTabRef = useRef<{ id: string; type: CanvasContentType } | null>(null);
+  const activeTabId = activeTab?.id ?? null;
+  const activeTabType = activeTab?.type ?? null;
+
+  // SEP-1865: Teardown MCP App when switching away from an mcp-app tab
+  useEffect(() => {
+    const prev = prevActiveTabRef.current;
+    if (
+      prev &&
+      prev.type === 'mcp-app' &&
+      prev.id !== activeTabId
+    ) {
+      mcpAppRef.current?.teardown();
+    }
+    prevActiveTabRef.current =
+      activeTabId && activeTabType ? { id: activeTabId, type: activeTabType } : null;
+  }, [activeTabId, activeTabType]);
+
+  // Teardown active MCP App on page unload / navigate away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (activeTabType === 'mcp-app') {
+        mcpAppRef.current?.teardown();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also teardown on component unmount (route change)
+      handleBeforeUnload();
+    };
+  }, [activeTabType]);
 
   // SEP-1865: Send ui/resource-teardown before closing MCP App tabs
   const handleBeforeCloseTab = useCallback(

@@ -218,8 +218,7 @@ class MCPServerManager:
         if any("chrome-devtools-mcp" in str(a) for a in [command] + args):
             joined = " ".join(args)
             if "--no-sandbox" not in joined:
-                args.extend(["--chrome-arg=--no-sandbox",
-                             "--chrome-arg=--disable-dev-shm-usage"])
+                args.extend(["--chrome-arg=--no-sandbox", "--chrome-arg=--disable-dev-shm-usage"])
             if "--headless" not in joined:
                 args.append("--headless")
 
@@ -334,7 +333,8 @@ class MCPServerManager:
             # Use read(n) which may block, so we wrap in wait_for
             # If process is still running and has no stderr, this will timeout
             stderr_bytes = await asyncio.wait_for(
-                server.process.stderr.read(4096), timeout=0.5,
+                server.process.stderr.read(4096),
+                timeout=0.5,
             )
             if stderr_bytes:
                 return stderr_bytes.decode("utf-8", errors="replace")[:2000]
@@ -505,7 +505,7 @@ class MCPServerManager:
             # Check if process died during the request
             if not self._is_process_alive(name):
                 server.status = ServerStatus.CRASHED
-                server.error = f"Process died during tool discovery"
+                server.error = "Process died during tool discovery"
                 stderr_text = await self._capture_server_stderr(name)
                 if stderr_text:
                     server.error += f"\n--- stderr ---\n{stderr_text[:2000]}"
@@ -525,8 +525,7 @@ class MCPServerManager:
             await self.stop_server(name)
 
             raise RuntimeError(
-                f"MCP server '{name}' is unresponsive and has been stopped. "
-                f"Error: {e}"
+                f"MCP server '{name}' is unresponsive and has been stopped. Error: {e}"
             ) from e
 
     async def call_tool(
@@ -573,11 +572,13 @@ class MCPServerManager:
             if stderr_text:
                 server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
             return MCPCallResult(
-                content=[{
-                    "type": "text",
-                    "text": f"Server '{server_name}' process has exited. "
-                            f"stderr: {stderr_text[:500] if stderr_text else '(none)'}"
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": f"Server '{server_name}' process has exited. "
+                        f"stderr: {stderr_text[:500] if stderr_text else '(none)'}",
+                    }
+                ],
                 is_error=True,
                 error_message=server.error,
             ).to_dict()
@@ -590,7 +591,8 @@ class MCPServerManager:
                 timeout = int(tool_timeout) + 30
 
             raw = await self._send_request(
-                server_name, "tools/call",
+                server_name,
+                "tools/call",
                 {"name": tool_name, "arguments": arguments},
                 timeout=timeout,
             )
@@ -609,21 +611,25 @@ class MCPServerManager:
                 if stderr_text:
                     server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
                 return MCPCallResult(
-                    content=[{
-                        "type": "text",
-                        "text": f"Server '{server_name}' process died during tool call. "
-                                f"stderr: {stderr_text[:500] if stderr_text else '(none)'}"
-                    }],
+                    content=[
+                        {
+                            "type": "text",
+                            "text": f"Server '{server_name}' process died during tool call. "
+                            f"stderr: {stderr_text[:500] if stderr_text else '(none)'}",
+                        }
+                    ],
                     is_error=True,
                     error_message=server.error,
                 ).to_dict()
 
             return MCPCallResult(
-                content=[{
-                    "type": "text",
-                    "text": f"Tool '{tool_name}' timed out after {timeout}s. "
-                            f"Server is still running but unresponsive."
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": f"Tool '{tool_name}' timed out after {timeout}s. "
+                        f"Server is still running but unresponsive.",
+                    }
+                ],
                 is_error=True,
                 error_message=str(e),
             ).to_dict()
@@ -650,6 +656,9 @@ class MCPServerManager:
         if not server or server.status != ServerStatus.RUNNING:
             return None
 
+        # Ensure uri is a plain string (MCP SDK may use Pydantic AnyUrl)
+        uri = str(uri)
+
         try:
             result = await self._send_request(server_name, "resources/read", {"uri": uri})
             contents = result.get("contents", [])
@@ -657,7 +666,7 @@ class MCPServerManager:
                 if isinstance(item, dict):
                     text = item.get("text")
                     if text:
-                        return text
+                        return str(text)
             return None
         except Exception as e:
             logger.error(f"Error reading resource '{uri}' from '{server_name}': {e}")
@@ -839,9 +848,7 @@ class MCPServerManager:
                 self._subscriptions[server_name] = {}
             self._subscriptions[server_name][subscription_id] = uri
 
-            logger.info(
-                f"Subscribed to resource '{uri}' on '{server_name}': {subscription_id}"
-            )
+            logger.info(f"Subscribed to resource '{uri}' on '{server_name}': {subscription_id}")
             return subscription_id
         except Exception as e:
             logger.error(f"Error subscribing to resource on '{server_name}': {e}")
@@ -884,9 +891,7 @@ class MCPServerManager:
             if not self._subscriptions[server_name]:
                 del self._subscriptions[server_name]
 
-            logger.info(
-                f"Unsubscribed from resource on '{server_name}': {subscription_id}"
-            )
+            logger.info(f"Unsubscribed from resource on '{server_name}': {subscription_id}")
             return True
         except Exception as e:
             logger.error(f"Error unsubscribing from resource on '{server_name}': {e}")
@@ -975,7 +980,9 @@ class MCPServerManager:
             if server.process and server.process.returncode is not None:
                 stderr_text = await self._capture_server_stderr(server.name)
                 exit_code = server.process.returncode
-                error_msg = f"MCP server '{server.name}' exited with code {exit_code} during initialization"
+                error_msg = (
+                    f"MCP server '{server.name}' exited with code {exit_code} during initialization"
+                )
                 if stderr_text:
                     error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
                 logger.error(error_msg)
@@ -1068,7 +1075,7 @@ class MCPServerManager:
                         raise TimeoutError(f"MCP request '{method}' timed out after {timeout}s")
         except (RuntimeError, TimeoutError):
             raise
-        except Exception as e:
+        except Exception:
             conn._pending.pop(request_id, None)
             raise
 
@@ -1104,12 +1111,11 @@ class MCPServerManager:
             while True:
                 try:
                     line = await asyncio.wait_for(
-                        conn.stdout.readline(), timeout=idle_timeout,
+                        conn.stdout.readline(),
+                        timeout=idle_timeout,
                     )
                 except asyncio.TimeoutError:
-                    logger.warning(
-                        f"Stdio reader for '{name}' idle for {idle_timeout}s, stopping"
-                    )
+                    logger.warning(f"Stdio reader for '{name}' idle for {idle_timeout}s, stopping")
                     break
                 if not line:
                     break  # EOF - process exited
@@ -1189,7 +1195,7 @@ class MCPServerManager:
                             f"for method '{method}': {body[:500]}"
                         )
                         if attempt < max_retries - 1:
-                            await asyncio.sleep(0.5 * (2 ** attempt))
+                            await asyncio.sleep(0.5 * (2**attempt))
                             continue
                         raise last_error
 
@@ -1245,7 +1251,7 @@ class MCPServerManager:
                     )
                 last_error = RuntimeError(msg)
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    await asyncio.sleep(0.5 * (2**attempt))
                     continue
                 raise last_error
 
@@ -1300,13 +1306,9 @@ class MCPServerManager:
                 if new_session_id:
                     self._session_ids[server_name] = new_session_id
         except aiohttp.ClientError as e:
-            logger.warning(
-                f"HTTP notification to MCP server '{server_name}' failed: {e}"
-            )
+            logger.warning(f"HTTP notification to MCP server '{server_name}' failed: {e}")
 
-    async def _read_sse_response(
-        self, resp, request_id: int
-    ) -> Dict[str, Any]:
+    async def _read_sse_response(self, resp, request_id: int) -> Dict[str, Any]:
         """Read an SSE stream response and extract the JSON-RPC result."""
         import json as json_mod
 
@@ -1321,9 +1323,7 @@ class MCPServerManager:
                     if isinstance(data, dict) and "result" in data:
                         return data.get("result", {})
                     if isinstance(data, dict) and "error" in data:
-                        raise RuntimeError(
-                            f"MCP error: {data['error'].get('message', 'Unknown')}"
-                        )
+                        raise RuntimeError(f"MCP error: {data['error'].get('message', 'Unknown')}")
                 except json_mod.JSONDecodeError:
                     continue
         return {}
@@ -1401,32 +1401,32 @@ class MCPServerManager:
             self._ws_connections[server.name] = conn
 
             # Start reader task
-            conn._reader_task = asyncio.create_task(
-                self._read_ws_responses(server.name)
-            )
+            conn._reader_task = asyncio.create_task(self._read_ws_responses(server.name))
 
             # Send initialize (register future BEFORE send to avoid race with reader)
             req_id = conn.next_id()
             future: asyncio.Future = asyncio.get_event_loop().create_future()
             conn._pending[req_id] = future
 
-            await ws.send_json({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "roots": {"listChanged": True},
-                        "extensions": {
-                            "io.modelcontextprotocol/ui": {
-                                "mimeTypes": ["text/html;profile=mcp-app"],
+            await ws.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "roots": {"listChanged": True},
+                            "extensions": {
+                                "io.modelcontextprotocol/ui": {
+                                    "mimeTypes": ["text/html;profile=mcp-app"],
+                                },
                             },
                         },
+                        "clientInfo": {"name": "sandbox-mcp-manager", "version": "1.0.0"},
                     },
-                    "clientInfo": {"name": "sandbox-mcp-manager", "version": "1.0.0"},
-                },
-            })
+                }
+            )
 
             # Wait for response
             result = await asyncio.wait_for(future, timeout=MCP_INIT_TIMEOUT)
@@ -1437,10 +1437,12 @@ class MCPServerManager:
             )
 
             # Send initialized notification
-            await ws.send_json({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized",
-            })
+            await ws.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized",
+                }
+            )
 
         except Exception as e:
             await session.close()
@@ -1574,8 +1576,7 @@ class MCPServerManager:
             if resp.status != 200:
                 body = await resp.text()
                 raise RuntimeError(
-                    f"SSE connection to '{server.url}' returned HTTP {resp.status}: "
-                    f"{body[:200]}"
+                    f"SSE connection to '{server.url}' returned HTTP {resp.status}: {body[:200]}"
                 )
 
             conn = _SSEConnection(server=server, session=session)
@@ -1586,9 +1587,7 @@ class MCPServerManager:
             conn.messages_url = endpoint_url
 
             # Start background reader for JSON-RPC responses
-            conn._reader_task = asyncio.create_task(
-                self._read_sse_stream(server.name, resp)
-            )
+            conn._reader_task = asyncio.create_task(self._read_sse_stream(server.name, resp))
 
             # Send initialize request
             req_id = conn.next_id()
@@ -1649,9 +1648,7 @@ class MCPServerManager:
             logger.warning(f"Failed to init SSE MCP for '{server.name}': {e}")
             raise
 
-    async def _read_sse_endpoint(
-        self, resp, server: ManagedServer, timeout: int = 10
-    ) -> str:
+    async def _read_sse_endpoint(self, resp, server: ManagedServer, timeout: int = 10) -> str:
         """Read the 'endpoint' event from an SSE stream to get the messages URL."""
         event_type = ""
 
@@ -1679,8 +1676,7 @@ class MCPServerManager:
                     return messages_path
 
             raise RuntimeError(
-                f"SSE stream from '{server.name}' closed without sending "
-                f"'endpoint' event"
+                f"SSE stream from '{server.name}' closed without sending 'endpoint' event"
             )
 
         try:
@@ -1714,9 +1710,7 @@ class MCPServerManager:
                                 future = conn._pending.pop(req_id)
                                 if "error" in data:
                                     future.set_exception(
-                                        RuntimeError(
-                                            data["error"].get("message", "Unknown")
-                                        )
+                                        RuntimeError(data["error"].get("message", "Unknown"))
                                     )
                                 else:
                                     future.set_result(data.get("result", {}))
@@ -1755,8 +1749,7 @@ class MCPServerManager:
         conn = self._sse_connections.get(server_name)
         if not conn or not conn.messages_url:
             raise RuntimeError(
-                f"No SSE connection for '{server_name}'. "
-                f"The server may need to be restarted."
+                f"No SSE connection for '{server_name}'. The server may need to be restarted."
             )
 
         req_id = conn.next_id()
@@ -1791,9 +1784,7 @@ class MCPServerManager:
             conn._pending.pop(req_id, None)
             if not future.done():
                 future.cancel()
-            raise RuntimeError(
-                f"Cannot send request to SSE server '{server_name}': {e}"
-            ) from e
+            raise RuntimeError(f"Cannot send request to SSE server '{server_name}': {e}") from e
 
         return await asyncio.wait_for(future, timeout=timeout)
 
@@ -1809,8 +1800,7 @@ class MCPServerManager:
         conn = self._sse_connections.get(server_name)
         if not conn or not conn.messages_url:
             raise RuntimeError(
-                f"No SSE connection for '{server_name}'. "
-                f"The server may need to be restarted."
+                f"No SSE connection for '{server_name}'. The server may need to be restarted."
             )
 
         notification: Dict[str, Any] = {

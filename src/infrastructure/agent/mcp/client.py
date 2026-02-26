@@ -13,8 +13,9 @@ import contextlib
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from types import TracebackType
-from typing import Any, Callable, cast
+from typing import Any, cast, override
 
 import aiohttp
 import httpx
@@ -34,7 +35,9 @@ class MCPTransport(ABC):
         """Close connection to MCP server."""
 
     @abstractmethod
-    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def send_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Send a request to the MCP server.
 
@@ -94,7 +97,9 @@ class MCPTransport(ABC):
         # Default implementation - subclasses can override
         return []
 
-    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def get_prompt(
+        self, prompt_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Get a specific prompt from the MCP server.
 
@@ -113,6 +118,7 @@ class StdioTransport(MCPTransport):
     """MCP transport using stdio (subprocess communication)."""
 
     def __init__(self, config: dict[str, Any]) -> None:
+        super().__init__()
         import os
 
         self.config = config
@@ -128,6 +134,7 @@ class StdioTransport(MCPTransport):
         self._request_id = 0
         self._initialized = False
 
+    @override
     async def connect(self) -> None:
         """Start subprocess and establish stdio connection."""
         try:
@@ -156,7 +163,7 @@ class StdioTransport(MCPTransport):
 
         # Step 1: Send initialize request
         init_params = {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": "2026-01-26",
             "capabilities": {
                 "roots": {"listChanged": True},
                 "sampling": {},
@@ -187,6 +194,7 @@ class StdioTransport(MCPTransport):
         self.process.stdin.write(notification_json.encode())
         await self.process.stdin.drain()
 
+    @override
     async def disconnect(self) -> None:
         """Terminate subprocess."""
         if self.process:
@@ -196,7 +204,10 @@ class StdioTransport(MCPTransport):
             self._initialized = False
             logger.info("MCP server process terminated")
 
-    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def send_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Send JSON-RPC request via stdin and read response from stdout."""
         if not self.process or not self.process.stdin or not self.process.stdout:
             raise RuntimeError("MCP server process not started")
@@ -241,16 +252,19 @@ class StdioTransport(MCPTransport):
 
         return cast(dict[str, Any], response.get("result", {}))
 
+    @override
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
         return cast(list[dict[str, Any]], result.get("tools", []))
 
+    @override
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
 
+    @override
     async def ping(self) -> bool:
         """Send a ping request to check connection health."""
         try:
@@ -260,6 +274,7 @@ class StdioTransport(MCPTransport):
             logger.error(f"Ping failed: {e}")
             return False
 
+    @override
     async def set_logging_level(self, level: str) -> bool:
         """Set the logging level for the MCP server."""
         try:
@@ -269,12 +284,16 @@ class StdioTransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
+    @override
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         return cast(list[dict[str, Any]], result.get("prompts", []))
 
-    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def get_prompt(
+        self, prompt_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params: dict[str, Any] = {"name": prompt_name}
         if arguments:
@@ -286,12 +305,14 @@ class HTTPTransport(MCPTransport):
     """MCP transport using HTTP request/response."""
 
     def __init__(self, config: dict[str, Any]) -> None:
+        super().__init__()
         self.config = config
         self.base_url = config.get("url")
         self.headers = config.get("headers", {})
         self.timeout = config.get("timeout", 30)
         self.client: httpx.AsyncClient | None = None
 
+    @override
     async def connect(self) -> None:
         """Initialize HTTP client."""
         assert self.base_url is not None
@@ -300,6 +321,7 @@ class HTTPTransport(MCPTransport):
         )
         logger.info(f"Connected to MCP server via HTTP: {self.base_url}")
 
+    @override
     async def disconnect(self) -> None:
         """Close HTTP client."""
         if self.client:
@@ -307,7 +329,10 @@ class HTTPTransport(MCPTransport):
             self.client = None
             logger.info("HTTP client closed")
 
-    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def send_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Send HTTP POST request with JSON-RPC payload."""
         if not self.client:
             raise RuntimeError("HTTP client not initialized")
@@ -327,16 +352,19 @@ class HTTPTransport(MCPTransport):
             logger.error(f"HTTP request failed: {e}")
             raise
 
+    @override
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
         return cast(list[dict[str, Any]], result.get("tools", []))
 
+    @override
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
 
+    @override
     async def ping(self) -> bool:
         """Send a ping request to check connection health."""
         try:
@@ -346,6 +374,7 @@ class HTTPTransport(MCPTransport):
             logger.error(f"Ping failed: {e}")
             return False
 
+    @override
     async def set_logging_level(self, level: str) -> bool:
         """Set the logging level for the MCP server."""
         try:
@@ -355,12 +384,16 @@ class HTTPTransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
+    @override
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         return cast(list[dict[str, Any]], result.get("prompts", []))
 
-    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def get_prompt(
+        self, prompt_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params: dict[str, Any] = {"name": prompt_name}
         if arguments:
@@ -372,6 +405,7 @@ class SSETransport(MCPTransport):
     """MCP transport using Streamable HTTP (MCP SDK)."""
 
     def __init__(self, config: dict[str, Any]) -> None:
+        super().__init__()
         self.config = config
         self.url = config.get("url")
         self.headers = config.get("headers", {})
@@ -382,6 +416,7 @@ class SSETransport(MCPTransport):
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
         self._reader_task: asyncio.Task[None] | None = None
 
+    @override
     async def connect(self) -> None:
         """Initialize streamable HTTP client using MCP SDK."""
         from contextlib import AsyncExitStack
@@ -433,7 +468,7 @@ class SSETransport(MCPTransport):
         init_request = InitializeRequest(
             method="initialize",
             params=InitializeRequestParams(
-                protocolVersion="2024-11-05",
+                protocolVersion="2026-01-26",
                 capabilities=ClientCapabilities(
                     roots=RootsCapability(listChanged=True),
                     sampling=None,
@@ -450,14 +485,16 @@ class SSETransport(MCPTransport):
         self._pending_requests[request_id] = future
 
         # Send message - wrap JSONRPCRequest in JSONRPCMessage
-        # Inject SEP-1865 UI extension capability into the raw params
+        # Inject SEP-1865 UI extension capability into the raw params.
+        # We must inject via dict because the MCP SDK types may not have
+        # an 'extensions' field yet.
         params_dict = init_request.params.model_dump() if init_request.params else {}
-        if "capabilities" in params_dict:
-            params_dict["capabilities"]["extensions"] = {
-                "io.modelcontextprotocol/ui": {
-                    "mimeTypes": ["text/html;profile=mcp-app"],
-                },
-            }
+        caps = params_dict.setdefault("capabilities", {})
+        caps["extensions"] = {
+            "io.modelcontextprotocol/ui": {
+                "mimeTypes": ["text/html;profile=mcp-app"],
+            },
+        }
         jsonrpc_request = JSONRPCRequest(
             jsonrpc="2.0",
             id=request_id,
@@ -515,6 +552,7 @@ class SSETransport(MCPTransport):
                     future.set_exception(e)
             self._pending_requests.clear()
 
+    @override
     async def disconnect(self) -> None:
         """Close streamable HTTP client."""
         if self._reader_task:
@@ -532,7 +570,10 @@ class SSETransport(MCPTransport):
         self._pending_requests.clear()
         logger.info("Streamable HTTP client closed")
 
-    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def send_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Send request via streamable HTTP."""
         if not self._write_stream:
             raise RuntimeError("Streamable HTTP client not initialized")
@@ -570,6 +611,7 @@ class SSETransport(MCPTransport):
             self._pending_requests.pop(request_id, None)
             raise RuntimeError(f"Timeout waiting for response to {method}") from None
 
+    @override
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
@@ -577,11 +619,13 @@ class SSETransport(MCPTransport):
         # Convert Pydantic models to dicts if needed
         return [t.model_dump() if hasattr(t, "model_dump") else t for t in tools]
 
+    @override
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
 
+    @override
     async def ping(self) -> bool:
         """Send a ping request to check connection health."""
         try:
@@ -591,6 +635,7 @@ class SSETransport(MCPTransport):
             logger.error(f"Ping failed: {e}")
             return False
 
+    @override
     async def set_logging_level(self, level: str) -> bool:
         """Set the logging level for the MCP server."""
         try:
@@ -600,6 +645,7 @@ class SSETransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
+    @override
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
@@ -607,7 +653,10 @@ class SSETransport(MCPTransport):
         # Convert Pydantic models to dicts if needed
         return [p.model_dump() if hasattr(p, "model_dump") else p for p in prompts]
 
-    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def get_prompt(
+        self, prompt_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params: dict[str, Any] = {"name": prompt_name}
         if arguments:
@@ -626,6 +675,7 @@ class WebSocketTransport(MCPTransport):
     """
 
     def __init__(self, config: dict[str, Any]) -> None:
+        super().__init__()
         """
         Initialize WebSocket transport.
 
@@ -654,6 +704,7 @@ class WebSocketTransport(MCPTransport):
         self._initialized = False
         self._closed = False
 
+    @override
     async def connect(self) -> None:
         """Establish WebSocket connection to MCP server."""
         if self._ws and not self._ws.closed:
@@ -696,7 +747,7 @@ class WebSocketTransport(MCPTransport):
 
         # Step 1: Send initialize request
         init_params = {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": "2026-01-26",
             "capabilities": {
                 "roots": {"listChanged": True},
                 "sampling": {},
@@ -785,6 +836,7 @@ class WebSocketTransport(MCPTransport):
         else:
             logger.warning(f"Received unexpected message: {data}")
 
+    @override
     async def disconnect(self) -> None:
         """Close WebSocket connection."""
         if self._closed:
@@ -821,7 +873,10 @@ class WebSocketTransport(MCPTransport):
                 future.set_exception(RuntimeError("WebSocket connection closed"))
         self._pending_requests.clear()
 
-    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def send_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Send JSON-RPC request and wait for response.
 
@@ -869,11 +924,13 @@ class WebSocketTransport(MCPTransport):
             self._pending_requests.pop(request_id, None)
             raise
 
+    @override
     async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self.send_request("tools/list")
         return cast(list[dict[str, Any]], result.get("tools", []))
 
+    @override
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Call a tool on the MCP server.
@@ -888,6 +945,7 @@ class WebSocketTransport(MCPTransport):
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
 
+    @override
     async def ping(self) -> bool:
         """Send a ping request to check connection health."""
         try:
@@ -897,6 +955,7 @@ class WebSocketTransport(MCPTransport):
             logger.error(f"Ping failed: {e}")
             return False
 
+    @override
     async def set_logging_level(self, level: str) -> bool:
         """Set the logging level for the MCP server."""
         try:
@@ -906,12 +965,16 @@ class WebSocketTransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
+    @override
     async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         return cast(list[dict[str, Any]], result.get("prompts", []))
 
-    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    @override
+    async def get_prompt(
+        self, prompt_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params: dict[str, Any] = {"name": prompt_name}
         if arguments:
@@ -928,6 +991,7 @@ class MCPClient:
     """
 
     def __init__(self, server_type: str, transport_config: dict[str, Any]) -> None:
+        super().__init__()
         """
         Initialize MCP client.
 
@@ -1088,7 +1152,9 @@ class MCPClient:
 
         return await self.transport.list_prompts()
 
-    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def get_prompt(
+        self, prompt_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Get a specific prompt from the MCP server.
 

@@ -52,14 +52,21 @@ class SandboxMCPServerToolAdapter(AgentTool):
             tool_info: Tool definition dict (name, description, input_schema, _meta).
             cache_ttl_seconds: Cache TTL for resource HTML (default: 60s, 0 to disable).
         """
+        # Extract and compute tool name/description first (needed for super().__init__)
+        self._server_name = server_name
+        self._original_tool_name = tool_info.get("name", "")
+        description = tool_info.get("description", "")
+        tool_name = self._generate_tool_name_static(server_name, self._original_tool_name)
+
+        # Call parent constructor with computed name and description
+        super().__init__(name=tool_name, description=description)
+
+        # Now set the remaining attributes
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
-        self._server_name = server_name
-
-        self._original_tool_name = tool_info.get("name", "")
-        self._description = tool_info.get("description", "")
         self._input_schema = tool_info.get("input_schema", tool_info.get("inputSchema", {}))
-        self._name = self._generate_tool_name()
+        # Override the _description with our own (parent set it, but we keep it consistent)
+        self._description = description
 
         # Preserve _meta.ui for MCP Apps support
         meta = tool_info.get("_meta")
@@ -93,13 +100,15 @@ class SandboxMCPServerToolAdapter(AgentTool):
         # Background tasks for this adapter instance
         self._bg_tasks: set[asyncio.Task[Any]] = set()
 
+    @staticmethod
+    def _generate_tool_name_static(server_name: str, tool_name: str) -> str:
+        """Generate MCP tool name (static version for use before __init__)."""
+        clean_server = server_name.replace("-", "_")
+        return f"mcp__{clean_server}__{tool_name}"
+
     def _generate_tool_name(self) -> str:
-        clean_server = self._server_name.replace("-", "_")
-        return (
-            f"{self.MCP_PREFIX}{self.MCP_NAME_SEPARATOR}"
-            f"{clean_server}{self.MCP_NAME_SEPARATOR}"
-            f"{self._original_tool_name}"
-        )
+        """Generate MCP tool name (instance version)."""
+        return self._generate_tool_name_static(self._server_name, self._original_tool_name)
 
     @property
     @override
@@ -126,10 +135,22 @@ class SandboxMCPServerToolAdapter(AgentTool):
     def has_ui(self) -> bool:
         """Check if this tool declares an MCP App UI.
 
-        Accepts any non-empty resourceUri scheme (ui://, mcp-resource://, etc.)
-        as long as _meta.ui is present with a resourceUri field.
+        SEP-1865 mandates the ``ui://`` scheme.  Legacy schemes are
+        accepted with a deprecation warning so existing servers keep
+        working while they migrate.
         """
-        return self._ui_metadata is not None and bool(self._ui_metadata.get("resourceUri"))
+        if self._ui_metadata is None:
+            return False
+        uri = self._ui_metadata.get("resourceUri", "")
+        if not uri:
+            return False
+        if not str(uri).startswith("ui://"):
+            logger.warning(
+                "Tool %s declares non-standard resourceUri scheme: %r; SEP-1865 requires ui:// scheme",
+                self.name,
+                uri,
+            )
+        return True
 
     @property
     def resource_uri(self) -> str:

@@ -349,9 +349,7 @@ class MCPWebSocketServer:
                                 )
                                 break
                     except ConnectionResetError:
-                        logger.debug(
-                            f"[MCP] Connection reset while sending to {client_id}"
-                        )
+                        logger.debug(f"[MCP] Connection reset while sending to {client_id}")
                         break
                     except json.JSONDecodeError as e:
                         logger.warning(f"[MCP] Invalid JSON from client {client_id}: {e}")
@@ -536,7 +534,8 @@ class MCPWebSocketServer:
             arguments["_workspace_dir"] = self.workspace_dir
             try:
                 result = await asyncio.wait_for(
-                    tool.handler(**arguments), timeout=max_tool_timeout,
+                    tool.handler(**arguments),
+                    timeout=max_tool_timeout,
                 )
             except asyncio.TimeoutError:
                 elapsed_ms = (_time.time() - start_time) * 1000
@@ -600,19 +599,50 @@ class MCPWebSocketServer:
             }
 
     async def _handle_read_resource(self, params: dict) -> dict:
-        """Handle resources/read by proxying to managed MCP servers."""
-        uri = params.get("uri", "")
+        """Handle resources/read by proxying to managed MCP servers.
+
+        Routes by URI authority first (e.g. ui://color-picker -> try 'color-picker'
+        server first), then falls back to other running servers.
+        """
+        uri = str(params.get("uri", ""))
         if not uri:
             return {"contents": []}
 
-        # Try each running managed MCP server until one returns content
         from src.tools.mcp_management import _get_manager
 
         manager = _get_manager(self.workspace_dir)
+
+        # Extract server name from URI authority for smart routing
+        # Supported schemes: ui://<server>, app://<server>, mcp-app://<server>
+        target_server = None
+        for scheme in ("ui://", "app://", "mcp-app://"):
+            if uri.startswith(scheme):
+                remainder = uri[len(scheme) :]
+                target_server = remainder.split("/")[0] if remainder else None
+                break
+
+        # Phase 1: Try the target server first (matched by URI authority)
+        if target_server:
+            text = await manager.read_resource(target_server, uri)
+            if text:
+                return {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "text/html",
+                            "text": text,
+                        }
+                    ]
+                }
+
+        # Phase 2: Fall back to other running servers
         for server_info in await manager.list_servers():
             name = server_info.get("name", "")
             status = server_info.get("status", "")
             if status != "running" or not name:
+                continue
+            # Skip target server (already tried above)
+            if name == target_server:
                 continue
             text = await manager.read_resource(name, uri)
             if text:

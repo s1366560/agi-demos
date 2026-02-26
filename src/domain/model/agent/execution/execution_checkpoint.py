@@ -40,7 +40,7 @@ class ExecutionCheckpoint(Entity):
     """
 
     conversation_id: str
-    message_id: str
+    message_id: str | None = None
     checkpoint_type: CheckpointType | str
     execution_state: dict[str, Any] = field(default_factory=dict)
     step_number: int | None = None

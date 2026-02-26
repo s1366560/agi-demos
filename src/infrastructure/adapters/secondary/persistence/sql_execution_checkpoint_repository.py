@@ -59,7 +59,7 @@ class SqlExecutionCheckpointRepository(
     @override
     async def save_and_commit(self, checkpoint: ExecutionCheckpoint) -> None:
         """Save a checkpoint and commit immediately."""
-        await self.save(checkpoint)
+        _ = await self.save(checkpoint)
         await self._session.commit()
 
     @override
@@ -131,7 +131,7 @@ class SqlExecutionCheckpointRepository(
         return ExecutionCheckpoint(
             id=db_model.id,
             conversation_id=db_model.conversation_id,
-            message_id=db_model.message_id or "",
+            message_id=db_model.message_id or None,
             checkpoint_type=db_model.checkpoint_type,
             execution_state=db_model.execution_state or {},
             step_number=db_model.step_number,

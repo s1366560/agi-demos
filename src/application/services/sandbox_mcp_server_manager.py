@@ -57,6 +57,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             sandbox_resource: Port for sandbox access (ensure/execute tools).
             app_service: Optional MCPAppService for auto-detecting MCP Apps.
         """
+        super().__init__()
         self._sandbox_resource = sandbox_resource
         self._app_service = app_service
 
@@ -188,16 +189,16 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             # Auto-detect MCP Apps (tools with _meta.ui.resourceUri)
             if self._app_service and tools:
                 try:
-                    await self._app_service.detect_apps_from_tools(
+                    _ = await self._app_service.detect_apps_from_tools(
                         server_id="",  # resolved by service from server_name
                         project_id=project_id,
                         tenant_id=tenant_id,
                         server_name=server_name,
-                        tools=tools,
+                        tools=cast(list[dict[str, Any]], tools),
                     )
                 except Exception as e:
                     logger.warning(f"MCP App auto-detection failed: {e}")
-            return tools
+            return cast(list[dict[str, Any]], tools)
         return []
 
     @override
@@ -235,6 +236,53 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 is_error=True,
                 error_message=str(e),
             )
+
+    async def get_tool_visibility(
+        self,
+        project_id: str,
+        server_name: str,
+        tool_name: str,
+    ) -> list[str]:
+        """Return the SEP-1865 visibility list for a specific tool.
+
+        Queries the sandbox's ``mcp_server_discover_tools`` management
+        tool and inspects ``_meta.ui.visibility`` on the matching tool.
+        Returns ``["model", "app"]`` (the spec default) when the tool
+        has no explicit visibility or when discovery fails.
+        """
+        default: list[str] = ["model", "app"]
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_DISCOVER,
+                arguments={"name": server_name},
+                timeout=MCP_DISCOVER_TIMEOUT,
+            )
+            tools = self._parse_tool_result(result)
+            if not isinstance(tools, list):
+                return default
+            tools_list = cast(list[dict[str, Any]], tools)
+            for tool in tools_list:
+                if not isinstance(tool, dict):
+                    continue
+                if tool.get("name") == tool_name:
+                    meta = tool.get("_meta", {})
+                    ui = meta.get("ui", {}) if isinstance(meta, dict) else {}
+                    if isinstance(ui, dict) and "visibility" in ui:
+                        vis = ui["visibility"]
+                        return vis if isinstance(vis, list) else default
+                    return default
+            # Tool not found in server listing — allow by default
+            return default
+        except Exception:
+            logger.warning(
+                "Failed to discover tool visibility: project=%s server=%s tool=%s",
+                project_id,
+                server_name,
+                tool_name,
+                exc_info=True,
+            )
+            return default
 
     async def read_resource(
         self,
@@ -323,10 +371,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 status.tool_count = tool_count
             else:
                 # If not a list, it might be an error dict or raw text
-                error_msg = "Unknown error"
+                error_msg: str = "Unknown error"
                 if isinstance(tools, dict):
-                    error_msg = (
-                        tools.get("error", tools.get("raw_output", str(tools))) or "Unknown error"
+                    error_msg = str(
+                        tools.get(
+                            "error",
+                            tools.get("raw_output", str(tools)),
+                        )
+                        or "Unknown error"
                     )
                 else:
                     error_msg = str(tools)
@@ -357,6 +409,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             if not isinstance(servers_data, list):
                 return []
 
+            servers_list = cast(list[dict[str, Any]], servers_data)
             return [
                 SandboxMCPServerStatus(
                     name=s.get("name", ""),
@@ -365,7 +418,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                     pid=s.get("pid"),
                     port=s.get("port"),
                 )
-                for s in servers_data
+                for s in servers_list
             ]
         except Exception as e:
             logger.warning(f"Failed to list MCP servers: {e}")

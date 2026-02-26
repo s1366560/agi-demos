@@ -3,10 +3,13 @@
  *
  * Manages open artifacts, active tab, content versions, and editor state.
  * Used alongside the canvas layout mode for side-by-side editing.
+ *
+ * Tabs persist across page refreshes via zustand persist middleware.
+ * MCP app HTML content is NOT persisted (re-fetched on demand).
  */
 
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 export type CanvasContentType = 'code' | 'markdown' | 'preview' | 'data' | 'mcp-app';
@@ -45,6 +48,8 @@ export interface CanvasTab {
   mcpProjectId?: string | undefined;
   /** MCP server name (for proxy routing) */
   mcpServerName?: string | undefined;
+  /** Whether this tab is pinned (survives close, shown in dock) */
+  pinned?: boolean | undefined;
 }
 
 const MAX_HISTORY = 50;
@@ -54,7 +59,7 @@ interface CanvasState {
   activeTabId: string | null;
 
   openTab: (tab: Omit<CanvasTab, 'dirty' | 'createdAt' | 'history' | 'historyIndex'>) => void;
-  closeTab: (id: string) => void;
+  closeTab: (id: string, force?: boolean) => void;
   setActiveTab: (id: string) => void;
   updateTab: (id: string, updates: Partial<CanvasTab>) => void;
   updateContent: (id: string, content: string) => void;
@@ -62,118 +67,170 @@ interface CanvasState {
   redo: (tabId: string) => void;
   canUndo: (tabId: string) => boolean;
   canRedo: (tabId: string) => boolean;
+  togglePin: (id: string) => void;
+  getPinnedTabs: () => CanvasTab[];
   reset: () => void;
 }
 
 export const useCanvasStore = create<CanvasState>()(
   devtools(
-    (set, get) => ({
-      tabs: [],
-      activeTabId: null,
+    persist(
+      (set, get) => ({
+        tabs: [],
+        activeTabId: null,
 
-      openTab: (tab) =>
-        { set((state) => {
-          const existing = state.tabs.find((t) => t.id === tab.id);
-          if (existing) {
-            // Merge new data into existing tab (preserves history/dirty state)
-            return {
-              tabs: state.tabs.map((t) => (t.id === tab.id ? { ...t, ...tab, dirty: t.dirty } : t)),
-              activeTabId: tab.id,
+        openTab: (tab) =>
+          { set((state) => {
+            const existing = state.tabs.find((t) => t.id === tab.id);
+            if (existing) {
+              // Merge new data into existing tab (preserves history/dirty state)
+              return {
+                tabs: state.tabs.map((t) => (t.id === tab.id ? { ...t, ...tab, dirty: t.dirty } : t)),
+                activeTabId: tab.id,
+              };
+            }
+            const newTab: CanvasTab = {
+              ...tab,
+              dirty: false,
+              createdAt: Date.now(),
+              history: [],
+              historyIndex: -1,
             };
-          }
-          const newTab: CanvasTab = {
-            ...tab,
+            return {
+              tabs: [...state.tabs, newTab],
+              activeTabId: newTab.id,
+            };
+          }); },
+
+        closeTab: (id, force) =>
+          { set((state) => {
+            const tab = state.tabs.find((t) => t.id === id);
+            // Pinned tabs resist close unless force=true
+            if (tab?.pinned && !force) {
+              return state;
+            }
+            const filtered = state.tabs.filter((t) => t.id !== id);
+            const nextActive =
+              state.activeTabId === id
+                ? filtered.length > 0
+                  ? (filtered[filtered.length - 1]?.id ?? null)
+                  : null
+                : state.activeTabId;
+            return { tabs: filtered, activeTabId: nextActive };
+          }); },
+
+        setActiveTab: (id) => { set({ activeTabId: id }); },
+
+        updateTab: (id, updates) =>
+          { set((state) => ({
+            tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+          })); },
+
+        updateContent: (id, content) =>
+          { set((state) => ({
+            tabs: state.tabs.map((t) => {
+              if (t.id !== id) return t;
+              // Push previous content to history, truncate any forward history
+              const newHistory = [...t.history.slice(0, t.historyIndex + 1), t.content].slice(
+                -MAX_HISTORY
+              );
+              return {
+                ...t,
+                content,
+                dirty: true,
+                history: newHistory,
+                historyIndex: newHistory.length - 1,
+              };
+            }),
+          })); },
+
+        undo: (tabId) =>
+          { set((state) => ({
+            tabs: state.tabs.map((t) => {
+              if (t.id !== tabId || t.historyIndex < 0) return t;
+              const restoredContent = t.history[t.historyIndex] ?? '';
+              // Save current content at the end if we're at the latest position
+              const newHistory =
+                t.historyIndex === t.history.length - 1 ? [...t.history, t.content] : t.history;
+              return {
+                ...t,
+                content: restoredContent,
+                historyIndex: t.historyIndex - 1,
+                history: newHistory,
+              };
+            }),
+          })); },
+
+        redo: (tabId) =>
+          { set((state) => ({
+            tabs: state.tabs.map((t) => {
+              if (t.id !== tabId) return t;
+              const nextIndex = t.historyIndex + 2;
+              if (nextIndex >= t.history.length) return t;
+              return {
+                ...t,
+                content: t.history[nextIndex] ?? '',
+                historyIndex: t.historyIndex + 1,
+              };
+            }),
+          })); },
+
+        canUndo: (tabId) => {
+          const tab = get().tabs.find((t) => t.id === tabId);
+          return tab ? tab.historyIndex >= 0 : false;
+        },
+
+        canRedo: (tabId) => {
+          const tab = get().tabs.find((t) => t.id === tabId);
+          return tab ? tab.historyIndex + 2 < tab.history.length : false;
+        },
+
+        togglePin: (id) =>
+          { set((state) => ({
+            tabs: state.tabs.map((t) =>
+              t.id === id ? { ...t, pinned: !t.pinned } : t
+            ),
+          })); },
+
+        getPinnedTabs: () => {
+          return get().tabs.filter((t) => t.pinned);
+        },
+
+        reset: () => { set({ tabs: [], activeTabId: null }); },
+      }),
+      {
+        name: 'canvas-store',
+        partialize: (state) => ({
+          tabs: state.tabs.map((t) => ({
+            id: t.id,
+            title: t.title,
+            type: t.type,
+            // MCP app HTML is large and non-serializable; skip it, re-fetch on demand
+            content: t.type === 'mcp-app' ? '' : t.content,
+            mimeType: t.mimeType,
+            language: t.language,
             dirty: false,
-            createdAt: Date.now(),
+            createdAt: t.createdAt,
+            // Don't persist undo history
             history: [],
             historyIndex: -1,
-          };
-          return {
-            tabs: [...state.tabs, newTab],
-            activeTabId: newTab.id,
-          };
-        }); },
-
-      closeTab: (id) =>
-        { set((state) => {
-          const filtered = state.tabs.filter((t) => t.id !== id);
-          const nextActive =
-            state.activeTabId === id
-              ? filtered.length > 0
-                ? (filtered[filtered.length - 1]?.id ?? null)
-                : null
-              : state.activeTabId;
-          return { tabs: filtered, activeTabId: nextActive };
-        }); },
-
-      setActiveTab: (id) => { set({ activeTabId: id }); },
-
-      updateTab: (id, updates) =>
-        { set((state) => ({
-          tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-        })); },
-
-      updateContent: (id, content) =>
-        { set((state) => ({
-          tabs: state.tabs.map((t) => {
-            if (t.id !== id) return t;
-            // Push previous content to history, truncate any forward history
-            const newHistory = [...t.history.slice(0, t.historyIndex + 1), t.content].slice(
-              -MAX_HISTORY
-            );
-            return {
-              ...t,
-              content,
-              dirty: true,
-              history: newHistory,
-              historyIndex: newHistory.length - 1,
-            };
-          }),
-        })); },
-
-      undo: (tabId) =>
-        { set((state) => ({
-          tabs: state.tabs.map((t) => {
-            if (t.id !== tabId || t.historyIndex < 0) return t;
-            const restoredContent = t.history[t.historyIndex] ?? '';
-            // Save current content at the end if we're at the latest position
-            const newHistory =
-              t.historyIndex === t.history.length - 1 ? [...t.history, t.content] : t.history;
-            return {
-              ...t,
-              content: restoredContent,
-              historyIndex: t.historyIndex - 1,
-              history: newHistory,
-            };
-          }),
-        })); },
-
-      redo: (tabId) =>
-        { set((state) => ({
-          tabs: state.tabs.map((t) => {
-            if (t.id !== tabId) return t;
-            const nextIndex = t.historyIndex + 2;
-            if (nextIndex >= t.history.length) return t;
-            return {
-              ...t,
-              content: t.history[nextIndex] ?? '',
-              historyIndex: t.historyIndex + 1,
-            };
-          }),
-        })); },
-
-      canUndo: (tabId) => {
-        const tab = get().tabs.find((t) => t.id === tabId);
-        return tab ? tab.historyIndex >= 0 : false;
-      },
-
-      canRedo: (tabId) => {
-        const tab = get().tabs.find((t) => t.id === tabId);
-        return tab ? tab.historyIndex + 2 < tab.history.length : false;
-      },
-
-      reset: () => { set({ tabs: [], activeTabId: null }); },
-    }),
+            // Persist artifact references
+            artifactId: t.artifactId,
+            artifactUrl: t.artifactUrl,
+            // Persist MCP metadata (small, needed to re-open apps)
+            mcpAppId: t.mcpAppId,
+            mcpResourceUri: t.mcpResourceUri,
+            mcpToolName: t.mcpToolName,
+            mcpProjectId: t.mcpProjectId,
+            mcpServerName: t.mcpServerName,
+            mcpAppUiMetadata: t.mcpAppUiMetadata,
+            // Persist pinned state
+            pinned: t.pinned,
+          })),
+          activeTabId: state.activeTabId,
+        }),
+      }
+    ),
     { name: 'canvas-store' }
   )
 );
@@ -182,6 +239,8 @@ export const useCanvasStore = create<CanvasState>()(
 export const useCanvasTabs = () => useCanvasStore(useShallow((s) => s.tabs));
 export const useActiveCanvasTab = () =>
   useCanvasStore(useShallow((s) => s.tabs.find((t) => t.id === s.activeTabId) ?? null));
+export const usePinnedCanvasTabs = () =>
+  useCanvasStore(useShallow((s) => s.tabs.filter((t) => t.pinned)));
 export const useCanvasActions = () =>
   useCanvasStore(
     useShallow((s) => ({
@@ -194,6 +253,8 @@ export const useCanvasActions = () =>
       redo: s.redo,
       canUndo: s.canUndo,
       canRedo: s.canRedo,
+      togglePin: s.togglePin,
+      getPinnedTabs: s.getPinnedTabs,
       reset: s.reset,
     }))
   );
