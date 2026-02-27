@@ -14,10 +14,13 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.result import ToolResult
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.tools.define import ToolInfo
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,14 @@ class HookResult:
 
 
 # Type aliases for hook callables
+
+# Definition hooks: modify tool metadata at registration time.
+# Receives (tool_info) -> modified ToolInfo or None to remove the tool.
+DefinitionHook = Callable[
+    ["ToolInfo"],
+    "ToolInfo | None",
+]
+
 BeforeHook = Callable[
     [str, dict[str, Any], ToolContext],
     Awaitable[HookResult],
@@ -66,6 +77,16 @@ class _RegisteredAfterHook:
 
     hook: AfterHook
     pattern: str  # Tool name glob pattern (e.g., "*", "terminal*", "mcp__*")
+    priority: int  # Lower number = runs first
+    name: str = ""  # Optional name for debugging
+
+
+@dataclass
+class _RegisteredDefinitionHook:
+    """Internal registration entry for a definition-time hook."""
+
+    hook: DefinitionHook
+    pattern: str  # Tool name glob pattern
     priority: int  # Lower number = runs first
     name: str = ""  # Optional name for debugging
 
@@ -97,6 +118,62 @@ class ToolHookRegistry:
     def __init__(self) -> None:
         self._before_hooks: list[_RegisteredBeforeHook] = []
         self._after_hooks: list[_RegisteredAfterHook] = []
+        self._definition_hooks: list[_RegisteredDefinitionHook] = []
+
+    def register_definition(
+        self,
+        hook: DefinitionHook,
+        pattern: str = "*",
+        priority: int = HookPriority.DEFAULT,
+        name: str = "",
+    ) -> None:
+        """Register a definition-time hook.
+
+        Definition hooks run when tools are loaded/registered and can
+        modify ``ToolInfo`` metadata (description, parameters, tags)
+        or suppress a tool entirely (by returning ``None``).
+
+        Args:
+            hook: Callable receiving a ``ToolInfo``, returning a
+                (possibly modified) ``ToolInfo`` or ``None``.
+            pattern: Glob pattern to match tool names.
+            priority: Execution order (lower = earlier).
+            name: Optional name for debugging/logging.
+        """
+        entry = _RegisteredDefinitionHook(
+            hook=hook,
+            pattern=pattern,
+            priority=priority,
+            name=name,
+        )
+        self._definition_hooks.append(entry)
+        self._definition_hooks.sort(key=lambda h: h.priority)
+
+    def apply_definition_hooks(
+        self,
+        tool_info: ToolInfo,
+    ) -> ToolInfo | None:
+        """Apply all matching definition hooks to a ToolInfo.
+
+        Returns the (possibly modified) ToolInfo, or ``None`` if any
+        hook suppressed the tool.
+        """
+        current: ToolInfo | None = tool_info
+        for entry in self._definition_hooks:
+            if current is None:
+                break
+            if not fnmatch.fnmatch(current.name, entry.pattern):
+                continue
+            try:
+                current = entry.hook(current)
+            except Exception:
+                logger.exception(
+                    "Definition-hook '%s' failed for tool '%s'",
+                    entry.name or "<anonymous>",
+                    tool_info.name,
+                )
+                # Hook failures don't suppress tools
+        return current
 
     def register_before(
         self,
@@ -218,6 +295,7 @@ class ToolHookRegistry:
         """Remove all registered hooks."""
         self._before_hooks.clear()
         self._after_hooks.clear()
+        self._definition_hooks.clear()
 
     @property
     def before_hook_count(self) -> int:
@@ -228,3 +306,8 @@ class ToolHookRegistry:
     def after_hook_count(self) -> int:
         """Number of registered after-hooks."""
         return len(self._after_hooks)
+
+    @property
+    def definition_hook_count(self) -> int:
+        """Number of registered definition hooks."""
+        return len(self._definition_hooks)

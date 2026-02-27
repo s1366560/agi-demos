@@ -87,6 +87,13 @@ def clear_registry() -> None:
     _TOOL_REGISTRY.clear()
 
 
+def pop_registered_tool(name: str) -> ToolInfo:
+    """Remove and return a tool from the registry by name.
+
+    Raises ``KeyError`` if *name* is not present.
+    """
+    return _TOOL_REGISTRY.pop(name)
+
 # ---------------------------------------------------------------------------
 # @tool_define decorator
 # ---------------------------------------------------------------------------

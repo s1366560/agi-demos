@@ -377,6 +377,22 @@ async def get_mcp_tools_from_cache(
         return entry.tools
 
 
+def get_mcp_tools_from_cache_sync(
+    tenant_id: str,
+    ttl_seconds: int = 300,
+) -> dict[str, Any] | None:
+    """Get MCP tools from cache synchronously (no lock).
+
+    This is a best-effort read used in synchronous contexts
+    (e.g. custom tool providers) where awaiting is not possible.
+    """
+    entry = _mcp_tools_cache.get(tenant_id)
+    if entry is None:
+        return None
+    if entry.is_expired(ttl_seconds):
+        return None
+    return entry.tools
+
 async def update_mcp_tools_cache(
     tenant_id: str,
     tools: dict[str, Any],

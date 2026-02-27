@@ -23,7 +23,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -434,6 +434,8 @@ async def get_or_create_tools(
     # 11. Add plugin tools
     await _add_plugin_tools(tools, tenant_id, project_id)
 
+    # 12. Add custom tools from .memstack/tools/
+    _add_custom_tools(tools, project_id)
     return tools
 
 
@@ -869,6 +871,37 @@ def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> Non
         logger.info(message)
         return
     logger.warning(message)
+
+
+def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
+    """Load custom tools from ``.memstack/tools/`` directory.
+
+    Scans for standalone Python files using the ``@tool_define`` decorator.
+    Errors are logged but do not prevent agent startup.
+    """
+    try:
+        from src.infrastructure.agent.tools.custom_tool_loader import (
+            load_custom_tools,
+        )
+
+        custom_tools, diagnostics = load_custom_tools()
+        for diag in diagnostics:
+            log_fn = getattr(logger, diag.level, logger.info)
+            log_fn(
+                "[AgentWorker][CustomTools] %s: %s (%s)",
+                diag.code,
+                diag.message,
+                diag.file_path,
+            )
+        if custom_tools:
+            tools.update(custom_tools)
+            logger.info(
+                "Agent Worker: Added %d custom tool(s) for project %s",
+                len(custom_tools),
+                project_id,
+            )
+    except Exception as e:
+        logger.warning("Agent Worker: Failed to load custom tools: %s", e)
 
 
 async def _load_project_sandbox_tools(
@@ -2214,9 +2247,11 @@ async def get_or_create_skill_loader_tool(
     class NullSkillRepository(SkillRepositoryPort):
         """Null implementation - all methods return empty/None."""
 
+        @override
         async def create(self, skill: Skill) -> Skill:
             return skill
 
+        @override
         async def get_by_id(self, skill_id: str) -> Skill | None:
             return None
 
@@ -2233,12 +2268,15 @@ async def get_or_create_skill_loader_tool(
         ) -> list[Skill]:
             return []
 
+        @override
         async def update(self, skill: Skill) -> Skill:
             return skill
 
+        @override
         async def delete(self, skill_id: str) -> bool:
             return False
 
+        @override
         async def find_matching_skills(
             self,
             tenant_id: str,

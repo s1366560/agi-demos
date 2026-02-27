@@ -125,13 +125,13 @@ def create_mcp_tool_provider(
         # A more robust solution would expose a sync API in agent_session_pool
         try:
             from src.infrastructure.agent.state.agent_session_pool import (
-                _mcp_tools_cache,
+                get_mcp_tools_from_cache_sync,
             )
 
             cache_key = f"mcp_tools:{tenant_id}"
-            entry = _mcp_tools_cache.get(cache_key)
-            if entry and not entry.is_expired():
-                return entry.tools
+            tools = get_mcp_tools_from_cache_sync(cache_key)
+            if tools is not None:
+                return tools
             return {}
         except ImportError:
             logger.debug("MCP tools cache not available")
@@ -156,5 +156,40 @@ def create_static_tool_provider(
 
     def provider() -> dict[str, Any]:
         return tools.copy()
+
+    return provider
+
+
+def create_custom_tool_provider(
+    base_path: str | None = None,
+    tools_dirs: list[str] | None = None,
+) -> Callable[[], dict[str, Any]]:
+    """Create a tool provider that loads custom tools from the filesystem.
+
+    Scans ``.memstack/tools/`` for Python files using the ``@tool_define``
+    decorator and returns them as a tool provider callable.
+
+    Args:
+        base_path: Project root directory. Defaults to ``cwd()``.
+        tools_dirs: Override tool directories to scan.
+
+    Returns:
+        A callable that returns custom tools dict
+    """
+    from pathlib import Path
+
+    from src.infrastructure.agent.tools.custom_tool_loader import get_custom_tool_infos
+
+    resolved_path = Path(base_path) if base_path else None
+
+    # Cache loaded tools so we don't re-scan on every call.
+    _cache: dict[str, Any] = {}
+    _loaded: list[bool] = [False]
+
+    def provider() -> dict[str, Any]:
+        if not _loaded[0]:
+            _cache.update(get_custom_tool_infos(base_path=resolved_path))
+            _loaded[0] = True
+        return _cache.copy()
 
     return provider
