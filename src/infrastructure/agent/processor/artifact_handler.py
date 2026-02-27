@@ -436,6 +436,20 @@ class ArtifactHandler:
                         tool_execution_id=tool_execution_id,
                         source_tool=tool_name,
                     )
+                    # Emit artifact_open for canvas-displayable content
+                    canvas_type = get_canvas_content_type(artifact.mime_type, artifact.filename)
+                    if canvas_type and artifact.size_bytes < 500_000:
+                        try:
+                            text_content = artifact_data["content"].decode("utf-8")
+                            yield AgentArtifactOpenEvent(
+                                artifact_id=artifact.id,
+                                title=artifact.filename,
+                                content=text_content,
+                                content_type=canvas_type,
+                                language=get_language_from_filename(artifact.filename),
+                            )
+                        except (UnicodeDecodeError, ValueError):
+                            pass  # Binary content, skip canvas open
 
                 except Exception as e:
                     logger.error(f"Failed to create artifact from {tool_name}: {e}")

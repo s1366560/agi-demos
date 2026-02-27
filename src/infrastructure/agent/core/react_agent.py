@@ -483,7 +483,7 @@ class ReActAgent:
         self._tool_policy_layers = normalize_policy_layers(
             {"policy_layers": dict(tool_policy_layers or {})}
         )
-        self._last_tool_selection_trace: tuple[ToolSelectionTraceStep, ...] = ()
+        self._last_tool_selection_trace = ()
 
     def _init_memory_hooks(
         self,
@@ -654,7 +654,7 @@ class ReActAgent:
             redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
             terminal_retention_seconds=subagent_terminal_retention_seconds,
         )
-        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._subagent_session_tasks = {}
 
     def _init_orchestrators(self) -> None:
         """Initialize orchestrators for modular components."""
@@ -714,6 +714,7 @@ class ReActAgent:
             max_tokens=max_tokens,
             max_steps=max_steps,
             llm_client=self._llm_client,
+            skill_names=[s.name for s in (self.skills or [])],
         )
 
     def _build_tool_selection_context(
@@ -1691,6 +1692,7 @@ class ReActAgent:
             tool_provider=_tool_provider_wrapper,
             forced_skill_name=config.forced_skill_name,
             forced_skill_tools=config.forced_skill_tools,
+            skill_names=config.skill_names,
         )
         logger.debug("[ReActAgent] Created processor config with tool_provider for dynamic tools")
         return new_config

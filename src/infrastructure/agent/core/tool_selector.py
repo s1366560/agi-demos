@@ -24,6 +24,17 @@ CORE_TOOLS: set[str] = {
     "grep",
     "todoread",
     "todowrite",
+    "skill_loader",
+}
+
+# Skill management tools that should survive semantic budget pruning.
+# skill_loader is in CORE_TOOLS (always available).
+# skill_installer and skill_sync are NOT in CORE_TOOLS so that
+# policy deny lists (e.g. plan mode) can still block them.
+SKILL_TOOLS: set[str] = {
+    "skill_loader",
+    "skill_installer",
+    "skill_sync",
 }
 
 # High priority baseline score for core tools
@@ -58,6 +69,7 @@ class SemanticToolRanker(Protocol):
         score_fallback: Callable[[Any], float],
     ) -> list[str]:
         """Return ordered tool names from highest to lowest relevance."""
+        ...
 
 
 class KeywordSemanticToolRanker:
@@ -428,13 +440,20 @@ class ToolSelector:
             if hasattr(embedding_ranker, "rank_tools"):
                 return embedding_ranker  # type: ignore[return-value]
             if callable(embedding_ranker):
-                return _CallableSemanticToolRanker(embedding_ranker)
+                return _CallableSemanticToolRanker(
+                    cast(
+                        Callable[[dict[str, Any], ToolSelectionContext], list[str]],
+                        embedding_ranker,
+                    )
+                )
 
         custom_ranker = metadata.get("semantic_ranker")
         if hasattr(custom_ranker, "rank_tools"):
             return custom_ranker  # type: ignore[return-value]
         if callable(custom_ranker):
-            return _CallableSemanticToolRanker(custom_ranker)
+            return _CallableSemanticToolRanker(
+                cast(Callable[[dict[str, Any], ToolSelectionContext], list[str]], custom_ranker)
+            )
 
         if backend == "keyword":
             return self._keyword_ranker

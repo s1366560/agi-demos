@@ -168,12 +168,15 @@ class FileSystemSkillLoader:
         scan_result = self.scanner.scan(self.base_path, include_system=should_include_system)
         result.errors.extend(scan_result.errors)
 
-        # Parse each file and create Skill entities
+        # Parse each file and create Skill entities.
+        # Use a dict keyed by name so later sources (project) override earlier
+        # ones (system/global), preventing duplicates in the result list.
+        loaded_by_name: dict[str, LoadedSkill] = {}
         for file_info in scan_result.skills:
             try:
                 loaded = self._load_skill_file(file_info)
                 if loaded:
-                    result.skills.append(loaded)
+                    loaded_by_name[loaded.skill.name] = loaded
                     # Cache in appropriate cache based on scope
                     if file_info.is_system:
                         self._system_cache[loaded.skill.name] = loaded
@@ -187,6 +190,7 @@ class FileSystemSkillLoader:
                 error_msg = f"Unexpected error loading {file_info.file_path}: {e}"
                 logger.error(error_msg, exc_info=True)
                 result.errors.append(error_msg)
+        result.skills = list(loaded_by_name.values())
 
         self._cache_valid = True
         self._system_cache_valid = True

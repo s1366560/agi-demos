@@ -9,6 +9,7 @@ from typing import Any
 
 from src.infrastructure.agent.core.tool_selector import (
     CORE_TOOLS,
+    SKILL_TOOLS,
     ToolSelectionContext as CoreToolSelectionContext,
     get_tool_selector,
 )
@@ -187,11 +188,18 @@ def intent_router_stage(
     return filtered or dict(tools)
 
 
+_USER_MCP_TOOL_PREFIX = "mcp__"
+
+
 def semantic_ranker_stage(
     tools: dict[str, Any],
     context: ToolSelectionContext,
 ) -> dict[str, Any]:
-    """Rank tools by conversation relevance and enforce max_tools budget."""
+    """Rank tools by conversation relevance and enforce max_tools budget.
+
+    System built-in tools and sandbox tools are always included.
+    Only user MCP tools (mcp__* prefix) are subject to budget pruning.
+    """
     max_tools = _resolve_max_tools_budget(
         context.metadata,
         default=40,
@@ -200,25 +208,46 @@ def semantic_ranker_stage(
     if len(tools) <= max_tools:
         return dict(tools)
 
+    # All system built-in and sandbox tools are always included.
+    # Only user MCP tools (mcp__* prefix) are subject to budget pruning.
+    builtin_tools: dict[str, Any] = {}
+    user_mcp_tools: dict[str, Any] = {}
+    for name, tool in tools.items():
+        if name.startswith(_USER_MCP_TOOL_PREFIX):
+            user_mcp_tools[name] = tool
+        else:
+            builtin_tools[name] = tool
+
+    # If no user MCP tools, nothing to prune
+    if not user_mcp_tools:
+        return dict(tools)
+
+    # Budget for user MCP tools = total budget minus built-in count
+    user_mcp_budget = max(1, max_tools - len(builtin_tools))
+
+    # If user MCP tools fit within remaining budget, include all
+    if len(user_mcp_tools) <= user_mcp_budget:
+        return dict(tools)
+
+    # Rank only user MCP tools by relevance to fill remaining budget
     history = list(context.metadata.get("conversation_history") or [])
     user_message = context.metadata.get("user_message")
     if user_message:
         history.append({"role": "user", "content": str(user_message)})
 
-    # Merge skill-pinned tools into always_include so they survive budget pruning
     skill_pinned = set(_read_str_list(context.metadata, "skill_pinned_tools"))
-    always_include = set(CORE_TOOLS) | skill_pinned
+    always_include = set(CORE_TOOLS) | SKILL_TOOLS | skill_pinned
 
     selector = get_tool_selector()
     semantic_backend = (
         str(context.metadata.get("semantic_backend", "embedding_vector")).strip().lower()
     )
     selected_names = selector.select_tools(
-        tools,
+        user_mcp_tools,
         CoreToolSelectionContext(
             conversation_history=history,
             project_id=context.project_id,
-            max_tools=max_tools,
+            max_tools=user_mcp_budget,
             always_include=always_include,
             metadata={
                 "user_message": str(user_message or ""),
@@ -230,7 +259,13 @@ def semantic_ranker_stage(
             },
         ),
     )
-    return {name: tools[name] for name in selected_names if name in tools}
+
+    # Combine: all built-in tools + selected user MCP tools
+    result = dict(builtin_tools)
+    for name in selected_names:
+        if name in user_mcp_tools:
+            result[name] = user_mcp_tools[name]
+    return result
 
 
 def policy_stage(

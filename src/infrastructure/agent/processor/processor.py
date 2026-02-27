@@ -155,6 +155,8 @@ class ProcessorConfig:
     # Forced skill context (optional, for loop reinforcement)
     forced_skill_name: str | None = None
     forced_skill_tools: list[str] | None = None
+    # Available skill names (for /skills command)
+    skill_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -688,6 +690,7 @@ class SessionProcessor:
         ctx: dict[str, Any] = {
             "model_name": self.config.model,
             "tools": list(self.tools.keys()),
+            "skills": list(self.config.skill_names),
         }
         if self._langfuse_context:
             ctx["conversation_id"] = self._langfuse_context.get("conversation_id")

@@ -14,10 +14,15 @@ from src.infrastructure.agent.plugins.selection_pipeline import (
 
 @pytest.mark.unit
 def test_default_pipeline_limits_tools_and_emits_trace() -> None:
-    """Semantic stage should cap tools and emit stage traces."""
+    """Semantic stage should cap user MCP tools and emit stage traces.
+
+    System built-in tools (non mcp__* prefix) are always included.
+    Only user MCP tools (mcp__* prefix) are subject to budget pruning.
+    """
     pipeline = build_default_tool_selection_pipeline()
     tools = {
-        f"tool_{idx}": SimpleNamespace(name=f"tool_{idx}", description="desc") for idx in range(30)
+        f"mcp__srv__tool_{idx}": SimpleNamespace(name=f"mcp__srv__tool_{idx}", description="desc")
+        for idx in range(30)
     }
     tools["read"] = SimpleNamespace(name="read", description="Read files")
     tools["write"] = SimpleNamespace(name="write", description="Write files")
@@ -35,7 +40,12 @@ def test_default_pipeline_limits_tools_and_emits_trace() -> None:
         ),
     )
 
-    assert len(result.tools) <= 5
+    # Budget is 5 total, 2 built-in (read, write) always included,
+    # so at most 3 user MCP tools should survive
+    mcp_tools = [n for n in result.tools if n.startswith("mcp__")]
+    assert len(mcp_tools) <= 3
+    assert "read" in result.tools
+    assert "write" in result.tools
     assert any(step.stage == "semantic_ranker_stage" for step in result.trace)
     assert all(step.duration_ms >= 0 for step in result.trace)
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
@@ -100,10 +110,11 @@ def test_policy_stage_merges_layered_allow_and_deny() -> None:
 
 @pytest.mark.unit
 def test_semantic_stage_uses_layered_max_tools_budget() -> None:
-    """Layered max_tools budget should cap semantic stage selection."""
+    """Layered max_tools budget should cap user MCP tool selection."""
     pipeline = build_default_tool_selection_pipeline()
     tools = {
-        f"tool_{idx}": SimpleNamespace(name=f"tool_{idx}", description="desc") for idx in range(20)
+        f"mcp__srv__tool_{idx}": SimpleNamespace(name=f"mcp__srv__tool_{idx}", description="desc")
+        for idx in range(20)
     }
     tools["read"] = SimpleNamespace(name="read", description="Read files")
     tools["write"] = SimpleNamespace(name="write", description="Write files")
@@ -120,7 +131,11 @@ def test_semantic_stage_uses_layered_max_tools_budget() -> None:
         ),
     )
 
-    assert len(result.tools) <= 4
+    # Budget is 4, 2 built-in always included, so at most 2 user MCP tools
+    mcp_tools = [n for n in result.tools if n.startswith("mcp__")]
+    assert len(mcp_tools) <= 2
+    assert "read" in result.tools
+    assert "write" in result.tools
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
     assert semantic.explain.get("max_tools") == 4
 
@@ -164,14 +179,20 @@ def test_semantic_stage_supports_custom_ranker_backend() -> None:
     pipeline = build_default_tool_selection_pipeline()
     tools = {
         "read": SimpleNamespace(name="read", description="Read files"),
-        "alpha": SimpleNamespace(name="alpha", description="alpha tool"),
-        "beta": SimpleNamespace(name="beta", description="beta tool"),
-        "gamma": SimpleNamespace(name="gamma", description="gamma tool"),
-        "delta": SimpleNamespace(name="delta", description="delta tool"),
+        "mcp__srv__alpha": SimpleNamespace(name="mcp__srv__alpha", description="alpha tool"),
+        "mcp__srv__beta": SimpleNamespace(name="mcp__srv__beta", description="beta tool"),
+        "mcp__srv__gamma": SimpleNamespace(name="mcp__srv__gamma", description="gamma tool"),
+        "mcp__srv__delta": SimpleNamespace(name="mcp__srv__delta", description="delta tool"),
     }
 
     def _custom_ranker(tool_map, _context):
-        return ["gamma", "beta", "alpha", "delta", "read"]
+        return [
+            "mcp__srv__gamma",
+            "mcp__srv__beta",
+            "mcp__srv__alpha",
+            "mcp__srv__delta",
+            "read",
+        ]
 
     result = pipeline.select_with_trace(
         tools,
@@ -183,8 +204,9 @@ def test_semantic_stage_supports_custom_ranker_backend() -> None:
         ),
     )
 
+    # read is built-in (always included), budget=3, 1 built-in, so 2 mcp slots
     assert "read" in result.tools
-    assert "gamma" in result.tools
+    assert "mcp__srv__gamma" in result.tools
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
     assert semantic.explain.get("semantic_backend") == "embedding_vector"
     assert semantic.explain.get("semantic_backend_effective") == "token_vector"
@@ -222,13 +244,13 @@ def test_semantic_stage_uses_embedding_ranker_when_configured() -> None:
     pipeline = build_default_tool_selection_pipeline()
     tools = {
         "read": SimpleNamespace(name="read", description="Read files"),
-        "alpha": SimpleNamespace(name="alpha", description="alpha"),
-        "beta": SimpleNamespace(name="beta", description="beta"),
-        "gamma": SimpleNamespace(name="gamma", description="gamma"),
+        "mcp__srv__alpha": SimpleNamespace(name="mcp__srv__alpha", description="alpha"),
+        "mcp__srv__beta": SimpleNamespace(name="mcp__srv__beta", description="beta"),
+        "mcp__srv__gamma": SimpleNamespace(name="mcp__srv__gamma", description="gamma"),
     }
 
     def _embedding_ranker(tool_map, _context):
-        return ["beta", "gamma", "alpha", "read"]
+        return ["mcp__srv__beta", "mcp__srv__gamma", "mcp__srv__alpha", "read"]
 
     result = pipeline.select_with_trace(
         tools,
@@ -241,8 +263,9 @@ def test_semantic_stage_uses_embedding_ranker_when_configured() -> None:
         ),
     )
 
+    # read is built-in (always included), budget=2, 1 built-in, 1 mcp slot
     assert "read" in result.tools
-    assert "beta" in result.tools
+    assert "mcp__srv__beta" in result.tools
     semantic = next(step for step in result.trace if step.stage == "semantic_ranker_stage")
     assert semantic.explain.get("semantic_backend") == "embedding_vector"
     assert semantic.explain.get("semantic_backend_effective") == "embedding_vector"
@@ -254,9 +277,9 @@ def test_semantic_stage_applies_tool_quality_scores() -> None:
     pipeline = build_default_tool_selection_pipeline()
     tools = {
         "read": SimpleNamespace(name="read", description="Read files"),
-        "tool_a": SimpleNamespace(name="tool_a", description="general helper"),
-        "tool_b": SimpleNamespace(name="tool_b", description="general helper"),
-        "tool_c": SimpleNamespace(name="tool_c", description="general helper"),
+        "mcp__srv__tool_a": SimpleNamespace(name="mcp__srv__tool_a", description="general helper"),
+        "mcp__srv__tool_b": SimpleNamespace(name="mcp__srv__tool_b", description="general helper"),
+        "mcp__srv__tool_c": SimpleNamespace(name="mcp__srv__tool_c", description="general helper"),
     }
 
     result = pipeline.select_with_trace(
@@ -266,13 +289,13 @@ def test_semantic_stage_applies_tool_quality_scores() -> None:
                 "max_tools": 2,
                 "semantic_backend": "token_vector",
                 "tool_quality_scores": {
-                    "tool_a": 0.1,
-                    "tool_b": 0.95,
-                    "tool_c": 0.2,
+                    "mcp__srv__tool_a": 0.1,
+                    "mcp__srv__tool_b": 0.95,
+                    "mcp__srv__tool_c": 0.2,
                 },
             }
         ),
     )
 
     assert "read" in result.tools
-    assert "tool_b" in result.tools
+    assert "mcp__srv__tool_b" in result.tools
