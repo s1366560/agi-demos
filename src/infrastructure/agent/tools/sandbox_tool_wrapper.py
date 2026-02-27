@@ -78,30 +78,25 @@ class SandboxMCPToolWrapper(AgentTool):
         )
 
     def get_parameters_schema(self) -> dict[str, Any]:
-        """Get parameters schema from MCP tool schema."""
+        """Get parameters schema from MCP tool schema.
+
+        Preserves the full JSON Schema structure including nested
+        ``items`` for arrays and ``properties`` for objects so the LLM
+        can generate correctly-shaped arguments.
+        """
         input_schema = self._schema.get("input_schema", {})
 
-        # Convert MCP schema format to Agent tool schema format
-        properties = {}
-        required = []
+        if not isinstance(input_schema, dict):
+            return {"type": "object", "properties": {}, "required": []}
 
-        if isinstance(input_schema, dict):
-            # Handle JSON Schema format
-            schema_props = input_schema.get("properties", {})
-            for prop_name, prop_def in schema_props.items():
-                properties[prop_name] = {
-                    "type": prop_def.get("type", "string"),
-                    "description": prop_def.get("description", ""),
-                }
-                if "default" in prop_def:
-                    properties[prop_name]["default"] = prop_def["default"]
-
-            required = input_schema.get("required", [])
-
+        # Pass the schema through largely unchanged – it is already
+        # valid JSON Schema from the MCP server.  We only normalise
+        # the top-level keys so the agent framework always sees
+        # type/properties/required.
         return {
-            "type": "object",
-            "properties": properties,
-            "required": required,
+            "type": input_schema.get("type", "object"),
+            "properties": input_schema.get("properties", {}),
+            "required": input_schema.get("required", []),
         }
 
     def validate_args(self, **kwargs: Any) -> bool:
@@ -406,25 +401,27 @@ class SandboxMCPToolWrapper(AgentTool):
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
     """Convert MCP input_schema to agent tool JSON Schema format.
 
+    Preserves the full JSON Schema structure including nested
+    ``items`` for arrays and ``properties`` for objects so the LLM
+    can generate correctly-shaped arguments (e.g. ``batch_edit``'s
+    ``edits`` array of objects).
+
     Args:
         input_schema: Raw MCP tool input schema.
 
     Returns:
         Normalised JSON Schema dict with type/properties/required.
     """
-    properties: dict[str, Any] = {}
-    required: list[str] = []
-
-    for prop_name, prop_def in input_schema.get("properties", {}).items():
-        properties[prop_name] = {
-            "type": prop_def.get("type", "string"),
-            "description": prop_def.get("description", ""),
-        }
-        if "default" in prop_def:
-            properties[prop_name]["default"] = prop_def["default"]
-    required = input_schema.get("required", [])
-
-    return {"type": "object", "properties": properties, "required": required}
+    # The MCP input_schema is already valid JSON Schema.  We only
+    # normalise top-level keys so the caller always sees a consistent
+    # shape.  Critically, we preserve nested "items", "enum",
+    # "properties", "required", "anyOf", etc. that previous code
+    # was dropping.
+    return {
+        "type": input_schema.get("type", "object"),
+        "properties": input_schema.get("properties", {}),
+        "required": input_schema.get("required", []),
+    }
 
 
 def _extract_error_msg(result: dict[str, Any]) -> str:
