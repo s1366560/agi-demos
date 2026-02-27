@@ -459,7 +459,7 @@ class MCPSandboxAdapter(SandboxPort):
             return False
 
     @override
-    async def create_sandbox(
+    async def create_sandbox(  # noqa: PLR0915, C901, PLR0912
         self,
         project_path: str,
         config: SandboxConfig | None = None,
@@ -504,6 +504,21 @@ class MCPSandboxAdapter(SandboxPort):
             host_terminal_port = self._get_next_terminal_port_unsafe()
 
         try:
+            # Build sandbox environment variables
+            sandbox_env: dict[str, str] = {
+                "SANDBOX_ID": sandbox_id,
+                "MCP_HOST": "0.0.0.0",
+                "MCP_PORT": str(MCP_WEBSOCKET_PORT),
+                "MCP_WORKSPACE": "/workspace",
+                "DESKTOP_PORT": str(DESKTOP_PORT),
+                "TERMINAL_PORT": str(TERMINAL_PORT),
+                **config.environment,
+            }
+            # Expose host source mount point so agents know where to find it
+            for container_path in config.volumes.values():
+                if container_path:
+                    sandbox_env["MCP_HOST_SOURCE"] = container_path
+                    break  # Use first ro volume as host source path
             # Container configuration with all service ports
             container_config = {
                 "image": self._mcp_image,
@@ -520,15 +535,7 @@ class MCPSandboxAdapter(SandboxPort):
                     f"{DESKTOP_PORT}/tcp": host_desktop_port,
                     f"{TERMINAL_PORT}/tcp": host_terminal_port,
                 },
-                "environment": {
-                    "SANDBOX_ID": sandbox_id,
-                    "MCP_HOST": "0.0.0.0",
-                    "MCP_PORT": str(MCP_WEBSOCKET_PORT),
-                    "MCP_WORKSPACE": "/workspace",
-                    "DESKTOP_PORT": str(DESKTOP_PORT),
-                    "TERMINAL_PORT": str(TERMINAL_PORT),
-                    **config.environment,
-                },
+                "environment": sandbox_env,
                 "mem_limit": config.memory_limit or self._default_memory_limit,
                 "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
                 # Labels for identification
@@ -556,11 +563,19 @@ class MCPSandboxAdapter(SandboxPort):
             }
 
             # Volume mounts
-            volumes = {}
+            volumes: dict[str, dict[str, str]] = {}
             if project_path:
                 volumes[project_path] = {"bind": "/workspace", "mode": "rw"}
+            # Merge extra volumes from config (read-only)
+            for host_path, container_path in config.volumes.items():
+                if host_path and container_path:
+                    volumes[host_path] = {"bind": container_path, "mode": "ro"}
+            # Merge rw volumes from config (read-write)
+            for host_path, container_path in config.rw_volumes.items():
+                if host_path and container_path:
+                    volumes[host_path] = {"bind": container_path, "mode": "rw"}
             if volumes:
-                container_config["volumes"] = volumes
+                container_config["volumes"] = cast("dict[str, Any]", volumes)
 
             # Network mode - need network for WebSocket
             # Don't use "none" as we need to connect via host port

@@ -93,6 +93,8 @@ class UnifiedSandboxService(SandboxResourcePort):
         auto_recover: bool = True,
         memory_limit_override: str | None = None,
         cpu_limit_override: str | None = None,
+        host_source_volume: dict[str, str] | None = None,
+        host_memstack_volume: dict[str, str] | None = None,
     ) -> None:
         """Initialize the unified sandbox service.
 
@@ -105,6 +107,8 @@ class UnifiedSandboxService(SandboxResourcePort):
             auto_recover: Whether to auto-recover unhealthy sandboxes
             memory_limit_override: Override for memory limit (e.g. from config)
             cpu_limit_override: Override for CPU limit (e.g. from config)
+            host_source_volume: Host source volume mount (ro) (host_path -> container_path)
+            host_memstack_volume: .memstack rw mount (host_path -> container_path)
         """
         self._repository = repository
         self._adapter = sandbox_adapter
@@ -114,6 +118,8 @@ class UnifiedSandboxService(SandboxResourcePort):
         self._auto_recover = auto_recover
         self._memory_limit_override = memory_limit_override
         self._cpu_limit_override = cpu_limit_override
+        self._host_source_volume = host_source_volume
+        self._host_memstack_volume = host_memstack_volume
 
         # Per-project locks for in-process concurrency control
         self._project_locks: dict[str, asyncio.Lock] = {}
@@ -800,7 +806,7 @@ class UnifiedSandboxService(SandboxResourcePort):
             available_tools=available_tools,
         )
 
-    def _resolve_config(
+    def _resolve_config(  # noqa: C901, PLR0912
         self,
         profile: SandboxProfileType | None,
         config_override: dict[str, Any] | None,
@@ -837,6 +843,20 @@ class UnifiedSandboxService(SandboxResourcePort):
                 config.timeout_seconds = config_override["timeout_seconds"]
             if "desktop_enabled" in config_override:
                 config.desktop_enabled = config_override["desktop_enabled"]
+            if "volumes" in config_override:
+                config.volumes.update(config_override["volumes"])
+
+        # Apply host source volume from global settings (read-only)
+        if self._host_source_volume:
+            for host_path, container_path in self._host_source_volume.items():
+                if host_path and container_path:
+                    config.volumes[host_path] = container_path
+
+        # Apply .memstack volume from global settings (read-write)
+        if self._host_memstack_volume:
+            for host_path, container_path in self._host_memstack_volume.items():
+                if host_path and container_path:
+                    config.rw_volumes[host_path] = container_path
 
         return config
 

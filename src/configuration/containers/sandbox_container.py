@@ -7,9 +7,9 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.sandbox.profiles import SandboxProfileType
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.configuration.config import Settings
+from src.domain.model.sandbox.profiles import SandboxProfileType
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
     SqlProjectSandboxRepository,
@@ -83,11 +83,31 @@ class SandboxContainer:
             repository=self.project_sandbox_repository(),
             sandbox_adapter=sandbox_adapter,
             distributed_lock=distributed_lock,
-            default_profile=SandboxProfileType(self._settings.sandbox_profile_type) if self._settings else SandboxProfileType.STANDARD,
+            default_profile=SandboxProfileType(self._settings.sandbox_profile_type)
+            if self._settings
+            else SandboxProfileType.STANDARD,
             health_check_interval_seconds=60,
             auto_recover=True,
             memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
             cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
+            host_source_volume=(
+                {
+                    self._settings.sandbox_host_source_path: (
+                        self._settings.sandbox_host_source_mount_point
+                    )
+                }
+                if self._settings and self._settings.sandbox_host_source_path
+                else None
+            ),
+            host_memstack_volume=(
+                {
+                    self._settings.sandbox_host_memstack_path: (
+                        self._settings.sandbox_host_memstack_mount_point
+                    )
+                }
+                if self._settings and self._settings.sandbox_host_memstack_path
+                else None
+            ),
         )
 
     def project_sandbox_lifecycle_service(self) -> Any:
@@ -105,11 +125,31 @@ class SandboxContainer:
             repository=self.project_sandbox_repository(),
             sandbox_adapter=sandbox_adapter,
             distributed_lock=distributed_lock,
-            default_profile=SandboxProfileType(self._settings.sandbox_profile_type) if self._settings else SandboxProfileType.STANDARD,
+            default_profile=SandboxProfileType(self._settings.sandbox_profile_type)
+            if self._settings
+            else SandboxProfileType.STANDARD,
             health_check_interval_seconds=60,
             auto_recover=True,
             memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
             cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
+            host_source_volume=(
+                {
+                    self._settings.sandbox_host_source_path: (
+                        self._settings.sandbox_host_source_mount_point
+                    )
+                }
+                if self._settings and self._settings.sandbox_host_source_path
+                else None
+            ),
+            host_memstack_volume=(
+                {
+                    self._settings.sandbox_host_memstack_path: (
+                        self._settings.sandbox_host_memstack_mount_point
+                    )
+                }
+                if self._settings and self._settings.sandbox_host_memstack_path
+                else None
+            ),
         )
 
     def sandbox_mcp_server_manager(self) -> Any:

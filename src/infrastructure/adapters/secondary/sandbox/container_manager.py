@@ -14,7 +14,7 @@ import docker
 from docker.errors import ImageNotFound, NotFound
 from docker.models.containers import Container
 
-from src.infrastructure.adapters.secondary.sandbox.constants import (  # type: ignore[attr-defined]
+from src.infrastructure.adapters.secondary.sandbox.constants import (
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
     MCP_WEBSOCKET_PORT,
@@ -78,6 +78,7 @@ class ContainerManager:
         environment: dict[str, str] | None = None,
         project_id: str | None = None,
         tenant_id: str | None = None,
+        extra_volumes: dict[str, str] | None = None,
     ) -> Container:
         """
         Create a new Docker container for sandbox.
@@ -91,6 +92,7 @@ class ContainerManager:
             environment: Additional environment variables
             project_id: Project ID for labeling
             tenant_id: Tenant ID for labeling
+            extra_volumes: Additional read-only volume mounts (host_path -> container_path)
 
         Returns:
             Created Docker container
@@ -128,9 +130,13 @@ class ContainerManager:
         }
 
         # Build volume mounts
-        volumes = {
+        volumes: dict[str, dict[str, str]] = {
             project_path: {"bind": "/workspace", "mode": "rw"},
         }
+        if extra_volumes:
+            for host_path, container_path in extra_volumes.items():
+                if host_path and container_path:
+                    volumes[host_path] = {"bind": container_path, "mode": "ro"}
 
         # Resource limits
         mem_limit = memory_limit or self._default_memory_limit
@@ -160,14 +166,16 @@ class ContainerManager:
             ),
         )
 
-        logger.info(f"Created container {container.id[:12]} for sandbox {sandbox_id}")
+        container_id = container.id or "unknown"
+        logger.info(f"Created container {container_id[:12]} for sandbox {sandbox_id}")
         return container
 
     async def start_container(self, container: Container) -> None:
         """Start a container."""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, container.start)
-        logger.info(f"Started container {container.id[:12]}")
+        container_id = container.id or "unknown"
+        logger.info(f"Started container {container_id[:12]}")
 
     async def stop_container(
         self,
@@ -178,9 +186,11 @@ class ContainerManager:
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, lambda: container.stop(timeout=timeout))
-            logger.info(f"Stopped container {container.id[:12]}")
+            container_id = container.id or "unknown"
+            logger.info(f"Stopped container {container_id[:12]}")
         except Exception as e:
-            logger.warning(f"Error stopping container {container.id[:12]}: {e}")
+            container_id = container.id or "unknown"
+            logger.warning(f"Error stopping container {container_id[:12]}: {e}")
 
     async def remove_container(
         self,
@@ -191,12 +201,15 @@ class ContainerManager:
         """Remove a container."""
         loop = asyncio.get_event_loop()
         try:
+            container_id = container.id or "unknown"
             await loop.run_in_executor(None, lambda: container.remove(force=force, v=v))
-            logger.info(f"Removed container {container.id[:12]}")
+            logger.info(f"Removed container {container_id[:12]}")
         except NotFound:
-            logger.debug(f"Container {container.id[:12]} already removed")
+            container_id = container.id or "unknown"
+            logger.debug(f"Container {container_id[:12]} already removed")
         except Exception as e:
-            logger.warning(f"Error removing container {container.id[:12]}: {e}")
+            container_id = container.id or "unknown"
+            logger.warning(f"Error removing container {container_id[:12]}: {e}")
 
     async def get_container(self, container_id: str) -> Container | None:
         """Get container by ID."""
@@ -237,7 +250,7 @@ class ContainerManager:
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, container.reload)
-            return cast(bool, container.status == "running")
+            return container.status == "running"
         except Exception:
             return False
 
@@ -285,7 +298,8 @@ class ContainerManager:
                     await self.remove_container(container)
                     count += 1
                 except Exception as e:
-                    logger.warning(f"Failed to cleanup container {container.id[:12]}: {e}")
+                    container_id = container.id or "unknown"
+                    logger.warning(f"Failed to cleanup container {container_id[:12]}: {e}")
 
         if count > 0:
             logger.info(f"Cleaned up {count} orphaned containers")
@@ -296,7 +310,8 @@ class ContainerManager:
         """Get resource usage stats for container."""
         loop = asyncio.get_event_loop()
         try:
-            stats = await loop.run_in_executor(None, lambda: container.stats(stream=False))
+            raw_stats = await loop.run_in_executor(None, lambda: container.stats(stream=False))
+            stats = cast(dict[str, Any], raw_stats)
 
             # Parse CPU usage
             cpu_delta = (

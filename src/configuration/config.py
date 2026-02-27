@@ -275,6 +275,19 @@ class Settings(BaseSettings):
     sandbox_profile_type: str = Field(default="standard", alias="SANDBOX_PROFILE_TYPE")
     sandbox_auto_recover: bool = Field(default=True, alias="SANDBOX_AUTO_RECOVER")
     sandbox_health_check_interval: int = Field(default=60, alias="SANDBOX_HEALTH_CHECK_INTERVAL")
+    sandbox_host_source_path: str = Field(
+        default="", alias="SANDBOX_HOST_SOURCE_PATH"
+    )  # Host path to mount read-only into sandbox (e.g., /path/to/project/src)
+    sandbox_host_source_mount_point: str = Field(
+        default="/host_src", alias="SANDBOX_HOST_SOURCE_MOUNT_POINT"
+    )  # Container path where host source is mounted (read-only)
+    sandbox_host_memstack_path: str = Field(
+        default="", alias="SANDBOX_HOST_MEMSTACK_PATH"
+    )  # Host path to .memstack dir for rw mount (e.g., /path/to/project/.memstack)
+    sandbox_host_memstack_mount_point: str = Field(
+        default="/workspace/.memstack",
+        alias="SANDBOX_HOST_MEMSTACK_MOUNT_POINT",
+    )  # Container path where .memstack is mounted (read-write overlay)
 
     # Agent Skill System (L2 Layer) Settings
     # Threshold for skill prompt injection (0.5 = medium match score)

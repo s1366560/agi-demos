@@ -17,11 +17,16 @@ logger = logging.getLogger(__name__)
 
 # Additional paths outside workspace that tools are allowed to access.
 # These are common system directories that agents legitimately need to read/list.
-_EXTRA_ALLOWED_PATHS = [
+_EXTRA_ALLOWED_PATHS: list[Path] = [
     Path("/tmp"),
     Path("/var/tmp"),
     Path("/etc"),
 ]
+
+# If MCP_HOST_SOURCE is set, allow read-only access to the host source directory.
+_host_source = os.getenv("MCP_HOST_SOURCE", "")
+if _host_source:
+    _EXTRA_ALLOWED_PATHS.append(Path(_host_source))
 
 def _resolve_path(
     path: str,

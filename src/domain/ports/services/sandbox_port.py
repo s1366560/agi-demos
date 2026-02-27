@@ -46,7 +46,8 @@ class SandboxConfig:
     blocked_ports: list[int] = field(default_factory=list)  # Ports to block
     security_profile: str = "standard"
     environment: dict[str, str] = field(default_factory=dict)
-    volumes: dict[str, str] = field(default_factory=dict)
+    volumes: dict[str, str] = field(default_factory=dict)  # host->container (ro)
+    rw_volumes: dict[str, str] = field(default_factory=dict)  # host->container (rw)
     desktop_enabled: bool = True  # Whether to start desktop environment (VNC/noVNC)
 
 
@@ -271,22 +272,17 @@ class SandboxTimeoutError(SandboxError):
     """Sandbox execution timed out."""
 
 
-
 class SandboxResourceError(SandboxError):
     """Sandbox resource limits exceeded."""
-
 
 
 class SandboxSecurityError(SandboxError):
     """Security violation in sandbox."""
 
 
-
 class SandboxConnectionError(SandboxError):
     """Failed to connect to sandbox."""
 
 
-
 class SandboxNotFoundError(SandboxError):
     """Sandbox instance not found."""
-
