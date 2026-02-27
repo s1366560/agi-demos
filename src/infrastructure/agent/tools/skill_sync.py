@@ -136,8 +136,6 @@ class SkillSyncTool(AgentTool):
             return {"error": prereq_error}
 
         try:
-            from pathlib import Path
-
             from src.application.services.skill_reverse_sync import SkillReverseSync
             from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
                 SqlSkillRepository,
@@ -145,6 +143,7 @@ class SkillSyncTool(AgentTool):
             from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
                 SqlSkillVersionRepository,
             )
+            from src.infrastructure.agent.state.agent_worker_state import resolve_project_base_path
 
             assert self._session_factory is not None
             async with self._session_factory() as db_session:
@@ -153,7 +152,7 @@ class SkillSyncTool(AgentTool):
                 reverse_sync = SkillReverseSync(
                     skill_repository=skill_repo,
                     skill_version_repository=version_repo,
-                    host_project_path=Path.cwd(),
+                    host_project_path=resolve_project_base_path(self._project_id or ""),
                 )
 
                 assert self._sandbox_adapter is not None, "sandbox_adapter is required"
@@ -313,8 +312,6 @@ async def _skill_sync_execute_sync(
     ctx: ToolContext,
 ) -> ToolResult:
     """Execute the core skill sync operation (DB + sandbox)."""
-    from pathlib import Path
-
     from src.application.services.skill_reverse_sync import SkillReverseSync
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
         SqlSkillRepository,
@@ -322,6 +319,7 @@ async def _skill_sync_execute_sync(
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
+    from src.infrastructure.agent.state.agent_worker_state import resolve_project_base_path
 
     assert _skill_sync_session_factory is not None
     assert _skill_sync_sandbox_adapter is not None
@@ -334,7 +332,7 @@ async def _skill_sync_execute_sync(
         reverse_sync = SkillReverseSync(
             skill_repository=skill_repo,
             skill_version_repository=version_repo,
-            host_project_path=Path.cwd(),
+            host_project_path=resolve_project_base_path(_skill_sync_project_id or ""),
         )
 
         result = await reverse_sync.sync_from_sandbox(
@@ -414,9 +412,7 @@ async def _skill_sync_execute_sync(
             },
             "change_summary": {
                 "type": "string",
-                "description": (
-                    "Optional description of what changed in this version"
-                ),
+                "description": ("Optional description of what changed in this version"),
             },
         },
         "required": ["skill_name"],
@@ -458,11 +454,17 @@ async def skill_sync_tool(
 
     try:
         return await _skill_sync_execute_sync(
-            skill_name, skill_path, change_summary, ctx,
+            skill_name,
+            skill_path,
+            change_summary,
+            ctx,
         )
     except Exception as e:
         logger.error(
-            "Skill sync failed for '%s': %s", skill_name, e, exc_info=True,
+            "Skill sync failed for '%s': %s",
+            skill_name,
+            e,
+            exc_info=True,
         )
         return ToolResult(
             output=f"Skill sync failed: {e}",

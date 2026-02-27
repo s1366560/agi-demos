@@ -434,7 +434,10 @@ class ProjectReActAgent:
 
             if embedding_service and redis_client:
                 cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
-                chunk_search = ChunkHybridSearch(cast("EmbeddingService", cached_embedding), session_factory)  # type: ignore[name-defined]
+                chunk_search = ChunkHybridSearch(
+                    cast("EmbeddingService", cached_embedding),  # noqa: F821
+                    session_factory,
+                )  # type: ignore[name-defined]
                 memory_recall = MemoryRecallPreprocessor(
                     chunk_search=chunk_search,
                     graph_search=graph_service,
@@ -450,7 +453,7 @@ class ProjectReActAgent:
                 memory_capture = MemoryCapturePostprocessor(
                     llm_client=llm_client,
                     session_factory=session_factory,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]
+                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]  # noqa: F821
                 )
                 logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
 
@@ -458,7 +461,7 @@ class ProjectReActAgent:
 
                 memory_flush = MemoryFlushService(
                     llm_client=llm_client,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]
+                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]  # noqa: F821
                     session_factory=session_factory,
                 )
         except Exception as e:
@@ -1126,13 +1129,12 @@ class ProjectReActAgent:
         Returns:
             List of enabled SubAgent instances for the project
         """
-        from pathlib import Path
-
         from src.application.services.subagent_service import SubAgentService
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
         from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
             SqlSubAgentRepository,
         )
+        from src.infrastructure.agent.state.agent_worker_state import resolve_project_base_path
         from src.infrastructure.agent.subagent.filesystem_loader import (
             FileSystemSubAgentLoader,
         )
@@ -1157,7 +1159,7 @@ class ProjectReActAgent:
         # Load from filesystem
         try:
             fs_loader = FileSystemSubAgentLoader(
-                base_path=Path.cwd(),
+                base_path=resolve_project_base_path(self.config.project_id),
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
@@ -1457,7 +1459,9 @@ class ProjectAgentManager:
         for key in agents_to_stop:
             try:
                 # Get agent from local list (already removed from dict)
-                found_agent: ProjectReActAgent | None = next((a for k, a in self._agents.items() if k == key), None)
+                found_agent: ProjectReActAgent | None = next(
+                    (a for k, a in self._agents.items() if k == key), None
+                )
                 if found_agent:
                     await found_agent.stop()
                     logger.info(f"ProjectAgentManager: Cleaned up idle agent {key}")
