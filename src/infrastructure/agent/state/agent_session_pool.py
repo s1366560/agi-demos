@@ -632,7 +632,6 @@ async def get_or_create_agent_session(
         match_threshold=subagent_match_threshold,
     )
 
-    from pathlib import Path
 
     from src.infrastructure.adapters.secondary.skill import (
         LocalSkillResourceAdapter,
@@ -640,10 +639,11 @@ async def get_or_create_agent_session(
     )
     from src.infrastructure.agent.state.agent_worker_state import (
         get_mcp_sandbox_adapter,
+        resolve_project_base_path,
     )
 
     sandbox_adapter = get_mcp_sandbox_adapter()
-    host_project_path = Path.cwd()
+    host_project_path = resolve_project_base_path(project_id)
 
     if sandbox_adapter:
         skill_resource_port = SandboxSkillResourceAdapter(

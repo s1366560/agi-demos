@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from src.domain.ports.services.sandbox_port import SandboxPort
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -536,12 +538,10 @@ def _add_skill_installer_tools(
 ) -> None:
     """Add SkillInstallerTool and PluginManagerTool."""
     try:
-        from pathlib import Path
-
         from src.infrastructure.agent.tools.plugin_manager import PluginManagerTool
         from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
 
-        project_path = Path.cwd()
+        project_path = resolve_project_base_path(project_id)
         skill_installer = SkillInstallerTool(
             project_path=project_path,
             tenant_id=tenant_id,
@@ -857,6 +857,64 @@ def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
             return cast(str | None, tool.sandbox_id)
     return None
 
+def resolve_project_base_path(
+    project_id: str,
+    tools: dict[str, Any] | None = None,
+) -> Path:
+    """Resolve the filesystem base path for a project.
+
+    When a sandbox is active for the project, returns the **host-side**
+    project path that is bind-mounted into the container as ``/workspace``.
+    Custom tools at ``<base_path>/.memstack/tools/`` will therefore be
+    found correctly regardless of whether a sandbox is in use.
+
+    Falls back to ``Path.cwd()`` when no sandbox is available (local
+    development without Docker sandboxes).
+
+    Args:
+        project_id: Project ID to resolve path for.
+        tools: Optional tools dict to extract sandbox_id from loaded
+            sandbox tool wrappers.  When not provided, falls back to
+            the adapter's active sandbox lookup.
+
+    Returns:
+        Resolved base path for ``.memstack/`` subdirectories.
+    """
+    from pathlib import Path
+
+    # Strategy 1: Try to get project_path from the sandbox adapter
+    if _mcp_sandbox_adapter is not None:
+        # First, check if we already have a sandbox_id from loaded tools
+        sandbox_id: str | None = None
+        if tools is not None:
+            sandbox_id = _find_sandbox_id(tools)
+
+        # If no sandbox_id from tools, look up by project_id
+        if sandbox_id is None:
+            # Check active sandboxes for this project
+            active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+            for sid, instance in active.items():
+                inst_project_id = getattr(instance, "project_id", None)
+                if inst_project_id == project_id:
+                    sandbox_id = sid
+                    break
+
+        if sandbox_id is not None:
+            active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+            instance = active.get(sandbox_id)
+            if instance is not None:
+                project_path = getattr(instance, "project_path", "")
+                if project_path:
+                    resolved = Path(project_path)
+                    if resolved.exists():
+                        logger.debug(
+                            "Resolved project base path from sandbox: %s",
+                            resolved,
+                        )
+                        return resolved
+
+    # Strategy 2: Fall back to cwd (local development)
+    return Path.cwd()
 
 def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
     """Log plugin runtime diagnostics consistently."""
@@ -876,6 +934,9 @@ def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> Non
 def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
     """Load custom tools from ``.memstack/tools/`` directory.
 
+    Resolves the base path from the project's sandbox when available,
+    falling back to ``Path.cwd()`` for local development.
+
     Scans for standalone Python files using the ``@tool_define`` decorator.
     Errors are logged but do not prevent agent startup.
     """
@@ -884,7 +945,8 @@ def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
             load_custom_tools,
         )
 
-        custom_tools, diagnostics = load_custom_tools()
+        base_path = resolve_project_base_path(project_id, tools)
+        custom_tools, diagnostics = load_custom_tools(base_path=base_path)
         for diag in diagnostics:
             log_fn = getattr(logger, diag.level, logger.info)
             log_fn(
@@ -896,9 +958,11 @@ def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
         if custom_tools:
             tools.update(custom_tools)
             logger.info(
-                "Agent Worker: Added %d custom tool(s) for project %s",
+                "Agent Worker: Added %d custom tool(s) for project %s "
+                "(base_path=%s)",
                 len(custom_tools),
                 project_id,
+                base_path,
             )
     except Exception as e:
         logger.warning("Agent Worker: Failed to load custom tools: %s", e)
@@ -1976,6 +2040,63 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
         logger.info("Agent Worker: All tool caches invalidated")
 
 
+def rescan_custom_tools_for_project(project_id: str) -> int:
+    """Re-scan custom tools for a project and merge into the tools cache.
+
+    This enables hot-reload of custom tools created mid-conversation.
+    When the agent (or plugin_manager reload) triggers a tool refresh,
+    newly created ``.memstack/tools/*.py`` files will be discovered.
+
+    Args:
+        project_id: Project ID to rescan custom tools for.
+
+    Returns:
+        Number of custom tools found (including previously loaded ones).
+    """
+    cached = _tools_cache.get(project_id)
+    if cached is None:
+        logger.debug(
+            "rescan_custom_tools_for_project: no cached tools for %s, skipping",
+            project_id,
+        )
+        return 0
+
+    try:
+        from src.infrastructure.agent.tools.custom_tool_loader import (
+            load_custom_tools,
+        )
+
+        base_path = resolve_project_base_path(project_id, cached)
+        custom_tools, diagnostics = load_custom_tools(base_path=base_path)
+        for diag in diagnostics:
+            log_fn = getattr(logger, diag.level, logger.info)
+            log_fn(
+                "[AgentWorker][CustomTools:rescan] %s: %s (%s)",
+                diag.code,
+                diag.message,
+                diag.file_path,
+            )
+
+        if custom_tools:
+            # Merge into cached tools (overwrites existing custom tools
+            # with same name, adds new ones)
+            cached.update(custom_tools)
+            logger.info(
+                "Agent Worker: Rescanned %d custom tool(s) for project %s",
+                len(custom_tools),
+                project_id,
+            )
+        return len(custom_tools)
+
+    except Exception as e:
+        logger.warning(
+            "Agent Worker: Failed to rescan custom tools for %s: %s",
+            project_id,
+            e,
+        )
+        return 0
+
+
 def invalidate_all_caches_for_project(
     project_id: str,
     tenant_id: str | None = None,
@@ -2081,7 +2202,6 @@ async def get_or_create_skills(
     Returns:
         List of Skill domain entities
     """
-    from pathlib import Path
 
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
@@ -2090,8 +2210,8 @@ async def get_or_create_skills(
 
     async with _skills_cache_lock:
         if cache_key not in _skills_cache:
-            # Use current working directory as base path for skill scanning
-            base_path = Path.cwd()
+            # Use sandbox-aware path resolution for skill scanning
+            base_path = resolve_project_base_path(project_id or "")
 
             # Create scanner with standard skill directories
             scanner = FileSystemSkillScanner(
@@ -2233,7 +2353,6 @@ async def get_or_create_skill_loader_tool(
     Returns:
         Initialized SkillLoaderTool instance with dynamic description
     """
-    from pathlib import Path
 
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.application.services.skill_service import SkillService
@@ -2296,8 +2415,8 @@ async def get_or_create_skill_loader_tool(
 
     async with _skill_loader_cache_lock:
         if cache_key not in _skill_loader_cache:
-            # Use current working directory as base path
-            base_path = Path.cwd()
+            # Use sandbox-aware path resolution for skill scanning
+            base_path = resolve_project_base_path(project_id or "")
 
             # Create scanner with standard skill directories
             scanner = FileSystemSkillScanner(

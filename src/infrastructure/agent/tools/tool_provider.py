@@ -33,9 +33,13 @@ def create_cached_tool_provider(
     """
     from src.infrastructure.agent.state.agent_worker_state import (
         get_cached_tools_for_project,
+        rescan_custom_tools_for_project,
     )
 
     def provider() -> dict[str, Any]:
+        # Rescan custom tools before returning — picks up
+        # .memstack/tools/*.py files created mid-conversation.
+        rescan_custom_tools_for_project(project_id)
         cached = get_cached_tools_for_project(project_id)
         if cached is not None:
             return cached
