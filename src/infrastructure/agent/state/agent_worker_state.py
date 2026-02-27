@@ -85,6 +85,7 @@ __all__ = [
     # Tools cache access (hot-plug support)
     "get_cached_tools",
     "get_cached_tools_for_project",
+    "get_custom_tool_diagnostics",
     "get_hitl_response_listener",
     "get_mcp_sandbox_adapter",
     # MCP Tools
@@ -140,6 +141,9 @@ _llm_cache_lock = asyncio.Lock()
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
 _tools_cache_lock = asyncio.Lock()
+
+# Custom tool diagnostics cache (by project_id key)
+_custom_tool_diagnostics: dict[str, list[Any]] = {}
 
 # Skills cache (by tenant_id:project_id key)
 _skills_cache: dict[str, list[Any]] = {}
@@ -876,6 +880,7 @@ def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
             return cast(str | None, tool.sandbox_id)
     return None
 
+
 def resolve_project_base_path(
     project_id: str,
     tools: dict[str, Any] | None = None,
@@ -935,6 +940,7 @@ def resolve_project_base_path(
     # Strategy 2: Fall back to cwd (local development)
     return Path.cwd()
 
+
 def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
     """Log plugin runtime diagnostics consistently."""
     message = (
@@ -966,23 +972,42 @@ def _add_custom_tools(tools: dict[str, Any], project_id: str) -> None:
 
         base_path = resolve_project_base_path(project_id, tools)
         custom_tools, diagnostics = load_custom_tools(base_path=base_path)
+        _custom_tool_diagnostics[project_id] = diagnostics
         for diag in diagnostics:
-            log_fn = getattr(logger, diag.level, logger.info)
-            log_fn(
-                "[AgentWorker][CustomTools] %s: %s (%s)",
-                diag.code,
-                diag.message,
-                diag.file_path,
-            )
+            if diag.level == "error":
+                logger.error(
+                    "[AgentWorker][CustomTools] %s: %s (%s)",
+                    diag.code,
+                    diag.message,
+                    diag.file_path,
+                )
+            else:
+                log_fn = getattr(logger, diag.level, logger.info)
+                log_fn(
+                    "[AgentWorker][CustomTools] %s: %s (%s)",
+                    diag.code,
+                    diag.message,
+                    diag.file_path,
+                )
         if custom_tools:
             tools.update(custom_tools)
             logger.info(
-                "Agent Worker: Added %d custom tool(s) for project %s "
-                "(base_path=%s)",
+                "Agent Worker: Added %d custom tool(s) for project %s (base_path=%s)",
                 len(custom_tools),
                 project_id,
                 base_path,
             )
+
+        # Register custom_tools_status diagnostic tool
+        try:
+            from src.infrastructure.agent.tools.custom_tool_status import (
+                custom_tools_status,
+            )
+
+            tools[custom_tools_status.name] = custom_tools_status
+        except Exception:
+            logger.debug("custom_tools_status tool not available")
+
     except Exception as e:
         logger.warning("Agent Worker: Failed to load custom tools: %s", e)
 
@@ -2044,6 +2069,16 @@ def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
     return _tools_cache.get(project_id)
 
 
+def get_custom_tool_diagnostics(
+    project_id: str,
+) -> list[Any]:
+    """Return the latest custom tool load diagnostics for a project.
+
+    Returns an empty list if no diagnostics have been recorded.
+    """
+    return list(_custom_tool_diagnostics.get(project_id, []))
+
+
 def invalidate_tools_cache(project_id: str | None = None) -> None:
     """Invalidate tool cache for a project or all projects.
 
@@ -2053,9 +2088,14 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
     global _tools_cache
     if project_id:
         _tools_cache.pop(project_id, None)
-        logger.info(f"Agent Worker: Tool cache invalidated for project {project_id}")
+        _custom_tool_diagnostics.pop(project_id, None)
+        logger.info(
+            "Agent Worker: Tool cache invalidated for project %s",
+            project_id,
+        )
     else:
         _tools_cache.clear()
+        _custom_tool_diagnostics.clear()
         logger.info("Agent Worker: All tool caches invalidated")
 
 
@@ -2074,11 +2114,39 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
     """
     cached = _tools_cache.get(project_id)
     if cached is None:
+        # No cached tools yet -- still load custom tools for diagnostics.
+        # The tools themselves cannot be merged (no cache entry), but
+        # diagnostics are recorded so the user gets feedback.
         logger.debug(
-            "rescan_custom_tools_for_project: no cached tools for %s, skipping",
+            "rescan_custom_tools_for_project: no cached tools for %s, loading diagnostics only",
             project_id,
         )
-        return 0
+        try:
+            from src.infrastructure.agent.tools.custom_tool_loader import (
+                load_custom_tools,
+            )
+
+            base_path = resolve_project_base_path(project_id)
+            custom_tools, diagnostics = load_custom_tools(
+                base_path=base_path,
+            )
+            _custom_tool_diagnostics[project_id] = diagnostics
+            for diag in diagnostics:
+                log_fn = getattr(logger, diag.level, logger.info)
+                log_fn(
+                    "[AgentWorker][CustomTools:rescan:no-cache] %s: %s (%s)",
+                    diag.code,
+                    diag.message,
+                    diag.file_path,
+                )
+            return len(custom_tools)
+        except Exception as e:
+            logger.warning(
+                "Agent Worker: Failed to rescan custom tools (no-cache) for %s: %s",
+                project_id,
+                e,
+            )
+            return 0
 
     try:
         from src.infrastructure.agent.tools.custom_tool_loader import (
@@ -2087,6 +2155,7 @@ def rescan_custom_tools_for_project(project_id: str) -> int:
 
         base_path = resolve_project_base_path(project_id, cached)
         custom_tools, diagnostics = load_custom_tools(base_path=base_path)
+        _custom_tool_diagnostics[project_id] = diagnostics
         for diag in diagnostics:
             log_fn = getattr(logger, diag.level, logger.info)
             log_fn(

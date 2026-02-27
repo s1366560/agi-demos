@@ -203,13 +203,21 @@ class CustomToolLoader:
         try:
             module = self._import_file(file_path, module_name)
         except Exception as exc:
+            import traceback
+
+            tb = traceback.format_exc()
             diagnostics.append(
                 CustomToolDiagnostic(
                     file_path=str(file_path),
                     code="import_failed",
-                    message=f"Failed to import: {exc}",
+                    message=f"Failed to import: {exc}\n{tb}",
                     level="error",
                 )
+            )
+            logger.error(
+                "Custom tool import failed: %s\n%s",
+                file_path,
+                tb,
             )
             return {}, diagnostics
 
