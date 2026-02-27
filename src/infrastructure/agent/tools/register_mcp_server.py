@@ -180,7 +180,9 @@ class RegisterMCPServerTool(AgentTool):
             namespaced_tool_names = [f"mcp__{server_name}__{name}" for name in tool_names]
 
             self._emit_tools_updated_event(server_name, namespaced_tool_names)
-            lifecycle_result = self._run_lifecycle_and_emit(server_name, namespaced_tool_names)
+            lifecycle_result = self._run_lifecycle_and_emit(
+                server_name, namespaced_tool_names, discovered_tools=tools
+            )
 
             if lifecycle_result["probe"].get("status") == "missing_tools":
                 logger.warning(
@@ -309,9 +311,21 @@ class RegisterMCPServerTool(AgentTool):
         )
 
     def _run_lifecycle_and_emit(
-        self, server_name: str, namespaced_tool_names: list[str]
+        self,
+        server_name: str,
+        namespaced_tool_names: list[str],
+        *,
+        discovered_tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Run lifecycle orchestrator and emit toolset_changed event."""
+        """Run lifecycle orchestrator and emit toolset_changed event.
+
+        Args:
+            server_name: Name of the MCP server.
+            namespaced_tool_names: Namespaced tool names (mcp__server__tool).
+            discovered_tools: Raw MCP tool metadata dicts from sandbox discovery.
+                Included in the toolset_changed event so the processor can inject
+                them directly without waiting for a cache repopulation round-trip.
+        """
         from src.infrastructure.agent.tools.self_modifying_lifecycle import (
             SelfModifyingLifecycleOrchestrator,
         )
@@ -329,17 +343,20 @@ class RegisterMCPServerTool(AgentTool):
             self._project_id,
             lifecycle_result["cache_invalidation"],
         )
+        event_data: dict[str, Any] = {
+            "source": TOOL_NAME,
+            "project_id": self._project_id,
+            "tenant_id": self._tenant_id,
+            "server_name": server_name,
+            "tool_names": namespaced_tool_names,
+            "lifecycle": lifecycle_result,
+        }
+        if discovered_tools:
+            event_data["discovered_tools"] = discovered_tools
         self._pending_events.append(
             {
                 "type": "toolset_changed",
-                "data": {
-                    "source": TOOL_NAME,
-                    "project_id": self._project_id,
-                    "tenant_id": self._tenant_id,
-                    "server_name": server_name,
-                    "tool_names": namespaced_tool_names,
-                    "lifecycle": lifecycle_result,
-                },
+                "data": event_data,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
         )
@@ -1019,8 +1036,19 @@ async def _register_mcp_emit_events(
     ctx: ToolContext,
     server_name: str,
     namespaced_tool_names: list[str],
+    *,
+    discovered_tools: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Emit tools-updated and toolset_changed events. Returns lifecycle result."""
+    """Emit tools-updated and toolset_changed events. Returns lifecycle result.
+
+    Args:
+        ctx: Tool execution context.
+        server_name: Name of the MCP server.
+        namespaced_tool_names: Namespaced tool names (mcp__server__tool).
+        discovered_tools: Raw MCP tool metadata dicts from sandbox discovery.
+            Included in the toolset_changed event so the processor can inject
+            them directly without waiting for a cache repopulation round-trip.
+    """
     from src.domain.events.agent_events import AgentToolsUpdatedEvent
     from src.infrastructure.agent.tools.self_modifying_lifecycle import (
         SelfModifyingLifecycleOrchestrator,
@@ -1051,16 +1079,19 @@ async def _register_mcp_emit_events(
         "register_mcp_server lifecycle completed for project %s: %s",
         _register_mcp_project_id, lifecycle_result["cache_invalidation"],
     )
+    event_data: dict[str, Any] = {
+        "source": TOOL_NAME,
+        "project_id": _register_mcp_project_id,
+        "tenant_id": _register_mcp_tenant_id,
+        "server_name": server_name,
+        "tool_names": namespaced_tool_names,
+        "lifecycle": lifecycle_result,
+    }
+    if discovered_tools:
+        event_data["discovered_tools"] = discovered_tools
     await ctx.emit({
         "type": "toolset_changed",
-        "data": {
-            "source": TOOL_NAME,
-            "project_id": _register_mcp_project_id,
-            "tenant_id": _register_mcp_tenant_id,
-            "server_name": server_name,
-            "tool_names": namespaced_tool_names,
-            "lifecycle": lifecycle_result,
-        },
+        "data": event_data,
         "timestamp": datetime.now(UTC).isoformat(),
     })
     return lifecycle_result
@@ -1191,7 +1222,7 @@ async def _register_mcp_execute_core(
     namespaced_tool_names = [f"mcp__{server_name}__{name}" for name in tool_names]
 
     lifecycle_result = await _register_mcp_emit_events(
-        ctx, server_name, namespaced_tool_names
+        ctx, server_name, namespaced_tool_names, discovered_tools=tools
     )
 
     if lifecycle_result["probe"].get("status") == "missing_tools":

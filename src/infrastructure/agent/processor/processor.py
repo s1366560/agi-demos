@@ -345,10 +345,31 @@ class SessionProcessor:
                 logger.warning("[Processor] tool_provider returned None, skipping refresh")
                 return None
 
-            # Update tools dict with new tool definitions
-            self.tools = {t.name: t for t in new_tools}
+            new_tools_map = {t.name: t for t in new_tools}
+
+            # Guard: never replace a populated tool registry with an empty set.
+            # After MCP registration the cache may be transiently empty due to
+            # invalidation; blindly assigning would wipe built-in tools and cause
+            # all subsequent tool calls to fail with "Unknown tool".
+            if not new_tools_map and self.tools:
+                logger.warning(
+                    "[Processor] tool_provider returned 0 tools but current registry "
+                    "has %d tools — keeping existing tools to avoid wipe",
+                    len(self.tools),
+                )
+                return None
+
+            # Merge: keep existing tools, overlay with refreshed ones.
+            # This ensures built-in tools survive even if the provider only
+            # returns the newly discovered MCP tools.
+            merged = {**self.tools, **new_tools_map}
+            self.tools = merged
             logger.info(
-                "[Processor] Refreshed tools from provider: %d tools available", len(self.tools)
+                "[Processor] Refreshed tools from provider: %d tools available "
+                "(%d new/updated, %d total)",
+                len(new_tools_map),
+                len(new_tools_map),
+                len(self.tools),
             )
             return len(self.tools)
 
@@ -1191,6 +1212,10 @@ class SessionProcessor:
                     tool_execution_id=tool_part.tool_execution_id,
                 )
             )
+            # Feed unknown-tool errors to doom-loop error tracker
+            self.doom_loop_detector.record_error(
+                tool_name, f"Unknown tool: {tool_name}"
+            )
             return None
 
         return (tool_part, tool_def)
@@ -1677,7 +1702,7 @@ class SessionProcessor:
         self._last_raw_result = result
         self._last_output_str = output_str
 
-    async def _emit_tool_side_effects(  # noqa: PLR0912
+    async def _emit_tool_side_effects(  # noqa: PLR0912, PLR0915
         self,
         tool_name: str,
         tool_def: "ToolDefinition",
@@ -1793,6 +1818,38 @@ class SessionProcessor:
                                 event_data["refresh_status"] = refresh_status
                                 if refresh_count is not None:
                                     event_data["refreshed_tool_count"] = refresh_count
+
+                                # Fix: If discovered_tools are present and the
+                                # refresh didn't populate them (cache race), try
+                                # a second refresh now that the lifecycle has settled.
+                                _ = event_data.get("discovered_tools")
+                                tool_names_in_event = event_data.get("tool_names", [])
+                                missing = [
+                                    n for n in tool_names_in_event
+                                    if n not in self.tools
+                                ]
+                                if missing:
+                                    retry_count = self._refresh_tools()
+                                    if retry_count is not None:
+                                        logger.info(
+                                            "[Processor] Post-event retry refresh loaded %d tools",
+                                            retry_count,
+                                        )
+                                        event_data["refresh_status"] = "success_retry"
+                                        event_data["refreshed_tool_count"] = retry_count
+                                    else:
+                                        # Still missing — log clearly so we can diagnose
+                                        still_missing = [
+                                            n for n in tool_names_in_event
+                                            if n not in self.tools
+                                        ]
+                                        if still_missing:
+                                            logger.warning(
+                                                "[Processor] MCP tools still missing after retry "
+                                                "refresh: %s (total tools: %d)",
+                                                still_missing,
+                                                len(self.tools),
+                                            )
                         yield event
                 except Exception as pending_err:
                     logger.error(
@@ -2183,6 +2240,47 @@ class SessionProcessor:
             for ev in self.__resolve_errors:
                 yield ev
             return
+
+        # 1b. Error-based doom loop intervention (consecutive tool errors)
+        if self.doom_loop_detector.should_intervene_on_errors():
+            recent = self.doom_loop_detector.get_recent_errors(3)
+            error_summary = "; ".join(
+                f"{e.tool}: {e.error}" for e in recent
+            )
+            logger.warning(
+                "[Processor] Consecutive tool errors threshold reached "
+                "(%d errors). Recent: %s",
+                self.doom_loop_detector.consecutive_error_count,
+                error_summary,
+            )
+            yield AgentDoomLoopDetectedEvent(
+                tool=tool_name,
+                input={
+                    "reason": "consecutive_tool_errors",
+                    "error_count": self.doom_loop_detector.consecutive_error_count,
+                    "recent_errors": error_summary,
+                },
+            )
+            tool_part = self._pending_tool_calls.get(call_id)
+            if tool_part:
+                tool_part.status = ToolState.ERROR
+                tool_part.error = (
+                    f"Stopped: {self.doom_loop_detector.consecutive_error_count}"
+                    f" consecutive tool errors detected"
+                )
+                tool_part.end_time = time.time()
+            yield AgentObserveEvent(
+                tool_name=tool_name,
+                error=(
+                    f"Execution halted: {self.doom_loop_detector.consecutive_error_count}"
+                    f" consecutive tool errors. Last errors: {error_summary}."
+                    f" Please verify tool names and try a different approach."
+                ),
+                call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id if tool_part else None,
+            )
+            self._state = ProcessorState.OBSERVING
+            return
         tool_part, tool_def = resolved
 
         # 2. Doom-loop
@@ -2252,6 +2350,8 @@ class SessionProcessor:
                     session_id,
                 ):
                     yield ev
+                # Reset error tracker on successful pipeline execution
+                self.doom_loop_detector.reset_errors()
 
             except Exception as e:
                 logger.error(
@@ -2345,6 +2445,8 @@ class SessionProcessor:
                 tool_execution_id=tool_part.tool_execution_id,
             )
 
+        # Reset error tracker on successful non-pipeline execution
+        self.doom_loop_detector.reset_errors()
         self._state = ProcessorState.OBSERVING
 
     # Max bytes for tool output stored in LLM context

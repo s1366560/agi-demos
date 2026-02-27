@@ -364,8 +364,10 @@ class TestProcessorToolRefreshEdgeCases:
 
         result = processor._refresh_tools()
 
-        assert result == 0
-        assert len(processor.tools) == 0
+        assert result is None
+        # Guard: existing tools are preserved when provider returns empty
+        assert len(processor.tools) == 1
+        assert "initial" in processor.tools
 
     def test_refresh_with_provider_raising_exception(self):
         """Should handle provider raising exception gracefully."""
@@ -544,7 +546,7 @@ class TestProcessorPendingToolEvents:
         )
         assert toolset_changed_event["data"]["refresh_source"] == "processor"
         assert toolset_changed_event["data"]["refresh_status"] == "success"
-        assert toolset_changed_event["data"]["refreshed_tool_count"] == 2
+        assert toolset_changed_event["data"]["refreshed_tool_count"] == 3
 
     @pytest.mark.asyncio
     async def test_plugin_manager_toolset_event_marks_refresh_skipped_on_error(self):
