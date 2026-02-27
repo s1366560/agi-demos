@@ -1,8 +1,9 @@
-"""Memory search and retrieval tools for the ReAct agent.
+"""Memory search, retrieval, and creation tools for the ReAct agent.
 
 Provides the agent with active memory capabilities:
 - memory_search: Semantic + keyword hybrid search across memory chunks
 - memory_get: Retrieve full content of a specific memory chunk
+- memory_create: Create a new memory entry in the project knowledge base
 
 These tools let the agent proactively search for relevant context
 rather than relying solely on automatic recall.
@@ -14,7 +15,7 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 
 from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.agent.tools.context import ToolContext
@@ -50,6 +51,7 @@ class MemorySearchTool(AgentTool):
         self._graph_service = graph_service
         self._project_id = project_id
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -72,6 +74,7 @@ class MemorySearchTool(AgentTool):
             "required": ["query"],
         }
 
+    @override
     async def execute(self, **kwargs: Any) -> str:
         query = kwargs.get("query", "")
         max_results = kwargs.get("max_results", 5)
@@ -186,6 +189,7 @@ class MemoryGetTool(AgentTool):
         self._session_factory = session_factory
         self._project_id = project_id
 
+    @override
     def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
@@ -198,6 +202,7 @@ class MemoryGetTool(AgentTool):
             "required": ["source_id"],
         }
 
+    @override
     async def execute(self, **kwargs: Any) -> str:
         source_id = kwargs.get("source_id", "")
         if not source_id:
@@ -547,3 +552,263 @@ async def memory_get_tool(
             output=json.dumps({"error": f"Failed to retrieve memory: {e}"}),
             is_error=True,
         )
+
+
+# ---------------------------------------------------------------------------
+# MemoryCreateTool (class-based) + @tool_define memory_create_tool
+# ---------------------------------------------------------------------------
+
+_memcreate_session_factory: Callable[..., Any] | None = None
+_memcreate_graph_service: Any = None
+_memcreate_project_id: str = ""
+_memcreate_tenant_id: str = ""
+
+
+def configure_memory_create(
+    session_factory: Callable[..., Any],
+    graph_service: Any,
+    project_id: str = "",
+    tenant_id: str = "",
+) -> None:
+    """Configure dependencies for the memory_create tool.
+
+    Called at agent startup to inject the DB session factory and graph service.
+    """
+    global _memcreate_session_factory, _memcreate_graph_service
+    global _memcreate_project_id, _memcreate_tenant_id
+    _memcreate_session_factory = session_factory
+    _memcreate_graph_service = graph_service
+    _memcreate_project_id = project_id
+    _memcreate_tenant_id = tenant_id
+
+
+class MemoryCreateTool(AgentTool):
+    """Create a new memory entry in the project knowledge base.
+
+    Persists the memory to the database and adds an episode to the
+    knowledge graph for entity extraction and relationship discovery.
+    """
+
+    def __init__(
+        self,
+        session_factory: Callable[..., Any] | None = None,
+        graph_service: Any = None,
+        project_id: str = "",
+        tenant_id: str = "",
+    ) -> None:
+        super().__init__(
+            name="memory_create",
+            description=(
+                "Create a new memory entry in the project knowledge base. "
+                "Use this to persist important facts, user preferences, decisions, "
+                "or any information that should be remembered for future conversations. "
+                "The memory will be indexed and made searchable via memory_search."
+            ),
+        )
+        self._session_factory = session_factory
+        self._graph_service = graph_service
+        self._project_id = project_id
+        self._tenant_id = tenant_id
+
+    @override
+    def get_parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": (
+                        "The content to store as a memory. "
+                        "Be specific and include all relevant details."
+                    ),
+                },
+                "title": {
+                    "type": "string",
+                    "description": (
+                        "A short descriptive title for this memory. "
+                        "If omitted, one will be generated from the content."
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category of the memory.",
+                    "enum": ["preference", "fact", "decision", "entity"],
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional tags for categorization.",
+                },
+            },
+            "required": ["content"],
+        }
+
+    @override
+    async def execute(self, **kwargs: Any) -> str:
+        content = kwargs.get("content", "")
+        title = kwargs.get("title", "")
+        category = kwargs.get("category", "fact")
+        tags: list[str] = kwargs.get("tags") or []
+
+        if not content:
+            return json.dumps({"error": "content parameter is required"})
+
+        if not title:
+            title = content[:80].strip()
+            if len(content) > 80:
+                title += "..."
+
+        return await _execute_memory_create(
+            content=content,
+            title=title,
+            category=category,
+            tags=tags,
+            session_factory=self._session_factory,
+            graph_service=self._graph_service,
+            project_id=self._project_id,
+            tenant_id=self._tenant_id,
+        )
+
+
+async def _execute_memory_create(
+    *,
+    content: str,
+    title: str,
+    category: str,
+    tags: list[str],
+    session_factory: Callable[..., Any] | None,
+    graph_service: Any,
+    project_id: str,
+    tenant_id: str,
+) -> str:
+    """Shared implementation for both class-based and @tool_define memory_create."""
+    if not session_factory or not graph_service:
+        return json.dumps({"error": "Memory creation not configured"})
+
+    session = session_factory()
+    try:
+        from src.application.services.memory_service import MemoryService
+        from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
+            SqlMemoryRepository,
+        )
+
+
+        repo = SqlMemoryRepository(session)
+        service = MemoryService(
+            memory_repo=repo,
+            graph_service=graph_service,
+        )
+
+        memory = await service.create_memory(
+            title=title,
+            content=content,
+            project_id=project_id,
+            user_id="agent",
+            tenant_id=tenant_id,
+            content_type="text",
+            tags=tags,
+            metadata={"category": category, "source": "agent_tool"},
+        )
+
+        await session.commit()
+
+        logger.info(
+            "memory_create: created memory %s for project %s",
+            memory.id,
+            project_id,
+        )
+
+        return json.dumps(
+            {
+                "status": "created",
+                "memory_id": memory.id,
+                "title": memory.title,
+                "project_id": project_id,
+                "processing_status": memory.processing_status,
+            },
+            ensure_ascii=False,
+            default=str,
+        )
+    except Exception as e:
+        logger.warning("memory_create failed: %s", e)
+        await session.rollback()
+        return json.dumps({"error": f"Failed to create memory: {e}"})
+    finally:
+        await session.close()
+
+
+@tool_define(
+    name="memory_create",
+    description=(
+        "Create a new memory entry in the project knowledge base. "
+        "Use this to persist important facts, user preferences, decisions, "
+        "or any information that should be remembered for future conversations. "
+        "The memory will be indexed and made searchable via memory_search."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": (
+                    "The content to store as a memory. "
+                    "Be specific and include all relevant details."
+                ),
+            },
+            "title": {
+                "type": "string",
+                "description": (
+                    "A short descriptive title for this memory. "
+                    "If omitted, one will be generated from the content."
+                ),
+            },
+            "category": {
+                "type": "string",
+                "description": "Category of the memory.",
+                "enum": ["preference", "fact", "decision", "entity"],
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional tags for categorization.",
+            },
+        },
+        "required": ["content"],
+    },
+    permission=None,
+    category="memory",
+)
+async def memory_create_tool(
+    ctx: ToolContext,
+    *,
+    content: str,
+    title: str = "",
+    category: str = "fact",
+    tags: list[str] | None = None,
+) -> ToolResult:
+    """Create a new memory entry in the project knowledge base."""
+    _ = ctx  # reserved for future use
+    if not content:
+        return ToolResult(
+            output=json.dumps({"error": "content parameter is required"}),
+            is_error=True,
+        )
+
+    if not title:
+        title = content[:80].strip()
+        if len(content) > 80:
+            title += "..."
+
+    result = await _execute_memory_create(
+        content=content,
+        title=title,
+        category=category,
+        tags=tags or [],
+        session_factory=_memcreate_session_factory,
+        graph_service=_memcreate_graph_service,
+        project_id=_memcreate_project_id,
+        tenant_id=_memcreate_tenant_id,
+    )
+
+    is_error = '"error"' in result
+    return ToolResult(output=result, is_error=is_error)

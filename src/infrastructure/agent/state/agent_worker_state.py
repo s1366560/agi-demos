@@ -431,7 +431,7 @@ async def get_or_create_tools(
     _add_register_mcp_server_tool(tools, tenant_id, project_id)
 
     # 10. Add Memory Tools
-    _add_memory_tools(tools, project_id, graph_service, redis_client)
+    _add_memory_tools(tools, project_id, graph_service, redis_client, tenant_id)
 
     # 11. Add plugin tools
     await _add_plugin_tools(tools, tenant_id, project_id)
@@ -771,8 +771,9 @@ def _add_memory_tools(
     project_id: str,
     graph_service: Any,
     redis_client: Any,
+    tenant_id: str = "",
 ) -> None:
-    """Add Memory Tools (memory_search + memory_get)."""
+    """Add Memory Tools (memory_search + memory_get + memory_create)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as mem_session_factory,
@@ -811,6 +812,24 @@ def _add_memory_tools(
             configure_memory_get(
                 session_factory=mem_session_factory,
                 project_id=project_id,
+            )
+
+            from src.infrastructure.agent.tools.memory_tools import (
+                MemoryCreateTool,
+                configure_memory_create,
+            )
+
+            tools["memory_create"] = MemoryCreateTool(
+                session_factory=mem_session_factory,
+                graph_service=graph_service,
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+            configure_memory_create(
+                session_factory=mem_session_factory,
+                graph_service=graph_service,
+                project_id=project_id,
+                tenant_id=tenant_id,
             )
             logger.info(f"Agent Worker: Memory tools added for project {project_id}")
     except Exception as e:
