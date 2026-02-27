@@ -1,0 +1,9 @@
+{
+  "source": "tristanmanchester/agent-skills",
+  "skill_name": "designing-beautiful-websites",
+  "branch": "main",
+  "source_path": "designing-beautiful-websites/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

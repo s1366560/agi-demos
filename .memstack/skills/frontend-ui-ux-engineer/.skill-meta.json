@@ -1,0 +1,9 @@
+{
+  "source": "404kidwiz/claude-supercode-skills",
+  "skill_name": "frontend-ui-ux-engineer",
+  "branch": "main",
+  "source_path": "SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}
