@@ -920,6 +920,8 @@ def _resolve_sandbox_path(
     available, a matching sandbox is found, and the path contains
     actual ``.memstack/`` content.  Returns ``None`` otherwise.
     """
+    from pathlib import Path
+
     if _mcp_sandbox_adapter is None:
         return None
 
