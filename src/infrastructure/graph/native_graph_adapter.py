@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 from src.domain.model.memory.episode import Episode
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -122,7 +122,7 @@ class NativeGraphAdapter(GraphServicePort):
         return self._neo4j_client
 
     @property
-    def driver(self) -> Any:
+    def driver(self) -> Any:  # noqa: ANN401
         """Get the Neo4j driver (for direct driver access)."""
         return self._neo4j_client.driver
 
@@ -374,6 +374,7 @@ class NativeGraphAdapter(GraphServicePort):
             logger.error(f"Failed to clear embeddings: {e}")
         return 0
 
+    @override
     async def add_episode(self, episode: Episode) -> Episode:
         """
         Add an episode to the knowledge graph.
@@ -567,7 +568,7 @@ class NativeGraphAdapter(GraphServicePort):
             )
             # Use unique_entities, but also track which entities were duplicates
             # Note: Check for None explicitly, as empty list [] is a valid result (all entities duplicated)
-            final_entities = unique_entities if unique_entities is not None else entities
+            final_entities = unique_entities if unique_entities else entities
 
             # 5. Save entities to Neo4j
             entity_edges: list[EpisodicEdge] = []
@@ -774,7 +775,7 @@ class NativeGraphAdapter(GraphServicePort):
                     # Parse created_at if it's a string
                     created_at = node_data.get("created_at")
                     if isinstance(created_at, str):
-                        from datetime import datetime
+
 
                         created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     else:
@@ -829,6 +830,7 @@ class NativeGraphAdapter(GraphServicePort):
 
         await self._neo4j_client.execute_query(query, **params)
 
+    @override
     async def search(self, query: str, project_id: str | None = None, limit: int = 10) -> list[Any]:
         """
         Search the knowledge graph.
@@ -863,6 +865,7 @@ class NativeGraphAdapter(GraphServicePort):
                             "type": "episode",
                             "content": item.content,
                             "uuid": item.uuid,
+                            "memory_id": item.metadata.get("memory_id", ""),
                         }
                     )
                 else:
@@ -881,6 +884,7 @@ class NativeGraphAdapter(GraphServicePort):
             logger.error(f"Search failed: {e}")
             raise
 
+    @override
     async def get_graph_data(self, project_id: str, limit: int = 100) -> dict[str, Any]:
         """
         Retrieve graph data (nodes and edges) for visualization.
@@ -1003,6 +1007,7 @@ class NativeGraphAdapter(GraphServicePort):
             logger.error(f"Failed to get graph data for project {project_id}: {e}")
             raise
 
+    @override
     async def delete_episode(self, episode_name: str) -> bool:
         """
         Delete an episode by name from the graph.
@@ -1023,6 +1028,7 @@ class NativeGraphAdapter(GraphServicePort):
             logger.error(f"Failed to delete episode {episode_name}: {e}")
             raise
 
+    @override
     async def delete_episode_by_memory_id(self, memory_id: str) -> bool:
         """
         Delete an episode by memory_id from the graph.
@@ -1042,6 +1048,7 @@ class NativeGraphAdapter(GraphServicePort):
             logger.warning(f"Failed to delete episode by memory_id {memory_id}: {e}")
             return False
 
+    @override
     async def remove_episode(self, episode_uuid: str) -> bool:
         """
         Remove an episode and clean up orphaned entities and edges.

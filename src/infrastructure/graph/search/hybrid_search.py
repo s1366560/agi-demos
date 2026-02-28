@@ -339,7 +339,7 @@ class HybridSearch:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        all_results = []
+        all_results: list[SearchResultItem] = []
         for result in results:
             if not isinstance(result, BaseException):
                 all_results.extend(result)
@@ -577,6 +577,7 @@ class HybridSearch:
             RETURN node.uuid AS uuid,
                    node.name AS name,
                    node.content AS content,
+                   node.memory_id AS memory_id,
                    node.created_at AS created_at,
                    score
             ORDER BY score DESC
@@ -598,6 +599,7 @@ class HybridSearch:
                     metadata={
                         "search_type": "keyword",
                         "created_at": record.get("created_at"),
+                        "memory_id": record.get("memory_id"),
                     },
                 )
                 items.append(item)
@@ -650,7 +652,7 @@ class HybridSearch:
                 items_map[uuid] = item
 
         # Create combined results with new scores
-        combined = []
+        combined: list[SearchResultItem] = []
         for uuid, score in scores.items():
             item = items_map[uuid]
             # Merge metadata: prefer vector result's metadata, add rrf_score
@@ -665,6 +667,7 @@ class HybridSearch:
                 metadata=merged_metadata,
             )
             combined.append(combined_item)
+
 
         # Sort by RRF score
         combined.sort(key=lambda x: x.score, reverse=True)

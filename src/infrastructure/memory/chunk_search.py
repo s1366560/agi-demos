@@ -93,6 +93,7 @@ class ChunkHybridSearch:
         query: str,
         project_id: str,
         limit: int = 6,
+        category: str | None = None,
     ) -> list[ChunkSearchResult]:
         """Execute hybrid search with all enhancements.
 
@@ -100,6 +101,7 @@ class ChunkHybridSearch:
             query: User search query.
             project_id: Scope to project.
             limit: Maximum results to return.
+            category: Optional category filter (applied at DB level).
 
         Returns:
             Ranked list of ChunkSearchResult.
@@ -111,7 +113,7 @@ class ChunkHybridSearch:
 
         session = getattr(chunk_repo, "_session", None)
         try:
-            return await self._do_search(chunk_repo, query, project_id, limit)
+            return await self._do_search(chunk_repo, query, project_id, limit, category=category)
         finally:
             if session:
                 await session.close()
@@ -122,26 +124,29 @@ class ChunkHybridSearch:
         query: str,
         project_id: str,
         limit: int,
+        category: str | None = None,
     ) -> list[ChunkSearchResult]:
         """Internal search logic with a live chunk_repo."""
         fetch_limit = limit * 3  # Over-fetch for MMR/decay filtering
 
         # 1. Vector search (with graceful fallback)
         vector_results: list[dict[str, Any]] = []
-        query_embedding = await self._embedding.embed_text(query)
+        query_embedding: list[float] | None = await self._embedding.embed_text(query)
 
-        if query_embedding is not None:
+        if query_embedding is not None:  # pyright: ignore[reportUnnecessaryComparison]
             vector_results = await chunk_repo.vector_search(
-                query_embedding, project_id, fetch_limit
+                query_embedding, project_id, fetch_limit, category=category
             )
-        elif not self._config.enable_fts_fallback:  # type: ignore[unreachable]  # embed_text may fail at runtime
+        elif not self._config.enable_fts_fallback:
             logger.error("Embedding failed and FTS fallback disabled")
             return []
         # Fall through to FTS search below
         # 2. FTS search with keyword extraction
         keywords = extract_keywords(query)
-        fts_query = " ".join(keywords) if keywords else query
-        fts_results = await chunk_repo.fts_search(fts_query, project_id, fetch_limit)
+        fts_results = await chunk_repo.fts_search(
+            query, project_id, fetch_limit, category=category,
+            keywords=keywords if keywords else None,
+        )
 
         # 3. RRF fusion
         if vector_results and fts_results:
