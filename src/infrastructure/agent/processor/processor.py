@@ -756,6 +756,22 @@ class SessionProcessor:
         if result is None:
             return None
 
+        # If the interceptor matched a skill (not a builtin command),
+        # inject forced_skill_name and let the ReAct loop handle it.
+        from src.infrastructure.agent.commands.types import SkillTriggerResult
+
+        if isinstance(result, SkillTriggerResult):
+            self.config.forced_skill_name = result.skill_id
+            # Rewrite user message to task text (strip /skill-name prefix)
+            if result.text_override is not None:
+                self._rewrite_last_user_message(messages, result.text_override)
+            logger.info(
+                "Skill command '/%s' routed to ReAct loop with forced_skill_name=%s",
+                result.skill_id,
+                result.skill_id,
+            )
+            return None  # Fall through to ReAct loop
+
         # Collect all events from _emit_command_result into a list.
         events: list[ProcessorEvent] = []
         async for evt in self._emit_command_result(result):
@@ -765,6 +781,30 @@ class SessionProcessor:
         events.append(AgentCompleteEvent(trace_url=None))
         self._state = ProcessorState.COMPLETED
         return events
+
+    @staticmethod
+    def _rewrite_last_user_message(
+        messages: list[dict[str, Any]],
+        new_text: str,
+    ) -> None:
+        """Replace the content of the last user message in the list.
+
+        This is used when a skill command (e.g. ``/code-review fix the bug``)
+        is intercepted: the ``/skill-name`` prefix is stripped and the message
+        is rewritten to just the task text so the ReAct loop sees a clean prompt.
+        """
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                content = msg.get("content")
+                if isinstance(content, str):
+                    msg["content"] = new_text
+                elif isinstance(content, list):
+                    # Multi-part content: replace the first text part
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            part["text"] = new_text
+                            break
+                return
 
     async def _emit_command_result(
         self,

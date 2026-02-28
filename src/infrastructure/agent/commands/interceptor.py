@@ -15,6 +15,7 @@ from src.infrastructure.agent.commands.registry import CommandRegistry
 from src.infrastructure.agent.commands.types import (
     CommandResult,
     ReplyResult,
+    SkillTriggerResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,12 @@ class CommandInterceptor:
         try:
             invocation = self._registry.parse_and_resolve(message)
         except CommandParseError as exc:
+            # Check if the unknown command name matches a loaded skill.
+            # If so, return a SkillTriggerResult so the processor can route
+            # the message to the ReAct loop with forced_skill_name set.
+            skill_result = self._try_match_skill_command(message, context)
+            if skill_result is not None:
+                return skill_result
             logger.debug("Command parse error: %s", exc)
             hint = f"\nUsage: {exc.usage_hint}" if exc.usage_hint else ""
             return ReplyResult(
@@ -103,3 +110,51 @@ class CommandInterceptor:
             True if the message matches the slash command pattern.
         """
         return SlashCommandParser.is_slash_command(message)
+
+    def _try_match_skill_command(
+        self,
+        message: str,
+        context: dict[str, Any],
+    ) -> SkillTriggerResult | None:
+        """Check if an unknown slash command matches a loaded skill name.
+
+        When the user types ``/some-skill do something``, the command registry
+        raises ``CommandParseError`` because "some-skill" is not a registered
+        command.  This method inspects the available skills list from the
+        runtime context and, if a case-insensitive match is found, returns a
+        ``SkillTriggerResult`` so the processor can route the request to the
+        ReAct loop with ``forced_skill_name`` set.
+
+        Args:
+            message: The original user input (e.g. ``/code-review fix the bug``).
+            context: Runtime context dict containing a ``skills`` list.
+
+        Returns:
+            A ``SkillTriggerResult`` if the command name matches a skill,
+            otherwise ``None``.
+        """
+        parts = SlashCommandParser.extract_command_parts(message)
+        if parts is None:
+            return None
+
+        cmd_name, raw_args = parts
+        skills: list[str] = context.get("skills", [])
+        if not skills:
+            return None
+
+        # Case-insensitive match against loaded skill names
+        cmd_lower = cmd_name.lower()
+        for skill_name in skills:
+            if skill_name.lower() == cmd_lower:
+                logger.info(
+                    "Unknown command '/%s' matched skill '%s'; "+
+                    "routing to skill execution",
+                    cmd_name,
+                    skill_name,
+                )
+                return SkillTriggerResult(
+                    skill_id=skill_name,
+                    text_override=raw_args if raw_args else None,
+                )
+
+        return None

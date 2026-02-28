@@ -669,6 +669,107 @@ class TestCommandInterceptor:
 
 
 # ============================================================================
+# Skill as Command Interception Tests
+# ============================================================================
+
+
+@pytest.mark.unit
+class TestSkillAsCommandInterception:
+    """Tests for skill-to-command interception feature."""
+
+    async def test_skill_match_returns_skill_trigger_result(
+        self, interceptor: CommandInterceptor
+    ) -> None:
+        """/code-review when skills=['code-review'] returns SkillTriggerResult."""
+        result = await interceptor.try_intercept(
+            "/code-review fix bug", {"skills": ["code-review"]}
+        )
+        assert isinstance(result, SkillTriggerResult)
+        assert result.skill_id == "code-review"
+        assert result.text_override == "fix bug"
+
+    async def test_skill_match_case_insensitive(
+        self, interceptor: CommandInterceptor
+    ) -> None:
+        """/Code-Review matches skill 'code-review' case-insensitively."""
+        result = await interceptor.try_intercept(
+            "/Code-Review fix bug", {"skills": ["code-review"]}
+        )
+        assert isinstance(result, SkillTriggerResult)
+        assert result.skill_id == "code-review"
+        assert result.text_override == "fix bug"
+
+    async def test_unknown_skill_returns_error(
+        self, interceptor: CommandInterceptor
+    ) -> None:
+        """/unknown-thing returns error when not in skills list."""
+        result = await interceptor.try_intercept(
+            "/unknown-thing", {"skills": ["code-review"]}
+        )
+        assert isinstance(result, ReplyResult)
+        assert result.level == "error"
+
+    async def test_skill_match_without_args(
+        self, interceptor: CommandInterceptor
+    ) -> None:
+        """/code-review with no args returns SkillTriggerResult with None override."""
+        result = await interceptor.try_intercept(
+            "/code-review", {"skills": ["code-review"]}
+        )
+        assert isinstance(result, SkillTriggerResult)
+        assert result.skill_id == "code-review"
+        assert result.text_override is None
+
+    async def test_empty_skills_returns_error(
+        self, interceptor: CommandInterceptor
+    ) -> None:
+        """/code-review returns error when skills list is empty."""
+        result = await interceptor.try_intercept(
+            "/code-review fix bug", {"skills": []}
+        )
+        assert isinstance(result, ReplyResult)
+        assert result.level == "error"
+
+    async def test_builtin_takes_priority_over_skill(
+        self, interceptor: CommandInterceptor
+    ) -> None:
+        """/help returns builtin ReplyResult, not SkillTriggerResult."""
+        result = await interceptor.try_intercept(
+            "/help", {"skills": ["help"]}
+        )
+        # Builtin takes priority, so should be ReplyResult, not SkillTriggerResult
+        assert isinstance(result, ReplyResult)
+        assert "Available Commands:" in result.text
+
+    async def test_session_processor_rewrite_string_content(self) -> None:
+        """SessionProcessor._rewrite_last_user_message rewrites string content."""
+        from src.infrastructure.agent.processor.processor import SessionProcessor
+
+        messages = [
+            {"role": "user", "content": "old message"},
+        ]
+        SessionProcessor._rewrite_last_user_message(messages, "new message")
+        assert messages[0]["content"] == "new message"
+
+    async def test_session_processor_rewrite_multipart_content(self) -> None:
+        """SessionProcessor._rewrite_last_user_message rewrites first text part in multi-part content."""
+        from src.infrastructure.agent.processor.processor import SessionProcessor
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "old text"},
+                    {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}},
+                ],
+            },
+        ]
+        SessionProcessor._rewrite_last_user_message(messages, "new text")
+        assert messages[0]["content"][0]["text"] == "new text"
+        # Image part should remain unchanged
+        assert messages[0]["content"][1]["type"] == "image_url"
+
+# ============================================================================
 # Built-in Commands Integration Tests
 # ============================================================================
 
