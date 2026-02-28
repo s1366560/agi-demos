@@ -1213,9 +1213,7 @@ class SessionProcessor:
                 )
             )
             # Feed unknown-tool errors to doom-loop error tracker
-            self.doom_loop_detector.record_error(
-                tool_name, f"Unknown tool: {tool_name}"
-            )
+            self.doom_loop_detector.record_error(tool_name, f"Unknown tool: {tool_name}")
             return None
 
         return (tool_part, tool_def)
@@ -1574,12 +1572,70 @@ class SessionProcessor:
         - ``self._last_raw_result`` — the raw tool result
         - ``self._last_output_str`` — the string output stored on tool_part
         """
+        # Inject per-request context for tools on the non-pipeline path.
+        # The pipeline path handles this via _ToolAdapter; here we handle
+        # the non-pipeline path which calls tool_def.execute() directly.
+        _tool_inst = getattr(tool_def, "_tool_instance", None)
+        _lctx = self._langfuse_context or {}
+
+        # For @tool_define tools (ToolInfo), call execute directly with a
+        # real ToolContext, bypassing the stub-context wrapper.
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        _needs_direct_ctx = isinstance(_tool_inst, ToolInfo)
+        _has_runtime_ctx = hasattr(_tool_inst, "set_runtime_context") if _tool_inst else False
+
+        _runtime_ctx: ToolContext | None = None
+        if _needs_direct_ctx or _has_runtime_ctx:
+            _runtime_ctx = ToolContext(
+                session_id=call_id,
+                message_id=call_id,
+                call_id=call_id,
+                agent_name=_lctx.get("agent_name", "main"),
+                conversation_id=_lctx.get("conversation_id", call_id),
+                abort_signal=self._abort_event or asyncio.Event(),
+                messages=[],
+                project_id=_lctx.get("project_id", ""),
+                user_id=_lctx.get("user_id", ""),
+            )
+
         start_time = time.time()
-        result = await tool_def.execute(**arguments)
+        if _needs_direct_ctx:
+            # @tool_define: call execute(ctx, **args) directly with real context
+            logger.debug(
+                "[Processor] Direct ToolContext for @tool_define %s: project_id=%s, user_id=%s",
+                tool_name,
+                _lctx.get("project_id", ""),
+                _lctx.get("user_id", ""),
+            )
+            try:
+                assert _runtime_ctx is not None  # guaranteed by the if/elif above
+                result = await _tool_inst.execute(_runtime_ctx, **arguments)
+            except Exception as e:
+                result = f"Error executing tool {tool_name}: {e!s}"
+        elif _has_runtime_ctx:
+            # Legacy class-based tool with set_runtime_context
+            assert _tool_inst is not None  # guaranteed by _has_runtime_ctx guard
+            assert _runtime_ctx is not None  # guaranteed by the if/elif above
+            _tool_inst.set_runtime_context(_runtime_ctx)
+            logger.debug(
+                "[Processor] Injected runtime context for %s: user_id=%s, project_id=%s",
+                tool_name,
+                _lctx.get("user_id", ""),
+                _lctx.get("project_id", ""),
+            )
+            result = await tool_def.execute(**arguments)
+        else:
+            result = await tool_def.execute(**arguments)
         end_time = time.time()
 
         # Classify result format
-        if isinstance(result, dict) and "artifact" in result:
+        if isinstance(result, ToolResult):
+            output_str = result.output
+            sse_result: Any = result.metadata if result.metadata else output_str
+        elif isinstance(result, dict) and "artifact" in result:
             artifact = result["artifact"]
             output_str = result.get(
                 "output",
@@ -1587,7 +1643,7 @@ class SessionProcessor:
                 f"({artifact.get('mime_type', 'unknown')}, "
                 f"{artifact.get('size', 0)} bytes)",
             )
-            sse_result: Any = strip_artifact_binary_data(result)
+            sse_result = strip_artifact_binary_data(result)
         elif isinstance(result, dict) and "output" in result:
             output_str = result.get("output", "")
             sse_result = result
@@ -1595,7 +1651,7 @@ class SessionProcessor:
             output_str = result
             sse_result = result
         else:
-            output_str = json.dumps(result)
+            output_str = json.dumps(result, default=str)
             sse_result = result
 
         # Update tool_part
@@ -1824,10 +1880,7 @@ class SessionProcessor:
                                 # a second refresh now that the lifecycle has settled.
                                 _ = event_data.get("discovered_tools")
                                 tool_names_in_event = event_data.get("tool_names", [])
-                                missing = [
-                                    n for n in tool_names_in_event
-                                    if n not in self.tools
-                                ]
+                                missing = [n for n in tool_names_in_event if n not in self.tools]
                                 if missing:
                                     retry_count = self._refresh_tools()
                                     if retry_count is not None:
@@ -1840,8 +1893,7 @@ class SessionProcessor:
                                     else:
                                         # Still missing — log clearly so we can diagnose
                                         still_missing = [
-                                            n for n in tool_names_in_event
-                                            if n not in self.tools
+                                            n for n in tool_names_in_event if n not in self.tools
                                         ]
                                         if still_missing:
                                             logger.warning(
@@ -1970,6 +2022,8 @@ class SessionProcessor:
             conversation_id=session_id,
             abort_signal=self._abort_event or asyncio.Event(),
             messages=[],
+            project_id=(self._langfuse_context or {}).get("project_id", ""),
+            user_id=(self._langfuse_context or {}).get("user_id", ""),
         )
 
         # Adapt ToolDefinition to ToolInfoProtocol
@@ -2000,7 +2054,9 @@ class SessionProcessor:
                     except Exception as e:
                         return f"Error executing tool {self.name}: {e!s}"
 
-                # Legacy class-based tools: delegate and bridge events
+                # Legacy class-based tools: inject runtime context if supported
+                if tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
+                    tool_instance.set_runtime_context(self._ctx)
                 result = await self._td.execute(**kwargs)
                 if tool_instance is not None and hasattr(tool_instance, "consume_pending_events"):
                     for event in tool_instance.consume_pending_events():
@@ -2244,12 +2300,9 @@ class SessionProcessor:
         # 1b. Error-based doom loop intervention (consecutive tool errors)
         if self.doom_loop_detector.should_intervene_on_errors():
             recent = self.doom_loop_detector.get_recent_errors(3)
-            error_summary = "; ".join(
-                f"{e.tool}: {e.error}" for e in recent
-            )
+            error_summary = "; ".join(f"{e.tool}: {e.error}" for e in recent)
             logger.warning(
-                "[Processor] Consecutive tool errors threshold reached "
-                "(%d errors). Recent: %s",
+                "[Processor] Consecutive tool errors threshold reached (%d errors). Recent: %s",
                 self.doom_loop_detector.consecutive_error_count,
                 error_summary,
             )

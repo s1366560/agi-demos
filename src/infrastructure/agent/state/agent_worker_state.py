@@ -777,7 +777,7 @@ def _add_memory_tools(
     redis_client: Any,
     tenant_id: str = "",
 ) -> None:
-    """Add Memory Tools (memory_search + memory_get + memory_create)."""
+    """Add Memory Tools (memory_search + memory_get + memory_create + memory_update + memory_delete)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as mem_session_factory,
@@ -834,7 +834,18 @@ def _add_memory_tools(
                 graph_service=graph_service,
                 project_id=project_id,
                 tenant_id=tenant_id,
+                embedding_service=cached_emb,
             )
+
+            # memory_update and memory_delete are @tool_define ToolInfo instances.
+            # They reuse _memcreate_* globals set by configure_memory_create().
+            from src.infrastructure.agent.tools.memory_tools import (
+                memory_delete_tool,
+                memory_update_tool,
+            )
+
+            tools["memory_update"] = memory_update_tool
+            tools["memory_delete"] = memory_delete_tool
             logger.info(f"Agent Worker: Memory tools added for project {project_id}")
     except Exception as e:
         logger.debug(f"Agent Worker: Memory tools not available: {e}")
@@ -892,8 +903,9 @@ def resolve_project_base_path(
     Custom tools at ``<base_path>/.memstack/tools/`` will therefore be
     found correctly regardless of whether a sandbox is in use.
 
-    Falls back to ``Path.cwd()`` when no sandbox is available (local
-    development without Docker sandboxes).
+    Falls back to the well-known naming convention
+    ``/tmp/memstack_{project_id}`` when the adapter lookup fails, and
+    finally to ``Path.cwd()`` for local development without sandboxes.
 
     Args:
         project_id: Project ID to resolve path for.
@@ -937,7 +949,18 @@ def resolve_project_base_path(
                         )
                         return resolved
 
-    # Strategy 2: Fall back to cwd (local development)
+    # Strategy 2: Direct construction from known naming convention
+    # Both project_sandbox_lifecycle_service.py and unified_sandbox_service.py
+    # hardcode f"/tmp/memstack_{project_id}" as the host-side project path.
+    candidate = Path(f"/tmp/memstack_{project_id}")
+    if candidate.exists():
+        logger.debug(
+            "Resolved project base path from convention: %s",
+            candidate,
+        )
+        return candidate
+
+    # Strategy 3: Fall back to cwd (local development)
     return Path.cwd()
 
 

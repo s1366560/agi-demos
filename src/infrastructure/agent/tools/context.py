@@ -48,6 +48,10 @@ class ToolContext:
     # Conversation access (read-only snapshot)
     messages: list[Any] = field(default_factory=list)
 
+    # Project / user identity (populated by pipeline when available)
+    project_id: str = ""
+    user_id: str = ""
+
     # Internal event collection (pipeline reads these)
     _pending_events: list[Any] = field(default_factory=list, repr=False)
 

@@ -109,6 +109,7 @@ class AgentContainer:
         self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
         self._sequence_service_factory = sequence_service_factory
         self._skill_service_instance: SkillService | None = None
+        self._workspace_manager_instance: Any | None = None
 
     # === Agent Repositories ===
 
@@ -283,6 +284,31 @@ class AgentContainer:
             filesystem_loader=fs_loader,
         )
         return self._skill_service_instance
+
+    # === Workspace Manager ===
+
+    def workspace_manager(self) -> Any:
+        """Get WorkspaceManager for loading persona/soul workspace files (cached singleton)."""
+        if self._workspace_manager_instance is not None:
+            return self._workspace_manager_instance
+
+        from pathlib import Path
+
+        from src.infrastructure.agent.workspace.manager import WorkspaceManager
+
+        settings = self._settings
+        enabled = settings.workspace_enabled if settings else True
+        workspace_dir = settings.workspace_dir if settings else "/workspace/.memstack/workspace"
+        max_per_file = settings.workspace_max_chars_per_file if settings else 20000
+        max_total = settings.workspace_max_chars_total if settings else 150000
+
+        self._workspace_manager_instance = WorkspaceManager(
+            workspace_dir=Path(workspace_dir),
+            max_chars_per_file=max_per_file,
+            max_chars_total=max_total,
+            enabled=enabled,
+        )
+        return self._workspace_manager_instance
 
     # === Agent Service ===
 

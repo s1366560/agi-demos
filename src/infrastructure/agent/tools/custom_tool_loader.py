@@ -19,6 +19,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import logging
 import sys
@@ -201,7 +202,7 @@ class CustomToolLoader:
         pre_keys = set(get_registered_tools().keys())
 
         try:
-            module = self._import_file(file_path, module_name)
+            module = self._import_file(file_path, module_name, base_path=self._base_path)
         except Exception as exc:
             import traceback
 
@@ -263,32 +264,53 @@ class CustomToolLoader:
         return tools, diagnostics
 
     @staticmethod
-    def _import_file(file_path: Path, module_name: str) -> types.ModuleType:
+    def _import_file(
+        file_path: Path,
+        module_name: str,
+        base_path: Path | None = None,
+    ) -> types.ModuleType:
         """Dynamically import a Python file as a module.
 
         The module is added to ``sys.modules`` so that relative imports
         within the tool file can resolve, and removed on failure.
+
+        When *base_path* is provided it is temporarily prepended to
+        ``sys.path`` so that ``from memstack_tools import ...`` works
+        for tool files that use the public SDK package.
         """
-        spec = importlib.util.spec_from_file_location(
-            module_name,
-            file_path,
-        )
-        if spec is None or spec.loader is None:
-            msg = f"Cannot create module spec for {file_path}"
-            raise ImportError(msg)
+        # Ensure the project root is importable (memstack_tools lives there).
+        added_to_path = False
+        if base_path is not None:
+            base_str = str(base_path)
+            if base_str not in sys.path:
+                sys.path.insert(0, base_str)
+                added_to_path = True
 
-        module = importlib.util.module_from_spec(spec)
-
-        # Temporarily register in sys.modules for import resolution.
-        sys.modules[module_name] = module
         try:
-            spec.loader.exec_module(module)
-        except Exception:
-            # Clean up on failure.
-            sys.modules.pop(module_name, None)
-            raise
+            spec = importlib.util.spec_from_file_location(
+                module_name,
+                file_path,
+            )
+            if spec is None or spec.loader is None:
+                msg = f"Cannot create module spec for {file_path}"
+                raise ImportError(msg)
 
-        return module
+            module = importlib.util.module_from_spec(spec)
+
+            # Temporarily register in sys.modules for import resolution.
+            sys.modules[module_name] = module
+            try:
+                spec.loader.exec_module(module)
+            except Exception:
+                # Clean up on failure.
+                sys.modules.pop(module_name, None)
+                raise
+
+            return module
+        finally:
+            if added_to_path:
+                with contextlib.suppress(ValueError):
+                    sys.path.remove(str(base_path))
 
 
 def load_custom_tools(

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,15 +101,7 @@ class SandboxContainer:
                 if self._settings and self._settings.sandbox_host_source_path
                 else None
             ),
-            host_memstack_volume=(
-                {
-                    self._settings.sandbox_host_memstack_path: (
-                        self._settings.sandbox_host_memstack_mount_point
-                    )
-                }
-                if self._settings and self._settings.sandbox_host_memstack_path
-                else None
-            ),
+            host_memstack_volume=self._resolve_memstack_volume(),
         )
 
     def project_sandbox_lifecycle_service(self) -> Any:
@@ -141,15 +135,7 @@ class SandboxContainer:
                 if self._settings and self._settings.sandbox_host_source_path
                 else None
             ),
-            host_memstack_volume=(
-                {
-                    self._settings.sandbox_host_memstack_path: (
-                        self._settings.sandbox_host_memstack_mount_point
-                    )
-                }
-                if self._settings and self._settings.sandbox_host_memstack_path
-                else None
-            ),
+            host_memstack_volume=self._resolve_memstack_volume(),
         )
 
     def sandbox_mcp_server_manager(self) -> Any:
@@ -179,3 +165,44 @@ class SandboxContainer:
             manager_factory=lambda: self.sandbox_mcp_server_manager(),
         )
         return MCPAppService(app_repo=app_repo, resource_resolver=resource_resolver)
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    _logger = logging.getLogger(__name__)
+
+    def _resolve_memstack_volume(self) -> dict[str, str] | None:
+        """Resolve host_memstack_volume, auto-deriving the path when possible.
+
+        Priority:
+        1. Explicit ``SANDBOX_HOST_MEMSTACK_PATH`` setting (non-empty).
+        2. Auto-derive from ``SANDBOX_HOST_SOURCE_PATH`` parent + ".memstack".
+        3. Auto-derive from CWD + ".memstack" (development fallback).
+        4. ``None`` -- no dedicated mount.
+        """
+        if not self._settings:
+            return None
+
+        mount_point = self._settings.sandbox_host_memstack_mount_point
+
+        # 1. Explicit setting
+        if self._settings.sandbox_host_memstack_path:
+            return {self._settings.sandbox_host_memstack_path: mount_point}
+
+        # 2. Derive from host source path
+        if self._settings.sandbox_host_source_path:
+            derived = Path(self._settings.sandbox_host_source_path).parent / ".memstack"
+            if derived.is_dir():
+                self._logger.debug(
+                    "Auto-derived memstack volume from host_source_path: %s", derived
+                )
+                return {str(derived): mount_point}
+
+        # 3. Derive from CWD (development fallback)
+        cwd_memstack = Path.cwd() / ".memstack"
+        if cwd_memstack.is_dir():
+            self._logger.debug("Auto-derived memstack volume from CWD: %s", cwd_memstack)
+            return {str(cwd_memstack): mount_point}
+
+        return None

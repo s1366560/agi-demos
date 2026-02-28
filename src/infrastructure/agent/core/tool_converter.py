@@ -186,4 +186,9 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
             )
         )
 
-    return definitions
+
+    # Lazy import to avoid basedpyright resolution timing issues
+    from src.infrastructure.agent.prompts import tool_summaries as _ts
+
+    _ts.apply_tool_summaries(definitions)
+    return cast(list[ToolDefinition], _ts.sort_by_tool_order(definitions))
