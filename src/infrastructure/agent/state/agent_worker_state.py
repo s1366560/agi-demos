@@ -943,25 +943,40 @@ def resolve_project_base_path(
                 if project_path:
                     resolved = Path(project_path)
                     if resolved.exists():
-                        logger.debug(
-                            "Resolved project base path from sandbox: %s",
+                        logger.info(
+                            "Resolved project base path from sandbox adapter: %s",
                             resolved,
                         )
-                        return resolved
 
     # Strategy 2: Direct construction from known naming convention
     # Both project_sandbox_lifecycle_service.py and unified_sandbox_service.py
     # hardcode f"/tmp/memstack_{project_id}" as the host-side project path.
     candidate = Path(f"/tmp/memstack_{project_id}")
     if candidate.exists():
-        logger.debug(
-            "Resolved project base path from convention: %s",
+        # Verify the candidate has actual skill content before committing.
+        # An empty /tmp/memstack_{id}/.memstack/ (created during sandbox init
+        # but never populated with skills) should NOT short-circuit resolution.
+        memstack_dir = candidate / ".memstack"
+        has_content = memstack_dir.exists() and any(
+            child.is_dir() and any(child.iterdir())
+            for child in memstack_dir.iterdir()
+            if child.is_dir()
+        )
+        if has_content:
+            logger.info(
+                "Resolved project base path from convention: %s (has .memstack content)",
+                candidate,
+            )
+            return candidate
+        logger.info(
+            "Convention path %s exists but .memstack/ is empty, falling through to cwd",
             candidate,
         )
-        return candidate
 
     # Strategy 3: Fall back to cwd (local development)
-    return Path.cwd()
+    cwd = Path.cwd()
+    logger.info("Resolved project base path from cwd: %s", cwd)
+    return cwd
 
 
 def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
@@ -2314,6 +2329,8 @@ async def get_or_create_skills(
         List of Skill domain entities
     """
 
+    from pathlib import Path
+
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
@@ -2324,33 +2341,66 @@ async def get_or_create_skills(
             # Use sandbox-aware path resolution for skill scanning
             base_path = resolve_project_base_path(project_id or "")
 
-            # Create scanner with standard skill directories
+            # Collect skills from primary base_path
             scanner = FileSystemSkillScanner(
                 skill_dirs=[".memstack/skills/"],
             )
-
-            # Create file system loader
             fs_loader = FileSystemSkillLoader(
                 base_path=base_path,
                 tenant_id=tenant_id,
                 project_id=project_id,
                 scanner=scanner,
             )
-
-            # Load all skills
             result = await fs_loader.load_all()
+            loaded_by_name: dict[str, Any] = {
+                loaded.skill.name: loaded.skill for loaded in result.skills
+            }
+            all_errors = list(result.errors)
 
-            # Extract Skill domain entities
-            skills = [loaded.skill for loaded in result.skills]
+            logger.info(
+                "Agent Worker: Primary skill scan at %s found %d skills",
+                base_path,
+                len(loaded_by_name),
+            )
 
+            # P1-Fix1: Multi-path scanning — if base_path is NOT cwd,
+            # also scan cwd as a fallback source (local development skills).
+            cwd = Path.cwd()
+            if base_path.resolve() != cwd.resolve():
+                cwd_scanner = FileSystemSkillScanner(
+                    skill_dirs=[".memstack/skills/"],
+                )
+                cwd_loader = FileSystemSkillLoader(
+                    base_path=cwd,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    scanner=cwd_scanner,
+                )
+                cwd_result = await cwd_loader.load_all()
+                cwd_count = 0
+                for loaded in cwd_result.skills:
+                    if loaded.skill.name not in loaded_by_name:
+                        loaded_by_name[loaded.skill.name] = loaded.skill
+                        cwd_count += 1
+                all_errors.extend(cwd_result.errors)
+                if cwd_count > 0:
+                    logger.info(
+                        "Agent Worker: Fallback cwd scan at %s added %d skills",
+                        cwd,
+                        cwd_count,
+                    )
+
+            skills = list(loaded_by_name.values())
             _skills_cache[cache_key] = skills
             logger.info(
-                f"Agent Worker: Skills cached for {cache_key}, "
-                f"loaded {len(skills)} skills, errors: {len(result.errors)}"
+                "Agent Worker: Skills cached for %s, total=%d, errors=%d",
+                cache_key,
+                len(skills),
+                len(all_errors),
             )
-            if result.errors:
-                for error in result.errors:
-                    logger.warning(f"Agent Worker: Skill loading error: {error}")
+            if all_errors:
+                for error in all_errors:
+                    logger.warning("Agent Worker: Skill loading error: %s", error)
 
         return _skills_cache[cache_key]
 
@@ -2472,8 +2522,11 @@ async def get_or_create_skill_loader_tool(
     from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
-    # Create a NullSkillRepository for SkillService
-    # We only use filesystem skills (skip_database=True), so no DB operations needed
+    # Create a NullSkillRepository for SkillService.
+    # TODO(P1-Fix2): Replace with real SqlSkillRepository when a per-request
+    # DB session is available in the agent worker context.  Currently all
+    # skills come from the filesystem, so this null impl is sufficient.
+    # We only use filesystem skills (skip_database=True), so no DB operations needed.
     class NullSkillRepository(SkillRepositoryPort):
         """Null implementation - all methods return empty/None."""
 

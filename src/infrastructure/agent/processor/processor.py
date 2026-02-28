@@ -708,10 +708,20 @@ class SessionProcessor:
 
     def _build_command_context(self) -> dict[str, Any]:
         """Build context dict for command handlers."""
+        # Prefer live skills from SkillLoaderTool (dynamically updated cache)
+        # over stale self.config.skill_names (set once at init time).
+        skills: list[str] = list(self.config.skill_names)
+        skill_loader_def = self.tools.get("skill_loader")
+        if skill_loader_def is not None:
+            tool_inst = getattr(skill_loader_def, "_tool_instance", None)
+            if tool_inst is not None and hasattr(tool_inst, "get_available_skills"):
+                live_skills = tool_inst.get_available_skills()
+                if live_skills:
+                    skills = live_skills
         ctx: dict[str, Any] = {
             "model_name": self.config.model,
             "tools": list(self.tools.keys()),
-            "skills": list(self.config.skill_names),
+            "skills": skills,
         }
         if self._langfuse_context:
             ctx["conversation_id"] = self._langfuse_context.get("conversation_id")

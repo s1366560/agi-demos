@@ -600,6 +600,9 @@ class ReActAgent:
             result = await loader.load_all()
             if result.count > 0:
                 self.skills.extend(loaded.skill for loaded in result.skills)
+                # P1-Fix3: Update ProcessorConfig.skill_names so /skills
+                # command fallback stays current after lazy filesystem load.
+                self.config.skill_names = [s.name for s in self.skills]
                 logger.info(
                     "[ReActAgent] Loaded %d filesystem skills from %s",
                     result.count,
