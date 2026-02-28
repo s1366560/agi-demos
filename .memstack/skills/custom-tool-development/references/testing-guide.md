@@ -26,8 +26,7 @@ Verify the tool is discovered and has correct metadata.
 
 ```python
 TOOL_CODE = '''
-from src.infrastructure.agent.tools.define import tool_define
-from src.infrastructure.agent.tools.result import ToolResult
+from memstack_tools import tool_define, ToolResult
 
 @tool_define(
     name="word_count",

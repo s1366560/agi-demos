@@ -1,0 +1,9 @@
+{
+  "source": "anthropics/skills",
+  "skill_name": "pdf",
+  "branch": "main",
+  "source_path": "skills/pdf/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

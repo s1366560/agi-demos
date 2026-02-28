@@ -63,7 +63,7 @@ except TimeoutError:
 
 ## ToolResult
 
-**Import**: `from src.infrastructure.agent.tools.result import ToolResult`
+**Import**: `from memstack_tools import ToolResult` *(or from src.infrastructure.agent.tools.result)*
 
 Structured return value from tool execution. The `output` field is what the LLM sees.
 
@@ -101,7 +101,7 @@ return ToolResult(
 
 ## ToolAttachment
 
-**Import**: `from src.infrastructure.agent.tools.result import ToolAttachment`
+**Import**: `from memstack_tools import ToolAttachment` *(or from src.infrastructure.agent.tools.result)*
 
 File attachment from tool execution.
 
@@ -124,7 +124,7 @@ return ToolResult(
 
 ## ToolInfo
 
-**Import**: `from src.infrastructure.agent.tools.define import ToolInfo`
+**Import**: `from memstack_tools import ToolInfo` *(or from src.infrastructure.agent.tools.define)*
 
 Metadata container returned by `@tool_define`. This is what the decorator produces instead of the original function.
 
@@ -145,7 +145,7 @@ Metadata container returned by `@tool_define`. This is what the decorator produc
 
 ## @tool_define Decorator
 
-**Import**: `from src.infrastructure.agent.tools.define import tool_define`
+**Import**: `from memstack_tools import tool_define` *(or from src.infrastructure.agent.tools.define)*
 
 Decorator factory that converts an async function into a `ToolInfo` and registers it in the global registry.
 

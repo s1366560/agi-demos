@@ -29,9 +29,7 @@ Both patterns are equivalent. Use package-style when the tool needs helper modul
 ### Minimal Template
 
 ```python
-from src.infrastructure.agent.tools.define import tool_define
-from src.infrastructure.agent.tools.result import ToolResult
-
+from memstack_tools import tool_define, ToolResult
 @tool_define(
     name="my_tool",
     description="One-line description shown to the LLM.",
@@ -115,8 +113,7 @@ from src.infrastructure.agent.tools.custom_tool_loader import CustomToolLoader
 from src.infrastructure.agent.tools.define import ToolInfo, clear_registry
 
 TOOL_CODE = '''
-from src.infrastructure.agent.tools.define import tool_define
-from src.infrastructure.agent.tools.result import ToolResult
+from memstack_tools import tool_define, ToolResult
 
 @tool_define(
     name="test_tool",
@@ -159,7 +156,7 @@ Run tests: `uv run pytest src/tests/unit/test_my_tool.py -v`
 | Tool not discovered | Missing `@tool_define` decorator | Add decorator to function |
 | Tool not discovered | File not in `.memstack/tools/` | Move file to correct directory |
 | Tool not discovered | Package missing `tool.py` | Rename entry file to `tool.py` |
-| `ImportError` in diagnostic | Bad import path | Check `from src.infrastructure.agent.tools...` imports |
+| `ImportError` in diagnostic | Bad import path | Check `from memstack_tools import ...` imports |
 | Duplicate tool diagnostic | Two tools share same `name` | Rename one tool's `name` parameter |
 | `TypeError` at runtime | Missing `ctx` first parameter | Add `ctx` as first positional arg |
 | Tool returns nothing to LLM | Forgot `ToolResult` | Return `ToolResult(output=...)` |
@@ -195,7 +192,7 @@ Container paths:
 
 1. **Write tools to `/workspace/.memstack/tools/`** -- Files written here are immediately synced to the host's `.memstack/tools/` directory via a direct bind mount.
 2. **Read host source from `/host_src/`** -- The host project's `src/` directory is mounted read-only at `/host_src/`. Use this to reference existing code patterns, imports, and APIs.
-3. **Import paths in tools** -- Custom tools use `from src.infrastructure.agent.tools.define import tool_define` etc. These imports resolve against the host Python environment at agent startup, not inside the sandbox.
+3. **Import paths in tools** -- Custom tools use `from memstack_tools import tool_define, ToolResult`. The `memstack_tools` package is a thin public SDK that re-exports the internal types. These imports resolve against the host Python environment at agent startup, not inside the sandbox.
 4. **Test inside sandbox** -- You can create test files and run `pytest` within `/workspace/`. Copy necessary test fixtures from `/host_src/` if needed.
 5. **The `/host_src/` path is read-only** -- You cannot modify host source code from the sandbox. This is intentional for safety.
 

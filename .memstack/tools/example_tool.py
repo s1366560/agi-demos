@@ -18,8 +18,7 @@ Minimal skeleton
 ----------------
 ::
 
-    from src.infrastructure.agent.tools.define import tool_define
-    from src.infrastructure.agent.tools.result import ToolResult
+    from memstack_tools import tool_define, ToolResult
 
     @tool_define(
         name="my_tool",
@@ -48,8 +47,7 @@ Notes
   tool without explicit user approval (``"read"`` is the safest).
 """
 
-from src.infrastructure.agent.tools.define import tool_define
-from src.infrastructure.agent.tools.result import ToolResult
+from memstack_tools import ToolResult, tool_define
 
 
 @tool_define(
