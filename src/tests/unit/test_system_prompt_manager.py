@@ -599,3 +599,229 @@ class TestModelProviderEnum:
         assert ModelProvider.ZHIPU.value == "zhipu"
         assert ModelProvider.OPENAI.value == "openai"
         assert ModelProvider.DEFAULT.value == "default"
+
+
+@pytest.mark.unit
+class TestPersonaIntegration:
+    """Test persona integration with SystemPromptManager.
+
+    Verifies that _build_persona_sections correctly renders persona
+    content into the system prompt and that PromptReport tracks persona.
+    """
+
+    @pytest.fixture()
+    def manager(self):
+        """Create SystemPromptManager with default prompts directory."""
+        return SystemPromptManager()
+
+    @pytest.fixture()
+    def context(self):
+        """Create basic PromptContext."""
+        return PromptContext(
+            model_provider=ModelProvider.DEFAULT,
+            mode=PromptMode.BUILD,
+            tool_definitions=[
+                {"name": "MemorySearch", "description": "Search"},
+            ],
+            project_id="test-project",
+        )
+
+    async def test_persona_sections_included_in_prompt(
+        self, manager, context,
+    ):
+        """Persona sections should appear in the assembled prompt."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="You are a helpful assistant.",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=30,
+                injected_chars=30,
+                filename="SOUL.md",
+            ),
+        )
+        context.persona = persona
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert
+        assert "SOUL.md" in prompt
+        assert "You are a helpful assistant." in prompt
+
+    async def test_no_persona_sections_when_empty(
+        self, manager, context,
+    ):
+        """No persona sections when persona has no content."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import AgentPersona
+        context.persona = AgentPersona.empty()
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert - persona-specific markers should not be present
+        assert "<soul>" not in prompt
+        assert "<identity>" not in prompt
+        assert "<user-profile>" not in prompt
+
+    async def test_multiple_persona_fields_in_prompt(
+        self, manager, context,
+    ):
+        """Multiple loaded persona fields should all appear."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="soul text",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=9,
+                injected_chars=9,
+                filename="SOUL.md",
+            ),
+            identity=PersonaField(
+                content="identity text",
+                source=PersonaSource.TEMPLATE,
+                raw_chars=13,
+                injected_chars=13,
+                filename="IDENTITY.md",
+            ),
+            user_profile=PersonaField(
+                content="user profile text",
+                source=PersonaSource.CONFIG,
+                raw_chars=17,
+                injected_chars=17,
+                filename="USER.md",
+            ),
+        )
+        context.persona = persona
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert
+        assert "soul text" in prompt
+        assert "identity text" in prompt
+        assert "user profile text" in prompt
+        assert "<soul>" in prompt
+        assert "<identity>" in prompt
+        assert "<user-profile>" in prompt
+
+    async def test_persona_with_none_does_not_crash(
+        self, manager, context,
+    ):
+        """Prompt building should tolerate persona=None."""
+        # Arrange
+        context.persona = None
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert
+        assert len(prompt) > 0
+        assert "<soul>" not in prompt
+
+    async def test_prompt_report_tracks_persona(
+        self, manager, context,
+    ):
+        """PromptReport should contain persona reference."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="soul",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=4,
+                injected_chars=4,
+                filename="SOUL.md",
+            ),
+        )
+        context.persona = persona
+
+        # Act
+        await manager.build_system_prompt(context)
+        report = manager.last_prompt_report
+
+        # Assert
+        assert report is not None
+        assert report.total_chars > 0
+
+    async def test_truncated_persona_adds_warning(
+        self, manager, context,
+    ):
+        """Truncated persona should add a warning to PromptReport."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="truncated soul",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=50000,
+                injected_chars=20000,
+                is_truncated=True,
+                filename="SOUL.md",
+            ),
+        )
+        context.persona = persona
+
+        # Act
+        await manager.build_system_prompt(context)
+        report = manager.last_prompt_report
+
+        # Assert
+        assert report is not None
+        has_truncation_warning = any(
+            "truncated" in w.lower()
+            for w in report.warnings
+        )
+        assert has_truncation_warning
+
+    async def test_persona_not_in_subagent_prompt(
+        self, manager, context,
+    ):
+        """SubAgent prompt should not include persona sections."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="soul for subagent",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=18,
+                injected_chars=18,
+                filename="SOUL.md",
+            ),
+        )
+        context.persona = persona
+        subagent = Mock()
+        subagent.system_prompt = "SubAgent instructions."
+
+        # Act
+        prompt = await manager.build_system_prompt(
+            context, subagent=subagent,
+        )
+
+        # Assert - subagent prompts skip persona
+        assert "SubAgent instructions." in prompt
+        # Persona sections should not be injected in subagent mode
+        assert "<soul>" not in prompt
