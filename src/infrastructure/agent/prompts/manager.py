@@ -19,6 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from src.infrastructure.agent.prompts.persona import AgentPersona, PromptReport
 from src.infrastructure.memory.prompt_safety import (
     looks_like_prompt_injection,
     sanitize_for_context,
@@ -81,6 +82,12 @@ class PromptContext:
     current_step: int = 1
     max_steps: int = 50
 
+    # Workspace persona context (first-class AgentPersona)
+    persona: AgentPersona | None = None
+
+    # Heartbeat context (injected when a heartbeat check is due)
+    heartbeat_prompt: str | None = None
+
     @property
     def is_last_step(self) -> bool:
         """Check if this is the last allowed step."""
@@ -126,6 +133,7 @@ class SystemPromptManager:
         # Always use sandbox workspace path, never expose host filesystem
         self.project_root = project_root or self.DEFAULT_SANDBOX_WORKSPACE
         self._cache: dict[str, str] = {}
+        self.last_prompt_report: PromptReport | None = None
 
     async def build_system_prompt(
         self,
@@ -164,6 +172,14 @@ class SystemPromptManager:
         # 2-3. Base prompt, memory context, forced skill
         await self._build_base_sections(sections, context, is_forced_skill)
 
+        # 3.5. Persona/soul sections (after base, before tools)
+        self._build_persona_sections(sections, context)
+
+        # 3.6. Heartbeat section (periodic self-check prompt)
+        heartbeat_section = self._build_heartbeat_section(context)
+        if heartbeat_section:
+            sections.append(heartbeat_section)
+
         # 4-6.5. Tools, skills, subagents sections
         self._build_capability_sections(sections, context, is_forced_skill)
         # 7. Environment context
@@ -179,17 +195,30 @@ class SystemPromptManager:
             reminder = (
                 f'\n<skill-reminder priority="highest">'
                 f'\nRemember: You are executing forced skill "/{skill_name}". '
-                f'Follow the <mandatory-skill> instructions above precisely. '
+                f"Follow the <mandatory-skill> instructions above precisely. "
                 + (
-                    f'Use ONLY the declared tools: {", ".join(skill_tools_list)}.'
+                    f"Use ONLY the declared tools: {', '.join(skill_tools_list)}."
                     if skill_tools_list
                     else ""
                 )
-                + '\n</skill-reminder>'
+                + "\n</skill-reminder>"
             )
             sections.append(reminder)
 
-        return "\n\n".join(filter(None, sections))
+        prompt = "\n\n".join(filter(None, sections))
+
+        # Build diagnostic report
+        report = PromptReport(
+            total_chars=len(prompt),
+            persona=context.persona or AgentPersona.empty(),
+        )
+        report.add_section("assembled_prompt", prompt)
+        if context.persona and context.persona.any_truncated:
+            report.add_warning("One or more persona files were truncated")
+        self.last_prompt_report = report
+        logger.debug("Prompt report: %s", report.summary())
+
+        return prompt
 
     async def _build_base_sections(
         self,
@@ -223,9 +252,7 @@ class SystemPromptManager:
                     model_provider=context.model_provider,
                     mode=context.mode,
                     tool_definitions=[
-                        t
-                        for t in context.tool_definitions
-                        if t.get("name") in skill_tools
+                        t for t in context.tool_definitions if t.get("name") in skill_tools
                     ],
                     skills=context.skills,
                     subagents=context.subagents,
@@ -262,6 +289,71 @@ class SystemPromptManager:
             skill_recommendation = self._build_skill_recommendation(context.matched_skill)
             if skill_recommendation:
                 sections.append(skill_recommendation)
+
+    def _build_persona_sections(
+        self,
+        sections: list[str],
+        context: PromptContext,
+    ) -> None:
+        """Build persona/soul/identity sections from workspace files.
+
+        Uses the first-class AgentPersona type when available, with backward
+        compatibility for legacy bare-string fields. Wraps all persona content
+        under a unified <project-context> block with per-file sub-headers and
+        an explicit model instruction for soul embodiment.
+
+        Args:
+            sections: Mutable list of prompt sections to append to.
+            context: The prompt context with optional persona.
+        """
+        persona = context.persona
+        if persona is None or not persona.has_any:
+            return
+
+        parts: list[str] = []
+
+        # Explicit model instruction (inspired by OpenClaw)
+        parts.append(
+            "You have been given persona files that define your personality,"
+            " identity, and user preferences. Embody the persona described"
+            " in SOUL.md. Respect the constraints in IDENTITY.md. Adapt"
+            " your communication style to match the user profile in USER.md."
+        )
+
+        if persona.soul.is_loaded:
+            parts.append(f"## SOUL.md\n<soul>\n{persona.soul.content}\n</soul>")
+
+        if persona.identity.is_loaded:
+            parts.append(f"## IDENTITY.md\n<identity>\n{persona.identity.content}\n</identity>")
+
+        if persona.user_profile.is_loaded:
+            parts.append(
+                f"## USER.md\n<user-profile>\n{persona.user_profile.content}\n</user-profile>"
+            )
+
+        if parts:
+            body = "\n\n".join(parts)
+            sections.append(f"# Project Context\n\n{body}")
+
+    @staticmethod
+    def _build_heartbeat_section(context: PromptContext) -> str:
+        """Build the heartbeat section when a periodic check is due.
+
+        When the HeartbeatRunner determines a check is due, it populates
+        ``context.heartbeat_prompt`` with the full prompt (including
+        HEARTBEAT.md content wrapped in XML tags). This method simply
+        wraps it in a ``<heartbeat>`` block for clear separation in the
+        system prompt.
+
+        Args:
+            context: The prompt context.
+
+        Returns:
+            Heartbeat section XML block or empty string.
+        """
+        if not context.heartbeat_prompt:
+            return ""
+        return f"<heartbeat>\n{context.heartbeat_prompt}\n</heartbeat>"
 
     async def _build_trailing_sections(
         self,

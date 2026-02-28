@@ -40,7 +40,10 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
@@ -233,6 +236,7 @@ class ProjectReActAgent:
 
         # Optional plan repository for Plan Mode awareness
         self._plan_repo: Any | None = None
+        self._artifact_service: Any | None = None
 
     @property
     def is_initialized(self) -> bool:
@@ -435,9 +439,9 @@ class ProjectReActAgent:
             if embedding_service and redis_client:
                 cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
                 chunk_search = ChunkHybridSearch(
-                    cast("EmbeddingService", cached_embedding),  # noqa: F821
+                    cast("EmbeddingService", cached_embedding),
                     session_factory,
-                )  # type: ignore[name-defined]
+                )
                 memory_recall = MemoryRecallPreprocessor(
                     chunk_search=chunk_search,
                     graph_search=graph_service,
@@ -453,7 +457,7 @@ class ProjectReActAgent:
                 memory_capture = MemoryCapturePostprocessor(
                     llm_client=llm_client,
                     session_factory=session_factory,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]  # noqa: F821
+                    embedding_service=cast("EmbeddingService | None", cached_emb),
                 )
                 logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
 
@@ -461,7 +465,7 @@ class ProjectReActAgent:
 
                 memory_flush = MemoryFlushService(
                     llm_client=llm_client,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]  # noqa: F821
+                    embedding_service=cast("EmbeddingService | None", cached_emb),
                     session_factory=session_factory,
                 )
         except Exception as e:
@@ -526,6 +530,15 @@ class ProjectReActAgent:
             processor_config=processor_config,
         )
 
+        # Get workspace manager for persona/soul file loading (SOUL.md, IDENTITY.md, USER.md)
+        workspace_manager = None
+        try:
+            from src.configuration.di_container import DIContainer as _Container
+
+            workspace_manager = _Container().workspace_manager()
+        except Exception as e:
+            logger.debug(f"Could not initialize workspace manager: {e}")
+
         app_settings = get_settings()
         context_window_config = self._build_context_window_config(
             provider_config, app_settings, _clamp_max_tokens, get_model_context_window
@@ -577,6 +590,7 @@ class ProjectReActAgent:
             _cached_tool_definitions=self._session_context.tool_definitions,
             _cached_system_prompt_manager=self._session_context.system_prompt_manager,
             _cached_subagent_router=self._session_context.subagent_router,
+            workspace_manager=workspace_manager,
         )
 
     def _build_context_window_config(
@@ -1415,7 +1429,7 @@ class ProjectAgentManager:
                 await asyncio.sleep(300)  # Run every 5 minutes
 
                 if not self._is_running:
-                    break  # type: ignore[unreachable]
+                    break
 
                 await self._cleanup_idle_agents()
 
@@ -1440,10 +1454,10 @@ class ProjectAgentManager:
 
         async with self._lock:
             for key, agent in list(self._agents.items()):
-                if not agent.is_active or agent._status.active_chats > 0:
+                if not agent.is_active or agent.get_status().active_chats > 0:
                     continue
 
-                last_activity = agent._status.last_activity_at
+                last_activity = agent.get_status().last_activity_at
                 if last_activity:
                     last_activity_time = datetime.fromisoformat(last_activity)
                     idle_seconds = (now - last_activity_time).total_seconds()

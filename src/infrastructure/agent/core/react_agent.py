@@ -44,6 +44,8 @@ from ..commands.registry import CommandRegistry
 from ..config import ExecutionConfig
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
+from ..heartbeat.config import HeartbeatConfig
+from ..heartbeat.runner import HeartbeatRunner
 from ..permission import PermissionManager
 from ..planning.plan_detector import PlanDetector
 from ..plugins.policy_context import PolicyContext, normalize_policy_layers
@@ -145,6 +147,7 @@ class ReActAgent:
     skill_match_threshold: float
     skill_fallback_on_error: bool
     skill_execution_timeout: int
+    _filesystem_skills_loaded: bool
     # _init_subagent_system
     subagents: list[SubAgent]
     subagent_match_threshold: float
@@ -237,6 +240,10 @@ class ReActAgent:
         resource_sync_service: Any | None = None,
         # Graph service for SubAgent memory sharing (Phase 5.1)
         graph_service: GraphServicePort | None = None,
+        # Workspace persona manager (loaded from .memstack/workspace/)
+        workspace_manager: Any | None = None,
+        # Heartbeat configuration (periodic self-check during long sessions)
+        heartbeat_config: HeartbeatConfig | None = None,
         # ====================================================================
         # Hot-plug support: Optional tool provider function for dynamic tools
         # When provided, tools are fetched at each stream() call instead of
@@ -338,6 +345,13 @@ class ReActAgent:
         self._llm_client = llm_client  # LLM client for unified resilience
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
+        self._workspace_manager = workspace_manager  # Workspace persona/soul file loader
+        self._heartbeat_runner: HeartbeatRunner | None = None
+        if heartbeat_config and heartbeat_config.enabled:
+            self._heartbeat_runner = HeartbeatRunner(
+                config=heartbeat_config,
+                workspace_manager=workspace_manager,
+            )
         self._plan_detector = plan_detector or PlanDetector()
 
         self._init_tool_pipeline(
@@ -349,7 +363,11 @@ class ReActAgent:
         )
         self._init_memory_hooks(memory_recall, memory_capture, memory_flush)
         self._init_prompt_and_context(
-            _cached_system_prompt_manager, context_window_config, max_context_tokens, max_tokens
+            _cached_system_prompt_manager,
+            context_window_config,
+            max_context_tokens,
+            max_tokens,
+            workspace_manager,
         )
 
         execution_config = self._init_execution_config(
@@ -502,6 +520,7 @@ class ReActAgent:
         context_window_config: ContextWindowConfig | None,
         max_context_tokens: int,
         max_tokens: int,
+        workspace_manager: Any | None = None,
     ) -> None:
         """Initialize System Prompt Manager and Context Window Manager."""
         if cached_prompt_manager is not None:
@@ -552,6 +571,45 @@ class ReActAgent:
         self.skill_match_threshold = skill_match_threshold
         self.skill_fallback_on_error = skill_fallback_on_error
         self.skill_execution_timeout = skill_execution_timeout
+        self._filesystem_skills_loaded = False
+
+    async def _load_filesystem_skills(
+        self,
+        tenant_id: str,
+        project_id: str,
+    ) -> None:
+        """Lazy-load Skills from .memstack/skills/ on first stream() call.
+
+        Filesystem skills are appended to self.skills without replacing
+        any database-sourced skills. Loading happens at most once per agent
+        instance (guarded by _filesystem_skills_loaded flag).
+        """
+        if self._filesystem_skills_loaded:
+            return
+        self._filesystem_skills_loaded = True
+
+        # Lazy import to avoid circular deps and basedpyright indexing issues
+        from src.infrastructure.agent.skill.filesystem_loader import FileSystemSkillLoader
+
+        try:
+            loader = FileSystemSkillLoader(
+                base_path=self.project_root,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+            result = await loader.load_all()
+            if result.count > 0:
+                self.skills.extend(loaded.skill for loaded in result.skills)
+                logger.info(
+                    "[ReActAgent] Loaded %d filesystem skills from %s",
+                    result.count,
+                    self.project_root,
+                )
+            if result.errors:
+                for err in result.errors:
+                    logger.warning("[ReActAgent] Filesystem skill load error: %s", err)
+        except Exception as e:
+            logger.warning("[ReActAgent] Failed to load filesystem skills: %s", e)
 
     def _init_subagent_system(  # noqa: PLR0913
         self,
@@ -1026,6 +1084,7 @@ class ReActAgent:
         force_execution: bool = False,
         memory_context: str | None = None,
         selection_context: ToolSelectionContext | None = None,
+        heartbeat_prompt: str | None = None,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -1103,6 +1162,14 @@ class ReActAgent:
                 if sa.enabled
             ]
 
+        # Load workspace persona as first-class AgentPersona
+        persona = None
+        if self._workspace_manager:
+            try:
+                persona = await self._workspace_manager.build_persona()
+            except Exception as e:
+                logger.warning("Failed to load workspace persona: %s", e)
+
         # Build prompt context
         context = PromptContext(
             model_provider=model_provider,
@@ -1119,6 +1186,8 @@ class ReActAgent:
             current_step=current_step,
             max_steps=self.max_steps,
             memory_context=memory_context,
+            persona=persona,
+            heartbeat_prompt=heartbeat_prompt,
         )
 
         # Use SystemPromptManager to build the prompt
@@ -1927,7 +1996,7 @@ class ReActAgent:
                 f"[ReActAgent] Skill {matched_skill.name} usage recorded: success={success}"
             )
 
-    async def stream(  # noqa: PLR0913
+    async def stream(  # noqa: PLR0913, PLR0912, PLR0915
         self,
         conversation_id: str,
         user_message: str,
@@ -2002,6 +2071,9 @@ class ReActAgent:
         )
         yield route_event
 
+        # Phase 4b: Filesystem skill loading (lazy, once per agent instance)
+        await self._load_filesystem_skills(tenant_id, project_id)
+
         # Phase 5: Skill matching
         for event in self._stream_match_skill(processed_user_message, forced_skill_name):
             yield event
@@ -2040,6 +2112,14 @@ class ReActAgent:
             yield event
         memory_context = self._stream_memory_context
 
+        # Phase 7b: Heartbeat check
+        heartbeat_prompt: str | None = None
+        if self._heartbeat_runner and self._heartbeat_runner.check_due():
+            hb_result = await self._heartbeat_runner.run_once()
+            if hb_result.should_run:
+                heartbeat_prompt = hb_result.prompt
+                logger.info("[ReActAgent] Heartbeat due, injecting heartbeat prompt into context")
+
         # Phase 8: System prompt building
         system_prompt = await self._build_system_prompt(
             processed_user_message,
@@ -2053,6 +2133,7 @@ class ReActAgent:
             force_execution=is_forced,
             memory_context=memory_context,
             selection_context=selection_context,
+            heartbeat_prompt=heartbeat_prompt,
         )
 
         # Phase 9: Context building
@@ -2112,6 +2193,14 @@ class ReActAgent:
             matched_skill=matched_skill,
         ):
             yield event
+
+        # Phase 13b: Heartbeat reply processing
+        if self._heartbeat_runner and heartbeat_prompt:
+            hb_reply = self._heartbeat_runner.process_reply(self._stream_final_content)
+            if hb_reply.should_suppress:
+                logger.debug("[ReActAgent] Heartbeat reply acknowledged (HEARTBEAT_OK)")
+            elif hb_reply.did_strip:
+                self._stream_final_content = hb_reply.cleaned_text
 
         # Phase 14: Post-processing
         async for event in self._stream_post_process(
