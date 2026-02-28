@@ -892,6 +892,78 @@ def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
     return None
 
 
+def _has_memstack_content(base: Path) -> bool:
+    """Check whether ``base/.memstack/workspace/`` (or any sub-dir) has files.
+
+    Used by :func:`resolve_project_base_path` to avoid committing to a
+    sandbox or convention path whose ``.memstack/`` tree was created during
+    sandbox init but never populated with actual persona / skill files.
+    """
+    ws_dir = base / ".memstack" / "workspace"
+    if ws_dir.exists() and any(ws_dir.iterdir()):
+        return True
+    memstack_dir = base / ".memstack"
+    return memstack_dir.exists() and any(
+        child.is_dir() and any(child.iterdir())
+        for child in memstack_dir.iterdir()
+        if child.is_dir()
+    )
+
+
+def _resolve_sandbox_path(
+    project_id: str,
+    tools: dict[str, Any] | None,
+) -> Path | None:
+    """Try to resolve project base path from the sandbox adapter.
+
+    Returns the sandbox's host-side project path if the adapter is
+    available, a matching sandbox is found, and the path contains
+    actual ``.memstack/`` content.  Returns ``None`` otherwise.
+    """
+    if _mcp_sandbox_adapter is None:
+        return None
+
+    sandbox_id: str | None = None
+    if tools is not None:
+        sandbox_id = _find_sandbox_id(tools)
+
+    if sandbox_id is None:
+        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        for sid, instance in active.items():
+            inst_project_id = getattr(instance, "project_id", None)
+            if inst_project_id == project_id:
+                sandbox_id = sid
+                break
+
+    if sandbox_id is None:
+        return None
+
+    active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+    instance = active.get(sandbox_id)
+    if instance is None:
+        return None
+
+    project_path = getattr(instance, "project_path", "")
+    if not project_path:
+        return None
+
+    resolved = Path(project_path)
+    if resolved.exists() and _has_memstack_content(resolved):
+        logger.info(
+            "Resolved project base path from sandbox adapter: %s",
+            resolved,
+        )
+        return resolved
+
+    if resolved.exists():
+        logger.info(
+            "Sandbox adapter path %s exists but .memstack/workspace "
+            "is empty, falling through to next strategy",
+            resolved,
+        )
+    return None
+
+
 def resolve_project_base_path(
     project_id: str,
     tools: dict[str, Any] | None = None,
@@ -919,55 +991,20 @@ def resolve_project_base_path(
     from pathlib import Path
 
     # Strategy 1: Try to get project_path from the sandbox adapter
-    if _mcp_sandbox_adapter is not None:
-        # First, check if we already have a sandbox_id from loaded tools
-        sandbox_id: str | None = None
-        if tools is not None:
-            sandbox_id = _find_sandbox_id(tools)
-
-        # If no sandbox_id from tools, look up by project_id
-        if sandbox_id is None:
-            # Check active sandboxes for this project
-            active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
-            for sid, instance in active.items():
-                inst_project_id = getattr(instance, "project_id", None)
-                if inst_project_id == project_id:
-                    sandbox_id = sid
-                    break
-
-        if sandbox_id is not None:
-            active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
-            instance = active.get(sandbox_id)
-            if instance is not None:
-                project_path = getattr(instance, "project_path", "")
-                if project_path:
-                    resolved = Path(project_path)
-                    if resolved.exists():
-                        logger.info(
-                            "Resolved project base path from sandbox adapter: %s",
-                            resolved,
-                        )
-
+    sandbox_path = _resolve_sandbox_path(project_id, tools)
+    if sandbox_path is not None:
+        return sandbox_path
     # Strategy 2: Direct construction from known naming convention
     # Both project_sandbox_lifecycle_service.py and unified_sandbox_service.py
     # hardcode f"/tmp/memstack_{project_id}" as the host-side project path.
     candidate = Path(f"/tmp/memstack_{project_id}")
-    if candidate.exists():
-        # Verify the candidate has actual skill content before committing.
-        # An empty /tmp/memstack_{id}/.memstack/ (created during sandbox init
-        # but never populated with skills) should NOT short-circuit resolution.
-        memstack_dir = candidate / ".memstack"
-        has_content = memstack_dir.exists() and any(
-            child.is_dir() and any(child.iterdir())
-            for child in memstack_dir.iterdir()
-            if child.is_dir()
+    if candidate.exists() and _has_memstack_content(candidate):
+        logger.info(
+            "Resolved project base path from convention: %s (has .memstack content)",
+            candidate,
         )
-        if has_content:
-            logger.info(
-                "Resolved project base path from convention: %s (has .memstack content)",
-                candidate,
-            )
-            return candidate
+        return candidate
+    if candidate.exists():
         logger.info(
             "Convention path %s exists but .memstack/ is empty, falling through to cwd",
             candidate,

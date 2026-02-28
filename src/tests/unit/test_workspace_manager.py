@@ -126,15 +126,24 @@ class TestWorkspaceManagerBuildPersona:
         tpl.mkdir()
         return tpl
 
+    @pytest.fixture()
+    def tenant_workspace_dir(self, tmp_path):
+        """Create a tenant workspace directory for testing."""
+        tws = tmp_path / "tenant_workspace"
+        tws.mkdir()
+        return tws
+
     def _make_manager(
         self,
         workspace_dir,
         templates_dir,
         max_chars_per_file=DEFAULT_BOOTSTRAP_MAX_CHARS,
+        tenant_workspace_dir=None,
     ):
         """Helper to create a WorkspaceManager."""
         return WorkspaceManager(
             workspace_dir=workspace_dir,
+            tenant_workspace_dir=tenant_workspace_dir,
             templates_dir=templates_dir,
             max_chars_per_file=max_chars_per_file,
         )
@@ -357,3 +366,94 @@ class TestWorkspaceManagerBuildPersona:
         assert persona.soul.filename == "SOUL.md"
         assert persona.identity.filename == "IDENTITY.md"
         assert persona.user_profile.filename == "USER.md"
+
+    async def test_build_persona_with_agents_and_tools(
+        self,
+        workspace_dir,
+        templates_dir,
+    ):
+        """build_persona should load AGENTS.md and TOOLS.md as WORKSPACE source."""
+        # Arrange
+        (workspace_dir / "AGENTS.md").write_text("agent config")
+        (workspace_dir / "TOOLS.md").write_text("tool config")
+        manager = self._make_manager(workspace_dir, templates_dir)
+
+        # Act
+        persona = await manager.build_persona()
+
+        # Assert
+        assert persona.agents.is_loaded is True
+        assert persona.agents.content == "agent config"
+        assert persona.agents.source == PersonaSource.WORKSPACE
+        assert persona.tools.is_loaded is True
+        assert persona.tools.content == "tool config"
+        assert persona.tools.source == PersonaSource.WORKSPACE
+
+    async def test_build_persona_tenant_fallback(
+        self,
+        workspace_dir,
+        templates_dir,
+        tenant_workspace_dir,
+    ):
+        """build_persona should fall back to tenant dir when workspace files are missing."""
+        # Arrange - only tenant dir has SOUL.md, workspace is empty
+        (tenant_workspace_dir / "SOUL.md").write_text("tenant soul")
+        manager = self._make_manager(
+            workspace_dir,
+            templates_dir,
+            tenant_workspace_dir=tenant_workspace_dir,
+        )
+
+        # Act
+        persona = await manager.build_persona()
+
+        # Assert
+        assert persona.soul.is_loaded is True
+        assert persona.soul.content == "tenant soul"
+        assert persona.soul.source == PersonaSource.TENANT
+
+    async def test_build_persona_project_overrides_tenant(
+        self,
+        workspace_dir,
+        templates_dir,
+        tenant_workspace_dir,
+    ):
+        """Project workspace file should override tenant workspace file."""
+        # Arrange - both dirs have SOUL.md with different content
+        (workspace_dir / "SOUL.md").write_text("project soul")
+        (tenant_workspace_dir / "SOUL.md").write_text("tenant soul")
+        manager = self._make_manager(
+            workspace_dir,
+            templates_dir,
+            tenant_workspace_dir=tenant_workspace_dir,
+        )
+
+        # Act
+        persona = await manager.build_persona()
+
+        # Assert - project content wins with WORKSPACE source
+        assert persona.soul.content == "project soul"
+        assert persona.soul.source == PersonaSource.WORKSPACE
+
+    async def test_build_persona_tenant_overrides_template(
+        self,
+        workspace_dir,
+        templates_dir,
+        tenant_workspace_dir,
+    ):
+        """Tenant workspace file should override template file."""
+        # Arrange - tenant dir and templates both have SOUL.md
+        (tenant_workspace_dir / "SOUL.md").write_text("tenant soul")
+        (templates_dir / "SOUL.md").write_text("template soul")
+        manager = self._make_manager(
+            workspace_dir,
+            templates_dir,
+            tenant_workspace_dir=tenant_workspace_dir,
+        )
+
+        # Act
+        persona = await manager.build_persona()
+
+        # Assert - tenant content wins with TENANT source
+        assert persona.soul.content == "tenant soul"
+        assert persona.soul.source == PersonaSource.TENANT

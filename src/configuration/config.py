@@ -304,6 +304,9 @@ class Settings(BaseSettings):
     workspace_dir: str = Field(
         default="/workspace/.memstack/workspace", alias="WORKSPACE_DIR"
     )
+    tenant_workspace_dir: str = Field(
+        default="", alias="TENANT_WORKSPACE_DIR"
+    )
     workspace_max_chars_per_file: int = Field(
         default=20000, alias="WORKSPACE_MAX_CHARS_PER_FILE"
     )

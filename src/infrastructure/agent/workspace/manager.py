@@ -42,6 +42,8 @@ WORKSPACE_FILENAMES: tuple[str, ...] = (
     "IDENTITY.md",
     "USER.md",
     "HEARTBEAT.md",
+    "AGENTS.md",
+    "TOOLS.md",
 )
 
 # Minimal allowlist for subagent/cron sessions (skip HEARTBEAT)
@@ -72,6 +74,8 @@ class WorkspaceFiles:
         identity_text: Content of IDENTITY.md (agent identity definition).
         user_profile: Content of USER.md (user profile/preferences).
         heartbeat_text: Content of HEARTBEAT.md (heartbeat instructions).
+        agents_text: Content of AGENTS.md (agent configuration).
+        tools_text: Content of TOOLS.md (tool configuration).
         load_errors: Errors encountered during loading.
     """
 
@@ -79,12 +83,14 @@ class WorkspaceFiles:
     identity_text: str | None = None
     user_profile: str | None = None
     heartbeat_text: str | None = None
+    agents_text: str | None = None
+    tools_text: str | None = None
     load_errors: list[str] = field(default_factory=list)
 
     @property
     def has_persona(self) -> bool:
         """Check if any persona/soul files were loaded."""
-        return bool(self.soul_text or self.identity_text or self.user_profile)
+        return bool(self.soul_text or self.identity_text or self.user_profile or self.agents_text or self.tools_text)
 
 
 def trim_bootstrap_content(
@@ -159,6 +165,7 @@ class WorkspaceManager:
     def __init__(
         self,
         workspace_dir: Path | None = None,
+        tenant_workspace_dir: Path | None = None,
         max_chars_per_file: int = DEFAULT_BOOTSTRAP_MAX_CHARS,
         max_chars_total: int = DEFAULT_BOOTSTRAP_TOTAL_MAX_CHARS,
         templates_dir: Path | None = None,
@@ -167,8 +174,11 @@ class WorkspaceManager:
         """Initialize WorkspaceManager.
 
         Args:
-            workspace_dir: Path to .memstack/workspace/ in the sandbox.
+            workspace_dir: Path to .memstack/workspace/ in the sandbox (project-level).
                 Defaults to /workspace/.memstack/workspace.
+            tenant_workspace_dir: Path to tenant-level workspace directory.
+                When set, files not found at project level fall back here
+                before falling back to system templates.
             max_chars_per_file: Per-file character limit for truncation.
             max_chars_total: Total character budget across all files.
             templates_dir: Directory containing default template files.
@@ -176,6 +186,7 @@ class WorkspaceManager:
             enabled: Whether workspace loading is enabled.
         """
         self._workspace_dir = workspace_dir or Path("/workspace/.memstack/workspace")
+        self._tenant_workspace_dir = tenant_workspace_dir
         self._max_chars_per_file = max_chars_per_file
         self._max_chars_total = max_chars_total
         self._templates_dir = templates_dir or (
@@ -275,6 +286,14 @@ class WorkspaceManager:
                 files.user_profile,
                 "USER.md",
             ),
+            agents=self._to_persona_field(
+                files.agents_text,
+                "AGENTS.md",
+            ),
+            tools=self._to_persona_field(
+                files.tools_text,
+                "TOOLS.md",
+            ),
         )
 
     def _to_persona_field(
@@ -294,9 +313,17 @@ class WorkspaceManager:
         if content is None:
             return PersonaField.empty(filename)
 
-        # Determine source: workspace file or template fallback
+        # Determine source: project workspace > tenant workspace > template
         workspace_path = self._workspace_dir / filename
-        source = PersonaSource.WORKSPACE if workspace_path.exists() else PersonaSource.TEMPLATE
+        if workspace_path.exists():
+            source = PersonaSource.WORKSPACE
+        elif (
+            self._tenant_workspace_dir
+            and (self._tenant_workspace_dir / filename).exists()
+        ):
+            source = PersonaSource.TENANT
+        else:
+            source = PersonaSource.TEMPLATE
 
         # Check if this file was truncated by inspecting the cache
         cached = self._cache.get(filename)
@@ -329,8 +356,8 @@ class WorkspaceManager:
         file_path = self._workspace_dir / filename
 
         if not file_path.exists():
-            # Try loading from templates as fallback
-            return self._load_template(filename, max_chars)
+            # Try tenant-level workspace as fallback
+            return self._load_tenant_or_template(filename, max_chars)
 
         try:
             stat = file_path.stat()
@@ -361,6 +388,56 @@ class WorkspaceManager:
         except OSError as e:
             logger.warning("Failed to read workspace file %s: %s", file_path, e)
             return None
+
+    def _load_tenant_or_template(self, filename: str, max_chars: int) -> str | None:
+        """Try loading from tenant workspace, then fall back to template.
+
+        Implements the middle tier of the 3-tier resolution:
+        project-level (workspace_dir) > tenant-level > system template.
+
+        Args:
+            filename: Name of the file to load.
+            max_chars: Character limit for this file.
+
+        Returns:
+            File content (possibly truncated) or None if not found.
+        """
+        if self._tenant_workspace_dir:
+            tenant_path = self._tenant_workspace_dir / filename
+            if tenant_path.exists():
+                try:
+                    stat = tenant_path.stat()
+                    mtime_ns = stat.st_mtime_ns
+                    cache_key = f"tenant:{filename}"
+
+                    # Check cache by mtime
+                    cached = self._cache.get(cache_key)
+                    if cached is not None and cached[1] == mtime_ns:
+                        # Store under the filename key too for _to_persona_field
+                        self._cache[filename] = cached
+                        return cached[0]
+
+                    raw_content = tenant_path.read_text(encoding="utf-8")
+                    truncation = trim_bootstrap_content(raw_content, filename, max_chars)
+
+                    if truncation.truncated:
+                        logger.debug(
+                            "Truncated tenant %s: %d -> %d chars",
+                            filename,
+                            truncation.original_length,
+                            len(truncation.content),
+                        )
+
+                    self._cache[cache_key] = (truncation.content, mtime_ns)
+                    self._cache[filename] = (truncation.content, mtime_ns)
+                    return truncation.content
+
+                except PermissionError:
+                    logger.warning("Permission denied reading tenant file: %s", tenant_path)
+                except OSError as e:
+                    logger.warning("Failed to read tenant file %s: %s", tenant_path, e)
+
+        return self._load_template(filename, max_chars)
 
     def _load_template(self, filename: str, max_chars: int) -> str | None:
         """Load a default template file as fallback.
@@ -423,6 +500,8 @@ class WorkspaceManager:
             "IDENTITY.md": "identity_text",
             "USER.md": "user_profile",
             "HEARTBEAT.md": "heartbeat_text",
+            "AGENTS.md": "agents_text",
+            "TOOLS.md": "tools_text",
         }
         attr = field_map.get(filename)
         if attr is not None:

@@ -531,14 +531,35 @@ class ProjectReActAgent:
         )
 
         # Get workspace manager for persona/soul file loading (SOUL.md, IDENTITY.md, USER.md)
+        # Use resolve_project_base_path to find the host-side project path that maps to
+        # /workspace inside the sandbox container. This ensures persona files are loaded
+        # from the correct filesystem location (host-side bind mount).
         workspace_manager = None
         try:
-            from src.configuration.di_container import DIContainer as _Container
+            from pathlib import Path as _Path
 
-            workspace_manager = _Container().workspace_manager()
+            from src.configuration.config import get_settings as _get_ws_settings
+            from src.infrastructure.agent.state.agent_worker_state import (
+                resolve_project_base_path as _resolve_base,
+            )
+            from src.infrastructure.agent.workspace.manager import (
+                WorkspaceManager as _WorkspaceManager,
+            )
+
+            _ws_settings = _get_ws_settings()
+            _base_path = _resolve_base(self.config.project_id)
+            _workspace_dir = _base_path / ".memstack" / "workspace"
+            _tenant_dir_str = _ws_settings.tenant_workspace_dir if _ws_settings else ""
+
+            workspace_manager = _WorkspaceManager(
+                workspace_dir=_workspace_dir,
+                tenant_workspace_dir=_Path(_tenant_dir_str) if _tenant_dir_str else None,
+                max_chars_per_file=_ws_settings.workspace_max_chars_per_file,
+                max_chars_total=_ws_settings.workspace_max_chars_total,
+                enabled=_ws_settings.workspace_enabled,
+            )
         except Exception as e:
             logger.debug(f"Could not initialize workspace manager: {e}")
-
         app_settings = get_settings()
         context_window_config = self._build_context_window_config(
             provider_config, app_settings, _clamp_max_tokens, get_model_context_window

@@ -299,11 +299,13 @@ class AgentContainer:
         settings = self._settings
         enabled = settings.workspace_enabled if settings else True
         workspace_dir = settings.workspace_dir if settings else "/workspace/.memstack/workspace"
+        tenant_workspace_dir_str = settings.tenant_workspace_dir if settings else ""
         max_per_file = settings.workspace_max_chars_per_file if settings else 20000
         max_total = settings.workspace_max_chars_total if settings else 150000
 
         self._workspace_manager_instance = WorkspaceManager(
             workspace_dir=Path(workspace_dir),
+            tenant_workspace_dir=Path(tenant_workspace_dir_str) if tenant_workspace_dir_str else None,
             max_chars_per_file=max_per_file,
             max_chars_total=max_total,
             enabled=enabled,

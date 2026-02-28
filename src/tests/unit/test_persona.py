@@ -45,6 +45,9 @@ class TestPersonaSource:
         assert PersonaSource("workspace") == PersonaSource.WORKSPACE
         assert PersonaSource("none") == PersonaSource.NONE
 
+    def test_tenant_value(self):
+        """PersonaSource.TENANT should have value 'tenant'."""
+        assert PersonaSource.TENANT.value == "tenant"
     def test_invalid_value_raises(self):
         """Creating PersonaSource from invalid string should raise."""
         with pytest.raises(ValueError):
@@ -281,6 +284,112 @@ class TestAgentPersona:
         """user_profile_text should return None when not loaded."""
         persona = AgentPersona()
         assert persona.user_profile_text is None
+
+    def test_default_fields_include_agents_and_tools(self):
+        """Default AgentPersona should have agents and tools fields."""
+        persona = AgentPersona()
+        assert persona.agents.filename == "AGENTS.md"
+        assert persona.tools.filename == "TOOLS.md"
+        assert persona.agents.is_loaded is False
+        assert persona.tools.is_loaded is False
+
+    def test_has_any_true_with_agents(self):
+        """has_any should be True when agents is loaded."""
+        persona = AgentPersona(
+            agents=PersonaField(
+                content="agents config",
+                source=PersonaSource.WORKSPACE,
+            ),
+        )
+        assert persona.has_any is True
+
+    def test_has_any_true_with_tools(self):
+        """has_any should be True when tools is loaded."""
+        persona = AgentPersona(
+            tools=PersonaField(
+                content="tools config",
+                source=PersonaSource.TENANT,
+            ),
+        )
+        assert persona.has_any is True
+
+    def test_total_chars_with_all_fields(self):
+        """total_chars should sum injected_chars from all five fields."""
+        persona = AgentPersona(
+            soul=PersonaField(injected_chars=100),
+            identity=PersonaField(injected_chars=200),
+            user_profile=PersonaField(injected_chars=300),
+            agents=PersonaField(injected_chars=400),
+            tools=PersonaField(injected_chars=500),
+        )
+        assert persona.total_chars == 1500
+
+    def test_total_raw_chars_with_all_fields(self):
+        """total_raw_chars should sum raw_chars from all five fields."""
+        persona = AgentPersona(
+            soul=PersonaField(raw_chars=1000),
+            identity=PersonaField(raw_chars=2000),
+            user_profile=PersonaField(raw_chars=3000),
+            agents=PersonaField(raw_chars=4000),
+            tools=PersonaField(raw_chars=5000),
+        )
+        assert persona.total_raw_chars == 15000
+
+    def test_any_truncated_true_agents(self):
+        """any_truncated should be True if agents field is truncated."""
+        persona = AgentPersona(
+            agents=PersonaField(is_truncated=True),
+        )
+        assert persona.any_truncated is True
+
+    def test_loaded_fields_includes_agents_and_tools(self):
+        """loaded_fields should include agents and tools when loaded."""
+        agents = PersonaField(
+            content="agents",
+            source=PersonaSource.WORKSPACE,
+        )
+        tools = PersonaField(
+            content="tools",
+            source=PersonaSource.TENANT,
+        )
+        persona = AgentPersona(
+            agents=agents,
+            tools=tools,
+        )
+        loaded = persona.loaded_fields()
+        assert len(loaded) == 2
+        assert agents in loaded
+        assert tools in loaded
+
+    def test_agents_text_backward_compat_loaded(self):
+        """agents_text should return content when agents is loaded."""
+        persona = AgentPersona(
+            agents=PersonaField(
+                content="my agents",
+                source=PersonaSource.WORKSPACE,
+            ),
+        )
+        assert persona.agents_text == "my agents"
+
+    def test_agents_text_backward_compat_not_loaded(self):
+        """agents_text should return None when agents is not loaded."""
+        persona = AgentPersona()
+        assert persona.agents_text is None
+
+    def test_tools_text_backward_compat_loaded(self):
+        """tools_text should return content when tools is loaded."""
+        persona = AgentPersona(
+            tools=PersonaField(
+                content="my tools",
+                source=PersonaSource.TENANT,
+            ),
+        )
+        assert persona.tools_text == "my tools"
+
+    def test_tools_text_backward_compat_not_loaded(self):
+        """tools_text should return None when tools is not loaded."""
+        persona = AgentPersona()
+        assert persona.tools_text is None
 
     def test_frozen_prevents_mutation(self):
         """AgentPersona is frozen; field assignment should raise."""

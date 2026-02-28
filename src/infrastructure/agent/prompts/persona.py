@@ -26,14 +26,16 @@ class PersonaSource(str, Enum):
     """Origin of a persona field's content.
 
     Attributes:
-        WORKSPACE: Loaded from .memstack/workspace/ in the sandbox.
+        WORKSPACE: Loaded from .memstack/workspace/ in the sandbox (project-level).
         TEMPLATE: Fell back to the default template in prompts/workspace/.
+        TENANT: Loaded from tenant-level workspace directory.
         CONFIG: Provided via API/config (future use).
         NONE: No content was loaded.
     """
 
     WORKSPACE = "workspace"
     TEMPLATE = "template"
+    TENANT = "tenant"
     CONFIG = "config"
     NONE = "none"
 
@@ -80,6 +82,8 @@ class AgentPersona:
         soul: The agent's personality/soul definition (SOUL.md).
         identity: The agent's identity definition (IDENTITY.md).
         user_profile: The user's profile/preferences (USER.md).
+        agents: The project's agent configuration (AGENTS.md).
+        tools: The project's tool configuration (TOOLS.md).
     """
 
     soul: PersonaField = field(default_factory=lambda: PersonaField.empty("SOUL.md"))
@@ -89,11 +93,15 @@ class AgentPersona:
     user_profile: PersonaField = field(
         default_factory=lambda: PersonaField.empty("USER.md"),
     )
+    agents: PersonaField = field(default_factory=lambda: PersonaField.empty("AGENTS.md"))
+    tools: PersonaField = field(
+        default_factory=lambda: PersonaField.empty("TOOLS.md"),
+    )
 
     @property
     def has_any(self) -> bool:
         """Check if any persona field has content."""
-        return self.soul.is_loaded or self.identity.is_loaded or self.user_profile.is_loaded
+        return self.soul.is_loaded or self.identity.is_loaded or self.user_profile.is_loaded or self.agents.is_loaded or self.tools.is_loaded
 
     @property
     def total_chars(self) -> int:
@@ -102,23 +110,27 @@ class AgentPersona:
             self.soul.injected_chars
             + self.identity.injected_chars
             + self.user_profile.injected_chars
+            + self.agents.injected_chars
+            + self.tools.injected_chars
         )
 
     @property
     def total_raw_chars(self) -> int:
         """Total raw characters before truncation across all fields."""
-        return self.soul.raw_chars + self.identity.raw_chars + self.user_profile.raw_chars
+        return self.soul.raw_chars + self.identity.raw_chars + self.user_profile.raw_chars + self.agents.raw_chars + self.tools.raw_chars
 
     @property
     def any_truncated(self) -> bool:
         """Check if any field was truncated."""
         return (
             self.soul.is_truncated or self.identity.is_truncated or self.user_profile.is_truncated
+            or self.agents.is_truncated
+            or self.tools.is_truncated
         )
 
     def loaded_fields(self) -> list[PersonaField]:
         """Return only the fields that have content."""
-        return [f for f in (self.soul, self.identity, self.user_profile) if f.is_loaded]
+        return [f for f in (self.soul, self.identity, self.user_profile, self.agents, self.tools) if f.is_loaded]
 
     @staticmethod
     def empty() -> AgentPersona:
@@ -141,6 +153,15 @@ class AgentPersona:
     def user_profile_text(self) -> str | None:
         """Backward-compatible accessor for user profile content."""
         return self.user_profile.content if self.user_profile.is_loaded else None
+    @property
+    def agents_text(self) -> str | None:
+        """Backward-compatible accessor for agents content."""
+        return self.agents.content if self.agents.is_loaded else None
+
+    @property
+    def tools_text(self) -> str | None:
+        """Backward-compatible accessor for tools content."""
+        return self.tools.content if self.tools.is_loaded else None
 
 
 @dataclass(frozen=True)

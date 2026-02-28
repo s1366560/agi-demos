@@ -19,7 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from src.infrastructure.agent.prompts.persona import AgentPersona, PromptReport
+from src.infrastructure.agent.prompts.persona import AgentPersona, PersonaSource, PromptReport
 from src.infrastructure.memory.prompt_safety import (
     looks_like_prompt_injection,
     sanitize_for_context,
@@ -110,7 +110,9 @@ class SystemPromptManager:
     """
 
     # File extensions for custom rules
-    RULE_FILE_NAMES: ClassVar[list[str]] = [".memstack/AGENTS.md", "CLAUDE.md"]
+    # Custom rules file names — AGENTS.md is now handled by the persona system
+    # so only CLAUDE.md remains as a custom rules file.
+    RULE_FILE_NAMES: ClassVar[list[str]] = ["CLAUDE.md"]
 
     # Default sandbox workspace path - Agent should only see sandbox, not host filesystem
     DEFAULT_SANDBOX_WORKSPACE = Path("/workspace")
@@ -226,10 +228,23 @@ class SystemPromptManager:
         context: PromptContext,
         is_forced_skill: bool,
     ) -> None:
-        """Build base prompt, memory context, and forced skill sections."""
+        """Build base prompt, memory context, and forced skill sections.
+        
+        Loads the core (non-behavioral) base prompt, then conditionally
+        loads the behavioral/personality prompt only when no custom SOUL
+        exists (i.e. project or tenant SOUL.md overrides the default).
+        """
         base_prompt = await self._load_base_prompt(context.model_provider)
         if base_prompt:
             sections.append(base_prompt)
+
+        # Conditionally load behavioral prompt (personality/tone/identity)
+        # Only when no custom SOUL.md overrides it
+        if not self._has_custom_soul(context.persona):
+            behavioral = await self._load_behavioral_prompt(context.model_provider)
+            if behavioral:
+                sections.append(behavioral)
+
         if context.memory_context:
             sections.append(context.memory_context)
         if is_forced_skill:
@@ -331,6 +346,16 @@ class SystemPromptManager:
                 f"## USER.md\n<user-profile>\n{persona.user_profile.content}\n</user-profile>"
             )
 
+        if persona.agents.is_loaded:
+            parts.append(
+                f"## AGENTS.md\n<agents>\n{persona.agents.content}\n</agents>"
+            )
+
+        if persona.tools.is_loaded:
+            parts.append(
+                f"## TOOLS.md\n<tools>\n{persona.tools.content}\n</tools>"
+            )
+
         if parts:
             body = "\n\n".join(parts)
             sections.append(f"# Project Context\n\n{body}")
@@ -426,6 +451,53 @@ class SystemPromptManager:
 
         filename = filename_map.get(provider, "default.txt")
         return await self._load_file(f"system/{filename}")
+
+    async def _load_behavioral_prompt(self, provider: ModelProvider) -> str:
+        """
+        Load the behavioral/personality prompt for a specific model provider.
+
+        These contain the default personality, tone, and working style that
+        get overridden when a project or tenant provides a custom SOUL.md.
+
+        Args:
+            provider: The model provider type.
+
+        Returns:
+            Behavioral prompt content or empty string if not found.
+        """
+        filename_map = {
+            ModelProvider.ANTHROPIC: "anthropic_behavioral.txt",
+            ModelProvider.GEMINI: "gemini_behavioral.txt",
+            ModelProvider.DASHSCOPE: "qwen_behavioral.txt",
+            ModelProvider.DEEPSEEK: "default_behavioral.txt",
+            ModelProvider.ZHIPU: "qwen_behavioral.txt",
+            ModelProvider.OPENAI: "default_behavioral.txt",
+            ModelProvider.DEFAULT: "default_behavioral.txt",
+        }
+
+        filename = filename_map.get(provider, "default_behavioral.txt")
+        return await self._load_file(f"system/{filename}")
+
+    @staticmethod
+    def _has_custom_soul(persona: AgentPersona | None) -> bool:
+        """Check if a custom SOUL.md exists at project or tenant level.
+
+        When a project-level or tenant-level SOUL.md is present, the
+        behavioral/personality section of the base prompt should be
+        suppressed in favor of the custom SOUL.md content.
+
+        Args:
+            persona: The agent persona (may be None).
+
+        Returns:
+            True if a custom (non-template, non-empty) SOUL.md exists.
+        """
+        if persona is None:
+            return False
+        return persona.soul.is_loaded and persona.soul.source in (
+            PersonaSource.WORKSPACE,
+            PersonaSource.TENANT,
+        )
 
     def _build_environment_context(self, context: PromptContext) -> str:
         """
@@ -675,9 +747,12 @@ Use these tools in order: {tools}"""
         Security: Only loads rules from sandbox workspace (/workspace),
         never from host filesystem to prevent information leakage.
 
+        Note: .memstack/AGENTS.md is now handled by the persona system
+        (loaded via WorkspaceManager as AGENTS.md persona field). Only
+        CLAUDE.md is loaded here as a separate custom rules file.
+
         Search order (first found wins):
-        1. Sandbox workspace .memstack/AGENTS.md
-        2. Sandbox workspace CLAUDE.md
+        1. Sandbox workspace CLAUDE.md
 
         Reference: OpenCode system.ts:94-155
 

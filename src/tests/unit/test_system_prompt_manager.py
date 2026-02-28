@@ -825,3 +825,179 @@ class TestPersonaIntegration:
         assert "SubAgent instructions." in prompt
         # Persona sections should not be injected in subagent mode
         assert "<soul>" not in prompt
+
+    async def test_behavioral_prompt_suppressed_by_custom_soul(
+        self, manager, context,
+    ):
+        """Behavioral prompt should be suppressed when custom SOUL.md exists."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="custom soul",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=11,
+                injected_chars=11,
+                filename="SOUL.md",
+            ),
+        )
+        context.persona = persona
+        behavioral_marker = "__BEHAVIORAL_PROMPT_MARKER__"
+        manager._load_behavioral_prompt = AsyncMock(return_value=behavioral_marker)
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert - behavioral prompt should NOT be included
+        assert behavioral_marker not in prompt
+
+    async def test_behavioral_prompt_included_without_custom_soul(
+        self, manager, context,
+    ):
+        """Behavioral prompt should be included when no custom soul exists."""
+        # Arrange - persona with TEMPLATE source (not custom)
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="template soul",
+                source=PersonaSource.TEMPLATE,
+                raw_chars=13,
+                injected_chars=13,
+                filename="SOUL.md",
+            ),
+        )
+        context.persona = persona
+        behavioral_marker = "__BEHAVIORAL_PROMPT_MARKER__"
+        manager._load_behavioral_prompt = AsyncMock(return_value=behavioral_marker)
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert - behavioral prompt should be included
+        assert behavioral_marker in prompt
+
+    def test_has_custom_soul_workspace(self):
+        """_has_custom_soul should return True for WORKSPACE source."""
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="soul",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=4,
+                injected_chars=4,
+                filename="SOUL.md",
+            ),
+        )
+        assert SystemPromptManager._has_custom_soul(persona) is True
+
+    def test_has_custom_soul_tenant(self):
+        """_has_custom_soul should return True for TENANT source."""
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="soul",
+                source=PersonaSource.TENANT,
+                raw_chars=4,
+                injected_chars=4,
+                filename="SOUL.md",
+            ),
+        )
+        assert SystemPromptManager._has_custom_soul(persona) is True
+
+    def test_has_custom_soul_template(self):
+        """_has_custom_soul should return False for TEMPLATE source."""
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            soul=PersonaField(
+                content="soul",
+                source=PersonaSource.TEMPLATE,
+                raw_chars=4,
+                injected_chars=4,
+                filename="SOUL.md",
+            ),
+        )
+        assert SystemPromptManager._has_custom_soul(persona) is False
+
+    def test_has_custom_soul_none_persona(self):
+        """_has_custom_soul should return False for None persona."""
+        assert SystemPromptManager._has_custom_soul(None) is False
+
+    async def test_agents_persona_section_in_prompt(
+        self, manager, context,
+    ):
+        """Persona with agents loaded should render <agents> tag in prompt."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            agents=PersonaField(
+                content="agent instructions",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=19,
+                injected_chars=19,
+                filename="AGENTS.md",
+            ),
+        )
+        context.persona = persona
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert
+        assert "<agents>" in prompt
+        assert "agent instructions" in prompt
+
+    async def test_tools_persona_section_in_prompt(
+        self, manager, context,
+    ):
+        """Persona with tools loaded should render <tools> tag in prompt."""
+        # Arrange
+        from src.infrastructure.agent.prompts.persona import (
+            AgentPersona,
+            PersonaField,
+            PersonaSource,
+        )
+        persona = AgentPersona(
+            tools=PersonaField(
+                content="tool instructions",
+                source=PersonaSource.WORKSPACE,
+                raw_chars=18,
+                injected_chars=18,
+                filename="TOOLS.md",
+            ),
+        )
+        context.persona = persona
+
+        # Act
+        prompt = await manager.build_system_prompt(context)
+
+        # Assert
+        assert "<tools>" in prompt
+        assert "tool instructions" in prompt
+
+    def test_custom_rules_only_loads_claude_md(self):
+        """RULE_FILE_NAMES should only contain CLAUDE.md."""
+        assert SystemPromptManager.RULE_FILE_NAMES == ["CLAUDE.md"]
