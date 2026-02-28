@@ -383,6 +383,9 @@ class DIContainer:
     def skill_service(self) -> SkillService:
         return self._agent.skill_service()
 
+    def workspace_manager(self) -> Any:
+        return self._agent.workspace_manager()
+
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 

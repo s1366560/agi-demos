@@ -299,6 +299,27 @@ class Settings(BaseSettings):
         default=300, alias="AGENT_SKILL_EXECUTION_TIMEOUT"
     )  # Increased from 60 to 300 (5 minutes)
 
+    # Workspace Persona System Settings (.memstack/workspace/)
+    workspace_enabled: bool = Field(default=True, alias="WORKSPACE_ENABLED")
+    workspace_dir: str = Field(
+        default="/workspace/.memstack/workspace", alias="WORKSPACE_DIR"
+    )
+    workspace_max_chars_per_file: int = Field(
+        default=20000, alias="WORKSPACE_MAX_CHARS_PER_FILE"
+    )
+    workspace_max_chars_total: int = Field(
+        default=150000, alias="WORKSPACE_MAX_CHARS_TOTAL"
+    )
+
+    # Heartbeat System Settings
+    heartbeat_enabled: bool = Field(default=False, alias="HEARTBEAT_ENABLED")
+    heartbeat_interval_minutes: int = Field(
+        default=30, alias="HEARTBEAT_INTERVAL_MINUTES"
+    )
+    heartbeat_ack_max_chars: int = Field(
+        default=300, alias="HEARTBEAT_ACK_MAX_CHARS"
+    )
+
     # Context Compression Settings
     # Adaptive compression trigger thresholds (0.0 - 1.0)
     compression_l1_trigger_pct: float = Field(
