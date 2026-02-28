@@ -139,7 +139,9 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
     await navigator.clipboard.writeText(content);
     setCopied(true);
     message.success('Copied to clipboard');
-    setTimeout(() => { setCopied(false); }, 2000);
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
   };
 
   if (loading) {

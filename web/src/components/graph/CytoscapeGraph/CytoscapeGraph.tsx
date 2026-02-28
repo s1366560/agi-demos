@@ -35,7 +35,6 @@ interface GraphContextValue {
 
 const GraphContext = createContext<GraphContextValue | null>(null);
 
- 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useGraphContext = () => {
   const context = useContext(GraphContext);
@@ -281,7 +280,12 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
           {nodeInfoPanelChild && (
             <NodeInfoPanelComponent
               node={nodeInfoPanelProps.node ?? selectedNode}
-              onClose={nodeInfoPanelProps.onClose || (() => { setSelectedNode(null); })}
+              onClose={
+                nodeInfoPanelProps.onClose ||
+                (() => {
+                  setSelectedNode(null);
+                })
+              }
             />
           )}
           {!controlsChild && config.features?.showToolbar !== false && (
@@ -316,7 +320,12 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
         {config.features?.showLegend !== false && (
           <GraphLegend includeCommunities={config.data.includeCommunities} />
         )}
-        <NodeInfoPanelComponent node={selectedNode} onClose={() => { setSelectedNode(null); }} />
+        <NodeInfoPanelComponent
+          node={selectedNode}
+          onClose={() => {
+            setSelectedNode(null);
+          }}
+        />
       </div>
     </GraphContext.Provider>
   );

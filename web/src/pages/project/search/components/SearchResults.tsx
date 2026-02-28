@@ -142,16 +142,25 @@ export const SearchResults = memo<SearchResultsProps>(
               {results.length} {t('project.search.results.items')}
             </span>
           </div>
-          <div className="flex items-center gap-3" onClick={(e) => { e.stopPropagation(); }}>
+          <div
+            className="flex items-center gap-3"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
             <div className="flex items-center bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-lg p-0.5">
               <button
-                onClick={() => { onViewModeChange('grid'); }}
+                onClick={() => {
+                  onViewModeChange('grid');
+                }}
                 className={`p-1.5 rounded shadow-sm transition-colors ${viewMode === 'grid' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
               >
                 <Grid className="w-4 h-4" />
               </button>
               <button
-                onClick={() => { onViewModeChange('list'); }}
+                onClick={() => {
+                  onViewModeChange('list');
+                }}
                 className={`p-1.5 rounded shadow-sm transition-colors ${viewMode === 'list' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
               >
                 <List className="w-4 h-4" />
@@ -183,7 +192,9 @@ export const SearchResults = memo<SearchResultsProps>(
                   copiedId={copiedId}
                   getScoreColor={getScoreColor}
                   getIconForType={getIconForType}
-                  onClick={() => { onResultClick(result); }}
+                  onClick={() => {
+                    onResultClick(result);
+                  }}
                   onCopyId={onCopyId}
                 />
               );
@@ -327,7 +338,9 @@ interface NodeIdCopyButtonProps {
 const NodeIdCopyButton = memo<NodeIdCopyButtonProps>(({ uuid, copiedId, onCopyId }) => (
   <div
     className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-500 font-mono hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors group/id"
-    onClick={(e) => { onCopyId(uuid, e); }}
+    onClick={(e) => {
+      onCopyId(uuid, e);
+    }}
     title="Copy Node ID"
   >
     <span>{uuid.slice(0, 8)}...</span>

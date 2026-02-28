@@ -259,7 +259,9 @@ export function useMCPClient({
       await Promise.race([
         mcpClient.connect(transport),
         new Promise<never>((_, reject) =>
-          setTimeout(() => { reject(new Error('MCP connect timeout')); }, CONNECT_TIMEOUT_MS)
+          setTimeout(() => {
+            reject(new Error('MCP connect timeout'));
+          }, CONNECT_TIMEOUT_MS)
         ),
       ]);
 

@@ -19,11 +19,15 @@ import { projectAPI } from '../services/api';
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
 interface ApiError {
-  response?: {
-    data?: {
-      detail?: string | Record<string, unknown> | undefined;
-    } | undefined;
-  } | undefined;
+  response?:
+    | {
+        data?:
+          | {
+              detail?: string | Record<string, unknown> | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
 }
 
 interface ProjectState {
@@ -38,7 +42,11 @@ interface ProjectState {
   // Actions
   listProjects: (
     tenantId: string,
-    params?: { page?: number | undefined; page_size?: number | undefined; search?: string | undefined }
+    params?: {
+      page?: number | undefined;
+      page_size?: number | undefined;
+      search?: string | undefined;
+    }
   ) => Promise<void>;
   createProject: (tenantId: string, data: ProjectCreate) => Promise<void>;
   updateProject: (tenantId: string, projectId: string, data: ProjectUpdate) => Promise<void>;
@@ -219,7 +227,9 @@ export const useProjectStore = create<ProjectState>()(
         }
       },
 
-      clearError: () => { set({ error: null }); },
+      clearError: () => {
+        set({ error: null });
+      },
     }),
     {
       name: 'ProjectStore',

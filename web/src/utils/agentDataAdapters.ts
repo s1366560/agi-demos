@@ -136,11 +136,13 @@ export function extractTokenData(message: Message): {
   const costMetadata = metadata.cost as
     | {
         total?: number | undefined;
-        breakdown?: {
-          input_cost?: number | undefined;
-          output_cost?: number | undefined;
-          reasoning_cost?: number | undefined;
-        } | undefined;
+        breakdown?:
+          | {
+              input_cost?: number | undefined;
+              output_cost?: number | undefined;
+              reasoning_cost?: number | undefined;
+            }
+          | undefined;
       }
     | undefined;
 

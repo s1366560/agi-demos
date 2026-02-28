@@ -99,7 +99,9 @@ export const ContextStatusIndicator: FC = () => {
       >
         <button
           type="button"
-          onClick={() => { setDetailExpanded(true); }}
+          onClick={() => {
+            setDetailExpanded(true);
+          }}
           className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors cursor-pointer"
         >
           <Database size={11} className={colorClass} />

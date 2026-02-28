@@ -316,7 +316,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         }
       };
       window.addEventListener('keydown', handleKeyShortcut);
-      return () => { window.removeEventListener('keydown', handleKeyShortcut); };
+      return () => {
+        window.removeEventListener('keydown', handleKeyShortcut);
+      };
     }, []);
 
     // Load conversations
@@ -354,7 +356,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           );
           textarea?.focus();
         }, 100);
-        return () => { clearTimeout(timer); };
+        return () => {
+          clearTimeout(timer);
+        };
       }
       return undefined;
     }, [isLoadingHistory, activeConversationId]);
@@ -368,7 +372,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           );
           textarea?.focus();
         }, 200);
-        return () => { clearTimeout(timer); };
+        return () => {
+          clearTimeout(timer);
+        };
       }
       return undefined;
     }, [isStreaming, activeConversationId]);
@@ -395,14 +401,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           }),
         });
       }
-      }, [doomLoopDetected, notification, t]);
+    }, [doomLoopDetected, notification, t]);
 
     const handleNewConversation = useCallback(async () => {
       if (!projectId) return;
       const newId = await createNewConversation(projectId);
       if (newId) {
         if (customBasePath) {
-          void navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+          void navigate(
+            `${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`
+          );
         } else {
           void navigate(`${basePath}/${newId}`);
         }
@@ -431,7 +439,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         });
         if (!conversationId && newId) {
           if (customBasePath) {
-            void navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+            void navigate(
+              `${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`
+            );
           } else {
             void navigate(`${basePath}/${newId}`);
           }
@@ -455,8 +465,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       () =>
         timeline.length === 0 && !activeConversationId ? (
           <EmptyState
-            onNewConversation={() => { void handleNewConversation(); }}
-            onSendPrompt={(...args) => { void handleSend(...args); }}
+            onNewConversation={() => {
+              void handleNewConversation();
+            }}
+            onSendPrompt={(...args) => {
+              void handleSend(...args);
+            }}
             lastConversation={lastConversation}
             onResumeConversation={handleResumeConversation}
             projectId={projectId}
@@ -475,7 +489,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             isLoadingEarlier={isLoadingEarlier}
             conversationId={activeConversationId}
             suggestions={suggestions}
-            onSuggestionSelect={(...args) => { void handleSend(...args); }}
+            onSuggestionSelect={(...args) => {
+              void handleSend(...args);
+            }}
           />
         ),
       [
@@ -492,7 +508,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         suggestions,
         loadEarlierMessages,
         projectId,
-
       ]
     );
 
@@ -584,7 +599,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           <ChatSearch
             timeline={timeline}
             visible={chatSearchVisible}
-            onClose={() => { setChatSearchVisible(false); }}
+            onClose={() => {
+              setChatSearchVisible(false);
+            }}
           />
         </div>
         <div
@@ -605,12 +622,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             </div>
           </div>
           <InputBar
-            onSend={(...args) => { void handleSend(...args); }}
+            onSend={(...args) => {
+              void handleSend(...args);
+            }}
             onAbort={abortStream}
             isStreaming={isStreaming}
             disabled={isLoadingHistory}
             projectId={projectId || undefined}
-            onTogglePlanMode={() => { void handleTogglePlanMode(); }}
+            onTogglePlanMode={() => {
+              void handleTogglePlanMode();
+            }}
             isPlanMode={isPlanMode}
           />
         </div>
@@ -670,8 +691,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setShowExportMenu((v) => !v); }}
-                onBlur={() => setTimeout(() => { setShowExportMenu(false); }, 150)}
+                onClick={() => {
+                  setShowExportMenu((v) => !v);
+                }}
+                onBlur={() =>
+                  setTimeout(() => {
+                    setShowExportMenu(false);
+                  }, 150)
+                }
                 className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 title={t('agent.actions.export', 'Export')}
                 aria-label={t('agent.actions.export', 'Export')}
@@ -725,14 +752,20 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
               setCompareMode(false);
               setCompareConversationId(null);
             }}
-            onSelectRight={() => { setShowComparePicker(true); }}
+            onSelectRight={() => {
+              setShowComparePicker(true);
+            }}
           />
           <ConversationPickerModal
             visible={showComparePicker}
             currentConversationId={activeConversationId}
             conversations={conversations}
-            onSelect={(id) => { setCompareConversationId(id); }}
-            onClose={() => { setShowComparePicker(false); }}
+            onSelect={(id) => {
+              setCompareConversationId(id);
+            }}
+            onClose={() => {
+              setShowComparePicker(false);
+            }}
           />
           {statusBarWithLayout}
         </div>
@@ -863,7 +896,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
               style={{ width: rightPercent, minWidth: '320px', willChange: 'width' }}
             >
               <CanvasPanel
-                onSendPrompt={(prompt) => { void handleSend(prompt); }}
+                onSendPrompt={(prompt) => {
+                  void handleSend(prompt);
+                }}
                 onUpdateModelContext={(ctx) => {
                   const convId = useAgentV3Store.getState().activeConversationId;
                   if (convId) {

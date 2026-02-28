@@ -297,15 +297,19 @@ export function parseAxiosError(error: unknown): ApiError {
   let details: unknown;
 
   const err = error as {
-    response?: {
-      status?: number | undefined;
-      data?: {
-        detail?: string | undefined;
-        code?: string | undefined;
-        message?: string | undefined;
-        error?: string | undefined;
-      } | undefined;
-    } | undefined;
+    response?:
+      | {
+          status?: number | undefined;
+          data?:
+            | {
+                detail?: string | undefined;
+                code?: string | undefined;
+                message?: string | undefined;
+                error?: string | undefined;
+              }
+            | undefined;
+        }
+      | undefined;
     message?: string | undefined;
     code?: string | undefined;
   };

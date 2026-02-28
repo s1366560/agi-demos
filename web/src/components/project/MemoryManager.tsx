@@ -32,7 +32,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterUser, setFilterUser] = useState<string>('');
-  const [dateRange, setDateRange] = useState<{ start?: Date | undefined; end?: Date | undefined }>({});
+  const [dateRange, setDateRange] = useState<{ start?: Date | undefined; end?: Date | undefined }>(
+    {}
+  );
 
   const loadMemories = useCallback(async () => {
     if (!currentProject) return;
@@ -132,7 +134,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             </span>
           </div>
           <button
-            onClick={() => { setIsCreateModalOpen(true); }}
+            onClick={() => {
+              setIsCreateModalOpen(true);
+            }}
             className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
           >
             <Plus className="h-4 w-4" />
@@ -147,7 +151,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               type="text"
               placeholder="搜索记忆内容..."
               value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); }}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+              }}
               onKeyPress={(e) => e.key === 'Enter' && loadMemories()}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
             />
@@ -156,7 +162,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
           <div>
             <select
               value={filterType}
-              onChange={(e) => { setFilterType(e.target.value); }}
+              onChange={(e) => {
+                setFilterType(e.target.value);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             >
               <option value="all">所有类型</option>
@@ -172,7 +180,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               type="text"
               placeholder="按用户筛选..."
               value={filterUser}
-              onChange={(e) => { setFilterUser(e.target.value); }}
+              onChange={(e) => {
+                setFilterUser(e.target.value);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
             />
           </div>
@@ -220,7 +230,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             </p>
             {!searchTerm && filterType === 'all' && !filterUser && (
               <button
-                onClick={() => { setIsCreateModalOpen(true); }}
+                onClick={() => {
+                  setIsCreateModalOpen(true);
+                }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
                 创建记忆
@@ -237,7 +249,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
                 }`}
-                onClick={() => { handleMemorySelect(memory); }}
+                onClick={() => {
+                  handleMemorySelect(memory);
+                }}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center space-x-3 flex-1">
@@ -345,7 +359,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
       <MemoryCreateModal
         isOpen={isCreateModalOpen}
-        onClose={() => { setIsCreateModalOpen(false); }}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+        }}
         onSuccess={() => {
           if (currentProject) {
             loadMemories();
@@ -355,7 +371,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
       <MemoryDetailModal
         isOpen={isDetailModalOpen}
-        onClose={() => { setIsDetailModalOpen(false); }}
+        onClose={() => {
+          setIsDetailModalOpen(false);
+        }}
         memory={currentMemory}
       />
     </div>

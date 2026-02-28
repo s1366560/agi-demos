@@ -211,7 +211,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         // If result is an object, try to extract meaningful text or stringify it
         if (typeof rawResult === 'object' && 'content' in rawResult) {
           // MCP-style result with content array
-          const content = (rawResult).content;
+          const content = rawResult.content;
           if (Array.isArray(content) && content.length > 0) {
             observationValue = content[0]?.text ?? JSON.stringify(rawResult);
           } else {
@@ -580,6 +580,21 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         url: data.url,
         previewUrl: data.preview_url,
         toolExecutionId: data.tool_execution_id,
+        sourceTool: data.source_tool,
+      };
+    }
+
+    case 'artifacts_batch': {
+      const data = event.data as any;
+      return {
+        id: generateTimelineEventId('artifacts_batch'),
+        type: 'artifacts_batch',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        toolExecutionId: data.tool_execution_id,
+        artifacts: data.artifacts,
         sourceTool: data.source_tool,
       };
     }

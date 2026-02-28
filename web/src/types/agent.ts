@@ -918,12 +918,14 @@ export interface ChatRequest {
   message: string;
   project_id?: string | undefined;
   /** File metadata for files uploaded to sandbox */
-  file_metadata?: Array<{
-    filename: string;
-    sandbox_path: string;
-    mime_type: string;
-    size_bytes: number;
-  }> | undefined;
+  file_metadata?:
+    | Array<{
+        filename: string;
+        sandbox_path: string;
+        mime_type: string;
+        size_bytes: number;
+      }>
+    | undefined;
   /** Force execution of a specific skill by name */
   forced_skill_name?: string | undefined;
   /** Context injected by MCP Apps via ui/update-model-context (SEP-1865) */
@@ -1059,7 +1061,9 @@ export interface AgentStreamHandler {
   onTextDelta?: ((event: AgentEvent<TextDeltaEventData>) => void) | undefined; // Typewriter effect
   onTextEnd?: ((event: AgentEvent<TextEndEventData>) => void) | undefined; // Typewriter effect
   onClarificationAsked?: ((event: AgentEvent<ClarificationAskedEventData>) => void) | undefined;
-  onClarificationAnswered?: ((event: AgentEvent<ClarificationAnsweredEventData>) => void) | undefined;
+  onClarificationAnswered?:
+    | ((event: AgentEvent<ClarificationAnsweredEventData>) => void)
+    | undefined;
   onDecisionAsked?: ((event: AgentEvent<DecisionAskedEventData>) => void) | undefined;
   onDecisionAnswered?: ((event: AgentEvent<DecisionAnsweredEventData>) => void) | undefined;
   onDoomLoopDetected?: ((event: AgentEvent<DoomLoopDetectedEventData>) => void) | undefined;
@@ -1072,12 +1076,15 @@ export interface AgentStreamHandler {
   onSkillExecutionStart?: ((event: AgentEvent<SkillExecutionStartEventData>) => void) | undefined;
   onSkillToolStart?: ((event: AgentEvent<SkillToolStartEventData>) => void) | undefined;
   onSkillToolResult?: ((event: AgentEvent<SkillToolResultEventData>) => void) | undefined;
-  onSkillExecutionComplete?: ((event: AgentEvent<SkillExecutionCompleteEventData>) => void) | undefined;
+  onSkillExecutionComplete?:
+    | ((event: AgentEvent<SkillExecutionCompleteEventData>) => void)
+    | undefined;
   onSkillFallback?: ((event: AgentEvent<SkillFallbackEventData>) => void) | undefined;
   // Artifact handlers
   onArtifactCreated?: ((event: AgentEvent<ArtifactCreatedEventData>) => void) | undefined;
   onArtifactReady?: ((event: AgentEvent<ArtifactReadyEventData>) => void) | undefined;
   onArtifactError?: ((event: AgentEvent<ArtifactErrorEventData>) => void) | undefined;
+  onArtifactsBatch?: ((event: AgentEvent<ArtifactsBatchEventData>) => void) | undefined;
   // Suggestion handlers
   onSuggestions?: ((event: AgentEvent<SuggestionsEventData>) => void) | undefined;
   // Artifact lifecycle handlers
@@ -2035,10 +2042,12 @@ export interface UpdatePlanRequest {
   content?: string | undefined;
   title?: string | undefined;
   explored_files?: string[] | undefined;
-  critical_files?: Array<{
-    path: string;
-    type: 'create' | 'modify' | 'delete';
-  }> | undefined;
+  critical_files?:
+    | Array<{
+        path: string;
+        type: 'create' | 'modify' | 'delete';
+      }>
+    | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
@@ -2189,11 +2198,13 @@ export interface ActEvent extends BaseTimelineEvent {
   toolName: string;
   toolInput: Record<string, unknown>;
   execution_id?: string | undefined; // New: unique ID for act/observe matching
-  execution?: {
-    startTime: number;
-    endTime: number;
-    duration: number;
-  } | undefined;
+  execution?:
+    | {
+        startTime: number;
+        endTime: number;
+        duration: number;
+      }
+    | undefined;
 }
 
 /**
@@ -2205,12 +2216,14 @@ export interface ObserveEvent extends BaseTimelineEvent {
   toolOutput?: string | undefined; // May be undefined if result is not a string or empty
   isError: boolean;
   execution_id?: string | undefined; // New: matches act event's execution_id
-  mcpUiMetadata?: {
-    resource_uri?: string | undefined;
-    server_name?: string | undefined;
-    app_id?: string | undefined;
-    title?: string | undefined;
-  } | undefined;
+  mcpUiMetadata?:
+    | {
+        resource_uri?: string | undefined;
+        server_name?: string | undefined;
+        app_id?: string | undefined;
+        title?: string | undefined;
+      }
+    | undefined;
 }
 
 /**

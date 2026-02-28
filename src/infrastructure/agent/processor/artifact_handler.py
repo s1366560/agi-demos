@@ -383,6 +383,89 @@ class ArtifactHandler:
                     f"Traceback: {traceback.format_exc()}"
                 )
 
+        # Check for batch_export_artifacts results
+        batch_results = result.get("results")
+        if batch_results and isinstance(batch_results, list) and len(batch_results) > 0:
+            import base64 as b64
+
+            from src.application.services.artifact_service import (
+                detect_mime_type,
+                get_category_from_mime,
+            )
+
+            for batch_item in batch_results:
+                try:
+                    filename = batch_item.get("filename", "exported_file")
+                    encoding = batch_item.get("encoding", "utf-8")
+                    data = batch_item.get("data")
+                    if not data:
+                        logger.warning(
+                            f"[ArtifactUpload] Batch item {filename} has no data, skipping"
+                        )
+                        continue
+
+                    if encoding == "base64":
+                        file_content = b64.b64decode(data)
+                    else:
+                        file_content = data.encode("utf-8") if isinstance(data, str) else data
+
+                    mime_type = detect_mime_type(filename)
+                    category = get_category_from_mime(mime_type)
+                    artifact_id = str(uuid.uuid4())
+
+                    # Yield artifact_created event immediately
+                    yield AgentArtifactCreatedEvent(
+                        artifact_id=artifact_id,
+                        filename=filename,
+                        mime_type=mime_type,
+                        category=category.value,
+                        size_bytes=len(file_content),
+                        url=None,
+                        preview_url=None,
+                        tool_execution_id=tool_execution_id,
+                        source_tool=tool_name,
+                        source_path=batch_item.get("path"),
+                    )
+
+                    # Emit artifact_open for canvas-displayable content
+                    canvas_type = get_canvas_content_type(mime_type, filename)
+                    if canvas_type and len(file_content) < 500_000:
+                        try:
+                            text_content = file_content.decode("utf-8")
+                            yield AgentArtifactOpenEvent(
+                                artifact_id=artifact_id,
+                                title=filename,
+                                content=text_content,
+                                content_type=canvas_type,
+                                language=get_language_from_filename(filename),
+                            )
+                        except (UnicodeDecodeError, ValueError):
+                            pass  # Binary content, skip canvas open
+
+                    # Upload in background thread
+                    logger.warning(
+                        f"[ArtifactUpload] Scheduling batch upload: filename={filename}, "
+                        f"size={len(file_content)}, project_id={project_id}"
+                    )
+                    _schedule_threaded_upload(
+                        file_content=file_content,
+                        filename=filename,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        tool_execution_id=tool_execution_id or "",
+                        conversation_id=conversation_id or "",
+                        message_id=message_id or "",
+                        tool_name=tool_name,
+                        artifact_id=artifact_id,
+                        mime_type=mime_type,
+                        category_value=category.value,
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to process batch artifact {batch_item.get('filename', '?')}: {e}"
+                    )
+            return
         # Check for MCP content array with images/resources
         content = result.get("content", [])
         if not content:

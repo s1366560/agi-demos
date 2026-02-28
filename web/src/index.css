@@ -1840,3 +1840,70 @@ img[loading='lazy'] {
   font-weight: 600;
   user-select: none;
 }
+
+/* ============================================================================
+ * OFFICE DOCUMENT PREVIEW STYLES
+ * Styles for client-side DOCX and XLSX preview in Canvas panel
+ * ============================================================================ */
+
+/* XLSX Preview - SheetJS generated tables */
+.xlsx-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.xlsx-preview th,
+.xlsx-preview td {
+  border: 1px solid #e2e8f0;
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.xlsx-preview th {
+  background-color: #f1f5f9;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.xlsx-preview tr:hover td {
+  background-color: #f8fafc;
+}
+
+:is(.dark) .xlsx-preview th,
+:is(.dark) .xlsx-preview td {
+  border-color: #334155;
+}
+
+:is(.dark) .xlsx-preview th {
+  background-color: #1e293b;
+}
+
+:is(.dark) .xlsx-preview tr:hover td {
+  background-color: #1e293b;
+}
+
+/* DOCX Preview - docx-preview generated content */
+.docx-container {
+  min-height: 100%;
+}
+
+.docx-container .docx-wrapper {
+  background: transparent !important;
+  padding: 1rem !important;
+}
+
+.docx-container .docx-wrapper > section.docx {
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+  padding: 2rem !important;
+  min-height: auto !important;
+}

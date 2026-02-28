@@ -76,7 +76,6 @@ function VirtualGridInternal<T>({
 }: VirtualGridProps<T>) {
   const parentRef = useRef<HTMLDivElement>(null);
 
- 
   // Detect test environment - render all items without virtualization
   const isTestEnvironment =
     process.env.NODE_ENV === 'test' ||
@@ -101,7 +100,7 @@ function VirtualGridInternal<T>({
 
   // Set up virtual row virtualizer - MUST be before any early returns
   // This ensures hooks are called in consistent order
-// eslint-disable-next-line react-hooks/incompatible-library
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,

@@ -104,7 +104,6 @@ describe('AgentDashboard', () => {
   describe('Performance', () => {
     it('should use React.memo for optimization', async () => {
       // Check if component is wrapped with memo
-       
 
       const AgentDashboardModule = await import('../../../pages/tenant/AgentDashboard');
       // Component should be exported and potentially memoized

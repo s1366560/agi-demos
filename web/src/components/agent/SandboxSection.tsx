@@ -121,7 +121,9 @@ const TerminalTab: React.FC<{
             setSessionId(id);
             setIsConnected(true);
           }}
-          onDisconnect={() => { setIsConnected(false); }}
+          onDisconnect={() => {
+            setIsConnected(false);
+          }}
           height="100%"
           showToolbar={false}
         />
@@ -195,7 +197,9 @@ const DesktopTab: React.FC<{
               type="text"
               size="small"
               icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              onClick={() => { setIsFullscreen(!isFullscreen); }}
+              onClick={() => {
+                setIsFullscreen(!isFullscreen);
+              }}
               className="text-slate-400 hover:text-white"
             />
           </LazyTooltip>
@@ -294,7 +298,9 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
       {/* Tabs */}
       <LazyTabs
         activeKey={activeTab}
-        onChange={(key: string) => { setActiveTab(key as SandboxTab); }}
+        onChange={(key: string) => {
+          setActiveTab(key as SandboxTab);
+        }}
         items={tabItems}
         className="flex-1 sandbox-tabs"
         tabBarStyle={{

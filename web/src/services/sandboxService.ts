@@ -107,10 +107,12 @@ export interface CreateSandboxRequest {
   /** Optional custom image */
   image?: string | undefined;
   /** Optional resource limits */
-  resources?: {
-    cpu?: string | undefined; // e.g., "0.5" for 50% of one CPU
-    memory?: string | undefined; // e.g., "512m" for 512MB
-  } | undefined;
+  resources?:
+    | {
+        cpu?: string | undefined; // e.g., "0.5" for 50% of one CPU
+        memory?: string | undefined; // e.g., "512m" for 512MB
+      }
+    | undefined;
 }
 
 /**
@@ -120,10 +122,12 @@ export interface CreateSandboxResponse {
   /** The created sandbox */
   sandbox: Sandbox;
   /** Initial access URLs (if services auto-started) */
-  urls?: {
-    desktop?: string | undefined;
-    terminal?: string | undefined;
-  } | undefined;
+  urls?:
+    | {
+        desktop?: string | undefined;
+        terminal?: string | undefined;
+      }
+    | undefined;
 }
 
 /**

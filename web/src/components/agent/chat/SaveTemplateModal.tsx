@@ -37,14 +37,18 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
           </h3>
           <input
             value={title}
-            onChange={(e) => { setTitle(e.target.value); }}
+            onChange={(e) => {
+              setTitle(e.target.value);
+            }}
             placeholder={t('agent.templates.titlePlaceholder', 'Template name')}
             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg mb-3 bg-transparent text-sm text-slate-800 dark:text-slate-200"
             autoFocus
           />
           <select
             value={category}
-            onChange={(e) => { setCategory(e.target.value); }}
+            onChange={(e) => {
+              setCategory(e.target.value);
+            }}
             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg mb-4 bg-transparent text-sm text-slate-800 dark:text-slate-200"
           >
             <option value="general">General</option>

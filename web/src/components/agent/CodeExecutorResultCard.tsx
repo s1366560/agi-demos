@@ -43,7 +43,6 @@ interface CodeExecutorResultCardProps {
   result: CodeExecutorResult;
 }
 
- 
 // eslint-disable-next-line react-refresh/only-export-components
 export function parseCodeExecutorResult(resultStr: string): CodeExecutorResult | null {
   try {
@@ -167,7 +166,9 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
             ghost
             size="small"
             activeKey={showLogs ? ['logs'] : []}
-            onChange={(keys) => { setShowLogs(keys.includes('logs')); }}
+            onChange={(keys) => {
+              setShowLogs(keys.includes('logs'));
+            }}
             items={[
               {
                 key: 'logs',

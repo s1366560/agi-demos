@@ -22,7 +22,6 @@ vi.mock('../../services/agentService', () => ({
   },
 }));
 
-
 describe('Agent Store Pagination', () => {
   beforeEach(() => {
     // Reset store before each test

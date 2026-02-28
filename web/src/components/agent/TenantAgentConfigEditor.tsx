@@ -178,7 +178,7 @@ export function TenantAgentConfigEditor({
   // Handle save
   const handleSave = async () => {
     try {
-      const values = (await form.validateFields());
+      const values = await form.validateFields();
       setSaving(true);
       setError(null);
 

@@ -86,11 +86,15 @@ export interface StandardMCPAppRendererProps {
   /** UI metadata with CSP, permissions, and display preferences */
   uiMetadata?: MCPAppUIMetadata | undefined;
   /** Callback when the app sends a ui/message to add to conversation */
-  onMessage?: ((message: { role: string; content: { type: string; text: string } }) => void) | undefined;
+  onMessage?:
+    | ((message: { role: string; content: { type: string; text: string } }) => void)
+    | undefined;
   /** Callback when the app updates model context via ui/update-model-context (SEP-1865) */
   onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
   /** Callback when the app reports a size change */
-  onSizeChanged?: ((size: { width?: number | undefined; height?: number | undefined }) => void) | undefined;
+  onSizeChanged?:
+    | ((size: { width?: number | undefined; height?: number | undefined }) => void)
+    | undefined;
   /** Height of the container */
   height?: string | number | undefined;
 }
@@ -221,7 +225,9 @@ export const StandardMCPAppRenderer = forwardRef<
         }
       });
       observer.observe(el);
-      return () => { observer.disconnect(); };
+      return () => {
+        observer.disconnect();
+      };
     }, []);
 
     // Defer hostContext until the sandbox bridge is connected to avoid
@@ -242,13 +248,21 @@ export const StandardMCPAppRenderer = forwardRef<
       if (useDirectClient) {
         // Mode A: WS client connected; iframe proxy handshake still needed.
         // 1500ms covers lazy-bundle load + proxy handshake on cold cache.
-        const timer = setTimeout(() => { setAppInitialized(true); }, 1500);
-        return () => { clearTimeout(timer); };
+        const timer = setTimeout(() => {
+          setAppInitialized(true);
+        }, 1500);
+        return () => {
+          clearTimeout(timer);
+        };
       }
       // Mode B: no direct client. 3000ms generous fallback for cold cache.
       // handleSizeChanged fires earlier when the app reports its size.
-      const timer = setTimeout(() => { setAppInitialized(true); }, 3000);
-      return () => { clearTimeout(timer); };
+      const timer = setTimeout(() => {
+        setAppInitialized(true);
+      }, 3000);
+      return () => {
+        clearTimeout(timer);
+      };
     }, [useDirectClient, appId, resourceUri]);
 
     // Normalize: treat empty strings as undefined
@@ -260,7 +274,11 @@ export const StandardMCPAppRenderer = forwardRef<
       undefined;
 
     const sandboxConfig = useMemo(() => {
-      const config: { url: URL; permissions: string; csp?: { connectDomains?: string[]; resourceDomains?: string[] } } = {
+      const config: {
+        url: URL;
+        permissions: string;
+        csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+      } = {
         url: getSandboxProxyUrl(),
         permissions: 'allow-scripts allow-same-origin allow-forms',
       };
@@ -303,7 +321,14 @@ export const StandardMCPAppRenderer = forwardRef<
                   : undefined,
             }
           : undefined,
-      [appInitialized, computedTheme, hostStyles, containerSize.width, containerSize.height, displayMode]
+      [
+        appInitialized,
+        computedTheme,
+        hostStyles,
+        containerSize.width,
+        containerSize.height,
+        displayMode,
+      ]
     );
 
     // Handler for resources/read requests (when html prop is not provided)
@@ -341,7 +366,10 @@ export const StandardMCPAppRenderer = forwardRef<
     // Handler for tool calls from the guest app back to its MCP server
 
     const handleCallTool = useCallback(
-      async (params: { name: string; arguments?: Record<string, unknown> | undefined }): Promise<any> => {
+      async (params: {
+        name: string;
+        arguments?: Record<string, unknown> | undefined;
+      }): Promise<any> => {
         if (!effectiveProjectId) {
           throw new Error('projectId required for tool calls');
         }
@@ -565,7 +593,13 @@ export const StandardMCPAppRenderer = forwardRef<
       return (
         <div className="flex flex-col items-center justify-center gap-3 p-4" style={{ height }}>
           <Alert type="error" title="Failed to load MCP App" description={error} showIcon />
-          <Button icon={<RefreshCw size={14} />} onClick={() => { setError(null); }} size="small">
+          <Button
+            icon={<RefreshCw size={14} />}
+            onClick={() => {
+              setError(null);
+            }}
+            size="small"
+          >
             Retry
           </Button>
         </div>
@@ -625,9 +659,7 @@ export const StandardMCPAppRenderer = forwardRef<
               {...(toolCancelled != null ? { toolCancelled } : {})}
               {...(toolResult != null ? { toolResult: toolResult as any } : {})}
               {...(hostContext != null ? { hostContext: hostContext as any } : {})}
-              {...(!shouldUseFallback && mcpClient
-                ? { client: mcpClient as any }
-                : {})}
+              {...(!shouldUseFallback && mcpClient ? { client: mcpClient as any } : {})}
               {...(effectiveUri ? { onReadResource: handleReadResource as any } : {})}
               {...(shouldUseHttpToolCall ? { onCallTool: handleCallTool as any } : {})}
               {...(shouldUseFallback ? { onListResources: handleListResources as any } : {})}

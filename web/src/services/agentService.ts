@@ -100,6 +100,7 @@ import type {
   ArtifactCreatedEventData,
   ArtifactReadyEventData,
   ArtifactErrorEventData,
+  ArtifactsBatchEventData,
   SuggestionsEventData,
   ArtifactOpenEventData,
   ArtifactUpdateEventData,
@@ -553,7 +554,8 @@ class AgentServiceImpl implements AgentService {
     if (type === 'status_update') {
       if (
         this.statusSubscriber &&
-        (data as { project_id?: string | undefined })?.project_id === this.statusSubscriber.projectId
+        (data as { project_id?: string | undefined })?.project_id ===
+          this.statusSubscriber.projectId
       ) {
         this.statusSubscriber.callback(data);
       }
@@ -869,6 +871,9 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'artifact_error':
         handler.onArtifactError?.(event as AgentEvent<ArtifactErrorEventData>);
+        break;
+      case 'artifacts_batch':
+        handler.onArtifactsBatch?.(event as AgentEvent<ArtifactsBatchEventData>);
         break;
       // Suggestion events
       case 'suggestions':
@@ -2301,11 +2306,13 @@ class AgentServiceImpl implements AgentService {
     last_event_counter: number;
     current_message_id: string | null;
     conversation_id: string;
-    recovery?: {
-      can_recover: boolean;
-      stream_exists: boolean;
-      recovery_source: string;
-    } | undefined;
+    recovery?:
+      | {
+          can_recover: boolean;
+          stream_exists: boolean;
+          recovery_source: string;
+        }
+      | undefined;
   }> {
     const response = await api.get<{
       is_running: boolean;
@@ -2313,11 +2320,13 @@ class AgentServiceImpl implements AgentService {
       last_event_counter: number;
       current_message_id: string | null;
       conversation_id: string;
-      recovery?: {
-        can_recover: boolean;
-        stream_exists: boolean;
-        recovery_source: string;
-      } | undefined;
+      recovery?:
+        | {
+            can_recover: boolean;
+            stream_exists: boolean;
+            recovery_source: string;
+          }
+        | undefined;
     }>(`/agent/conversations/${conversationId}/execution-status`, {
       params: {
         include_recovery: includeRecovery,

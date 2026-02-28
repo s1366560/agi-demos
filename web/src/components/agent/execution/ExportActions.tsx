@@ -50,7 +50,9 @@ export function ExportActions({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error('Failed to copy:', error);
     }
@@ -90,7 +92,9 @@ export function ExportActions({
       const url = `${window.location.origin}/shared/${conversationId}`;
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error('Failed to share:', error);
     }

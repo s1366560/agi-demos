@@ -152,7 +152,9 @@ export const Login: React.FC = () => {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); }}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                  }}
                   className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                   placeholder="name@company.com"
                   required
@@ -182,7 +184,9 @@ export const Login: React.FC = () => {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); }}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                  }}
                   className="block w-full px-4 py-3 pr-10 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                   placeholder={t('login.form.password_placeholder')}
                   required
@@ -191,7 +195,9 @@ export const Login: React.FC = () => {
                 />
                 <button
                   type="button"
-                  onClick={() => { setShowPassword(!showPassword); }}
+                  onClick={() => {
+                    setShowPassword(!showPassword);
+                  }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   disabled={isLoading || authLoading}
                   data-testid="toggle-password-visibility"
@@ -257,7 +263,9 @@ export const Login: React.FC = () => {
             </div>
             <div className="space-y-2 text-sm">
               <div
-                onClick={() => { handleDemoLogin('admin'); }}
+                onClick={() => {
+                  handleDemoLogin('admin');
+                }}
                 className="flex justify-between items-center text-blue-800 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-2 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
                 role="button"
                 tabIndex={0}
@@ -266,7 +274,9 @@ export const Login: React.FC = () => {
                 <span className="font-mono text-xs">admin@memstack.ai / adminpassword</span>
               </div>
               <div
-                onClick={() => { handleDemoLogin('user'); }}
+                onClick={() => {
+                  handleDemoLogin('user');
+                }}
                 className="flex justify-between items-center text-blue-800 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-2 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
                 role="button"
                 tabIndex={0}

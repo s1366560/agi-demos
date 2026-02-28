@@ -208,7 +208,9 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   <input
                     type="text"
                     value={editedTitle}
-                    onChange={(e) => { setEditedTitle(e.target.value); }}
+                    onChange={(e) => {
+                      setEditedTitle(e.target.value);
+                    }}
                     className="flex-1 text-xl font-semibold text-gray-900 dark:text-white bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="记忆标题"
                   />
@@ -245,7 +247,9 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <div>
                   <textarea
                     value={editedContent}
-                    onChange={(e) => { setEditedContent(e.target.value); }}
+                    onChange={(e) => {
+                      setEditedContent(e.target.value);
+                    }}
                     className="w-full h-64 px-4 py-3 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-slate-200 whitespace-pre-wrap leading-relaxed resize-y"
                     placeholder="输入记忆内容..."
                   />

@@ -123,23 +123,26 @@ export const PluginHub: React.FC = () => {
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
 
-  const recordPluginAction = useCallback((response: PluginActionResponse, fallbackAction: string) => {
-    const details = response.details || null;
-    setLastPluginActionDetails(details);
-    const controlPlaneTrace = details?.control_plane_trace;
-    const timestamp = controlPlaneTrace?.timestamp || new Date().toISOString();
-    const traceId = controlPlaneTrace?.trace_id;
-    const action = controlPlaneTrace?.action || fallbackAction;
-    const entry: PluginActionTimelineEntry = {
-      id: traceId || `${timestamp}:${action}`,
-      action,
-      message: response.message,
-      success: response.success,
-      timestamp,
-      details,
-    };
-    setPluginActionTimeline((prev) => [entry, ...prev].slice(0, 10));
-  }, []);
+  const recordPluginAction = useCallback(
+    (response: PluginActionResponse, fallbackAction: string) => {
+      const details = response.details || null;
+      setLastPluginActionDetails(details);
+      const controlPlaneTrace = details?.control_plane_trace;
+      const timestamp = controlPlaneTrace?.timestamp || new Date().toISOString();
+      const traceId = controlPlaneTrace?.trace_id;
+      const action = controlPlaneTrace?.action || fallbackAction;
+      const entry: PluginActionTimelineEntry = {
+        id: traceId || `${timestamp}:${action}`,
+        action,
+        message: response.message,
+        success: response.success,
+        timestamp,
+        details,
+      };
+      setPluginActionTimeline((prev) => [entry, ...prev].slice(0, 10));
+    },
+    []
+  );
 
   useEffect(() => {
     if (!tenantId) return;
@@ -500,7 +503,10 @@ export const PluginHub: React.FC = () => {
         const secretPaths = activeChannelSchema.secret_paths || [];
         secretPaths.forEach((path) => {
           if (CHANNEL_SETTING_FIELDS.has(path)) {
-            if (editingConfig && (mutablePayload[path] === undefined || mutablePayload[path] === '')) {
+            if (
+              editingConfig &&
+              (mutablePayload[path] === undefined || mutablePayload[path] === '')
+            ) {
               delete mutablePayload[path];
             }
           } else if (extraSettings && editingConfig) {
@@ -539,7 +545,9 @@ export const PluginHub: React.FC = () => {
 
       setConfigActionKey('save');
       if (editingConfig) {
-        const updatePayload = { ...payload } as UpdateChannelConfig & { channel_type?: string | undefined };
+        const updatePayload = { ...payload } as UpdateChannelConfig & {
+          channel_type?: string | undefined;
+        };
         delete updatePayload.channel_type;
         await channelService.updateConfig(editingConfig.id, updatePayload);
         message.success('Configuration updated');
@@ -605,7 +613,12 @@ export const PluginHub: React.FC = () => {
 
         if (schema.enum && schema.enum.length > 0) {
           return (
-            <Form.Item key={fieldName} name={formName} label={label} {...(rules != null ? { rules } : {})}>
+            <Form.Item
+              key={fieldName}
+              name={formName}
+              label={label}
+              {...(rules != null ? { rules } : {})}
+            >
               <Select
                 options={schema.enum.map((value) => ({
                   value,
@@ -618,7 +631,12 @@ export const PluginHub: React.FC = () => {
 
         if (schema.type === 'integer' || schema.type === 'number') {
           return (
-            <Form.Item key={fieldName} name={formName} label={label} {...(rules != null ? { rules } : {})}>
+            <Form.Item
+              key={fieldName}
+              name={formName}
+              label={label}
+              {...(rules != null ? { rules } : {})}
+            >
               <InputNumber
                 style={{ width: '100%' }}
                 {...(schema.minimum != null ? { min: schema.minimum } : {})}
@@ -630,7 +648,12 @@ export const PluginHub: React.FC = () => {
         }
 
         return (
-            <Form.Item key={fieldName} name={formName} label={label} {...(rules != null ? { rules } : {})}>
+          <Form.Item
+            key={fieldName}
+            name={formName}
+            label={label}
+            {...(rules != null ? { rules } : {})}
+          >
             {sensitive ? (
               <Input.Password
                 placeholder={
@@ -789,7 +812,13 @@ export const PluginHub: React.FC = () => {
             loading={configActionKey === `test:${record.id}`}
             onClick={() => handleTestConfig(record.id)}
           />
-          <Button size="small" icon={<EditOutlined />} onClick={() => { handleEditConfig(record); }} />
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => {
+              handleEditConfig(record);
+            }}
+          />
           <Popconfirm
             title="Delete configuration?"
             onConfirm={() => handleDeleteConfig(record.id)}
@@ -840,13 +869,17 @@ export const PluginHub: React.FC = () => {
               placeholder="Select project context for channel configs"
               value={selectedProjectId || undefined}
               options={projectOptions}
-              onChange={(value) => { setSelectedProjectId(value ?? null); }}
+              onChange={(value) => {
+                setSelectedProjectId(value ?? null);
+              }}
               loading={projectLoading}
             />
             <Input
               placeholder="my-plugin-package==0.1.0"
               value={installRequirement}
-              onChange={(event) => { setInstallRequirement(event.target.value); }}
+              onChange={(event) => {
+                setInstallRequirement(event.target.value);
+              }}
               style={{ width: 280 }}
             />
             <Button

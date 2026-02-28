@@ -81,7 +81,12 @@ export const mcpAppAPI = {
     projectId: string,
     serverName?: string
   ): Promise<{
-    resources: Array<{ uri: string; name?: string | undefined; mimeType?: string | undefined; description?: string | undefined }>;
+    resources: Array<{
+      uri: string;
+      name?: string | undefined;
+      mimeType?: string | undefined;
+      description?: string | undefined;
+    }>;
   }> {
     return await api.post(`${BASE_URL}/resources/list`, {
       project_id: projectId,

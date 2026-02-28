@@ -40,25 +40,29 @@ export interface SubAgentGroup {
   tokensUsed?: number | undefined;
   executionTimeMs?: number | undefined;
   mode?: 'single' | 'parallel' | 'chain' | undefined;
-  parallelInfo?: {
-    taskCount: number;
-    subtasks: Array<{ subagent_name: string; task: string }>;
-    results?: Array<{ subagent_name: string; summary: string; success: boolean }> | undefined;
-    totalTimeMs?: number | undefined;
-  } | undefined;
-  chainInfo?: {
-    stepCount: number;
-    chainName: string;
-    steps: Array<{
-      index: number;
-      name: string;
-      subagentName: string;
-      summary?: string | undefined;
-      success?: boolean | undefined;
-      status: 'pending' | 'running' | 'success' | 'error';
-    }>;
-    totalTimeMs?: number | undefined;
-  } | undefined;
+  parallelInfo?:
+    | {
+        taskCount: number;
+        subtasks: Array<{ subagent_name: string; task: string }>;
+        results?: Array<{ subagent_name: string; summary: string; success: boolean }> | undefined;
+        totalTimeMs?: number | undefined;
+      }
+    | undefined;
+  chainInfo?:
+    | {
+        stepCount: number;
+        chainName: string;
+        steps: Array<{
+          index: number;
+          name: string;
+          subagentName: string;
+          summary?: string | undefined;
+          success?: boolean | undefined;
+          status: 'pending' | 'running' | 'success' | 'error';
+        }>;
+        totalTimeMs?: number | undefined;
+      }
+    | undefined;
 }
 
 interface SubAgentTimelineProps {
@@ -94,16 +98,18 @@ const StatusIcon = memo<{ status: string; size?: number | undefined }>(({ status
 
 StatusIcon.displayName = 'StatusIcon';
 
-const ModeIcon = memo<{ mode?: string | undefined; size?: number | undefined }>(({ mode, size = 14 }) => {
-  switch (mode) {
-    case 'parallel':
-      return <Layers size={size} className="text-indigo-500" />;
-    case 'chain':
-      return <GitBranch size={size} className="text-amber-500" />;
-    default:
-      return <Bot size={size} className="text-blue-500" />;
+const ModeIcon = memo<{ mode?: string | undefined; size?: number | undefined }>(
+  ({ mode, size = 14 }) => {
+    switch (mode) {
+      case 'parallel':
+        return <Layers size={size} className="text-indigo-500" />;
+      case 'chain':
+        return <GitBranch size={size} className="text-amber-500" />;
+      default:
+        return <Bot size={size} className="text-blue-500" />;
+    }
   }
-});
+);
 
 ModeIcon.displayName = 'ModeIcon';
 
@@ -254,7 +260,9 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     <div className={`rounded-lg border ${statusBg} transition-colors duration-200`}>
       {/* Header */}
       <button
-        onClick={() => { setExpanded(!expanded); }}
+        onClick={() => {
+          setExpanded(!expanded);
+        }}
         className="w-full flex items-center gap-2 px-3 py-2 text-left
           hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors rounded-t-lg"
       >

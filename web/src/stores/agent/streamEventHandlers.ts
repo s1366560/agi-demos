@@ -5,6 +5,7 @@
  * This module creates the AgentStreamHandler used by sendMessage.
  */
 
+import { isCanvasPreviewable } from '../../utils/filePreview';
 import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
 import { useBackgroundStore } from '../backgroundStore';
@@ -14,25 +15,22 @@ import { useUnifiedHITLStore } from '../hitlStore.unified';
 import { useLayoutModeStore } from '../layoutMode';
 
 import type {
-  AgentStreamHandler,
+  ActDeltaEventData,
   AgentEvent,
-  MessageEventData,
-  ThoughtEventData,
-  CompleteEventData,
+  AgentStreamHandler,
   ClarificationAskedEventData,
+  ArtifactsBatchEventData,
+  CompleteEventData,
   DecisionAskedEventData,
   EnvVarRequestedEventData,
-  PermissionAskedEventData,
-
-  ToolCall,
-  ActDeltaEventData,
-  ReflectionCompleteEvent,
-
-  MemoryRecalledEventData,
-  MemoryCapturedEventData,
-
   ExecutionNarrativeEntry,
-
+  MemoryCapturedEventData,
+  MemoryRecalledEventData,
+  MessageEventData,
+  PermissionAskedEventData,
+  ReflectionCompleteEvent,
+  ThoughtEventData,
+  ToolCall,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -151,11 +149,10 @@ export function createStreamEventHandlers(
         return;
       }
 
-      const updatedTimeline = appendSSEEventToTimeline(
-        convState.timeline,
-        event
-      );
-      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
 
       if (handlerConversationId === activeConversationId) {
         const newMessages = timelineToMessages(updatedTimeline);
@@ -290,14 +287,18 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
     },
 
     onTaskComplete: (event) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
     },
 
     onExecutionPathDecided: (event) => {
@@ -315,7 +316,7 @@ export function createStreamEventHandlers(
         route_id: decision.route_id,
         domain_lane:
           decision.metadata && typeof decision.metadata['domain_lane'] === 'string'
-            ? (decision.metadata['domain_lane'])
+            ? decision.metadata['domain_lane']
             : null,
         metadata: {
           target: decision.target,
@@ -402,7 +403,9 @@ export function createStreamEventHandlers(
       const actionText = changed.action || 'update';
       const pluginText = changed.plugin_name ? ` ${changed.plugin_name}` : '';
       const refreshStateText =
-        changed.refresh_status && changed.refresh_status !== 'deferred' && changed.refresh_status !== 'not_applicable'
+        changed.refresh_status &&
+        changed.refresh_status !== 'deferred' &&
+        changed.refresh_status !== 'not_applicable'
           ? ` · refresh=${changed.refresh_status}`
           : '';
       const refreshCountText =
@@ -742,7 +745,11 @@ export function createStreamEventHandlers(
 
       const updatedTimeline = convState.timeline.map((te) =>
         te.type === 'env_var_requested' && (te as any).requestId === requestId
-          ? { ...te, answered: true, providedVariables: event.data.saved_variables }
+          ? {
+              ...te,
+              answered: true,
+              providedVariables: event.data.saved_variables,
+            }
           : te
       );
 
@@ -909,10 +916,7 @@ export function createStreamEventHandlers(
 
       // Update the existing artifact_created timeline entry with URL
       const updatedTimeline = convState.timeline.map((item) => {
-        if (
-          item.type === 'artifact_created' &&
-          (item).artifactId === data.artifact_id
-        ) {
+        if (item.type === 'artifact_created' && item.artifactId === data.artifact_id) {
           return {
             ...item,
             url: data.url,
@@ -922,7 +926,30 @@ export function createStreamEventHandlers(
         return item;
       });
 
-      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+
+      // Auto-open canvas for preview-compatible binary files
+      // (text/code files are already handled by onArtifactOpen from the backend)
+      const mime = (data.mime_type || '').toLowerCase();
+      if (data.url && isCanvasPreviewable(mime, data.filename)) {
+        useCanvasStore.getState().openTab({
+          id: data.artifact_id,
+          title: data.filename || 'Untitled',
+          type: 'preview',
+          content: data.url,
+          artifactId: data.artifact_id,
+          artifactUrl: data.url,
+          mimeType: data.mime_type,
+        });
+
+        // Auto-switch to canvas layout if not already
+        const currentMode = useLayoutModeStore.getState().mode;
+        if (currentMode !== 'canvas') {
+          useLayoutModeStore.getState().setMode('canvas');
+        }
+      }
     },
 
     onArtifactError: (event) => {
@@ -936,10 +963,7 @@ export function createStreamEventHandlers(
 
       // Update the existing artifact_created timeline entry with error
       const updatedTimeline = convState.timeline.map((item) => {
-        if (
-          item.type === 'artifact_created' &&
-          (item).artifactId === data.artifact_id
-        ) {
+        if (item.type === 'artifact_created' && item.artifactId === data.artifact_id) {
           return {
             ...item,
             error: data.error,
@@ -948,22 +972,91 @@ export function createStreamEventHandlers(
         return item;
       });
 
-      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onArtifactsBatch: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const data = event.data as ArtifactsBatchEventData;
+
+      if (!data.artifacts || !Array.isArray(data.artifacts)) return;
+
+      const convState = getConversationState(handlerConversationId);
+
+      // Append the batch event to timeline  
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+      // Also add individual artifact_created timeline entries for each artifact in the batch
+      let timeline = updatedTimeline;
+      for (const info of data.artifacts) {
+        const artifactEvent = {
+          type: 'artifact_created' as const,
+          data: {
+            artifact_id: info.id,
+            filename: info.filename,
+            mime_type: info.mimeType,
+            category: info.category,
+            size_bytes: info.sizeBytes,
+            url: info.url,
+            preview_url: info.previewUrl,
+            source_tool: info.sourceTool || data.source_tool,
+            tool_execution_id: data.tool_execution_id,
+          },
+        };
+        timeline = appendSSEEventToTimeline(timeline, artifactEvent as any);
+      }
+
+      updateConversationState(handlerConversationId, {
+        timeline,
+      });
+
+      // Auto-open canvas for the first preview-compatible artifact
+      let canvasOpened = false;
+      for (const info of data.artifacts) {
+        const mime = (info.mimeType || '').toLowerCase();
+        if (info.url && isCanvasPreviewable(mime, info.filename)) {
+          useCanvasStore.getState().openTab({
+            id: info.id,
+            title: info.filename || 'Untitled',
+            type: 'preview',
+            content: info.url || '',
+            artifactId: info.id,
+            artifactUrl: info.url,
+            mimeType: info.mimeType,
+          });
+          canvasOpened = true;
+        }
+      }
+
+      if (canvasOpened) {
+        const currentMode = useLayoutModeStore.getState().mode;
+        if (currentMode !== 'canvas') {
+          useLayoutModeStore.getState().setMode('canvas');
+        }
+      }
     },
 
     onArtifactOpen: (event) => {
       const data = event.data as any;
       if (!data.artifact_id || !data.content) return;
 
+      const title = data.title || 'Untitled';
+      const mime = (data.content_type || '').toLowerCase();
+
+      const isPreviewFile = isCanvasPreviewable(mime, title);
+
       // Open the artifact in canvas with artifact link
       useCanvasStore.getState().openTab({
         id: data.artifact_id,
-        title: data.title || 'Untitled',
-        type: data.content_type || 'code',
+        title: title,
+        type: isPreviewFile ? 'preview' : data.content_type || 'code',
         content: data.content,
         language: data.language,
         artifactId: data.artifact_id,
         artifactUrl: data.url,
+        mimeType: data.content_type,
       });
 
       // Auto-switch to canvas layout if not already
@@ -1224,7 +1317,7 @@ export function createStreamEventHandlers(
 
           const app = store.apps[appId];
           // Prefer resourceUri from the event, then from the store, then undefined
-          const resolvedUri = resourceUri || (app?.ui_metadata?.resourceUri as string | undefined);
+          const resolvedUri = resourceUri || app?.ui_metadata?.resourceUri;
 
           if (resolvedUri || htmlContent) {
             openMCPAppTab(resolvedUri, {

@@ -26,9 +26,9 @@ import { Search, History, GitBranch } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
-import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { AgentSidebar } from '@/components/layout/AppSidebar';
+import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
 // Top navigation tabs for agent views
@@ -39,7 +39,10 @@ const TOP_TABS = [
 ];
 
 export const AgentLayout: React.FC = () => {
-  const { projectId, conversationId } = useParams<{ projectId: string; conversationId?: string | undefined }>();
+  const { projectId, conversationId } = useParams<{
+    projectId: string;
+    conversationId?: string | undefined;
+  }>();
   const currentProject = useProjectStore((state) => state.currentProject);
   const setCurrentProject = useProjectStore((state) => state.setCurrentProject);
   const projects = useProjectStore((state) => state.projects);
@@ -90,7 +93,9 @@ export const AgentLayout: React.FC = () => {
         projectId={projectId}
         conversationId={conversationId}
         collapsed={sidebarCollapsed}
-        onCollapseToggle={() => { setSidebarCollapsed(!sidebarCollapsed); }}
+        onCollapseToggle={() => {
+          setSidebarCollapsed(!sidebarCollapsed);
+        }}
       />
 
       {/* Main Workspace Area */}
@@ -134,7 +139,9 @@ export const AgentLayout: React.FC = () => {
               {TOP_TABS.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => { handleTabClick(tab); }}
+                  onClick={() => {
+                    handleTabClick(tab);
+                  }}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
                     activeTab === tab.id
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
@@ -166,7 +173,10 @@ export const AgentLayout: React.FC = () => {
               <LazyTooltip title="View execution history">
                 <button
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
-                  onClick={() => { const tab = TOP_TABS[1]; if (tab) handleTabClick(tab); }}
+                  onClick={() => {
+                    const tab = TOP_TABS[1];
+                    if (tab) handleTabClick(tab);
+                  }}
                 >
                   <History className="w-5 h-5" />
                 </button>
@@ -174,7 +184,10 @@ export const AgentLayout: React.FC = () => {
               <LazyTooltip title="View workflow patterns">
                 <button
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
-                  onClick={() => { const tab = TOP_TABS[2]; if (tab) handleTabClick(tab); }}
+                  onClick={() => {
+                    const tab = TOP_TABS[2];
+                    if (tab) handleTabClick(tab);
+                  }}
                 >
                   <GitBranch className="w-5 h-5" />
                 </button>

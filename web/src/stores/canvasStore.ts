@@ -89,7 +89,8 @@ export const useCanvasStore = create<CanvasState>()(
             if (tab.type === 'mcp-app') {
               if ((tab as CanvasTab).mcpResourceUri) {
                 existing = state.tabs.find(
-                  (t) => t.type === 'mcp-app' && t.mcpResourceUri === (tab as CanvasTab).mcpResourceUri
+                  (t) =>
+                    t.type === 'mcp-app' && t.mcpResourceUri === (tab as CanvasTab).mcpResourceUri
                 );
               }
               if (!existing && (tab as CanvasTab).mcpAppId) {
@@ -123,8 +124,8 @@ export const useCanvasStore = create<CanvasState>()(
             };
           }),
 
-        closeTab: (id, force) =>
-          { set((state) => {
+        closeTab: (id, force) => {
+          set((state) => {
             const tab = state.tabs.find((t) => t.id === id);
             // Pinned tabs resist close unless force=true
             if (tab?.pinned && !force) {
@@ -138,17 +139,21 @@ export const useCanvasStore = create<CanvasState>()(
                   : null
                 : state.activeTabId;
             return { tabs: filtered, activeTabId: nextActive };
-          }); },
+          });
+        },
 
-        setActiveTab: (id) => { set({ activeTabId: id }); },
+        setActiveTab: (id) => {
+          set({ activeTabId: id });
+        },
 
-        updateTab: (id, updates) =>
-          { set((state) => ({
+        updateTab: (id, updates) => {
+          set((state) => ({
             tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-          })); },
+          }));
+        },
 
-        updateContent: (id, content) =>
-          { set((state) => ({
+        updateContent: (id, content) => {
+          set((state) => ({
             tabs: state.tabs.map((t) => {
               if (t.id !== id) return t;
               // Push previous content to history, truncate any forward history
@@ -163,10 +168,11 @@ export const useCanvasStore = create<CanvasState>()(
                 historyIndex: newHistory.length - 1,
               };
             }),
-          })); },
+          }));
+        },
 
-        undo: (tabId) =>
-          { set((state) => ({
+        undo: (tabId) => {
+          set((state) => ({
             tabs: state.tabs.map((t) => {
               if (t.id !== tabId || t.historyIndex < 0) return t;
               const restoredContent = t.history[t.historyIndex] ?? '';
@@ -180,10 +186,11 @@ export const useCanvasStore = create<CanvasState>()(
                 history: newHistory,
               };
             }),
-          })); },
+          }));
+        },
 
-        redo: (tabId) =>
-          { set((state) => ({
+        redo: (tabId) => {
+          set((state) => ({
             tabs: state.tabs.map((t) => {
               if (t.id !== tabId) return t;
               const nextIndex = t.historyIndex + 2;
@@ -194,7 +201,8 @@ export const useCanvasStore = create<CanvasState>()(
                 historyIndex: t.historyIndex + 1,
               };
             }),
-          })); },
+          }));
+        },
 
         canUndo: (tabId) => {
           const tab = get().tabs.find((t) => t.id === tabId);
@@ -206,18 +214,19 @@ export const useCanvasStore = create<CanvasState>()(
           return tab ? tab.historyIndex + 2 < tab.history.length : false;
         },
 
-        togglePin: (id) =>
-          { set((state) => ({
-            tabs: state.tabs.map((t) =>
-              t.id === id ? { ...t, pinned: !t.pinned } : t
-            ),
-          })); },
+        togglePin: (id) => {
+          set((state) => ({
+            tabs: state.tabs.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t)),
+          }));
+        },
 
         getPinnedTabs: () => {
           return get().tabs.filter((t) => t.pinned);
         },
 
-        reset: () => { set({ tabs: [], activeTabId: null }); },
+        reset: () => {
+          set({ tabs: [], activeTabId: null });
+        },
       }),
       {
         name: 'canvas-store',
@@ -238,6 +247,8 @@ export const useCanvasStore = create<CanvasState>()(
             // Persist artifact references
             artifactId: t.artifactId,
             artifactUrl: t.artifactUrl,
+            // Persist PDF verification flag (needed to render PDF preview after refresh)
+            pdfVerified: t.pdfVerified,
             // Persist MCP metadata (small, needed to re-open apps)
             mcpAppId: t.mcpAppId,
             mcpResourceUri: t.mcpResourceUri,

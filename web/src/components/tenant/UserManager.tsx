@@ -219,14 +219,18 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
               type="text"
               placeholder={t('tenant.users.searchPlaceholder')}
               value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); }}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+              }}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
             />
           </div>
           <div>
             <select
               value={filterRole}
-              onChange={(e) => { setFilterRole(e.target.value); }}
+              onChange={(e) => {
+                setFilterRole(e.target.value);
+              }}
               className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             >
               <option value="all">{t('tenant.users.roles.all')}</option>
@@ -310,7 +314,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
 
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => { handleEditUser(user); }}
+                    onClick={() => {
+                      handleEditUser(user);
+                    }}
                     className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
                     title={t('tenant.users.actions.edit')}
                   >
@@ -344,7 +350,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                 </h2>
               </div>
               <button
-                onClick={() => { setIsInviteModalOpen(false); }}
+                onClick={() => {
+                  setIsInviteModalOpen(false);
+                }}
                 className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
               >
                 <span className="text-xl">×</span>
@@ -389,7 +397,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => { setIsInviteModalOpen(false); }}
+                  onClick={() => {
+                    setIsInviteModalOpen(false);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   {t('tenant.users.invite_modal.cancel')}
@@ -411,7 +421,9 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
         <EditUserModal
           user={selectedUser}
           isOpen={isEditModalOpen}
-          onClose={() => { setIsEditModalOpen(false); }}
+          onClose={() => {
+            setIsEditModalOpen(false);
+          }}
           onSave={handleUpdateRole}
           context={context}
           contextId={context === 'tenant' ? currentTenant?.id || '' : currentProject?.id || ''}

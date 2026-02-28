@@ -304,7 +304,9 @@ export class EventBusClient {
   private setState(state: ConnectionState): void {
     if (this.state !== state) {
       this.state = state;
-      this.stateListeners.forEach((listener) => { listener(state); });
+      this.stateListeners.forEach((listener) => {
+        listener(state);
+      });
     }
   }
 

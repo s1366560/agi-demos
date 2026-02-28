@@ -97,7 +97,9 @@ export const NewTenant: React.FC = () => {
                     <input
                       required
                       value={formData.name}
-                      onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
+                      onChange={(e) => {
+                        setFormData({ ...formData, name: e.target.value });
+                      }}
                       className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 transition-all outline-none"
                       placeholder="e.g. Acme Corp"
                       type="text"
@@ -112,7 +114,9 @@ export const NewTenant: React.FC = () => {
                   <textarea
                     rows={3}
                     value={formData.description}
-                    onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
+                    onChange={(e) => {
+                      setFormData({ ...formData, description: e.target.value });
+                    }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary p-3 text-sm placeholder:text-slate-400 transition-all outline-none resize-none"
                     placeholder="Briefly describe your organization..."
                   />
@@ -124,7 +128,9 @@ export const NewTenant: React.FC = () => {
                   </span>
                   <select
                     value={formData.plan}
-                    onChange={(e) => { setFormData({ ...formData, plan: e.target.value }); }}
+                    onChange={(e) => {
+                      setFormData({ ...formData, plan: e.target.value });
+                    }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary h-12 px-3 text-sm outline-none"
                   >
                     <option value="free">Free Starter</option>

@@ -207,7 +207,9 @@ function scheduleSave(conversationId: string, state: ConversationState): void {
  */
 async function flushPendingSaves(): Promise<void> {
   // Clear all timers
-  pendingSaves.forEach((timer) => { clearTimeout(timer); });
+  pendingSaves.forEach((timer) => {
+    clearTimeout(timer);
+  });
   pendingSaves.clear();
 
   // Get current store state and save all conversation states

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-
 import { ProviderConfig } from '../../types/memory';
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
@@ -56,7 +55,9 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
                 className="block w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Search providers..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); }}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                }}
                 autoFocus
               />
             </div>
@@ -71,7 +72,9 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
                 {filteredProviders.map((provider) => (
                   <button
                     key={provider.id}
-                    onClick={() => { onSelect(provider); }}
+                    onClick={() => {
+                      onSelect(provider);
+                    }}
                     className="w-full text-left p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 transition-colors group"
                   >
                     <ProviderIcon providerType={provider.provider_type} size="sm" />

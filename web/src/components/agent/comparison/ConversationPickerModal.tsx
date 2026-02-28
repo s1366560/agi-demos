@@ -78,7 +78,9 @@ export const ConversationPickerModal = memo(
         if (e.key === 'Escape') onClose();
       };
       window.addEventListener('keydown', handleKey);
-      return () => { window.removeEventListener('keydown', handleKey); };
+      return () => {
+        window.removeEventListener('keydown', handleKey);
+      };
     }, [visible, onClose]);
 
     if (!visible) return null;
@@ -111,7 +113,9 @@ export const ConversationPickerModal = memo(
                 ref={inputRef}
                 type="text"
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); }}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                }}
                 placeholder={t('comparison.search', 'Search conversations...')}
                 className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50"
               />
@@ -129,7 +133,9 @@ export const ConversationPickerModal = memo(
                 <button
                   key={conv.id}
                   type="button"
-                  onClick={() => { handleSelect(conv.id); }}
+                  onClick={() => {
+                    handleSelect(conv.id);
+                  }}
                   className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-100 dark:border-slate-700/30 last:border-b-0"
                 >
                   <div className="flex items-start gap-2.5">

@@ -66,18 +66,24 @@ export const SelectionToolbar = memo<SelectionToolbarProps>(({ containerRef, onA
 
   useEffect(() => {
     document.addEventListener('selectionchange', handleSelectionChange);
-    return () => { document.removeEventListener('selectionchange', handleSelectionChange); };
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
   }, [handleSelectionChange]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('[data-selection-toolbar]')) {
-        setTimeout(() => { setVisible(false); }, 150);
+        setTimeout(() => {
+          setVisible(false);
+        }, 150);
       }
     };
     document.addEventListener('mousedown', handleMouseDown);
-    return () => { document.removeEventListener('mousedown', handleMouseDown); };
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+    };
   }, []);
 
   if (!visible) return null;
@@ -119,7 +125,9 @@ export const SelectionToolbar = memo<SelectionToolbarProps>(({ containerRef, onA
         <button
           key={action.key}
           type="button"
-          onClick={() => { onAction(action.prompt(selectedText), selectedText); }}
+          onClick={() => {
+            onAction(action.prompt(selectedText), selectedText);
+          }}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors whitespace-nowrap"
           title={action.label}
         >

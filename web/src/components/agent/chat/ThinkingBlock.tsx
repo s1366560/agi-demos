@@ -46,7 +46,9 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
         setDuration(Math.floor((Date.now() - startTime) / 1000));
       }, 1000);
 
-      return () => { clearInterval(interval); };
+      return () => {
+        clearInterval(interval);
+      };
     }, [isStreaming, startTime]);
 
     // Auto-scroll content while streaming
@@ -103,7 +105,9 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
             <button
               ref={buttonRef}
               type="button"
-              onClick={() => { setExpanded(!expanded); }}
+              onClick={() => {
+                setExpanded(!expanded);
+              }}
               onKeyDown={handleKeyDown}
               aria-expanded={expanded}
               aria-controls="thinking-content"

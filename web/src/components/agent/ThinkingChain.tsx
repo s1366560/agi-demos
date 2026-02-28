@@ -32,7 +32,16 @@ interface ThinkingChainProps {
   toolCalls?: ToolCall[] | undefined;
   toolResults?: ToolResult[] | undefined;
   isThinking?: boolean | undefined;
-  toolExecutions?: Record<string, { startTime?: number | undefined; endTime?: number | undefined; duration?: number | undefined }> | undefined;
+  toolExecutions?:
+    | Record<
+        string,
+        {
+          startTime?: number | undefined;
+          endTime?: number | undefined;
+          duration?: number | undefined;
+        }
+      >
+    | undefined;
   timeline?: TimelineItem[] | undefined; // New prop for ordered display
 }
 

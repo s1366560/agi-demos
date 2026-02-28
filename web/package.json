@@ -66,6 +66,7 @@
         "axios": "^1.13.2",
         "chart.js": "^4.5.1",
         "cytoscape": "^3.33.1",
+        "docx-preview": "^0.3.7",
         "html2pdf.js": "^0.14.0",
         "i18next": "^25.7.3",
         "i18next-browser-languagedetector": "^8.2.0",
@@ -87,6 +88,7 @@
         "swr": "^2.4.0",
         "use-debounce": "^10.1.0",
         "uuid": "^13.0.0",
+        "xlsx": "^0.18.5",
         "zustand": "^5.0.9"
     },
     "packageManager": "pnpm@10.24.0+sha512.01ff8ae71b4419903b65c60fb2dc9d34cf8bb6e06d03bde112ef38f7a34d6904c424ba66bea5cdcf12890230bf39f9580473140ed9c946fef328b6e5238a345a"

@@ -492,7 +492,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('停止 Agent 失败');
     } finally {
-      setTimeout(() => { setIsActionPending(false); }, 3000);
+      setTimeout(() => {
+        setIsActionPending(false);
+      }, 3000);
     }
   }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
 
@@ -510,7 +512,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('重启 Agent 失败');
     } finally {
-      setTimeout(() => { setIsActionPending(false); }, 5000);
+      setTimeout(() => {
+        setIsActionPending(false);
+      }, 5000);
     }
   }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
 
@@ -523,7 +527,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('暂停 Agent 失败');
     } finally {
-      setTimeout(() => { setIsActionPending(false); }, 2000);
+      setTimeout(() => {
+        setIsActionPending(false);
+      }, 2000);
     }
   }, [poolInstance, instanceKey]);
 
@@ -536,7 +542,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('恢复 Agent 失败');
     } finally {
-      setTimeout(() => { setIsActionPending(false); }, 2000);
+      setTimeout(() => {
+        setIsActionPending(false);
+      }, 2000);
     }
   }, [poolInstance, instanceKey]);
 
@@ -806,7 +814,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip
               title={
                 <div className="space-y-2 max-w-xs">
-                  <div className="font-medium border-b border-slate-200/20 pb-1">Execution Insights</div>
+                  <div className="font-medium border-b border-slate-200/20 pb-1">
+                    Execution Insights
+                  </div>
                   {executionPathDecision && (
                     <div className="flex items-start gap-2 text-xs">
                       <Route size={12} className="mt-0.5 text-blue-400 flex-shrink-0" />
@@ -822,8 +832,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                     <div className="flex items-start gap-2 text-xs">
                       <Filter size={12} className="mt-0.5 text-purple-400 flex-shrink-0" />
                       <div>
-                        <span className="font-medium">Selection:</span> {selectionTrace.final_count}/
-                        {selectionTrace.initial_count} tools kept across {selectionTrace.stages.length} stages
+                        <span className="font-medium">Selection:</span> {selectionTrace.final_count}
+                        /{selectionTrace.initial_count} tools kept across{' '}
+                        {selectionTrace.stages.length} stages
                       </div>
                     </div>
                   )}
@@ -831,7 +842,8 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                     <div className="flex items-start gap-2 text-xs">
                       <Filter size={12} className="mt-0.5 text-amber-400 flex-shrink-0" />
                       <div>
-                        <span className="font-medium">Policy:</span> filtered {policyFiltered.removed_total} tools
+                        <span className="font-medium">Policy:</span> filtered{' '}
+                        {policyFiltered.removed_total} tools
                       </div>
                     </div>
                   )}

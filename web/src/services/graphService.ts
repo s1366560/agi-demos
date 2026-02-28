@@ -312,7 +312,12 @@ export const graphService = {
     min_members?: number | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
-  }): Promise<{ communities: Community[]; total: number; limit?: number | undefined; offset?: number | undefined }> {
+  }): Promise<{
+    communities: Community[];
+    total: number;
+    limit?: number | undefined;
+    offset?: number | undefined;
+  }> {
     const queryParams = new URLSearchParams();
     if (params.tenant_id) queryParams.append('tenant_id', params.tenant_id);
     if (params.project_id) queryParams.append('project_id', params.project_id);

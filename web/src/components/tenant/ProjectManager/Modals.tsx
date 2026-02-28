@@ -113,4 +113,3 @@ export const SettingsModal: FC<ProjectManagerSettingsModalProps> = ({
     />
   );
 };
-

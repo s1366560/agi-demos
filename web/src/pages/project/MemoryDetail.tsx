@@ -181,7 +181,9 @@ export const MemoryDetail: React.FC = () => {
       {deleteModalOpen && (
         <DeleteConfirmationModal
           isOpen={deleteModalOpen}
-          onClose={() => { setDeleteModalOpen(false); }}
+          onClose={() => {
+            setDeleteModalOpen(false);
+          }}
           onConfirm={handleDelete}
           title={t('project.memories.delete.title')}
           message={t('project.memories.delete.confirmation')}
@@ -191,7 +193,9 @@ export const MemoryDetail: React.FC = () => {
       {editModalOpen && (
         <EditMemoryModal
           isOpen={editModalOpen}
-          onClose={() => { setEditModalOpen(false); }}
+          onClose={() => {
+            setEditModalOpen(false);
+          }}
           memory={memory}
           onUpdate={refreshMemory}
           projectId={projectId}
@@ -259,14 +263,18 @@ export const MemoryDetail: React.FC = () => {
               </span>
             </button>
             <button
-              onClick={() => { setEditModalOpen(true); }}
+              onClick={() => {
+                setEditModalOpen(true);
+              }}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-all"
               title="Edit"
             >
               <span className="material-symbols-outlined text-[20px]">edit</span>
             </button>
             <button
-              onClick={() => { setDeleteModalOpen(true); }}
+              onClick={() => {
+                setDeleteModalOpen(true);
+              }}
               className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-all"
               title="Delete"
             >
@@ -329,7 +337,9 @@ export const MemoryDetail: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => { setEditModalOpen(true); }}
+                    onClick={() => {
+                      setEditModalOpen(true);
+                    }}
                     className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm shadow-primary/20"
                   >
                     <span className="material-symbols-outlined text-[18px]">edit_note</span>
@@ -381,7 +391,9 @@ export const MemoryDetail: React.FC = () => {
               <div className="mt-8 px-6 md:px-8 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex gap-8 overflow-x-auto">
                   <button
-                    onClick={() => { setActiveTab('content'); }}
+                    onClick={() => {
+                      setActiveTab('content');
+                    }}
                     className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
                       activeTab === 'content'
                         ? 'text-primary border-b-2 border-primary'
@@ -391,7 +403,9 @@ export const MemoryDetail: React.FC = () => {
                     {t('project.memories.detail.tabs.content')}
                   </button>
                   <button
-                    onClick={() => { setActiveTab('metadata'); }}
+                    onClick={() => {
+                      setActiveTab('metadata');
+                    }}
                     className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
                       activeTab === 'metadata'
                         ? 'text-primary border-b-2 border-primary'
@@ -401,7 +415,9 @@ export const MemoryDetail: React.FC = () => {
                     {t('project.memories.detail.tabs.metadata')}
                   </button>
                   <button
-                    onClick={() => { setActiveTab('raw'); }}
+                    onClick={() => {
+                      setActiveTab('raw');
+                    }}
                     className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
                       activeTab === 'raw'
                         ? 'text-primary border-b-2 border-primary'
@@ -411,7 +427,9 @@ export const MemoryDetail: React.FC = () => {
                     {t('project.memories.detail.tabs.raw')}
                   </button>
                   <button
-                    onClick={() => { setActiveTab('tasks'); }}
+                    onClick={() => {
+                      setActiveTab('tasks');
+                    }}
                     className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
                       activeTab === 'tasks'
                         ? 'text-primary border-b-2 border-primary'

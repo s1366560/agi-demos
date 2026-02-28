@@ -17,7 +17,9 @@ import { Spin, Empty as EmptyComponent } from 'antd';
 // Default Loading Fallback
 // ============================================================================
 
-export const DefaultFallback: React.FC<{ message?: string | undefined }> = ({ message = 'Loading...' }) => (
+export const DefaultFallback: React.FC<{ message?: string | undefined }> = ({
+  message = 'Loading...',
+}) => (
   <div className="flex items-center justify-center p-4">
     <span className="text-sm text-slate-500">{message}</span>
   </div>
@@ -42,7 +44,6 @@ function createLazyComponent<T extends ComponentType<any>>(
   return LazyComponent as ComponentType<any>;
 }
 
- 
 // eslint-disable-next-line react-refresh/only-export-components
 export function withSuspense<P extends object>(
   LazyComponent: ComponentType<P>,
@@ -224,11 +225,10 @@ export {
   Progress,
   Tooltip,
   Empty,
- 
   Alert,
-// eslint-disable-next-line react-refresh/only-export-components
+  // eslint-disable-next-line react-refresh/only-export-components
   message,
-// eslint-disable-next-line react-refresh/only-export-components
+  // eslint-disable-next-line react-refresh/only-export-components
   notification,
   Space,
   List,
@@ -238,7 +238,6 @@ export {
 } from 'antd';
 
 // Get Empty static properties (must be done after export)
- 
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const { PRESENTED_IMAGE_SIMPLE, PRESENTED_IMAGE_DEFAULT } = EmptyComponent;
@@ -356,7 +355,7 @@ export type {
 
 // ============================================================================
 // Helper Hooks for Services
- 
+
 // ============================================================================
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -369,7 +368,6 @@ export function useLazyMessage() {
     });
   }, []);
 
- 
   return messageApi;
 }
 

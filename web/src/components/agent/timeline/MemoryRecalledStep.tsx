@@ -29,7 +29,9 @@ export const MemoryRecalledStep: React.FC<MemoryRecalledStepProps> = ({ event })
   return (
     <div className="my-1 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30">
       <button
-        onClick={() => { setExpanded(!expanded); }}
+        onClick={() => {
+          setExpanded(!expanded);
+        }}
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-blue-700 dark:text-blue-300"
       >
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}

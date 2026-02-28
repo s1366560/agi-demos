@@ -58,9 +58,9 @@ vi.mock('@/components/agent/SandboxSection', () => ({
 }));
 
 // Import components after mocking
-  // eslint-disable-next-line no-restricted-imports
+// eslint-disable-next-line no-restricted-imports
 import { RightPanel } from '@/components/agent/RightPanel';
-  // eslint-disable-next-line no-restricted-imports
+// eslint-disable-next-line no-restricted-imports
 import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
 
 describe('ResizeHandle (Extracted Component)', () => {

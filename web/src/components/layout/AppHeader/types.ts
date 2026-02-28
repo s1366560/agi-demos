@@ -37,9 +37,11 @@ export interface AppHeaderRootProps {
   /** Custom breadcrumbs to display */
   breadcrumbs?: Breadcrumb[] | undefined;
   /** Options for breadcrumb generation */
-  breadcrumbOptions?: {
-    skipFirst?: boolean | undefined;
-  } | undefined;
+  breadcrumbOptions?:
+    | {
+        skipFirst?: boolean | undefined;
+      }
+    | undefined;
 }
 
 /**
@@ -219,11 +221,13 @@ export interface LegacyAppHeaderProps {
   /** Workspace switcher mode */
   workspaceMode?: WorkspaceMode | undefined;
   /** Primary action button */
-  primaryAction?: {
-    label: string;
-    to: string;
-    icon?: React.ReactNode | undefined;
-  } | undefined;
+  primaryAction?:
+    | {
+        label: string;
+        to: string;
+        icon?: React.ReactNode | undefined;
+      }
+    | undefined;
   /** Additional actions to display on the right */
   extraActions?: React.ReactNode | undefined;
   /** Show user status bar */

@@ -37,6 +37,7 @@ import {
   Loader2,
   AppWindow,
   Pin,
+  Music,
 } from 'lucide-react';
 
 import {
@@ -59,6 +60,7 @@ import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlug
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { SelectionToolbar } from './SelectionToolbar';
+import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 
 const typeIcon = (type: CanvasContentType, size = 14) => {
   switch (type) {
@@ -74,6 +76,8 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
       return <AppWindow size={size} />;
   }
 };
+
+
 
 const isSafePreviewUrl = (src: string): boolean => {
   if (!src) return false;
@@ -121,7 +125,9 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
               key={tab.id}
               role="tab"
               tabIndex={0}
-              onClick={() => { setActiveTab(tab.id); }}
+              onClick={() => {
+                setActiveTab(tab.id);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id);
               }}
@@ -182,7 +188,9 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
         </div>
         <button
           type="button"
-          onClick={() => { setMode('chat'); }}
+          onClick={() => {
+            setMode('chat');
+          }}
           className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           title={t('agent.canvas.backToChat', 'Back to chat')}
         >
@@ -205,8 +213,7 @@ const IsolatedPreviewFrame = memo<{
   title: string;
   srcUrl?: string | undefined;
   pdfVerified?: boolean | undefined;
-}>(
-  ({ content, title, srcUrl, pdfVerified }) => {
+}>(({ content, title, srcUrl, pdfVerified }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const previewSrc = srcUrl || content.trim();
@@ -223,8 +230,7 @@ const IsolatedPreviewFrame = memo<{
     }
   })();
   const wantsPdfPreview =
-    pdfVerified === true ||
-    lowerPreviewSrc.startsWith('data:application/pdf');
+    pdfVerified === true || lowerPreviewSrc.startsWith('data:application/pdf');
   const isPdfPreview = wantsPdfPreview && canUsePdfSrc;
 
   useEffect(() => {
@@ -302,9 +308,291 @@ ${htmlContent}
       title={title}
     />
   );
-  }
-);
+});
 IsolatedPreviewFrame.displayName = 'IsolatedPreviewFrame';
+
+/** Preview media files (image, video, audio, SVG) directly in canvas */
+const CanvasMediaPreview = memo<{
+  src: string;
+  mimeType: string;
+  title: string;
+}>(({ src, mimeType, title }) => {
+  if (mimeType.startsWith('image/')) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 overflow-auto p-4">
+        <img
+          src={src}
+          alt={title}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      </div>
+    );
+  }
+  if (mimeType.startsWith('video/')) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-black">
+        <video
+          src={src}
+          controls
+          playsInline
+          preload="metadata"
+          style={{ maxWidth: '100%', maxHeight: '100%' }}
+        >
+          <track kind="captions" />
+          <source src={src} type={mimeType} />
+        </video>
+      </div>
+    );
+  }
+  if (mimeType.startsWith('audio/')) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="flex flex-col items-center gap-4 p-8">
+          <Music size={48} className="text-slate-300 dark:text-slate-600" />
+          <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">{title}</div>
+          <audio src={src} controls preload="metadata" style={{ width: 320 }}>
+            <track kind="captions" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      </div>
+    );
+  }
+  // SVG - render in iframe for safety
+  return (
+    <iframe
+      src={src}
+      title={title}
+      sandbox="allow-same-origin"
+      className="w-full h-full border-0 bg-white rounded-b-lg"
+    />
+  );
+});
+CanvasMediaPreview.displayName = 'CanvasMediaPreview';
+
+/** Detect Office sub-type from MIME or filename extension */
+const getOfficeFileType = (mime: string, filename: string): 'docx' | 'xlsx' | 'pptx' | 'legacy' => {
+  const m = mime.toLowerCase();
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (
+    m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    ext === 'docx'
+  )
+    return 'docx';
+  if (
+    m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    ext === 'xlsx'
+  )
+    return 'xlsx';
+  if (
+    m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    ext === 'pptx'
+  )
+    return 'pptx';
+  // Legacy formats (.doc, .xls, .ppt) and unrecognized
+  return 'legacy';
+};
+
+/** Download fallback UI for unsupported Office formats */
+const OfficeDownloadFallback = memo<{ src: string; title: string; message: string }>(
+  ({ src, title, message }) => (
+    <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="flex flex-col items-center gap-4 p-8 text-center">
+        <FileText size={48} className="text-slate-300 dark:text-slate-600" />
+        <div className="text-sm text-slate-500 dark:text-slate-400">{title}</div>
+        <div className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">{message}</div>
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+        >
+          <Download size={14} />
+          Download File
+        </a>
+      </div>
+    </div>
+  )
+);
+OfficeDownloadFallback.displayName = 'OfficeDownloadFallback';
+
+/** Render DOCX files client-side using docx-preview */
+const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const render = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const resp = await fetch(src);
+        if (!resp.ok) throw new Error(`Failed to fetch: ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        if (cancelled || !containerRef.current) return;
+        const { renderAsync } = await import('docx-preview');
+        if (cancelled || !containerRef.current) return;
+        containerRef.current.innerHTML = '';
+        await renderAsync(buf, containerRef.current, undefined, {
+          className: 'docx-preview',
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: true,
+          breakPages: true,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
+          renderEndnotes: true,
+        });
+        if (!cancelled) setLoading(false);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to render document');
+          setLoading(false);
+        }
+      }
+    };
+    void render();
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  if (error) {
+    return <OfficeDownloadFallback src={src} title={title} message={error} />;
+  }
+
+  return (
+    <div className="h-full w-full overflow-auto bg-white dark:bg-slate-100 rounded-b-lg relative">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-100/80 z-10">
+          <Loader2 size={24} className="animate-spin text-blue-500" />
+        </div>
+      )}
+      <div ref={containerRef} className="docx-container p-2" />
+    </div>
+  );
+});
+DocxPreview.displayName = 'DocxPreview';
+
+/** Render XLSX files client-side using SheetJS */
+const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sheets, setSheets] = useState<{ name: string; html: string }[]>([]);
+  const [activeSheet, setActiveSheet] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const render = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const resp = await fetch(src);
+        if (!resp.ok) throw new Error(`Failed to fetch: ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        if (cancelled) return;
+        const XLSX = await import('xlsx');
+        if (cancelled) return;
+        const wb = XLSX.read(buf, { type: 'array' });
+        const result = wb.SheetNames.map((name) => {
+          const ws = wb.Sheets[name];
+          if (!ws) return { name, html: '<p>Empty sheet</p>' };
+          const html = XLSX.utils.sheet_to_html(ws, { editable: false });
+          return { name, html };
+        });
+        if (!cancelled) {
+          setSheets(result);
+          setActiveSheet(0);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to render spreadsheet');
+          setLoading(false);
+        }
+      }
+    };
+    void render();
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  if (error) {
+    return <OfficeDownloadFallback src={src} title={title} message={error} />;
+  }
+
+  return (
+    <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-b-lg relative">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 z-10">
+          <Loader2 size={24} className="animate-spin text-blue-500" />
+        </div>
+      )}
+      {sheets.length > 1 && (
+        <div className="flex gap-1 px-2 pt-2 border-b border-slate-200 dark:border-slate-700 overflow-x-auto shrink-0">
+          {sheets.map((s, i) => (
+            <button
+              key={s.name}
+              type="button"
+              onClick={() => setActiveSheet(i)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-t whitespace-nowrap transition-colors ${
+                i === activeSheet
+                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-b-0 border-slate-200 dark:border-slate-700'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {sheets[activeSheet] && (
+        <div
+          className="flex-1 overflow-auto p-2 xlsx-preview"
+          dangerouslySetInnerHTML={{ __html: sheets[activeSheet].html }}
+        />
+      )}
+    </div>
+  );
+});
+XlsxPreview.displayName = 'XlsxPreview';
+
+/** Preview Office files with client-side rendering (DOCX, XLSX) or download fallback */
+const CanvasOfficePreview = memo<{
+  src: string;
+  title: string;
+  mimeType?: string;
+}>(({ src, title, mimeType }) => {
+  const fileType = getOfficeFileType(mimeType || '', title);
+
+  switch (fileType) {
+    case 'docx':
+      return <DocxPreview src={src} title={title} />;
+    case 'xlsx':
+      return <XlsxPreview src={src} title={title} />;
+    case 'pptx':
+      return (
+        <OfficeDownloadFallback
+          src={src}
+          title={title}
+          message="PowerPoint preview is not yet supported. Server-side conversion will be added in a future update."
+        />
+      );
+    case 'legacy':
+      return (
+        <OfficeDownloadFallback
+          src={src}
+          title={title}
+          message="Legacy Office format (.doc/.xls/.ppt) preview is not supported. Please convert to .docx/.xlsx/.pptx for preview."
+        />
+      );
+  }
+});
+CanvasOfficePreview.displayName = 'CanvasOfficePreview';
 
 // Content area for a single non-mcp-app tab
 // MCP app tabs are rendered separately in CanvasPanel for multi-instance isolation.
@@ -325,7 +613,9 @@ const CanvasContent = memo<{
       <div className={`h-full overflow-auto ${tab.type === 'code' ? 'bg-slate-900' : ''}`}>
         <textarea
           value={tab.content}
-          onChange={(e) => { onContentChange(e.target.value); }}
+          onChange={(e) => {
+            onContentChange(e.target.value);
+          }}
           className={`w-full h-full font-mono text-sm p-4 resize-none focus:outline-none ${bgClass}`}
           spellCheck={false}
         />
@@ -356,7 +646,21 @@ const CanvasContent = memo<{
           </ReactMarkdown>
         </div>
       );
-    case 'preview':
+    case 'preview': {
+      const mime = tab.mimeType?.toLowerCase() || '';
+      const previewSrc = tab.artifactUrl || tab.content;
+
+      // Media files: image, video, audio, SVG
+      if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) {
+        return <CanvasMediaPreview src={previewSrc} mimeType={mime} title={tab.title} />;
+      }
+
+      // Office files: Word, Excel, PowerPoint
+      if (isOfficeMimeType(mime) || isOfficeExtension(tab.title)) {
+        return <CanvasOfficePreview src={previewSrc} title={tab.title} mimeType={mime} />;
+      }
+
+      // PDF and HTML: existing behavior
       return (
         <IsolatedPreviewFrame
           content={tab.content}
@@ -365,6 +669,7 @@ const CanvasContent = memo<{
           pdfVerified={tab.pdfVerified}
         />
       );
+    }
     case 'data':
       return (
         <div className="h-full overflow-auto p-4 bg-white dark:bg-slate-900 rounded-b-lg">
@@ -395,7 +700,9 @@ const CanvasToolbar = memo<{
     try {
       await navigator.clipboard.writeText(tab.content);
       setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch {
       // fallback
       const textarea = document.createElement('textarea');
@@ -405,7 +712,9 @@ const CanvasToolbar = memo<{
       (document as unknown as { execCommand: (cmd: string) => boolean }).execCommand('copy');
       document.body.removeChild(textarea);
       setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     }
   }, [tab.content]);
 
@@ -464,7 +773,9 @@ const CanvasToolbar = memo<{
       {canSave && (
         <button
           type="button"
-          onClick={() => { void handleSave(); }}
+          onClick={() => {
+            void handleSave();
+          }}
           disabled={saving}
           className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
           title={t('agent.canvas.save', 'Save (Ctrl+S)')}
@@ -474,7 +785,9 @@ const CanvasToolbar = memo<{
       )}
       <button
         type="button"
-        onClick={() => { undo(tab.id); }}
+        onClick={() => {
+          undo(tab.id);
+        }}
         disabled={!canUndo(tab.id)}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.undo', 'Undo (Ctrl+Z)')}
@@ -483,7 +796,9 @@ const CanvasToolbar = memo<{
       </button>
       <button
         type="button"
-        onClick={() => { redo(tab.id); }}
+        onClick={() => {
+          redo(tab.id);
+        }}
         disabled={!canRedo(tab.id)}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.redo', 'Redo (Ctrl+Shift+Z)')}
@@ -510,7 +825,9 @@ const CanvasToolbar = memo<{
       )}
       <button
         type="button"
-        onClick={() => { void handleCopy(); }}
+        onClick={() => {
+          void handleCopy();
+        }}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
         title={t('agent.canvas.copy', 'Copy')}
       >
@@ -593,7 +910,9 @@ const QuickActions = memo<{
         <button
           key={action.label}
           type="button"
-          onClick={() => { onSendPrompt(action.prompt); }}
+          onClick={() => {
+            onSendPrompt(action.prompt);
+          }}
           className="px-2 py-1 text-xs rounded-md bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
         >
           {action.label}
@@ -634,7 +953,9 @@ const CanvasEmptyState = memo(() => {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => { handleNew('code', 'untitled.py'); }}
+          onClick={() => {
+            handleNew('code', 'untitled.py');
+          }}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           <FileCode2 size={14} />
@@ -642,7 +963,9 @@ const CanvasEmptyState = memo(() => {
         </button>
         <button
           type="button"
-          onClick={() => { handleNew('markdown', 'untitled.md'); }}
+          onClick={() => {
+            handleNew('markdown', 'untitled.md');
+          }}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           <FileText size={14} />
@@ -650,7 +973,9 @@ const CanvasEmptyState = memo(() => {
         </button>
         <button
           type="button"
-          onClick={() => { handleNew('data', 'notes.txt'); }}
+          onClick={() => {
+            handleNew('data', 'notes.txt');
+          }}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           <StickyNote size={14} />
@@ -684,11 +1009,7 @@ export const CanvasPanel = memo<{
   // release resources when the user navigates away from a tab).
   useEffect(() => {
     const prev = prevActiveTabRef.current;
-    if (
-      prev &&
-      prev.type === 'mcp-app' &&
-      prev.id !== activeTabId
-    ) {
+    if (prev && prev.type === 'mcp-app' && prev.id !== activeTabId) {
       // Do NOT teardown on tab switch -- multi-instance approach keeps all alive.
       // Teardown only happens on close or unmount.
     }
@@ -712,17 +1033,14 @@ export const CanvasPanel = memo<{
   }, []);
 
   // Teardown specific MCP App on tab close
-  const handleBeforeCloseTab = useCallback(
-    (tabId: string) => {
-      const tabs = useCanvasStore.getState().tabs;
-      const tab = tabs.find((t) => t.id === tabId);
-      if (tab?.type === 'mcp-app') {
-        mcpAppRefsMap.current.get(tabId)?.teardown();
-        mcpAppRefsMap.current.delete(tabId);
-      }
-    },
-    []
-  );
+  const handleBeforeCloseTab = useCallback((tabId: string) => {
+    const tabs = useCanvasStore.getState().tabs;
+    const tab = tabs.find((t) => t.id === tabId);
+    if (tab?.type === 'mcp-app') {
+      mcpAppRefsMap.current.get(tabId)?.teardown();
+      mcpAppRefsMap.current.delete(tabId);
+    }
+  }, []);
 
   const handleSelectionAction = useCallback(
     (prompt: string) => {

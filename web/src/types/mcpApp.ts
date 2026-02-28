@@ -17,12 +17,14 @@ export interface MCPAppUIPermissions {
 export interface MCPAppUIMetadata {
   resourceUri: string;
   permissions?: MCPAppUIPermissions | undefined;
-  csp?: {
-    connectDomains?: string[] | undefined;
-    resourceDomains?: string[] | undefined;
-    frameDomains?: string[] | undefined;
-    baseUriDomains?: string[] | undefined;
-  } | undefined;
+  csp?:
+    | {
+        connectDomains?: string[] | undefined;
+        resourceDomains?: string[] | undefined;
+        frameDomains?: string[] | undefined;
+        baseUriDomains?: string[] | undefined;
+      }
+    | undefined;
   title?: string | undefined;
   visibility?: Array<'model' | 'app'> | undefined;
   prefersBorder?: boolean | undefined;

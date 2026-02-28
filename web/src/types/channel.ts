@@ -158,21 +158,25 @@ export interface ChannelPluginConfigSchema {
   package?: string | undefined;
   version?: string | undefined;
   schema_supported: boolean;
-  config_schema?: {
-    type?: string | undefined;
-    properties?: Record<string, ChannelPluginSchemaProperty> | undefined;
-    required?: string[] | undefined;
-  } | undefined;
-  config_ui_hints?: Record<
-    string,
-    {
-      label?: string | undefined;
-      help?: string | undefined;
-      placeholder?: string | undefined;
-      sensitive?: boolean | undefined;
-      advanced?: boolean | undefined;
-    }
-  > | undefined;
+  config_schema?:
+    | {
+        type?: string | undefined;
+        properties?: Record<string, ChannelPluginSchemaProperty> | undefined;
+        required?: string[] | undefined;
+      }
+    | undefined;
+  config_ui_hints?:
+    | Record<
+        string,
+        {
+          label?: string | undefined;
+          help?: string | undefined;
+          placeholder?: string | undefined;
+          sensitive?: boolean | undefined;
+          advanced?: boolean | undefined;
+        }
+      >
+    | undefined;
   defaults?: Record<string, unknown> | undefined;
   secret_paths: string[];
 }

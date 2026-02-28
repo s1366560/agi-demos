@@ -112,7 +112,9 @@ const TaskDashboardInner: React.FC<{
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 5000);
-    return () => { clearInterval(interval); };
+    return () => {
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   const handleRefresh = () => {
@@ -459,7 +461,9 @@ export const TaskDashboard: React.FC = () => {
   // Only render charts on client-side to avoid hydration issues (rendering-hydration-no-flicker)
   const [isClient, setIsClient] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- Necessary for client-side hydration check
-  useEffect(() => { setIsClient(true); }, []);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   if (!isClient) {
     return (

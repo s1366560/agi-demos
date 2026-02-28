@@ -37,7 +37,9 @@ export const UserMenu = React.memo(function UserMenu({
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => { document.removeEventListener('mousedown', handleClickOutside); };
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -63,7 +65,9 @@ export const UserMenu = React.memo(function UserMenu({
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => { setIsOpen(!isOpen); }}
+        onClick={() => {
+          setIsOpen(!isOpen);
+        }}
         className="flex items-center gap-1.5 sm:gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label="User menu"
         type="button"
@@ -102,7 +106,9 @@ export const UserMenu = React.memo(function UserMenu({
           <div className="py-1">
             <Link
               to={profilePath}
-              onClick={() => { setIsOpen(false); }}
+              onClick={() => {
+                setIsOpen(false);
+              }}
               className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <User className="w-4 h-4 text-slate-400" />
@@ -110,7 +116,9 @@ export const UserMenu = React.memo(function UserMenu({
             </Link>
             <Link
               to={settingsPath}
-              onClick={() => { setIsOpen(false); }}
+              onClick={() => {
+                setIsOpen(false);
+              }}
               className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <Settings className="w-4 h-4 text-slate-400" />

@@ -28,7 +28,6 @@ export interface SidebarContextValue {
   basePath: string;
 }
 
- 
 // eslint-disable-next-line react-refresh/only-export-components
 export const SidebarContext = React.createContext<SidebarContextValue | null>(null);
 

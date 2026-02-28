@@ -498,7 +498,8 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
 
   it('should normalize full URL VITE_API_HOST for sandbox proxy URL', async () => {
     const originalHost = (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST;
-    (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST = 'http://localhost:8000/api/v1';
+    (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST =
+      'http://localhost:8000/api/v1';
 
     try {
       render(<StandardMCPAppRenderer {...createProps({ html: '<div>Test</div>' })} />);

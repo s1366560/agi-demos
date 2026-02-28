@@ -93,7 +93,9 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
 
           {thought.length > 100 ? (
             <Typography.Link
-              onClick={() => { setCollapsed(!collapsed); }}
+              onClick={() => {
+                setCollapsed(!collapsed);
+              }}
               className="text-xs"
               aria-label={collapsed ? 'Expand thought' : 'Collapse thought'}
             >

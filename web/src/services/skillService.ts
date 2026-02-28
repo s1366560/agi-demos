@@ -47,7 +47,9 @@ export const skillAPI = {
   /**
    * List system skills
    */
-  listSystemSkills: async (params: { status?: string | undefined } = {}): Promise<SkillsListResponse> => {
+  listSystemSkills: async (
+    params: { status?: string | undefined } = {}
+  ): Promise<SkillsListResponse> => {
     return await api.get<SkillsListResponse>('/skills/system/list', { params });
   },
 

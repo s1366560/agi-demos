@@ -176,7 +176,9 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
         {/* Input Parameters */}
         <div>
           <button
-            onClick={() => { setShowFullInput(!showFullInput); }}
+            onClick={() => {
+              setShowFullInput(!showFullInput);
+            }}
             className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-300"
           >
             <MaterialIcon name={showFullInput ? 'expand_less' : 'expand_more'} size={14} />
@@ -214,7 +216,9 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
               </h6>
               {!hasImageResult && isResultFolded && (
                 <button
-                  onClick={() => { setShowFullResult(!showFullResult); }}
+                  onClick={() => {
+                    setShowFullResult(!showFullResult);
+                  }}
                   className="text-xs text-primary hover:underline"
                 >
                   {showFullResult ? 'Show Less' : 'Show Full'}

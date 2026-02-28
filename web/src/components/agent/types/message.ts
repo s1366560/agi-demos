@@ -69,11 +69,13 @@ export interface MessageMetadata {
   /** Branch ID (for conversation branching) */
   branchId?: string | undefined;
   /** Token usage */
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | undefined;
+  usage?:
+    | {
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+      }
+    | undefined;
   /** Cost */
   cost?: number | undefined;
   /** Model used */
@@ -99,46 +101,54 @@ export interface BaseMessage {
 /** User message */
 export interface UserMessage extends BaseMessage {
   role: 'user';
-  metadata?: MessageMetadata & {
-    /** Skill name if triggered via /skill */
-    forcedSkillName?: string | undefined;
-    /** Attached files */
-    attachments?: FileAttachment[] | undefined;
-  } | undefined;
+  metadata?:
+    | (MessageMetadata & {
+        /** Skill name if triggered via /skill */
+        forcedSkillName?: string | undefined;
+        /** Attached files */
+        attachments?: FileAttachment[] | undefined;
+      })
+    | undefined;
 }
 
 /** Assistant message */
 export interface AssistantMessage extends BaseMessage {
   role: 'assistant';
-  metadata?: MessageMetadata & {
-    isReport?: boolean | undefined;
-    isStreaming?: boolean | undefined;
-    toolCalls?: ToolCall[] | undefined;
-    reasoning?: string | undefined;
-    reasoningSteps?: ReasoningStep[] | undefined;
-  } | undefined;
+  metadata?:
+    | (MessageMetadata & {
+        isReport?: boolean | undefined;
+        isStreaming?: boolean | undefined;
+        toolCalls?: ToolCall[] | undefined;
+        reasoning?: string | undefined;
+        reasoningSteps?: ReasoningStep[] | undefined;
+      })
+    | undefined;
 }
 
 /** System message */
 export interface SystemMessage extends BaseMessage {
   role: 'system';
-  metadata?: MessageMetadata & {
-    /** Whether collapsible */
-    collapsible?: boolean | undefined;
-    /** Whether collapsed by default */
-    collapsed?: boolean | undefined;
-  } | undefined;
+  metadata?:
+    | (MessageMetadata & {
+        /** Whether collapsible */
+        collapsible?: boolean | undefined;
+        /** Whether collapsed by default */
+        collapsed?: boolean | undefined;
+      })
+    | undefined;
 }
 
 /** Tool message */
 export interface ToolMessage extends BaseMessage {
   role: 'tool';
-  metadata?: MessageMetadata & {
-    toolCallId?: string | undefined;
-    toolName?: string | undefined;
-    status?: 'pending' | 'running' | 'completed' | 'failed' | undefined;
-    error?: string | undefined;
-  } | undefined;
+  metadata?:
+    | (MessageMetadata & {
+        toolCallId?: string | undefined;
+        toolName?: string | undefined;
+        status?: 'pending' | 'running' | 'completed' | 'failed' | undefined;
+        error?: string | undefined;
+      })
+    | undefined;
 }
 
 /** Union type for all message types */
@@ -178,10 +188,12 @@ export interface MessageContextValue {
   /** Language */
   language: string;
   /** Custom components */
-  components?: {
-    UserMessage?: React.ComponentType<UserMessage> | undefined;
-    AssistantMessage?: React.ComponentType<AssistantMessage> | undefined;
-    SystemMessage?: React.ComponentType<SystemMessage> | undefined;
-    ToolMessage?: React.ComponentType<ToolMessage> | undefined;
-  } | undefined;
+  components?:
+    | {
+        UserMessage?: React.ComponentType<UserMessage> | undefined;
+        AssistantMessage?: React.ComponentType<AssistantMessage> | undefined;
+        SystemMessage?: React.ComponentType<SystemMessage> | undefined;
+        ToolMessage?: React.ComponentType<ToolMessage> | undefined;
+      }
+    | undefined;
 }

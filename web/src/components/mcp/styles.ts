@@ -3,7 +3,6 @@
  * Aligned with agent workspace design system
  */
 
-
 // ============================================================================
 // Runtime Status Styles - Aligned with agent workspace
 // ============================================================================

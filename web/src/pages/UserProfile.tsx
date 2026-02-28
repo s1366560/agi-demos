@@ -77,7 +77,9 @@ export const UserProfile: React.FC = () => {
       const updatedUser = await authAPI.updateProfile(updateData as Partial<UserProfileType>);
       setUser(updatedUser);
       setShowSuccess(true);
-      setTimeout(() => { setShowSuccess(false); }, 3000);
+      setTimeout(() => {
+        setShowSuccess(false);
+      }, 3000);
     } catch (error) {
       console.error('Failed to update profile:', error);
     } finally {
@@ -442,7 +444,9 @@ export const UserProfile: React.FC = () => {
                   <div className="ml-4 flex flex-shrink-0">
                     <button
                       className="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:bg-surface-dark dark:hover:text-gray-300"
-                      onClick={() => { setShowSuccess(false); }}
+                      onClick={() => {
+                        setShowSuccess(false);
+                      }}
                     >
                       <span className="sr-only">Close</span>
                       <span className="material-symbols-outlined text-sm">close</span>

@@ -43,13 +43,15 @@ export interface TimelineStep {
   isError?: boolean | undefined;
   duration?: number | undefined;
   timestamp?: number | undefined;
-  mcpUiMetadata?: {
-    resource_uri?: string | undefined;
-    server_name?: string | undefined;
-    app_id?: string | undefined;
-    title?: string | undefined;
-    project_id?: string | undefined;
-  } | undefined;
+  mcpUiMetadata?:
+    | {
+        resource_uri?: string | undefined;
+        server_name?: string | undefined;
+        app_id?: string | undefined;
+        title?: string | undefined;
+        project_id?: string | undefined;
+      }
+    | undefined;
 }
 
 interface ExecutionTimelineProps {
@@ -217,7 +219,9 @@ const TimelineStepItem = memo<{
       <div className="flex-1 pb-1.5 min-w-0 flex flex-col">
         <button
           type="button"
-          onClick={() => { setExpanded((v) => !v); }}
+          onClick={() => {
+            setExpanded((v) => !v);
+          }}
           className={`
             w-full text-left rounded-md border px-2.5 py-1.5 transition-colors
             ${statusBg}
@@ -441,7 +445,9 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
         {/* Summary header */}
         <button
           type="button"
-          onClick={() => { setCollapsed((v) => !v); }}
+          onClick={() => {
+            setCollapsed((v) => !v);
+          }}
           className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer"
         >
           {collapsed ? (

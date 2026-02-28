@@ -592,7 +592,9 @@ const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(
         {edges.map((edge) => (
           <div
             key={edge.id}
-            onClick={() => { onSelect(edge.id); }}
+            onClick={() => {
+              onSelect(edge.id);
+            }}
             className={`p-4 border-b border-slate-200 dark:border-[#2d3748] cursor-pointer transition-colors border-l-4 ${
               selectedEdgeId === edge.id
                 ? 'bg-blue-50 dark:bg-[#193db3]/10 border-l-blue-600 dark:border-l-[#193db3] hover:bg-blue-100 dark:hover:bg-[#193db3]/20'
@@ -684,14 +686,18 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => { onDelete(selectedEdge.id); }}
+              onClick={() => {
+                onDelete(selectedEdge.id);
+              }}
               className="px-3 py-1.5 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-[#2d3748] rounded bg-white dark:bg-[#151820] hover:bg-slate-50 dark:hover:bg-[#252d46] transition-colors flex items-center gap-2"
             >
               <Trash2 className="w-4 h-4" />
               {TEXTS.detail.delete}
             </button>
             <button
-              onClick={() => { onEdit(selectedEdge); }}
+              onClick={() => {
+                onEdit(selectedEdge);
+              }}
               className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-[#193db3] hover:bg-blue-700 rounded transition-colors flex items-center gap-2"
             >
               <Pencil className="w-4 h-4" />
@@ -751,7 +757,9 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
             </table>
             <div className="bg-slate-50 dark:bg-[#151820] px-4 py-2 border-t border-slate-200 dark:border-[#2d3748]">
               <button
-                onClick={() => { onEdit(selectedEdge); }}
+                onClick={() => {
+                  onEdit(selectedEdge);
+                }}
                 className="text-xs text-blue-600 dark:text-[#193db3] font-bold flex items-center gap-1 hover:text-blue-800 dark:hover:text-white transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -876,7 +884,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
         ></div>
         <div
           className="relative w-full max-w-3xl bg-white dark:bg-[#111521] shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-[#2a324a] animate-in slide-in-from-right duration-300"
-          onClick={(e) => { e.stopPropagation(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#2a324a] bg-slate-50 dark:bg-[#1e2433]">
             <div className="flex items-center gap-4">
@@ -924,7 +934,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
                       type="text"
                       value={formData.name}
-                      onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
+                      onChange={(e) => {
+                        setFormData({ ...formData, name: e.target.value });
+                      }}
                       placeholder={TEXTS.modal.namePlaceholder}
                       disabled={!!editingEdge}
                     />
@@ -937,7 +949,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
                       type="text"
                       value={formData.description}
-                      onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
+                      onChange={(e) => {
+                        setFormData({ ...formData, description: e.target.value });
+                      }}
                       placeholder={TEXTS.modal.descPlaceholder}
                     />
                   </div>
@@ -971,7 +985,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                           </span>
                         </div>
                         <button
-                          onClick={() => { removeAttribute(idx); }}
+                          onClick={() => {
+                            removeAttribute(idx);
+                          }}
                           className="text-xs text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 font-medium flex items-center gap-1"
                         >
                           {TEXTS.modal.deleteField}
@@ -987,7 +1003,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
                               type="text"
                               value={attr.name}
-                              onChange={(e) => { updateAttribute(idx, 'name', e.target.value); }}
+                              onChange={(e) => {
+                                updateAttribute(idx, 'name', e.target.value);
+                              }}
                               placeholder={TEXTS.modal.attrNamePlaceholder}
                             />
                           </div>
@@ -999,7 +1017,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               <select
                                 className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none appearance-none focus:border-blue-600 dark:focus:border-[#193db3]"
                                 value={attr.type}
-                                onChange={(e) => { updateAttribute(idx, 'type', e.target.value); }}
+                                onChange={(e) => {
+                                  updateAttribute(idx, 'type', e.target.value);
+                                }}
                               >
                                 <option value="String">String</option>
                                 <option value="Integer">Integer</option>
@@ -1021,7 +1041,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                             className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-500 dark:text-[#95a0c6] px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
                             type="text"
                             value={attr.description}
-                            onChange={(e) => { updateAttribute(idx, 'description', e.target.value); }}
+                            onChange={(e) => {
+                              updateAttribute(idx, 'description', e.target.value);
+                            }}
                             placeholder={TEXTS.modal.docstringPlaceholder}
                           />
                         </div>

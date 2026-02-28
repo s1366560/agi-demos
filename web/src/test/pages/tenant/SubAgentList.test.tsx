@@ -166,9 +166,6 @@ describe('SubAgentList', () => {
 
   describe('Component Structure', () => {
     it('should have SubAgentCard component defined', async () => {
-       
-       
-
       const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
@@ -177,8 +174,6 @@ describe('SubAgentList', () => {
     });
 
     it('should have StatusBadge component', async () => {
-       
-
       const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
@@ -187,8 +182,6 @@ describe('SubAgentList', () => {
     });
 
     it('should export SubAgentList component', async () => {
-       
-
       const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
@@ -199,8 +192,6 @@ describe('SubAgentList', () => {
 
   describe('Performance', () => {
     it('should use useMemo for computed values', async () => {
-       
-
       const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
@@ -209,8 +200,6 @@ describe('SubAgentList', () => {
     });
 
     it('should use useCallback for event handlers', async () => {
-       
-
       const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
@@ -219,8 +208,6 @@ describe('SubAgentList', () => {
     });
 
     it('should have efficient filtering', async () => {
-       
-
       const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'

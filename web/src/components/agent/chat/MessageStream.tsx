@@ -29,7 +29,7 @@ export interface MessageStreamProps {
  *   <FinalResponse content="# Analysis Report..." />
  * </MessageStream>
  */
- 
+
 export const MessageStream = memo(function MessageStream({
   children,
   className = '',
@@ -86,7 +86,6 @@ function getFileIcon(mimeType: string): string {
   return 'description';
 }
 
- 
 export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMessageProps) {
   return (
     <div className="flex items-start gap-3 justify-end">
@@ -168,7 +167,6 @@ export interface AgentSectionProps {
   children: ReactNode;
 }
 
- 
 export function AgentSection({
   icon = 'psychology',
   iconBg = 'bg-slate-200 dark:bg-border-dark',
@@ -200,7 +198,6 @@ export interface ReasoningLogCardProps {
   expanded?: boolean | undefined;
 }
 
- 
 export function ReasoningLogCard({
   steps,
   summary,
@@ -234,7 +231,7 @@ export function ReasoningLogCard({
  * Format tool result to string for display
  * Handles objects, arrays, and primitives
  */
- 
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatToolResult(result: unknown): string {
   if (result === null || result === undefined) {
@@ -285,7 +282,9 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
           {isFolded && (
             <button
               type="button"
-              onClick={() => { setIsExpanded(!isExpanded); }}
+              onClick={() => {
+                setIsExpanded(!isExpanded);
+              }}
               className="text-[10px] text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
             >
               <span className="material-symbols-outlined text-[12px]">
@@ -312,7 +311,9 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
         {isFolded && (
           <button
             type="button"
-            onClick={() => { setIsExpanded(!isExpanded); }}
+            onClick={() => {
+              setIsExpanded(!isExpanded);
+            }}
             className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-[12px]">

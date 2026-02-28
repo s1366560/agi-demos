@@ -174,7 +174,9 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
         ref={inputRef}
         type="text"
         value={query}
-        onChange={(e) => { setQuery(e.target.value); }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+        }}
         onKeyDown={handleKeyDown}
         placeholder={t('agent.search.placeholder', 'Search in conversation...')}
         className="w-48 bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"

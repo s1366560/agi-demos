@@ -116,7 +116,10 @@ export const useConversationsStore = create<ConversationsState>()(
             conversationsLoading: false,
           });
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+          const err = error as {
+            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+            message?: string | undefined;
+          };
           set({
             conversationsError: err?.response?.data?.detail || 'Failed to list conversations',
             conversationsLoading: false,
@@ -142,7 +145,10 @@ export const useConversationsStore = create<ConversationsState>()(
             conversationsLoadingMore: false,
           });
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+          const err = error as {
+            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+            message?: string | undefined;
+          };
           set({
             conversationsError: err?.response?.data?.detail || 'Failed to load more conversations',
             conversationsLoadingMore: false,
@@ -174,7 +180,10 @@ export const useConversationsStore = create<ConversationsState>()(
           });
           return conversation;
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+          const err = error as {
+            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+            message?: string | undefined;
+          };
           set({
             conversationsError: err?.response?.data?.detail || 'Failed to create conversation',
             conversationsLoading: false,
@@ -197,7 +206,10 @@ export const useConversationsStore = create<ConversationsState>()(
           set({ currentConversation: conversation, conversationsLoading: false });
           return conversation;
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+          const err = error as {
+            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+            message?: string | undefined;
+          };
           set({
             conversationsError: err?.response?.data?.detail || 'Failed to get conversation',
             conversationsLoading: false,
@@ -225,7 +237,10 @@ export const useConversationsStore = create<ConversationsState>()(
           });
           // Note: Conversation state cleanup is handled by the main agent store
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+          const err = error as {
+            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+            message?: string | undefined;
+          };
           set({
             conversationsError: err?.response?.data?.detail || 'Failed to delete conversation',
             conversationsLoading: false,

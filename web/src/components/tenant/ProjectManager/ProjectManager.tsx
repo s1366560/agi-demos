@@ -6,7 +6,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -216,7 +215,9 @@ export const Root: React.FC<ProjectManagerProps> = ({
           <Empty
             variant={searchTerm ? 'no-results' : 'no-projects'}
             showCreateButton={!searchTerm}
-            onCreateClick={() => { setIsCreateModalOpen(true); }}
+            onCreateClick={() => {
+              setIsCreateModalOpen(true);
+            }}
           />
         );
       }

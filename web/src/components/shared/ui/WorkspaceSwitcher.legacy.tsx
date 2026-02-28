@@ -63,7 +63,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => { document.removeEventListener('mousedown', handleClickOutside); };
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Get menu items count for keyboard navigation
@@ -191,7 +193,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
     <div className="relative" ref={dropdownRef}>
       <button
         ref={triggerButtonRef}
-        onClick={() => { setIsOpen(!isOpen); }}
+        onClick={() => {
+          setIsOpen(!isOpen);
+        }}
         onKeyDown={handleTriggerKeyDown}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -254,8 +258,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                     ref={(el) => {
                       menuItemRefs.current[index] = el;
                     }}
-                    onClick={() => { handleTenantSwitch(tenant); }}
-                    onKeyDown={(e) => { handleMenuKeyDown(e, index); }}
+                    onClick={() => {
+                      handleTenantSwitch(tenant);
+                    }}
+                    onKeyDown={(e) => {
+                      handleMenuKeyDown(e, index);
+                    }}
                     role="option"
                     aria-selected={currentTenant?.id === tenant.id}
                     tabIndex={focusedIndex === index ? 0 : -1}
@@ -280,7 +288,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                     menuItemRefs.current[tenants.length] = el;
                   }}
                   onClick={() => navigate('/tenants/new')}
-                  onKeyDown={(e) => { handleMenuKeyDown(e, tenants.length); }}
+                  onKeyDown={(e) => {
+                    handleMenuKeyDown(e, tenants.length);
+                  }}
                   role="option"
                   tabIndex={focusedIndex === tenants.length ? 0 : -1}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
@@ -303,8 +313,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                     ref={(el) => {
                       menuItemRefs.current[index] = el;
                     }}
-                    onClick={() => { handleProjectSwitch(project); }}
-                    onKeyDown={(e) => { handleMenuKeyDown(e, index); }}
+                    onClick={() => {
+                      handleProjectSwitch(project);
+                    }}
+                    onKeyDown={(e) => {
+                      handleMenuKeyDown(e, index);
+                    }}
                     role="option"
                     aria-selected={projectId === project.id}
                     tabIndex={focusedIndex === index ? 0 : -1}
@@ -327,7 +341,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                     menuItemRefs.current[projects.length] = el;
                   }}
                   onClick={handleBackToTenant}
-                  onKeyDown={(e) => { handleMenuKeyDown(e, projects.length); }}
+                  onKeyDown={(e) => {
+                    handleMenuKeyDown(e, projects.length);
+                  }}
                   role="option"
                   tabIndex={focusedIndex === projects.length ? 0 : -1}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"

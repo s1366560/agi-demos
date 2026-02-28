@@ -99,7 +99,8 @@ export function useBreadcrumbs(
           path: `/tenant/${tenantId}/agent-workspace`,
         });
       } else {
-        const label = getCustomLabel(section ?? '', customLabels) || formatBreadcrumbLabel(section ?? '');
+        const label =
+          getCustomLabel(section ?? '', customLabels) || formatBreadcrumbLabel(section ?? '');
         breadcrumbs.push({
           label,
           path: location.pathname,
@@ -133,7 +134,8 @@ export function useBreadcrumbs(
     // Add page-specific breadcrumb
     if (context === 'project' && paths.length > 2) {
       const section = paths[2];
-      const label = getCustomLabel(section ?? '', customLabels) || formatBreadcrumbLabel(section ?? '');
+      const label =
+        getCustomLabel(section ?? '', customLabels) || formatBreadcrumbLabel(section ?? '');
       breadcrumbs.push({
         label,
         path: location.pathname,
@@ -150,7 +152,8 @@ export function useBreadcrumbs(
       // Add agent sub-page
       if (paths.length > 3) {
         const subPage = paths[3];
-        const label = getCustomLabel(subPage ?? '', customLabels) || formatBreadcrumbLabel(subPage ?? '');
+        const label =
+          getCustomLabel(subPage ?? '', customLabels) || formatBreadcrumbLabel(subPage ?? '');
         breadcrumbs.push({
           label,
           path: location.pathname,
@@ -161,7 +164,8 @@ export function useBreadcrumbs(
     // Schema context specific
     if (context === 'schema' && paths.length > 3) {
       const subPage = paths[3];
-      const label = getCustomLabel(subPage ?? '', customLabels) || formatBreadcrumbLabel(subPage ?? '');
+      const label =
+        getCustomLabel(subPage ?? '', customLabels) || formatBreadcrumbLabel(subPage ?? '');
       breadcrumbs.push({
         label: 'Schema',
         path: `/project/${projectId}/schema`,

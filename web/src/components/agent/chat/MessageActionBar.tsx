@@ -80,7 +80,9 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
         await navigator.clipboard.writeText(content);
         setCopied(true);
         clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => { setCopied(false); }, 2000);
+        copyTimerRef.current = setTimeout(() => {
+          setCopied(false);
+        }, 2000);
       } catch {
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
@@ -93,7 +95,9 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
         document.body.removeChild(textArea);
         setCopied(true);
         clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => { setCopied(false); }, 2000);
+        copyTimerRef.current = setTimeout(() => {
+          setCopied(false);
+        }, 2000);
       }
     }, [content]);
 
@@ -245,7 +249,9 @@ export const CodeBlockCopyButton: React.FC<{ code: string }> = memo(({ code }) =
       await navigator.clipboard.writeText(code);
       setCopied(true);
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => { setCopied(false); }, 2000);
+      timerRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch {
       // silent fail
     }

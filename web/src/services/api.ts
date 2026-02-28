@@ -306,7 +306,11 @@ export const providerAPI = {
   },
   getUsage: async (
     id: string,
-    params: { start_date?: string | undefined; end_date?: string | undefined; tenant_id?: string | undefined } = {}
+    params: {
+      start_date?: string | undefined;
+      end_date?: string | undefined;
+      tenant_id?: string | undefined;
+    } = {}
   ): Promise<ProviderUsageStats> => {
     return await api.get<ProviderUsageStats>(`/llm-providers/${id}/usage`, { params });
   },

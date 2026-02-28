@@ -150,7 +150,9 @@ export const AppLauncher: FC = () => {
             placeholder="Search apps..."
             prefix={<Search size={12} className="text-slate-400" />}
             value={search}
-            onChange={(e) => { setSearch(e.target.value); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+            }}
             size="small"
             allowClear
           />
@@ -261,7 +263,9 @@ const AppLauncherItem: FC<{
       {/* App info - clickable to open */}
       <button
         type="button"
-        onClick={() => { onOpen(app); }}
+        onClick={() => {
+          onOpen(app);
+        }}
         className="flex-1 min-w-0 text-left"
       >
         <div className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
@@ -276,7 +280,10 @@ const AppLauncherItem: FC<{
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onTogglePin(app); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin(app);
+          }}
           className={`p-1 rounded transition-colors ${
             pinned
               ? 'text-primary bg-primary/10'
@@ -288,7 +295,10 @@ const AppLauncherItem: FC<{
         </button>
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onOpen(app); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(app);
+          }}
           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           title="Open in canvas"
         >

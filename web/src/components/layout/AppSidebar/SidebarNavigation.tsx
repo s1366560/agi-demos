@@ -24,7 +24,13 @@ function NavGroupSection({
   isOpen,
   onToggle,
 }: {
-  group: { id: string; title: string; items: any[]; collapsible?: boolean | undefined; defaultOpen?: boolean | undefined };
+  group: {
+    id: string;
+    title: string;
+    items: any[];
+    collapsible?: boolean | undefined;
+    defaultOpen?: boolean | undefined;
+  };
   isOpen: boolean;
   onToggle?: (() => void) | undefined;
 }) {
@@ -120,7 +126,9 @@ export function SidebarNavigation({ config }: SidebarNavigationProps) {
           key={group.id}
           group={group}
           isOpen={openGroups[group.id] ?? group.defaultOpen ?? true}
-          onToggle={() => { onGroupToggle(group.id); }}
+          onToggle={() => {
+            onGroupToggle(group.id);
+          }}
         />
       ))}
 

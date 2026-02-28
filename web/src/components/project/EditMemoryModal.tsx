@@ -79,7 +79,11 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       onClose();
     } catch (err: unknown) {
       console.error('Failed to update memory:', err);
-      const error = err as { response?: { status?: number | undefined; data?: { detail?: string | undefined } | undefined } | undefined };
+      const error = err as {
+        response?:
+          | { status?: number | undefined; data?: { detail?: string | undefined } | undefined }
+          | undefined;
+      };
       // Handle version conflict error specifically
       if (error.response?.status === 409) {
         setError('This memory has been modified by another user. Please refresh and try again.');
@@ -135,7 +139,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               id="memory-title"
               type="text"
               value={title}
-              onChange={(e) => { setTitle(e.target.value); }}
+              onChange={(e) => {
+                setTitle(e.target.value);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
               placeholder="输入记忆标题"
               required
@@ -154,7 +160,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             <textarea
               id="memory-content"
               value={content}
-              onChange={(e) => { setContent(e.target.value); }}
+              onChange={(e) => {
+                setContent(e.target.value);
+              }}
               rows={12}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white resize-none"
               placeholder="输入记忆内容..."
@@ -180,7 +188,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                   {tag}
                   <button
                     type="button"
-                    onClick={() => { handleRemoveTag(tag); }}
+                    onClick={() => {
+                      handleRemoveTag(tag);
+                    }}
                     className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50"
                     disabled={isSaving}
                     aria-label={`移除标签 ${tag}`}
@@ -195,7 +205,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                 id="memory-tags"
                 type="text"
                 value={newTag}
-                onChange={(e) => { setNewTag(e.target.value); }}
+                onChange={(e) => {
+                  setNewTag(e.target.value);
+                }}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                 placeholder="添加新标签"

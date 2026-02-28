@@ -1694,6 +1694,16 @@ class SessionProcessor:
                 f"{artifact.get('size', 0)} bytes)",
             )
             sse_result = strip_artifact_binary_data(result)
+        elif isinstance(result, dict) and "results" in result:
+            # Batch export: strip binary data from each item before SSE
+            output_str = result.get("output", "")
+            stripped = {**result}
+            stripped["results"] = [
+                {k: v for k, v in item.items() if k != "data"}
+                for item in result.get("results", [])
+                if isinstance(item, dict)
+            ]
+            sse_result = stripped
         elif isinstance(result, dict) and "output" in result:
             output_str = result.get("output", "")
             sse_result = result

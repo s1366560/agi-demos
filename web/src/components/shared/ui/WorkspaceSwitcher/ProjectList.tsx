@@ -82,9 +82,15 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         return (
           <button
             key={project.id}
-            ref={(el) => { registerMenuItemRef(index, el); }}
-            onClick={() => { onProjectSelect(project); }}
-            onKeyDown={(e) => { handleKeyDown(e, index); }}
+            ref={(el) => {
+              registerMenuItemRef(index, el);
+            }}
+            onClick={() => {
+              onProjectSelect(project);
+            }}
+            onKeyDown={(e) => {
+              handleKeyDown(e, index);
+            }}
             role="option"
             aria-selected={isSelected}
             tabIndex={focusedIndex === index ? 0 : -1}
@@ -104,9 +110,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({
       })}
       <div className="h-px bg-slate-100 dark:bg-slate-700 my-2" />
       <button
-        ref={(el) => { registerMenuItemRef(projects.length, el); }}
+        ref={(el) => {
+          registerMenuItemRef(projects.length, el);
+        }}
         onClick={onBackToTenant}
-        onKeyDown={(e) => { handleKeyDown(e, projects.length); }}
+        onKeyDown={(e) => {
+          handleKeyDown(e, projects.length);
+        }}
         role="option"
         tabIndex={focusedIndex === projects.length ? 0 : -1}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"

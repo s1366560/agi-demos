@@ -158,7 +158,11 @@ export function useSandboxAgentHandlers(sandboxId?: string | null) {
   // Create handlers for agent events
   const onAct = useCallback(
     (event: {
-      data: { tool_name: string; tool_input: Record<string, unknown>; call_id?: string | undefined };
+      data: {
+        tool_name: string;
+        tool_input: Record<string, unknown>;
+        call_id?: string | undefined;
+      };
     }) => {
       handleToolStart(event.data.tool_name, event.data.tool_input, event.data.call_id);
     },

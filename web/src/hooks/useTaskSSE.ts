@@ -127,7 +127,9 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
         optionsRef.current.onCompleted?.(task);
 
         // Auto-close connection on completion
-        setTimeout(() => { unsubscribe(); }, 500);
+        setTimeout(() => {
+          unsubscribe();
+        }, 500);
       });
 
       // Listen for failed event
@@ -158,14 +160,18 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
         }
       };
 
-      return () => { unsubscribe(); };
+      return () => {
+        unsubscribe();
+      };
     },
     [unsubscribe]
   );
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => { unsubscribe(); };
+    return () => {
+      unsubscribe();
+    };
   }, [unsubscribe]);
 
   return {
@@ -234,5 +240,7 @@ export function subscribeToTask(taskId: string, callbacks: UseTaskSSEOptions): (
     }
   };
 
-  return () => { eventSource.close(); };
+  return () => {
+    eventSource.close();
+  };
 }

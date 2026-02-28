@@ -145,7 +145,9 @@ export const UserList: React.FC = () => {
               placeholder={t('tenant.users.searchPlaceholder')}
               type="text"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); }}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
             />
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -153,7 +155,9 @@ export const UserList: React.FC = () => {
               <select
                 className="appearance-none bg-white dark:bg-surface-dark border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer"
                 value={roleFilter}
-                onChange={(e) => { setRoleFilter(e.target.value); }}
+                onChange={(e) => {
+                  setRoleFilter(e.target.value);
+                }}
               >
                 <option value="all">{t('tenant.users.allRoles')}</option>
                 <option value="admin">Admin</option>
@@ -168,7 +172,9 @@ export const UserList: React.FC = () => {
               <select
                 className="appearance-none bg-white dark:bg-surface-dark border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer"
                 value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); }}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                }}
               >
                 <option value="all">{t('common.status.all')}</option>
                 <option value="active">{t('common.status.active')}</option>

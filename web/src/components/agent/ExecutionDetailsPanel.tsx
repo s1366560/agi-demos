@@ -109,7 +109,11 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
       isThinking: isStreaming && message.content.length === 0,
       toolExecutions: message.metadata?.tool_executions as Record<
         string,
-        { startTime?: number | undefined; endTime?: number | undefined; duration?: number | undefined }
+        {
+          startTime?: number | undefined;
+          endTime?: number | undefined;
+          duration?: number | undefined;
+        }
       >,
       timeline: message.metadata?.timeline as any[],
     };

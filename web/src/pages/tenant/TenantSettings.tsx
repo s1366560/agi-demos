@@ -53,7 +53,9 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
             <input
               type="text"
               value={name}
-              onChange={(e) => { setName(e.target.value); }}
+              onChange={(e) => {
+                setName(e.target.value);
+              }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
             />
           </div>
@@ -63,7 +65,9 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
             </label>
             <textarea
               value={description}
-              onChange={(e) => { setDescription(e.target.value); }}
+              onChange={(e) => {
+                setDescription(e.target.value);
+              }}
               rows={3}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none resize-none"
             />

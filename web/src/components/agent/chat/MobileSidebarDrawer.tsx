@@ -25,7 +25,9 @@ export const MobileSidebarDrawer: FC<MobileSidebarDrawerProps> = ({ open, onClos
   useEffect(() => {
     if (!open) return undefined;
     document.addEventListener('keydown', handleKeyDown);
-    return () => { document.removeEventListener('keydown', handleKeyDown); };
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [open, handleKeyDown]);
 
   if (!open) return null;

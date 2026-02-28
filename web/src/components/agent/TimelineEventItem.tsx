@@ -12,43 +12,44 @@
  * @module components/agent/TimelineEventItem
  */
 
-import { memo, lazy, Suspense, useState, useCallback } from 'react';
+import { lazy, memo, Suspense, useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Loader2, PanelRight } from 'lucide-react';
 
 import { useAgentV3Store } from '../../stores/agentV3';
-import { useCanvasStore, type CanvasContentType } from '../../stores/canvasStore';
+import { type CanvasContentType, useCanvasStore } from '../../stores/canvasStore';
 import { useLayoutModeStore } from '../../stores/layoutMode';
 import { useSandboxStore } from '../../stores/sandbox';
-import { formatDistanceToNowCN, formatTimeOnly, formatDateTime } from '../../utils/date';
+import { formatDateTime, formatDistanceToNowCN, formatTimeOnly } from '../../utils/date';
+import { isOfficeMimeType, isOfficeExtension } from '../../utils/filePreview';
 
 import { AssistantMessage } from './chat/AssistantMessage';
 import { safeMarkdownComponents } from './chat/markdownPlugins';
 import {
-  UserMessage,
   AgentSection,
-  ToolExecutionCardDisplay,
   ReasoningLogCard,
+  ToolExecutionCardDisplay,
+  UserMessage,
 } from './chat/MessageStream';
 import {
-  MARKDOWN_PROSE_CLASSES,
-  ASSISTANT_BUBBLE_CLASSES,
   ASSISTANT_AVATAR_CLASSES,
+  ASSISTANT_BUBBLE_CLASSES,
+  MARKDOWN_PROSE_CLASSES,
 } from './styles';
 
 import type {
-  TimelineEvent,
   ActEvent,
-  ObserveEvent,
+  ArtifactCreatedEvent,
   ClarificationAskedTimelineEvent,
-  DecisionAskedTimelineEvent,
-  EnvVarRequestedTimelineEvent,
   ClarificationOption,
+  DecisionAskedTimelineEvent,
   DecisionOption,
   EnvVarField,
-  ArtifactCreatedEvent,
+  EnvVarRequestedTimelineEvent,
+  ObserveEvent,
+  TimelineEvent,
 } from '../../types/agent';
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
@@ -78,6 +79,8 @@ const MarkdownRenderer = lazy(async () => {
 
   return { default: MarkdownWrapper };
 });
+
+
 
 /**
  * TimeBadge - Natural time display component
@@ -163,34 +166,39 @@ function ThoughtItem({ event, isStreaming }: { event: TimelineEvent; isStreaming
  * Render act (tool call) event
  * 工具调用事件渲染 - 带状态跟踪
  */
-function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] | undefined }) {
+function ActItem({
+  event,
+  allEvents,
+}: {
+  event: TimelineEvent;
+  allEvents?: TimelineEvent[] | undefined;
+}) {
   if (event.type !== 'act') return null;
 
   const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
 
-  const ToolCard =
-    observeEvent ? (
-      <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
-        <ToolExecutionCardDisplay
-          toolName={event.toolName}
-          status={observeEvent.isError ? 'error' : 'success'}
-          parameters={event.toolInput}
-          result={observeEvent.isError ? undefined : observeEvent.toolOutput}
-          error={observeEvent.isError ? observeEvent.toolOutput : undefined}
-          duration={observeEvent.timestamp - event.timestamp}
-          defaultExpanded={false}
-        />
-      </AgentSection>
-    ) : (
-      <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800">
-        <ToolExecutionCardDisplay
-          toolName={event.toolName}
-          status="running"
-          parameters={event.toolInput}
-          defaultExpanded={true}
-        />
-      </AgentSection>
-    );
+  const ToolCard = observeEvent ? (
+    <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
+      <ToolExecutionCardDisplay
+        toolName={event.toolName}
+        status={observeEvent.isError ? 'error' : 'success'}
+        parameters={event.toolInput}
+        result={observeEvent.isError ? undefined : observeEvent.toolOutput}
+        error={observeEvent.isError ? observeEvent.toolOutput : undefined}
+        duration={observeEvent.timestamp - event.timestamp}
+        defaultExpanded={false}
+      />
+    </AgentSection>
+  ) : (
+    <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800">
+      <ToolExecutionCardDisplay
+        toolName={event.toolName}
+        status="running"
+        parameters={event.toolInput}
+        defaultExpanded={true}
+      />
+    </AgentSection>
+  );
 
   return (
     <div className="flex flex-col gap-1">
@@ -206,14 +214,20 @@ function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: Timel
  * Render observe (tool result) event
  * 工具结果事件渲染 - 孤儿observe（无对应act）时显示
  */
-function ObserveItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] | undefined }) {
+function ObserveItem({
+  event,
+  allEvents,
+}: {
+  event: TimelineEvent;
+  allEvents?: TimelineEvent[] | undefined;
+}) {
   if (event.type !== 'observe') return null;
 
   const hasMatchingAct = allEvents
     ? allEvents.some((e) => {
         if (e.type !== 'act') return false;
-        if ((e).execution_id && event.execution_id) {
-          return (e).execution_id === event.execution_id;
+        if (e.execution_id && event.execution_id) {
+          return e.execution_id === event.execution_id;
         }
         return e.toolName === event.toolName && e.timestamp < event.timestamp;
       })
@@ -398,6 +412,7 @@ function OptionButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       className={`
@@ -503,7 +518,10 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
               )}
 
               <button
-                onClick={() => { void handleSubmit(); }}
+                type="button"
+                onClick={() => {
+                  void handleSubmit();
+                }}
                 disabled={isSubmitting || (!selectedOption && !customAnswer)}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -602,7 +620,10 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
               )}
 
               <button
-                onClick={() => { void handleSubmit(); }}
+                type="button"
+                onClick={() => {
+                  void handleSubmit();
+                }}
                 disabled={isSubmitting || (!selectedOption && !customDecision)}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -684,10 +705,10 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
               <div className="space-y-3 mb-3">
                 {event.fields.map((field: EnvVarField) => (
                   <div key={field.name}>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <div className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       {field.label}
                       {field.required && <span className="text-red-500 ml-1">*</span>}
-                    </label>
+                    </div>
                     {field.description && (
                       <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                         {field.description}
@@ -697,7 +718,9 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                       <textarea
                         placeholder={field.placeholder || `请输入 ${field.label}`}
                         value={values[field.name] || field.default_value || ''}
-                        onChange={(e) => { handleChange(field.name, e.target.value); }}
+                        onChange={(e) => {
+                          handleChange(field.name, e.target.value);
+                        }}
                         disabled={isSubmitting}
                         rows={3}
                         className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -707,7 +730,9 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                         type={field.input_type === 'password' ? 'password' : 'text'}
                         placeholder={field.placeholder || `请输入 ${field.label}`}
                         value={values[field.name] || field.default_value || ''}
-                        onChange={(e) => { handleChange(field.name, e.target.value); }}
+                        onChange={(e) => {
+                          handleChange(field.name, e.target.value);
+                        }}
                         disabled={isSubmitting}
                         className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
                       />
@@ -717,7 +742,10 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
               </div>
 
               <button
-                onClick={() => { void handleSubmit(); }}
+                type="button"
+                onClick={() => {
+                  void handleSubmit();
+                }}
                 disabled={isSubmitting || !requiredFilled}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -742,7 +770,11 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
  * Render artifact created event
  * 显示工具生成的文件（图片、视频、文档等）
  */
-function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?: string | undefined } }) {
+function ArtifactCreatedItem({
+  event,
+}: {
+  event: ArtifactCreatedEvent & { error?: string | undefined };
+}) {
   const { t } = useTranslation();
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -755,10 +787,13 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
   const artifactStatus =
     storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
 
-  // Check if this artifact can be opened in canvas (text-decodable content)
+  // Check if this artifact can be opened in canvas (text-decodable content or previewable media/office)
   const isCanvasCompatible =
-    ['code', 'document', 'data'].includes(event.category) ||
+    ['code', 'document', 'data', 'image', 'video', 'audio'].includes(event.category) ||
     event.mimeType.startsWith('text/') ||
+    event.mimeType.startsWith('image/') ||
+    event.mimeType.startsWith('video/') ||
+    event.mimeType.startsWith('audio/') ||
     [
       'application/json',
       'application/xml',
@@ -766,11 +801,43 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
       'application/javascript',
       'application/typescript',
       'application/x-python',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.ms-excel',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     ].includes(event.mimeType);
 
   const handleOpenInCanvas = useCallback(async () => {
     const url = artifactUrl || artifactPreviewUrl;
     if (!url) return;
+
+    // Media and Office files: open directly with URL, no content fetch needed
+    const mime = event.mimeType.toLowerCase();
+    if (
+      mime.startsWith('image/') ||
+      mime.startsWith('video/') ||
+      mime.startsWith('audio/') ||
+      isOfficeMimeType(mime) ||
+      isOfficeExtension(event.filename)
+    ) {
+      useCanvasStore.getState().openTab({
+        id: event.artifactId,
+        title: event.filename,
+        type: 'preview',
+        content: url,
+        mimeType: event.mimeType,
+        artifactId: event.artifactId,
+        artifactUrl: url,
+      });
+      const currentMode = useLayoutModeStore.getState().mode;
+      if (currentMode !== 'canvas') {
+        useLayoutModeStore.getState().setMode('canvas');
+      }
+      return;
+    }
 
     try {
       const response = await fetch(url);
@@ -951,8 +1018,12 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                   className={`max-w-full max-h-75 rounded-lg shadow-sm object-contain ${
                     imageLoaded ? 'opacity-100' : 'opacity-0'
                   } transition-opacity duration-300`}
-                  onLoad={() => { setImageLoaded(true); }}
-                  onError={() => { setImageError(true); }}
+                  onLoad={() => {
+                    setImageLoaded(true);
+                  }}
+                  onError={() => {
+                    setImageError(true);
+                  }}
                 />
               </div>
             )}
@@ -995,7 +1066,9 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
               {isCanvasCompatible && url && (
                 <button
                   type="button"
-                  onClick={() => { void handleOpenInCanvas(); }}
+                  onClick={() => {
+                    void handleOpenInCanvas();
+                  }}
                   className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
                 >
                   <PanelRight size={14} />
@@ -1166,7 +1239,9 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       case 'artifact_created':
         return (
           <div className="my-3 animate-slide-up">
-            <ArtifactCreatedItem event={event as ArtifactCreatedEvent & { error?: string | undefined }} />
+            <ArtifactCreatedItem
+              event={event as ArtifactCreatedEvent & { error?: string | undefined }}
+            />
           </div>
         );
 

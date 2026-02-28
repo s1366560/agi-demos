@@ -122,7 +122,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
         <div className="border-b border-gray-200 dark:border-slate-800">
           <nav className="flex space-x-8 px-6">
             <button
-              onClick={() => { setActiveTab('basic'); }}
+              onClick={() => {
+                setActiveTab('basic');
+              }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'basic'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -135,7 +137,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
               </div>
             </button>
             <button
-              onClick={() => { setActiveTab('extraction'); }}
+              onClick={() => {
+                setActiveTab('extraction');
+              }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'extraction'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -148,7 +152,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
               </div>
             </button>
             <button
-              onClick={() => { setActiveTab('advanced'); }}
+              onClick={() => {
+                setActiveTab('advanced');
+              }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'advanced'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -192,7 +198,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     type="text"
                     id="memory-create-title"
                     value={formData.title}
-                    onChange={(e) => { setFormData({ ...formData, title: e.target.value }); }}
+                    onChange={(e) => {
+                      setFormData({ ...formData, title: e.target.value });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入记忆标题"
                     required
@@ -211,7 +219,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   <textarea
                     id="memory-create-content"
                     value={formData.content}
-                    onChange={(e) => { setFormData({ ...formData, content: e.target.value }); }}
+                    onChange={(e) => {
+                      setFormData({ ...formData, content: e.target.value });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入记忆内容"
                     rows={6}
@@ -232,9 +242,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     <select
                       id="memory-create-type"
                       value={formData.content_type}
-                      onChange={(e) =>
-                        { setFormData({ ...formData, content_type: e.target.value as any }); }
-                      }
+                      onChange={(e) => {
+                        setFormData({ ...formData, content_type: e.target.value as any });
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                       disabled={isLoading}
                     >
@@ -256,7 +266,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       type="text"
                       id="memory-create-author"
                       value={formData.author_id}
-                      onChange={(e) => { setFormData({ ...formData, author_id: e.target.value }); }}
+                      onChange={(e) => {
+                        setFormData({ ...formData, author_id: e.target.value });
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       placeholder="输入用户ID（可选）"
                       disabled={isLoading}
@@ -382,15 +394,15 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         type="checkbox"
                         id="enable_search"
                         checked={formData.metadata?.enable_search ?? true}
-                        onChange={(e) =>
-                          { setFormData({
+                        onChange={(e) => {
+                          setFormData({
                             ...formData,
                             metadata: {
                               ...formData.metadata,
                               enable_search: e.target.checked,
                             },
-                          }); }
-                        }
+                          });
+                        }}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                         disabled={isLoading}
                       />
@@ -406,15 +418,15 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         type="checkbox"
                         id="enable_graph"
                         checked={formData.metadata?.enable_graph ?? true}
-                        onChange={(e) =>
-                          { setFormData({
+                        onChange={(e) => {
+                          setFormData({
                             ...formData,
                             metadata: {
                               ...formData.metadata,
                               enable_graph: e.target.checked,
                             },
-                          }); }
-                        }
+                          });
+                        }}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                         disabled={isLoading}
                       />
@@ -439,8 +451,8 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     type="text"
                     id="memory-create-tags"
                     value={formData.metadata?.tags?.join(', ') || ''}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         metadata: {
                           ...formData.metadata,
@@ -449,8 +461,8 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                             .map((tag) => tag.trim())
                             .filter(Boolean),
                         },
-                      }); }
-                    }
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入标签，用逗号分隔"
                     disabled={isLoading}

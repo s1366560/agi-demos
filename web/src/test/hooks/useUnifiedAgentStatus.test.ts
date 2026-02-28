@@ -12,7 +12,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
 // eslint-disable-next-line import/order
-import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
+import {
+  useUnifiedAgentStatus,
+  type ProjectAgentLifecycleState,
+} from '../../hooks/useUnifiedAgentStatus';
 // Mock stores
 vi.mock('../../stores/agentV3', () => ({
   useAgentV3Store: vi.fn(),

@@ -254,7 +254,9 @@ export const Support: React.FC = () => {
       <div className="mb-6">
         {!showNewTicket ? (
           <button
-            onClick={() => { setShowNewTicket(true); }}
+            onClick={() => {
+              setShowNewTicket(true);
+            }}
             className="flex items-center gap-2 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             <Plus className="h-4 w-4" />
@@ -262,7 +264,9 @@ export const Support: React.FC = () => {
           </button>
         ) : (
           <button
-            onClick={() => { setShowNewTicket(false); }}
+            onClick={() => {
+              setShowNewTicket(false);
+            }}
             className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
           >
             {t('project.support.cancel')}
@@ -284,7 +288,9 @@ export const Support: React.FC = () => {
               <input
                 type="text"
                 value={subject}
-                onChange={(e) => { setSubject(e.target.value); }}
+                onChange={(e) => {
+                  setSubject(e.target.value);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder={t('project.support.form.subject_placeholder')}
                 required
@@ -297,7 +303,9 @@ export const Support: React.FC = () => {
               </label>
               <select
                 value={priority}
-                onChange={(e) => { setPriority(e.target.value); }}
+                onChange={(e) => {
+                  setPriority(e.target.value);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="low">{t('project.support.form.priority_options.low')}</option>
@@ -313,7 +321,9 @@ export const Support: React.FC = () => {
               </label>
               <textarea
                 value={message}
-                onChange={(e) => { setMessage(e.target.value); }}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                }}
                 rows={6}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
                 placeholder={t('project.support.form.message_placeholder')}
@@ -334,7 +344,9 @@ export const Support: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowNewTicket(false); }}
+                onClick={() => {
+                  setShowNewTicket(false);
+                }}
                 className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
               >
                 {t('project.support.cancel')}

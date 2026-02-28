@@ -166,7 +166,9 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
           <input
             type="text"
             value={data.name}
-            onChange={(e) => { onNameChange(e.target.value); }}
+            onChange={(e) => {
+              onNameChange(e.target.value);
+            }}
             className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
           />
         </div>
@@ -177,7 +179,9 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
           </label>
           <textarea
             value={data.description}
-            onChange={(e) => { onDescriptionChange(e.target.value); }}
+            onChange={(e) => {
+              onDescriptionChange(e.target.value);
+            }}
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white resize-none"
           />
@@ -188,7 +192,9 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
             type="checkbox"
             id="isPublic"
             checked={data.isPublic}
-            onChange={(e) => { onIsPublicChange(e.target.checked); }}
+            onChange={(e) => {
+              onIsPublicChange(e.target.checked);
+            }}
             className="rounded border-gray-300 dark:border-slate-600"
           />
           <label htmlFor="isPublic" className="text-sm text-gray-700 dark:text-slate-300">
@@ -240,7 +246,9 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             <input
               type="number"
               value={data.maxEpisodes}
-              onChange={(e) => { onMaxEpisodesChange(Number(e.target.value)); }}
+              onChange={(e) => {
+                onMaxEpisodesChange(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             />
           </div>
@@ -251,7 +259,9 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             <input
               type="number"
               value={data.retentionDays}
-              onChange={(e) => { onRetentionDaysChange(Number(e.target.value)); }}
+              onChange={(e) => {
+                onRetentionDaysChange(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             />
           </div>
@@ -262,7 +272,9 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             type="checkbox"
             id="autoRefresh"
             checked={data.autoRefresh}
-            onChange={(e) => { onAutoRefreshChange(e.target.checked); }}
+            onChange={(e) => {
+              onAutoRefreshChange(e.target.checked);
+            }}
             className="rounded border-gray-300 dark:border-slate-600"
           />
           <label htmlFor="autoRefresh" className="text-sm text-gray-700 dark:text-slate-300">
@@ -278,7 +290,9 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             <input
               type="number"
               value={data.refreshInterval}
-              onChange={(e) => { onRefreshIntervalChange(Number(e.target.value)); }}
+              onChange={(e) => {
+                onRefreshIntervalChange(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             />
           </div>
@@ -328,7 +342,9 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             <input
               type="number"
               value={data.maxNodes}
-              onChange={(e) => { onMaxNodesChange(Number(e.target.value)); }}
+              onChange={(e) => {
+                onMaxNodesChange(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             />
           </div>
@@ -339,7 +355,9 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             <input
               type="number"
               value={data.maxEdges}
-              onChange={(e) => { onMaxEdgesChange(Number(e.target.value)); }}
+              onChange={(e) => {
+                onMaxEdgesChange(Number(e.target.value));
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             />
           </div>
@@ -355,7 +373,9 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             max="1"
             step="0.05"
             value={data.similarityThreshold}
-            onChange={(e) => { onSimilarityThresholdChange(Number(e.target.value)); }}
+            onChange={(e) => {
+              onSimilarityThresholdChange(Number(e.target.value));
+            }}
             className="w-full"
           />
         </div>
@@ -365,7 +385,9 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             type="checkbox"
             id="communityDetection"
             checked={data.communityDetection}
-            onChange={(e) => { onCommunityDetectionChange(e.target.checked); }}
+            onChange={(e) => {
+              onCommunityDetectionChange(e.target.checked);
+            }}
             className="rounded border-gray-300 dark:border-slate-600"
           />
           <label htmlFor="communityDetection" className="text-sm text-gray-700 dark:text-slate-300">
@@ -557,7 +579,10 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       }, 1000);
     } catch (error) {
       console.error('Failed to save settings:', error);
-      const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+      const err = error as {
+        response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+        message?: string | undefined;
+      };
       setMessage({
         type: 'error',
         text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
@@ -585,7 +610,10 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       setMessage({ type: 'success', text: TEXTS.messages.saved });
     } catch (error) {
       console.error('Failed to save memory rules:', error);
-      const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+      const err = error as {
+        response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+        message?: string | undefined;
+      };
       setMessage({
         type: 'error',
         text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
@@ -613,7 +641,10 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       setMessage({ type: 'success', text: TEXTS.messages.saved });
     } catch (error) {
       console.error('Failed to save graph config:', error);
-      const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
+      const err = error as {
+        response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+        message?: string | undefined;
+      };
       setMessage({
         type: 'error',
         text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,

@@ -113,16 +113,18 @@ export interface GraphThemeConfig {
   nodeBorder?: string | undefined;
   edgeLine?: string | undefined;
   edgeLabel?: string | undefined;
-  colors?: {
-    episodic?: string | undefined;
-    community?: string | undefined;
-    person?: string | undefined;
-    organization?: string | undefined;
-    location?: string | undefined;
-    event?: string | undefined;
-    product?: string | undefined;
-    default?: string | undefined;
-  } | undefined;
+  colors?:
+    | {
+        episodic?: string | undefined;
+        community?: string | undefined;
+        person?: string | undefined;
+        organization?: string | undefined;
+        location?: string | undefined;
+        event?: string | undefined;
+        product?: string | undefined;
+        default?: string | undefined;
+      }
+    | undefined;
 }
 
 /**

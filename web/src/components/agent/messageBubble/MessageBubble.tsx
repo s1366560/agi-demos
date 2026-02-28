@@ -5,27 +5,28 @@
  * Features modern glass-morphism design, smooth animations, and improved UX.
  */
 
-import React, { memo, useState } from 'react';
+import type React from 'react';
+import { memo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
+import ReactMarkdown from 'react-markdown';
 
 import {
-  User,
-  Sparkles,
-  Wrench,
+  Bot,
   CheckCircle2,
-  XCircle,
-  Loader2,
   ChevronDown,
   ChevronUp,
   Clock,
-  Bot,
-  Lightbulb,
   FileOutput,
+  Lightbulb,
+  Loader2,
   PanelRight,
   RefreshCw,
+  Sparkles,
+  User,
+  Wrench,
+  XCircle,
 } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -35,39 +36,47 @@ import { useSandboxStore } from '@/stores/sandbox';
 import { artifactService } from '@/services/artifactService';
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
-import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
+import { safeMarkdownComponents, useMarkdownPlugins } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 import { InlineHITLCard } from '../InlineHITLCard';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { getErrorMessage } from '@/types/common';
+import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 
 import type {
-  UserMessageProps,
+  ArtifactCreatedProps,
   AssistantMessageProps,
+  MessageBubbleCompound,
+  MessageBubbleRootProps,
   TextDeltaProps,
+  TextEndProps,
   ThoughtProps,
   ToolExecutionProps,
+  UserMessageProps,
   WorkPlanProps,
-  TextEndProps,
-  ArtifactCreatedProps,
-  MessageBubbleRootProps,
-  MessageBubbleCompound,
 } from './types';
 import type {
-  TimelineEvent,
   ActEvent,
-  ObserveEvent,
   ArtifactCreatedEvent,
   ClarificationAskedEventData,
   DecisionAskedEventData,
   EnvVarRequestedEventData,
+  ObserveEvent,
   PermissionAskedEventData,
   PermissionAskedTimelineEvent,
   PermissionRequestedTimelineEvent,
+  TimelineEvent,
 } from '../../../types/agent';
 
+// ========================================
+// Utilities
+// ========================================
+
+
+// ========================================
+// HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard
 // ========================================
 // HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard
 // ========================================
@@ -176,7 +185,9 @@ const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | unde
 // ========================================
 
 // Format tool output for display
-const formatToolOutput = (output: unknown): { type: 'text' | 'json' | 'error'; content: string } => {
+const formatToolOutput = (
+  output: unknown
+): { type: 'text' | 'json' | 'error'; content: string } => {
   if (!output) return { type: 'text', content: 'No output' };
 
   if (typeof output === 'string') {
@@ -188,7 +199,15 @@ const formatToolOutput = (output: unknown): { type: 'text' | 'json' | 'error'; c
 
   if (typeof output === 'object') {
     if ('error' in output || 'errorMessage' in output || 'error_message' in output) {
-      const errorContent = ('errorMessage' in output ? output.errorMessage : 'error_message' in output ? output.error_message : 'error' in output ? output.error : undefined) as string | undefined;
+      const errorContent = (
+        'errorMessage' in output
+          ? output.errorMessage
+          : 'error_message' in output
+            ? output.error_message
+            : 'error' in output
+              ? output.error
+              : undefined
+      ) as string | undefined;
       if (typeof errorContent === 'string') {
         return { type: 'error', content: errorContent };
       }
@@ -417,7 +436,9 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
                   isPinned={isPinned}
                   onPin={onPin}
                   onReply={onReply}
-                  onSaveAsTemplate={() => { setShowSaveTemplate(true); }}
+                  onSaveAsTemplate={() => {
+                    setShowSaveTemplate(true);
+                  }}
                 />
               </div>
             )}
@@ -427,8 +448,12 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
           <SaveTemplateModal
             content={content || ''}
             visible={showSaveTemplate}
-            onClose={() => { setShowSaveTemplate(false); }}
-            onSave={() => { setShowSaveTemplate(false); }}
+            onClose={() => {
+              setShowSaveTemplate(false);
+            }}
+            onSave={() => {
+              setShowSaveTemplate(false);
+            }}
           />
         )}
       </div>
@@ -479,7 +504,10 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
           <button
-            onClick={() => { setExpanded(!expanded); }}
+            type="button"
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
             className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors"
           >
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -511,8 +539,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
   const { t } = useTranslation();
 
   const hasError = observeEvent?.isError;
-  const duration =
-    observeEvent ? (observeEvent.timestamp || 0) - (event.timestamp || 0) : null;
+  const duration = observeEvent ? (observeEvent.timestamp || 0) - (event.timestamp || 0) : null;
 
   const statusIcon = observeEvent ? (
     hasError ? (
@@ -545,7 +572,10 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
         <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
           {/* Header */}
           <button
-            onClick={() => { setExpanded(!expanded); }}
+            type="button"
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -663,7 +693,10 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
           <button
-            onClick={() => { setExpanded(!expanded); }}
+            type="button"
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors"
           >
             <div className="flex items-center gap-2">
@@ -671,7 +704,9 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
                 {t('agent.messageBubble.workPlan', 'Work Plan')}
               </span>
               <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                {t('agent.messageBubble.steps', '{{count}} steps', { count: steps.length })}
+                {t('agent.messageBubble.steps', '{{count}} steps', {
+                  count: steps.length,
+                })}
               </span>
             </div>
             {expanded ? (
@@ -739,7 +774,9 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
               isPinned={isPinned}
               onPin={onPin}
               onReply={onReply}
-              onSaveAsTemplate={() => { setShowSaveTemplate(true); }}
+              onSaveAsTemplate={() => {
+                setShowSaveTemplate(true);
+              }}
             />
           </div>
         </div>
@@ -747,8 +784,12 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
           <SaveTemplateModal
             content={fullText}
             visible={showSaveTemplate}
-            onClose={() => { setShowSaveTemplate(false); }}
-            onSave={() => { setShowSaveTemplate(false); }}
+            onClose={() => {
+              setShowSaveTemplate(false);
+            }}
+            onSave={() => {
+              setShowSaveTemplate(false);
+            }}
           />
         )}
       </div>
@@ -778,7 +819,13 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const canvasOpenTab = useCanvasStore((s) => s.openTab);
   const setLayoutMode = useLayoutModeStore((s) => s.setMode);
 
-  const canOpenInCanvas = ['code', 'document', 'data'].includes(event.category);
+  const canOpenInCanvas =
+    ['code', 'document', 'data', 'image', 'video', 'audio'].includes(event.category) ||
+    event.mimeType.startsWith('image/') ||
+    event.mimeType.startsWith('video/') ||
+    event.mimeType.startsWith('audio/') ||
+    isOfficeMimeType(event.mimeType?.toLowerCase() || '') ||
+    isOfficeExtension(event.filename);
 
   // Refresh expired URL
   const handleRefreshUrl = async () => {
@@ -799,6 +846,28 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const handleOpenInCanvas = async () => {
     const url = artifactUrl || artifactPreviewUrl;
     if (!url) return;
+
+    // Media and Office files: open directly with URL, no content fetch needed
+    const mime = (event.mimeType || '').toLowerCase();
+    if (
+      mime.startsWith('image/') ||
+      mime.startsWith('video/') ||
+      mime.startsWith('audio/') ||
+      isOfficeMimeType(mime) ||
+      isOfficeExtension(event.filename)
+    ) {
+      canvasOpenTab({
+        id: event.artifactId,
+        title: event.filename,
+        type: 'preview',
+        content: url,
+        mimeType: event.mimeType,
+        artifactId: event.artifactId,
+        artifactUrl: url,
+      });
+      setLayoutMode('canvas');
+      return;
+    }
 
     try {
       // Fetch content from the artifact URL
@@ -929,8 +998,12 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 className={`max-w-full max-h-[300px] object-contain ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 } transition-opacity duration-300`}
-                onLoad={() => { setImageLoaded(true); }}
-                onError={() => { setImageError(true); }}
+                onLoad={() => {
+                  setImageLoaded(true);
+                }}
+                onError={() => {
+                  setImageError(true);
+                }}
               />
             </div>
           )}
@@ -949,7 +1022,9 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
               )}
               <button
                 type="button"
-                onClick={() => { void handleRefreshUrl(); }}
+                onClick={() => {
+                  void handleRefreshUrl();
+                }}
                 disabled={refreshingUrl}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50"
               >
@@ -989,7 +1064,9 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             {canOpenInCanvas && (
               <button
                 type="button"
-                onClick={() => { void handleOpenInCanvas(); }}
+                onClick={() => {
+                  void handleOpenInCanvas();
+                }}
                 className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
               >
                 <PanelRight size={14} />
@@ -1012,7 +1089,9 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             {((isImage && imageError) || (!url && artifactStatus === 'error')) && (
               <button
                 type="button"
-                onClick={() => { void handleRefreshUrl(); }}
+                onClick={() => {
+                  void handleRefreshUrl();
+                }}
                 disabled={refreshingUrl}
                 className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50"
               >
@@ -1056,7 +1135,6 @@ const getContent = (event: TimelineEvent): string => {
 
 const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
   ({ event, isStreaming, allEvents, isPinned, onPin, onReply }) => {
-
     switch (event.type) {
       case 'user_message': {
         const rawContent = getContent(event);
@@ -1067,7 +1145,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         );
 
         let content = rawContent;
-        let forcedSubAgentName: string | undefined = undefined;
+        let forcedSubAgentName: string | undefined;
 
         if (systemInstructionMatch) {
           forcedSubAgentName = systemInstructionMatch[1];
@@ -1116,9 +1194,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return <Thought content={getContent(event)} />;
 
       case 'act': {
-        const observeEvent = allEvents
-          ? findMatchingObserve(event, allEvents)
-          : undefined;
+        const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
         return <ToolExecution event={event} observeEvent={observeEvent} />;
       }
 
@@ -1138,7 +1214,13 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'artifact_created':
         return (
-          <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string | undefined }} />
+          <ArtifactCreated
+            event={
+              event as unknown as ArtifactCreatedEvent & {
+                error?: string | undefined;
+              }
+            }
+          />
         );
 
       // HITL Events - Render inline cards
@@ -1389,15 +1471,15 @@ MessageBubble.ArtifactCreated = ArtifactCreated;
 MessageBubble.Root = MessageBubbleRoot;
 
 export type {
+  ArtifactCreatedProps,
+  AssistantMessageProps,
+  MessageBubbleCompound,
   MessageBubbleProps,
   MessageBubbleRootProps,
-  UserMessageProps,
-  AssistantMessageProps,
   TextDeltaProps,
+  TextEndProps,
   ThoughtProps,
   ToolExecutionProps,
+  UserMessageProps,
   WorkPlanProps,
-  TextEndProps,
-  ArtifactCreatedProps,
-  MessageBubbleCompound,
 } from './types';

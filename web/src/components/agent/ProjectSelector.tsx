@@ -235,8 +235,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 /**
  * Loading indicator component for async operations
  */
-export const ProjectSelectorLoading: React.FC<{ className?: string | undefined }> = ({ className }) => (
-  <div {...(className != null ? { className } : {})} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+export const ProjectSelectorLoading: React.FC<{ className?: string | undefined }> = ({
+  className,
+}) => (
+  <div
+    {...(className != null ? { className } : {})}
+    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+  >
     <Spin indicator={<LoadingOutlined spin />} size="small" />
     <span data-testid="loading-indicator">Loading...</span>
   </div>
@@ -245,7 +250,9 @@ export const ProjectSelectorLoading: React.FC<{ className?: string | undefined }
 /**
  * Empty state component when no projects are available
  */
-export const ProjectSelectorEmpty: React.FC<{ className?: string | undefined }> = ({ className }) => (
+export const ProjectSelectorEmpty: React.FC<{ className?: string | undefined }> = ({
+  className,
+}) => (
   <Select
     placeholder="No projects available"
     disabled

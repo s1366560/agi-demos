@@ -161,36 +161,39 @@ export function KasmVNCViewer({
         onConnect?.();
       });
 
-      rfb.addEventListener('disconnect', (e: { detail: { clean: boolean; reason?: string | undefined } }) => {
-        console.warn('[KasmVNC] Disconnected', {
-          clean: e.detail.clean,
-          reason: e.detail.reason || '(no reason)',
-        });
-        rfbRef.current = null;
+      rfb.addEventListener(
+        'disconnect',
+        (e: { detail: { clean: boolean; reason?: string | undefined } }) => {
+          console.warn('[KasmVNC] Disconnected', {
+            clean: e.detail.clean,
+            reason: e.detail.reason || '(no reason)',
+          });
+          rfbRef.current = null;
 
-        if (intentionalDisconnectRef.current) {
-          setConnectionState('disconnected');
-          onDisconnect?.();
-          return;
-        }
+          if (intentionalDisconnectRef.current) {
+            setConnectionState('disconnected');
+            onDisconnect?.();
+            return;
+          }
 
-        // Auto-reconnect on unexpected disconnect
-        const attempt = reconnectAttemptRef.current;
-        const MAX_RECONNECT_ATTEMPTS = 10;
-        if (attempt < MAX_RECONNECT_ATTEMPTS) {
-          const delay = Math.min(1000 * Math.pow(1.5, attempt), 15000);
-          reconnectAttemptRef.current = attempt + 1;
-          setConnectionState('connecting');
-          console.info(`[KasmVNC] Auto-reconnect attempt ${attempt + 1} in ${delay}ms`);
-          reconnectTimerRef.current = setTimeout(() => {
-            connectRFB();
-          }, delay);
-        } else {
-          setConnectionState('error');
-          onError?.('Connection lost after max retries');
-          onDisconnect?.('Connection lost');
+          // Auto-reconnect on unexpected disconnect
+          const attempt = reconnectAttemptRef.current;
+          const MAX_RECONNECT_ATTEMPTS = 10;
+          if (attempt < MAX_RECONNECT_ATTEMPTS) {
+            const delay = Math.min(1000 * Math.pow(1.5, attempt), 15000);
+            reconnectAttemptRef.current = attempt + 1;
+            setConnectionState('connecting');
+            console.info(`[KasmVNC] Auto-reconnect attempt ${attempt + 1} in ${delay}ms`);
+            reconnectTimerRef.current = setTimeout(() => {
+              connectRFB();
+            }, delay);
+          } else {
+            setConnectionState('error');
+            onError?.('Connection lost after max retries');
+            onDisconnect?.('Connection lost');
+          }
         }
-      });
+      );
 
       rfb.addEventListener('credentialsrequired', () => {
         // KasmVNC with -disableBasicAuth should not need credentials
@@ -215,15 +218,7 @@ export function KasmVNCViewer({
       setConnectionState('error');
       onError?.(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [
-    wsUrl,
-    currentResolution,
-    dynamicResize,
-    onConnect,
-    onDisconnect,
-    onError,
-    safeDisconnect,
-  ]);
+  }, [wsUrl, currentResolution, dynamicResize, onConnect, onDisconnect, onError, safeDisconnect]);
 
   // Connect on mount and when wsUrl changes
   useEffect(() => {
@@ -270,7 +265,9 @@ export function KasmVNCViewer({
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => { document.removeEventListener('fullscreenchange', handleFullscreenChange); };
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
   // Handle resolution change
@@ -340,7 +337,9 @@ export function KasmVNCViewer({
                 type="text"
                 size="small"
                 icon={isMuted ? <AudioMutedOutlined /> : <AudioOutlined />}
-                onClick={() => { setIsMuted((prev) => !prev); }}
+                onClick={() => {
+                  setIsMuted((prev) => !prev);
+                }}
                 className={`text-gray-400 hover:text-white ${!isMuted ? '!text-blue-400' : ''}`}
                 aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
               />
@@ -399,7 +398,9 @@ export function KasmVNCViewer({
           ref={canvasContainerRef}
           className="w-full h-full"
           style={{ touchAction: 'none', userSelect: 'none' }}
-          onDragStart={(e) => { e.preventDefault(); }}
+          onDragStart={(e) => {
+            e.preventDefault();
+          }}
         />
       </div>
     </div>

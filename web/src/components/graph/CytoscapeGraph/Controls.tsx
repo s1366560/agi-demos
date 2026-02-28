@@ -31,7 +31,9 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
         setCyInstance((e as CustomEvent).detail);
       };
       window.addEventListener('cytoscape-ready', handler);
-      return () => { window.removeEventListener('cytoscape-ready', handler); };
+      return () => {
+        window.removeEventListener('cytoscape-ready', handler);
+      };
     }
     return undefined;
   }, [setCyInstance]);

@@ -179,11 +179,12 @@ class SandboxMCPToolWrapper(AgentTool):
             result: The MCP result dict (no error flag set).
 
         Returns:
-            Dict with artifact data, text string, or "Success" fallback.
+            Dict with artifact data, batch results dict, text string, or "Success" fallback.
         """
         artifact = result.get("artifact")
         content_list = result.get("content", [])
 
+        # Single artifact (export_artifact)
         if artifact:
             filename = artifact.get("filename", "unknown")
             mime_type = artifact.get("mime_type", "unknown")
@@ -196,6 +197,17 @@ class SandboxMCPToolWrapper(AgentTool):
                 "output": output_summary,
                 "content": content_list,
                 "artifact": artifact,
+            }
+
+        # Batch artifacts (batch_export_artifacts)
+        batch_results = result.get("results")
+        if batch_results and isinstance(batch_results, list) and len(batch_results) > 0:
+            text = content_list[0].get("text", "") if content_list else ""
+            return {
+                "output": text or f"Batch exported {len(batch_results)} artifacts",
+                "content": content_list,
+                "results": batch_results,
+                "errors": result.get("errors", []),
             }
 
         if content_list and len(content_list) > 0:

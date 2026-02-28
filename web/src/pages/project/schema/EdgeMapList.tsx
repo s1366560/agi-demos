@@ -186,7 +186,9 @@ export default function EdgeMapList() {
                   </div>
                   <select
                     value={filterSource}
-                    onChange={(e) => { setFilterSource(e.target.value); }}
+                    onChange={(e) => {
+                      setFilterSource(e.target.value);
+                    }}
                     className="bg-blue-50 dark:bg-[#193db3]/20 text-blue-600 dark:text-[#193db3] text-xs px-2 py-0.5 rounded font-medium border-none outline-none cursor-pointer"
                   >
                     <option value="All">All</option>
@@ -213,7 +215,9 @@ export default function EdgeMapList() {
                   </div>
                   <select
                     value={filterTarget}
-                    onChange={(e) => { setFilterTarget(e.target.value); }}
+                    onChange={(e) => {
+                      setFilterTarget(e.target.value);
+                    }}
                     className="bg-blue-50 dark:bg-[#193db3]/20 text-blue-600 dark:text-[#193db3] text-xs px-2 py-0.5 rounded font-medium border-none outline-none cursor-pointer"
                   >
                     <option value="All">All</option>
@@ -231,7 +235,9 @@ export default function EdgeMapList() {
 
               {/* View Options */}
               <div
-                onClick={() => { setHideEmpty(!hideEmpty); }}
+                onClick={() => {
+                  setHideEmpty(!hideEmpty);
+                }}
                 className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-[#2a324a] bg-white dark:bg-[#1e2433] p-4 hover:border-blue-400 dark:hover:border-[#193db3]/50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center justify-between">
@@ -363,7 +369,9 @@ export default function EdgeMapList() {
                                 </span>
                               ))}
                               <button
-                                onClick={() => { openAddModal(row, col); }}
+                                onClick={() => {
+                                  openAddModal(row, col);
+                                }}
                                 className="text-slate-400 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10"
                               >
                                 <Plus className="w-4 h-4" />
@@ -385,18 +393,24 @@ export default function EdgeMapList() {
       {isAddModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={() => { setIsAddModalOpen(false); }}
+          onClick={() => {
+            setIsAddModalOpen(false);
+          }}
         >
           <div
             className="bg-white dark:bg-[#1e2433] rounded-lg shadow-xl border border-slate-200 dark:border-[#2a324a] w-full max-w-md p-6"
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                 {t('project.schema.mappings.modal.title')}
               </h3>
               <button
-                onClick={() => { setIsAddModalOpen(false); }}
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                }}
                 className="text-slate-400 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -420,7 +434,9 @@ export default function EdgeMapList() {
                 <select
                   className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none focus:border-blue-600 dark:focus:border-[#193db3]"
                   value={newMapData.edge}
-                  onChange={(e) => { setNewMapData({ ...newMapData, edge: e.target.value }); }}
+                  onChange={(e) => {
+                    setNewMapData({ ...newMapData, edge: e.target.value });
+                  }}
                 >
                   {edgeTypes.map((edge) => (
                     <option key={edge.id} value={edge.name}>
@@ -432,7 +448,9 @@ export default function EdgeMapList() {
 
               <div className="flex justify-end gap-3 mt-2">
                 <button
-                  onClick={() => { setIsAddModalOpen(false); }}
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                  }}
                   className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2a324a] rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a324a] transition-colors"
                 >
                   {t('project.schema.mappings.modal.cancel')}

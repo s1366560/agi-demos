@@ -288,7 +288,9 @@ class UnifiedEventServiceImpl {
     logger.debug(`[UnifiedWS] Subscribed to ${topic}`);
 
     // Return unsubscribe function
-    return () => { this.unsubscribe(topic, handler); };
+    return () => {
+      this.unsubscribe(topic, handler);
+    };
   }
 
   /**
@@ -313,7 +315,11 @@ class UnifiedEventServiceImpl {
    */
   subscribeMultiple(topics: string[], handler: EventHandler): () => void {
     const unsubscribeFns = topics.map((topic) => this.subscribe(topic, handler));
-    return () => { unsubscribeFns.forEach((fn) => { fn(); }); };
+    return () => {
+      unsubscribeFns.forEach((fn) => {
+        fn();
+      });
+    };
   }
 
   // ===========================================================================

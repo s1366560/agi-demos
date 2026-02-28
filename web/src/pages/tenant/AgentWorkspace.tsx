@@ -141,7 +141,8 @@ export const AgentWorkspace: React.FC = () => {
     );
   }
 
-  const effectiveProjectId = selectedProjectId || (projects.length > 0 ? (projects[0]?.id ?? null) : null);
+  const effectiveProjectId =
+    selectedProjectId || (projects.length > 0 ? (projects[0]?.id ?? null) : null);
 
   return (
     <div className="w-full h-full">

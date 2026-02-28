@@ -80,7 +80,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
 
   useEffect(() => {
     if (app.status === 'loading') {
-      timeoutRef.current = setTimeout(() => { setLoadingTimeout(true); }, LOADING_TIMEOUT_MS);
+      timeoutRef.current = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, LOADING_TIMEOUT_MS);
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoadingTimeout(false);
@@ -192,7 +194,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             </div>
             <button
               type="button"
-              onClick={() => { onRetry(app.id); }}
+              onClick={() => {
+                onRetry(app.id);
+              }}
               disabled={retrying.has(app.id)}
               className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 disabled:opacity-50 transition-colors"
             >
@@ -245,7 +249,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             {app.status === 'ready' && (
               <button
                 type="button"
-                onClick={() => { onOpenInCanvas(app); }}
+                onClick={() => {
+                  onOpenInCanvas(app);
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors font-medium"
               >
                 <ExternalLink size={12} />
@@ -256,7 +262,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             {/* Delete Button */}
             <Popconfirm
               title="确定要删除此应用吗？"
-              onConfirm={() => { onDelete(app.id); }}
+              onConfirm={() => {
+                onDelete(app.id);
+              }}
               okText="删除"
               cancelText="取消"
             >

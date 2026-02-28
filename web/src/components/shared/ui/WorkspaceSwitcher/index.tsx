@@ -68,7 +68,7 @@ export type {
 } from './types';
 
 // Compound components namespace for structured imports
- 
+
 // eslint-disable-next-line react-refresh/only-export-components
 export const WorkspaceSwitcherNamespace = {
   Root: WorkspaceSwitcherRoot,

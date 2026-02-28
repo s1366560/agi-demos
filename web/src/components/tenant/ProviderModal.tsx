@@ -38,7 +38,12 @@ const providerTypeRequiresApiKey = (type: ProviderType) =>
 
 const DEFAULT_MODELS: Record<
   ProviderType,
-  { llm: string; small?: string | undefined; embedding?: string | undefined; reranker?: string | undefined }
+  {
+    llm: string;
+    small?: string | undefined;
+    embedding?: string | undefined;
+    reranker?: string | undefined;
+  }
 > = {
   openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
   anthropic: { llm: 'claude-sonnet-4-20250514', small: 'claude-3-5-haiku-20241022' },
@@ -262,7 +267,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id as typeof activeTab); }}
+                onClick={() => {
+                  setActiveTab(tab.id as typeof activeTab);
+                }}
                 className={`flex items-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab.id
                     ? 'border-primary text-primary'
@@ -301,7 +308,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     type="text"
                     required
                     value={formData.name}
-                    onChange={(e) => { setFormData((prev) => ({ ...prev, name: e.target.value })); }}
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, name: e.target.value }));
+                    }}
                     placeholder="e.g., Production OpenAI"
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
@@ -318,7 +327,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     id="provider-type"
                     required
                     value={formData.provider_type}
-                    onChange={(e) => { handleProviderTypeChange(e.target.value as ProviderType); }}
+                    onChange={(e) => {
+                      handleProviderTypeChange(e.target.value as ProviderType);
+                    }}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   >
                     {PROVIDER_TYPES.map((type) => (
@@ -341,7 +352,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     type="password"
                     required={!isEditing && providerTypeRequiresApiKey(formData.provider_type)}
                     value={formData.api_key}
-                    onChange={(e) => { setFormData((prev) => ({ ...prev, api_key: e.target.value })); }}
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, api_key: e.target.value }));
+                    }}
                     placeholder={
                       isEditing
                         ? 'Leave empty to keep current key'
@@ -363,9 +376,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     <input
                       type="checkbox"
                       checked={formData.is_active}
-                      onChange={(e) =>
-                        { setFormData((prev) => ({ ...prev, is_active: e.target.checked })); }
-                      }
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, is_active: e.target.checked }));
+                      }}
                       className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                     />
                     <span className="text-sm text-slate-700 dark:text-slate-300">Active</span>
@@ -374,9 +387,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     <input
                       type="checkbox"
                       checked={formData.is_default}
-                      onChange={(e) =>
-                        { setFormData((prev) => ({ ...prev, is_default: e.target.checked })); }
-                      }
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, is_default: e.target.checked }));
+                      }}
                       className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                     />
                     <span className="text-sm text-slate-700 dark:text-slate-300">
@@ -402,9 +415,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     type="text"
                     required
                     value={formData.llm_model}
-                    onChange={(e) =>
-                      { setFormData((prev) => ({ ...prev, llm_model: e.target.value })); }
-                    }
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, llm_model: e.target.value }));
+                    }}
                     placeholder="e.g., gpt-4o"
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
@@ -424,9 +437,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     id="llm-small-model"
                     type="text"
                     value={formData.llm_small_model}
-                    onChange={(e) =>
-                      { setFormData((prev) => ({ ...prev, llm_small_model: e.target.value })); }
-                    }
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, llm_small_model: e.target.value }));
+                    }}
                     placeholder="e.g., gpt-4o-mini"
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
@@ -446,9 +459,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     id="embedding-model"
                     type="text"
                     value={formData.embedding_model}
-                    onChange={(e) =>
-                      { setFormData((prev) => ({ ...prev, embedding_model: e.target.value })); }
-                    }
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, embedding_model: e.target.value }));
+                    }}
                     placeholder="e.g., text-embedding-3-small"
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
@@ -468,9 +481,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     id="reranker-model"
                     type="text"
                     value={formData.reranker_model}
-                    onChange={(e) =>
-                      { setFormData((prev) => ({ ...prev, reranker_model: e.target.value })); }
-                    }
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, reranker_model: e.target.value }));
+                    }}
                     placeholder="e.g., gpt-4o-mini (optional)"
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
@@ -495,7 +508,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     id="base-url"
                     type="url"
                     value={formData.base_url}
-                    onChange={(e) => { setFormData((prev) => ({ ...prev, base_url: e.target.value })); }}
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, base_url: e.target.value }));
+                    }}
                     placeholder="https://api.example.com/v1"
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />

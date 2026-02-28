@@ -12,16 +12,19 @@ import type { PatternDefinition } from './PatternList';
 
 export interface PatternInspectorProps {
   /** Pattern to display */
-  pattern?: {
-    id: string;
-    name: string;
-    signature: string;
-    status: 'preferred' | 'active' | 'deprecated';
-    avgRuntime?: number | undefined;
-    successRate?: number | undefined;
-    usageCount?: number | undefined;
-    pattern?: PatternDefinition | undefined;
-  } | null | undefined;
+  pattern?:
+    | {
+        id: string;
+        name: string;
+        signature: string;
+        status: 'preferred' | 'active' | 'deprecated';
+        avgRuntime?: number | undefined;
+        successRate?: number | undefined;
+        usageCount?: number | undefined;
+        pattern?: PatternDefinition | undefined;
+      }
+    | null
+    | undefined;
   /** Callback when close is clicked */
   onClose?: (() => void) | undefined;
   /** Callback when save is clicked */
@@ -61,7 +64,9 @@ export function PatternInspector({
     try {
       navigator.clipboard.writeText(JSON.stringify(pattern.pattern, null, 2));
       setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error('Failed to copy JSON:', error);
     }
@@ -126,7 +131,9 @@ export function PatternInspector({
         <div className="flex items-center gap-2 ml-4">
           {onSave && pattern.pattern && (
             <button
-              onClick={() => { onSave?.(pattern.pattern as unknown as Record<string, unknown>); }}
+              onClick={() => {
+                onSave?.(pattern.pattern as unknown as Record<string, unknown>);
+              }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors"
             >
               <MaterialIcon name="save" size={16} />
@@ -203,7 +210,9 @@ export function PatternInspector({
             </h3>
             <textarea
               value={adminNotes}
-              onChange={(e) => { onAdminNotesChange(e.target.value); }}
+              onChange={(e) => {
+                onAdminNotesChange(e.target.value);
+              }}
               placeholder="Add notes about this pattern..."
               className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none"
               rows={4}

@@ -55,7 +55,9 @@ export const ThreadView = memo<ThreadViewProps>(
             setLoading(false);
           }
         });
-      return () => { abortController.abort(); };
+      return () => {
+        abortController.abort();
+      };
     }, [expanded, conversationId, messageId]);
 
     if (replyCount === 0 && !expanded) return null;
@@ -63,7 +65,9 @@ export const ThreadView = memo<ThreadViewProps>(
     return (
       <div className="ml-10 mt-1 mb-2">
         <button
-          onClick={() => { setExpanded(!expanded); }}
+          onClick={() => {
+            setExpanded(!expanded);
+          }}
           className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-600 transition-colors"
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -104,7 +108,9 @@ export const ThreadView = memo<ThreadViewProps>(
                 <div className="flex items-center gap-2 mt-2">
                   <input
                     value={replyText}
-                    onChange={(e) => { setReplyText(e.target.value); }}
+                    onChange={(e) => {
+                      setReplyText(e.target.value);
+                    }}
                     placeholder={t('agent.thread.replyPlaceholder', 'Write a reply...')}
                     className="flex-1 px-2.5 py-1.5 text-xs bg-transparent border border-slate-200 dark:border-slate-600 rounded-lg"
                     onKeyDown={(e) => {

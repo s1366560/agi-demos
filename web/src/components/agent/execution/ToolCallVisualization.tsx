@@ -466,7 +466,9 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
           <Segmented
             size="small"
             value={mode}
-            onChange={(value) => { setMode(value as typeof mode); }}
+            onChange={(value) => {
+              setMode(value as typeof mode);
+            }}
             options={modeOptions.map((opt) => ({
               value: opt.value,
               label: (
@@ -493,7 +495,9 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
         <DetailDrawer
           execution={selectedExecution}
           visible={drawerVisible}
-          onClose={() => { setDrawerVisible(false); }}
+          onClose={() => {
+            setDrawerVisible(false);
+          }}
         />
       )}
     </div>

@@ -28,11 +28,13 @@ export interface TokenData {
  */
 export interface CostData {
   total: number;
-  breakdown?: {
-    input_cost: number;
-    output_cost: number;
-    reasoning_cost?: number | undefined;
-  } | undefined;
+  breakdown?:
+    | {
+        input_cost: number;
+        output_cost: number;
+        reasoning_cost?: number | undefined;
+      }
+    | undefined;
 }
 
 export interface TokenUsageChartProps {
@@ -218,7 +220,9 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
     return (
       <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
         <button
-          onClick={() => { setIsExpanded(!isExpanded); }}
+          onClick={() => {
+            setIsExpanded(!isExpanded);
+          }}
           className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         >
           {isExpanded ? (

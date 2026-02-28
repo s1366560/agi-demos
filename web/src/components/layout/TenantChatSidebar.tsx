@@ -105,7 +105,9 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
           icon: <Trash2 size={14} />,
           label: 'Delete',
           danger: true,
-          onClick: (e) => { onDelete(e.domEvent as React.MouseEvent); },
+          onClick: (e) => {
+            onDelete(e.domEvent as React.MouseEvent);
+          },
         },
       ],
       [onDelete, onRename]
@@ -189,7 +191,9 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
               size="small"
               icon={<MoreVertical size={14} />}
               className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-              onClick={(e: React.MouseEvent) => { e.stopPropagation(); }}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+              }}
             />
           </LazyDropdown>
         </div>
@@ -636,7 +640,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             title={projects.find((p) => p.id === selectedProjectId)?.name || 'Select Project'}
           >
             <button
-              onClick={() => { setCollapsed(false); }}
+              onClick={() => {
+                setCollapsed(false);
+              }}
               className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
               <FolderOpen size={20} className="text-slate-500" />
@@ -691,9 +697,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                     key={conv.id}
                     conversation={conv}
                     isActive={conv.id === activeConversationId}
-                    onSelect={() => { handleSelectConversation(conv.id, conv.projectId); }}
-                    onDelete={(e) => { handleDeleteConversation(conv.id, e); }}
-                    onRename={(e) => { handleRenameClick(conv, e); }}
+                    onSelect={() => {
+                      handleSelectConversation(conv.id, conv.projectId);
+                    }}
+                    onDelete={(e) => {
+                      handleDeleteConversation(conv.id, e);
+                    }}
+                    onRename={(e) => {
+                      handleRenameClick(conv, e);
+                    }}
                     compact={collapsed}
                   />
                 ))
@@ -804,7 +816,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         <LazyInput
           placeholder="Enter conversation title"
           value={newTitle}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewTitle(e.target.value); }}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            setNewTitle(e.target.value);
+          }}
           onPressEnter={handleRenameSubmit}
           autoFocus
         />

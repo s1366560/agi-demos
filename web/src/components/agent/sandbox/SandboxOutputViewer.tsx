@@ -89,7 +89,9 @@ function ToolExecutionCard({
     await navigator.clipboard.writeText(content);
     setCopied(true);
     message.success('Copied to clipboard');
-    setTimeout(() => { setCopied(false); }, 2000);
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
   };
 
   // Format input for display
@@ -131,7 +133,12 @@ function ToolExecutionCard({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
         <div className="flex items-center gap-2">
-          <Tag icon={TOOL_ICONS[execution.toolName]} {...(TOOL_COLORS[execution.toolName] != null ? { color: TOOL_COLORS[execution.toolName] } : {})}>
+          <Tag
+            icon={TOOL_ICONS[execution.toolName]}
+            {...(TOOL_COLORS[execution.toolName] != null
+              ? { color: TOOL_COLORS[execution.toolName] }
+              : {})}
+          >
             {execution.toolName}
           </Tag>
           <Text
@@ -241,7 +248,11 @@ export function SandboxOutputViewer({
       key: exec.id,
       label: (
         <div className="flex items-center gap-2">
-          <Tag icon={TOOL_ICONS[exec.toolName]} {...(TOOL_COLORS[exec.toolName] != null ? { color: TOOL_COLORS[exec.toolName] } : {})} className="m-0">
+          <Tag
+            icon={TOOL_ICONS[exec.toolName]}
+            {...(TOOL_COLORS[exec.toolName] != null ? { color: TOOL_COLORS[exec.toolName] } : {})}
+            className="m-0"
+          >
             {exec.toolName}
           </Tag>
           <Text className="text-sm text-slate-600">{formatTimeOnly(exec.timestamp)}</Text>

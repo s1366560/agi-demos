@@ -29,7 +29,7 @@ export interface SandboxProviderProps {
 /**
  * Provider for SandboxPanel state
  */
- 
+
 export const SandboxPanelProvider: React.FC<SandboxProviderProps> = ({
   sandboxId,
   defaultTab = 'terminal',

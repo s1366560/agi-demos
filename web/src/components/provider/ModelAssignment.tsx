@@ -106,7 +106,9 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           </p>
         </div>
         <button
-          onClick={() => { handleAddClick(type); }}
+          onClick={() => {
+            handleAddClick(type);
+          }}
           className="text-primary hover:text-primary-dark text-sm font-medium flex items-center gap-1 transition-colors"
         >
           <MaterialIcon name="add" size={16} />
@@ -154,7 +156,9 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      onClick={() => { handleEditClick(assignment); }}
+                      onClick={() => {
+                        handleEditClick(assignment);
+                      }}
                       className="p-1.5 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                       title="Edit Assignment"
                     >
@@ -221,7 +225,9 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       {isSelectorOpen && (
         <ProviderSelectorModal
           isOpen={isSelectorOpen}
-          onClose={() => { setIsSelectorOpen(false); }}
+          onClose={() => {
+            setIsSelectorOpen(false);
+          }}
           onSelect={(provider) => {
             setSelectedProvider(provider);
             setIsSelectorOpen(false);
@@ -235,7 +241,9 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       {isAssignModalOpen && selectedProvider && (
         <AssignProviderModal
           isOpen={isAssignModalOpen}
-          onClose={() => { setIsAssignModalOpen(false); }}
+          onClose={() => {
+            setIsAssignModalOpen(false);
+          }}
           onSuccess={() => {
             setIsAssignModalOpen(false);
             loadAssignments();

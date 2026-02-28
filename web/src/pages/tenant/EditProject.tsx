@@ -121,7 +121,9 @@ export const EditProject: React.FC = () => {
                 type="text"
                 required
                 value={formData.name}
-                onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                 placeholder="e.g. Finance Knowledge Base"
               />
@@ -132,7 +134,9 @@ export const EditProject: React.FC = () => {
               </label>
               <select
                 value={formData.status}
-                onChange={(e) => { setFormData({ ...formData, status: e.target.value as any }); }}
+                onChange={(e) => {
+                  setFormData({ ...formData, status: e.target.value as any });
+                }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
               >
                 <option value="active">{t('project.edit.status_options.active')}</option>
@@ -147,7 +151,9 @@ export const EditProject: React.FC = () => {
               <textarea
                 rows={3}
                 value={formData.description}
-                onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
+                onChange={(e) => {
+                  setFormData({ ...formData, description: e.target.value });
+                }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none"
                 placeholder="Briefly describe the purpose of this project..."
               />
@@ -177,15 +183,15 @@ export const EditProject: React.FC = () => {
                     min="100"
                     max="10000"
                     value={formData.memory_rules.max_episodes}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
                           max_episodes: parseInt(e.target.value) || 1000,
                         },
-                      }); }
-                    }
+                      });
+                    }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
@@ -198,15 +204,15 @@ export const EditProject: React.FC = () => {
                     min="1"
                     max="365"
                     value={formData.memory_rules.retention_days}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
                           retention_days: parseInt(e.target.value) || 30,
                         },
-                      }); }
-                    }
+                      });
+                    }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
@@ -221,15 +227,15 @@ export const EditProject: React.FC = () => {
                   min="1"
                   max="168"
                   value={formData.memory_rules.refresh_interval}
-                  onChange={(e) =>
-                    { setFormData({
+                  onChange={(e) => {
+                    setFormData({
                       ...formData,
                       memory_rules: {
                         ...formData.memory_rules,
                         refresh_interval: parseInt(e.target.value) || 24,
                       },
-                    }); }
-                  }
+                    });
+                  }}
                   className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                 />
               </div>
@@ -239,12 +245,12 @@ export const EditProject: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={formData.memory_rules.auto_refresh}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         memory_rules: { ...formData.memory_rules, auto_refresh: e.target.checked },
-                      }); }
-                    }
+                      });
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
@@ -277,15 +283,15 @@ export const EditProject: React.FC = () => {
                     type="number"
                     min="100"
                     value={formData.graph_config.max_nodes}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           max_nodes: parseInt(e.target.value) || 5000,
                         },
-                      }); }
-                    }
+                      });
+                    }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
@@ -297,15 +303,15 @@ export const EditProject: React.FC = () => {
                     type="number"
                     min="100"
                     value={formData.graph_config.max_edges}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           max_edges: parseInt(e.target.value) || 10000,
                         },
-                      }); }
-                    }
+                      });
+                    }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
@@ -326,15 +332,15 @@ export const EditProject: React.FC = () => {
                   max="1.0"
                   step="0.1"
                   value={formData.graph_config.similarity_threshold}
-                  onChange={(e) =>
-                    { setFormData({
+                  onChange={(e) => {
+                    setFormData({
                       ...formData,
                       graph_config: {
                         ...formData.graph_config,
                         similarity_threshold: parseFloat(e.target.value),
                       },
-                    }); }
-                  }
+                    });
+                  }}
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
                 <div className="flex justify-between text-xs text-slate-400 mt-1">
@@ -348,15 +354,15 @@ export const EditProject: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={formData.graph_config.community_detection}
-                    onChange={(e) =>
-                      { setFormData({
+                    onChange={(e) => {
+                      setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           community_detection: e.target.checked,
                         },
-                      }); }
-                    }
+                      });
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>

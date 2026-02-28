@@ -219,7 +219,12 @@ export const TenantLayout: React.FC = memo(() => {
           </div>
 
           <div className="flex flex-col gap-4 w-full">
-            <button onClick={() => { setIsCreateModalOpen(true); }} className="btn-primary w-full py-3">
+            <button
+              onClick={() => {
+                setIsCreateModalOpen(true);
+              }}
+              className="btn-primary w-full py-3"
+            >
               {t('tenant.create')}
             </button>
             <button onClick={handleLogout} className="btn-secondary w-full py-3">
@@ -230,7 +235,9 @@ export const TenantLayout: React.FC = memo(() => {
 
         <TenantCreateModal
           isOpen={isCreateModalOpen}
-          onClose={() => { setIsCreateModalOpen(false); }}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+          }}
           onSuccess={handleCreateTenant}
         />
       </div>
@@ -274,7 +281,12 @@ export const TenantLayout: React.FC = memo(() => {
         />
 
         {/* Mobile sidebar drawer */}
-        <MobileSidebarDrawer open={mobileSidebarOpen} onClose={() => { setMobileSidebarOpen(false); }}>
+        <MobileSidebarDrawer
+          open={mobileSidebarOpen}
+          onClose={() => {
+            setMobileSidebarOpen(false);
+          }}
+        >
           <TenantChatSidebar tenantId={tenantId} mobile />
         </MobileSidebarDrawer>
 
@@ -284,8 +296,12 @@ export const TenantLayout: React.FC = memo(() => {
           <TenantHeader
             tenantId={tenantId || ''}
             sidebarCollapsed={sidebarCollapsed}
-            onSidebarToggle={() => { setSidebarCollapsed(!sidebarCollapsed); }}
-            onMobileMenuOpen={() => { setMobileSidebarOpen(true); }}
+            onSidebarToggle={() => {
+              setSidebarCollapsed(!sidebarCollapsed);
+            }}
+            onMobileMenuOpen={() => {
+              setMobileSidebarOpen(true);
+            }}
           />
 
           {/* Page Content */}
@@ -306,7 +322,9 @@ export const TenantLayout: React.FC = memo(() => {
       {/* Tenant Create Modal */}
       <TenantCreateModal
         isOpen={isCreateModalOpen}
-        onClose={() => { setIsCreateModalOpen(false); }}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+        }}
         onSuccess={handleCreateTenant}
       />
 

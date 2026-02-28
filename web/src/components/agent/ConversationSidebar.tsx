@@ -119,8 +119,12 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
   return (
     <div
       className="w-52"
-      onClick={(e) => { e.stopPropagation(); }}
-      onKeyDown={(e) => { e.stopPropagation(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+      }}
     >
       <p className="text-xs font-medium text-slate-500 mb-2">
         {t('agent.sidebar.labels', 'Labels')}
@@ -136,7 +140,9 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
               >
                 <LazyCheckbox
                   checked={assignedIds.includes(label.id)}
-                  onChange={() => { toggleConversationLabel(conversationId, label.id); }}
+                  onChange={() => {
+                    toggleConversationLabel(conversationId, label.id);
+                  }}
                   size="small"
                 />
                 <span className={`w-2.5 h-2.5 rounded-full ${colorDef.dot} shrink-0`} />
@@ -156,7 +162,9 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
             size="small"
             placeholder={t('agent.sidebar.newLabel', 'New label')}
             value={newLabelName}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewLabelName(e.target.value); }}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              setNewLabelName(e.target.value);
+            }}
             onPressEnter={handleAddNew}
             autoFocus
             className="rounded-md"
@@ -166,7 +174,9 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
               <button
                 key={c.name}
                 type="button"
-                onClick={() => { setSelectedColor(c.name); }}
+                onClick={() => {
+                  setSelectedColor(c.name);
+                }}
                 className={`w-5 h-5 rounded-full ${c.dot} transition-all ${
                   selectedColor === c.name
                     ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800'
@@ -184,7 +194,12 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
             >
               {t('agent.sidebar.addLabel', 'Add label')}
             </LazyButton>
-            <LazyButton size="small" onClick={() => { setShowNewForm(false); }}>
+            <LazyButton
+              size="small"
+              onClick={() => {
+                setShowNewForm(false);
+              }}
+            >
               <X size={12} />
             </LazyButton>
           </div>
@@ -192,7 +207,9 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
       ) : (
         <button
           type="button"
-          onClick={() => { setShowNewForm(true); }}
+          onClick={() => {
+            setShowNewForm(true);
+          }}
           className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-600 w-full px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50"
         >
           <Plus size={12} />
@@ -250,7 +267,9 @@ const ConversationItem = memo<ConversationItemProps>(
           icon: <Trash2 size={14} />,
           label: t('agent.sidebar.delete', 'Delete'),
           danger: true,
-          onClick: (e) => { onDelete(e.domEvent as React.MouseEvent); },
+          onClick: (e) => {
+            onDelete(e.domEvent as React.MouseEvent);
+          },
         },
       ],
       [onDelete, onRename, t]
@@ -432,7 +451,9 @@ const ConversationItem = memo<ConversationItemProps>(
                 size="small"
                 icon={<Tag size={14} />}
                 className="opacity-0 group-hover:opacity-100 touch-show transition-opacity text-slate-400 hover:text-slate-600"
-                onClick={(e: React.MouseEvent) => { e.stopPropagation(); }}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                }}
               />
             </LazyPopover>
             <LazyDropdown
@@ -445,7 +466,9 @@ const ConversationItem = memo<ConversationItemProps>(
                 size="small"
                 icon={<MoreVertical size={14} />}
                 className="opacity-0 group-hover:opacity-100 touch-show transition-opacity text-slate-400 hover:text-slate-600"
-                onClick={(e: React.MouseEvent) => { e.stopPropagation(); }}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                }}
               />
             </LazyDropdown>
           </div>
@@ -627,9 +650,19 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
               key={conv.id}
               conversation={conv}
               isActive={conv.id === activeId}
-              onSelect={() => { onSelect(conv.id); }}
-              onDelete={(e) => { onDelete(conv.id, e); }}
-              onRename={onRename ? () => { handleRenameClick(conv); } : undefined}
+              onSelect={() => {
+                onSelect(conv.id);
+              }}
+              onDelete={(e) => {
+                onDelete(conv.id, e);
+              }}
+              onRename={
+                onRename
+                  ? () => {
+                      handleRenameClick(conv);
+                    }
+                  : undefined
+              }
               compact={collapsed}
               status={conversationStatuses?.get(conv.id)}
             />
@@ -688,7 +721,9 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
         <LazyInput
           placeholder="Enter conversation title"
           value={newTitle}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setNewTitle(e.target.value); }}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            setNewTitle(e.target.value);
+          }}
           onPressEnter={handleRenameSubmit}
           autoFocus
           className="rounded-lg"

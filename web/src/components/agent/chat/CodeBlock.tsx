@@ -23,7 +23,9 @@ function extractCodeContent(children: ReactNode): { text: string; language?: str
 
   const child = Array.isArray(children) ? children[0] : children;
   if (child && typeof child === 'object' && 'props' in (child as ReactElement)) {
-    const codeEl = child as ReactElement<HTMLAttributes<HTMLElement> & { children?: ReactNode | undefined }>;
+    const codeEl = child as ReactElement<
+      HTMLAttributes<HTMLElement> & { children?: ReactNode | undefined }
+    >;
     const className = (codeEl.props?.className as string) || '';
     const langMatch = className.match(/language-(\w+)/);
     const text =
@@ -78,7 +80,9 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
   const highlighter = useSyntaxHighlighter();
 
   useEffect(() => {
-    return () => { clearTimeout(timerRef.current); };
+    return () => {
+      clearTimeout(timerRef.current);
+    };
   }, []);
 
   const { text, language } = extractCodeContent(children);
@@ -88,7 +92,9 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
       await navigator.clipboard.writeText(text);
       setCopied(true);
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => { setCopied(false); }, 2000);
+      timerRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch {
       // silent fail
     }

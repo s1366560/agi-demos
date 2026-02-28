@@ -33,10 +33,12 @@ export interface BackgroundTask {
   completed_at?: string | undefined;
   progress: number;
   message: string;
-  result?: {
-    communities_count?: number | undefined;
-    edges_count?: number | undefined;
-  } | undefined;
+  result?:
+    | {
+        communities_count?: number | undefined;
+        edges_count?: number | undefined;
+      }
+    | undefined;
   error?: string | undefined;
 }
 

@@ -72,7 +72,9 @@ export function FinalResponseDisplay({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error('Failed to copy:', error);
     }
@@ -160,7 +162,9 @@ export function FinalResponseDisplay({
           </h4>
           <div className="space-y-2">
             <button
-              onClick={() => { void handleCopy(); }}
+              onClick={() => {
+                void handleCopy();
+              }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -168,7 +172,9 @@ export function FinalResponseDisplay({
             </button>
 
             <button
-              onClick={() => { void handleExportPDF(); }}
+              onClick={() => {
+                void handleExportPDF();
+              }}
               disabled={isExporting}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -177,7 +183,9 @@ export function FinalResponseDisplay({
             </button>
 
             <button
-              onClick={() => { void handleShare(); }}
+              onClick={() => {
+                void handleShare();
+              }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
             >
               <Share2 className="w-4 h-4" />

@@ -151,7 +151,9 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 
       const act = event;
       // Priority 1: match by execution_id
-      let obs: ObserveEvent | undefined = act.execution_id ? observeByExecId.get(act.execution_id) : undefined;
+      let obs: ObserveEvent | undefined = act.execution_id
+        ? observeByExecId.get(act.execution_id)
+        : undefined;
       // Priority 2: fallback to toolName matching
       if (!obs) {
         const candidates = observeByToolName.get(act.toolName) || [];
@@ -656,8 +658,8 @@ const StreamingToolPreparation: React.FC = memo(() => {
 });
 StreamingToolPreparation.displayName = 'StreamingToolPreparation';
 
-const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string | undefined }> = memo(
-  ({ toolName, partialArguments }) => {
+const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string | undefined }> =
+  memo(({ toolName, partialArguments }) => {
     const argsRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -699,8 +701,7 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
         </div>
       </div>
     );
-  }
-);
+  });
 StreamingToolCard.displayName = 'StreamingToolCard';
 
 // ========================================
@@ -788,10 +789,12 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       );
     const loadingChild = findMarkerChild<_MessageAreaLoadingProps>(LOADING_SYMBOL);
     const emptyChild = findMarkerChild<_MessageAreaEmptyProps>(EMPTY_SYMBOL);
-    const scrollIndicatorChild = findMarkerChild<_MessageAreaScrollIndicatorProps>(SCROLL_INDICATOR_SYMBOL);
+    const scrollIndicatorChild =
+      findMarkerChild<_MessageAreaScrollIndicatorProps>(SCROLL_INDICATOR_SYMBOL);
     const scrollButtonChild = findMarkerChild<_MessageAreaScrollButtonProps>(SCROLL_BUTTON_SYMBOL);
     const contentChild = findMarkerChild<_MessageAreaContentProps>(CONTENT_SYMBOL);
-    const streamingContentChild = findMarkerChild<_MessageAreaStreamingContentProps>(STREAMING_CONTENT_SYMBOL);
+    const streamingContentChild =
+      findMarkerChild<_MessageAreaStreamingContentProps>(STREAMING_CONTENT_SYMBOL);
 
     // Determine if using compound mode
     const hasSubComponents =
@@ -1006,7 +1009,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           clearTimeout(loadingIndicatorTimeoutRef.current);
           loadingIndicatorTimeoutRef.current = null;
         }
-        setTimeout(() => { setShowLoadingIndicator(false); }, 0);
+        setTimeout(() => {
+          setShowLoadingIndicator(false);
+        }, 0);
         return;
       }
 
@@ -1021,16 +1026,20 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               containerRef.current.scrollTop = containerRef.current.scrollHeight;
             }
           });
-          setTimeout(() => { setShowScrollButton(false); }, 0);
+          setTimeout(() => {
+            setShowScrollButton(false);
+          }, 0);
         } else {
-          setTimeout(() => { setShowScrollButton(true); }, 0);
+          setTimeout(() => {
+            setShowScrollButton(true);
+          }, 0);
         }
       }
 
       prevTimelineLengthRef.current = currentTimelineLength;
-    // virtualizer is intentionally excluded from deps: it creates a new reference every render
-    // and would cause this effect to fire continuously. It is always current via closure.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // virtualizer is intentionally excluded from deps: it creates a new reference every render
+      // and would cause this effect to fire continuously. It is always current via closure.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, groupedItems.length]);
 
     // Auto-scroll when streaming content updates
@@ -1085,10 +1094,12 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Virtualizer setup
     const estimateSize = useCallback(
-      (index: number) => { const item = groupedItems[index]; return item ? estimateGroupedItemHeight(item) : 80; },
+      (index: number) => {
+        const item = groupedItems[index];
+        return item ? estimateGroupedItemHeight(item) : 80;
+      },
       [groupedItems]
     );
-
 
     const virtualizer = useVirtualizer({
       count: groupedItems.length,
@@ -1144,7 +1155,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         cancelAnimationFrame(rafId);
         if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current);
       };
-      }, [conversationId, virtualizer, groupedItems.length, timeline.length]);
+    }, [conversationId, virtualizer, groupedItems.length, timeline.length]);
 
     // j/k keyboard navigation for messages
     const focusedMsgRef = useRef<number>(-1);
@@ -1217,7 +1228,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       };
 
       window.addEventListener('keydown', handleNav);
-      return () => { window.removeEventListener('keydown', handleNav); };
+      return () => {
+        window.removeEventListener('keydown', handleNav);
+      };
     }, [navigableIndices, groupedItems]);
 
     return (
@@ -1253,7 +1266,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50">
               <button
                 type="button"
-                onClick={() => { setPinnedCollapsed(!pinnedCollapsed); }}
+                onClick={() => {
+                  setPinnedCollapsed(!pinnedCollapsed);
+                }}
                 className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
               >
                 <Pin size={12} />
@@ -1430,7 +1445,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         top: 0,
                         left: 0,
                         width: '100%',
-                          transform: `translateY(${String(virtualRow.start)}px)`,
+                        transform: `translateY(${String(virtualRow.start)}px)`,
                       }}
                       className={
                         isFocused
@@ -1444,7 +1459,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           isStreaming={isStreaming && index === timeline.length - 1}
                           allEvents={timeline}
                           isPinned={!!event.id && pinnedEventIds.has(event.id)}
-                          onPin={event.id ? () => { togglePinEvent(event.id); } : undefined}
+                          onPin={
+                            event.id
+                              ? () => {
+                                  togglePinEvent(event.id);
+                                }
+                              : undefined
+                          }
                         />
                       </div>
                     </div>

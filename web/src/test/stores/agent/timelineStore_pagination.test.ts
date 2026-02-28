@@ -22,7 +22,6 @@ vi.mock('../../../services/agentService', () => ({
   },
 }));
 
-
 const getConversationMessages = vi.mocked(agentService.getConversationMessages);
 
 // Helper to create mock timeline response with pagination metadata

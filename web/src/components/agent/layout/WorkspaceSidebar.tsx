@@ -98,7 +98,9 @@ export function WorkspaceSidebar({
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
-              onClick={() => { handleNavClick(item); }}
+              onClick={() => {
+                handleNavClick(item);
+              }}
               aria-label={collapsed ? item.label : undefined}
               aria-pressed={isActive(item.id)}
               aria-current={isActive(item.id) ? 'page' : undefined}
@@ -120,7 +122,9 @@ export function WorkspaceSidebar({
           {FOOTER_ITEMS.map((item) => (
             <button
               key={item.id}
-              onClick={() => { handleNavClick(item); }}
+              onClick={() => {
+                handleNavClick(item);
+              }}
               aria-label={collapsed ? item.label : undefined}
               className={`flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg w-full text-left justify-${collapsed ? 'center' : 'start'}`}
               title={collapsed ? item.label : ''}

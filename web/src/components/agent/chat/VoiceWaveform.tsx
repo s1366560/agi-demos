@@ -30,7 +30,9 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
           cancelAnimationFrame(contextRef.current.animationId);
           contextRef.current.source.disconnect();
           contextRef.current.audioContext.close();
-          contextRef.current.stream.getTracks().forEach((t) => { t.stop(); });
+          contextRef.current.stream.getTracks().forEach((t) => {
+            t.stop();
+          });
           contextRef.current = null;
         }
         return;
@@ -42,7 +44,9 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           if (cancelled) {
-            stream.getTracks().forEach((t) => { t.stop(); });
+            stream.getTracks().forEach((t) => {
+              t.stop();
+            });
             return;
           }
 
@@ -112,7 +116,9 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
           cancelAnimationFrame(contextRef.current.animationId);
           contextRef.current.source.disconnect();
           contextRef.current.audioContext.close();
-          contextRef.current.stream.getTracks().forEach((t) => { t.stop(); });
+          contextRef.current.stream.getTracks().forEach((t) => {
+            t.stop();
+          });
           contextRef.current = null;
         }
       };

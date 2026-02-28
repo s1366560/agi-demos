@@ -8,7 +8,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
-  // eslint-disable-next-line no-restricted-imports
+// eslint-disable-next-line no-restricted-imports
 import {
   PatternList,
   type _PatternStatus,

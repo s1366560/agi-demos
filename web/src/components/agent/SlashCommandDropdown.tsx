@@ -206,7 +206,9 @@ export const SlashCommandDropdown = memo(
                 const isFirstSkill = item.kind === 'skill' && index === filteredCommands.length;
 
                 return (
-                  <Fragment key={`${item.kind}-${item.kind === 'command' ? item.data.name : item.data.id}`}>
+                  <Fragment
+                    key={`${item.kind}-${item.kind === 'command' ? item.data.name : item.data.id}`}
+                  >
                     {isFirstCommand && (
                       <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
                         {t('agent.slashCommand.groupCommands', 'Commands')}
@@ -221,8 +223,12 @@ export const SlashCommandDropdown = memo(
                       ref={(el) => {
                         if (el) itemRefs.current.set(index, el);
                       }}
-                      onClick={() => { handleItemClick(item); }}
-                      onMouseEnter={() => { onSelectedIndexChange(index); }}
+                      onClick={() => {
+                        handleItemClick(item);
+                      }}
+                      onMouseEnter={() => {
+                        onSelectedIndexChange(index);
+                      }}
                       className={`
                         px-3 py-2 cursor-pointer flex items-start gap-3 transition-colors
                         ${

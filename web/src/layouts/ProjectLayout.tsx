@@ -57,7 +57,9 @@ export const ProjectLayout: React.FC = memo(() => {
               if (firstTenant) {
                 setCurrentTenant(firstTenant);
                 getProject(firstTenant.id, projectId)
-                  .then((p) => { setCurrentProject(p); })
+                  .then((p) => {
+                    setCurrentProject(p);
+                  })
                   .catch(console.error);
               }
             }
@@ -67,7 +69,9 @@ export const ProjectLayout: React.FC = memo(() => {
           if (firstTenant) {
             setCurrentTenant(firstTenant);
             getProject(firstTenant.id, projectId)
-              .then((p) => { setCurrentProject(p); })
+              .then((p) => {
+                setCurrentProject(p);
+              })
               .catch(console.error);
           }
         }

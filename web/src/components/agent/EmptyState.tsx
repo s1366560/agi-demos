@@ -203,7 +203,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       {lastConversation && onResumeConversation && (
         <div className="max-w-2xl w-full relative z-10 mb-4">
           <button
-            onClick={() => { onResumeConversation(lastConversation.id); }}
+            onClick={() => {
+              onResumeConversation(lastConversation.id);
+            }}
             className="
               group w-full flex items-center gap-4 p-4 rounded-xl
               bg-white dark:bg-slate-800/50
@@ -269,7 +271,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         {suggestionCards.map((card, index) => (
           <button
             key={index}
-            onClick={() => { handleCardClick(card.prompt); }}
+            onClick={() => {
+              handleCardClick(card.prompt);
+            }}
             className={`
               group relative p-5 rounded-2xl
               bg-white dark:bg-slate-800/50

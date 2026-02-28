@@ -183,7 +183,7 @@ function renderHook<T>(hook: () => T): { result: { current: T } } {
 }
 
 // Mock imports for extracted components
-  // eslint-disable-next-line no-restricted-imports
+// eslint-disable-next-line no-restricted-imports
 import { useAgentChatPanelState } from '@/components/agent/AgentChatHooks';
-  // eslint-disable-next-line no-restricted-imports
+// eslint-disable-next-line no-restricted-imports
 import { AgentChatInputArea } from '@/components/agent/AgentChatInputArea';

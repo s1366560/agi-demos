@@ -16,10 +16,12 @@ export interface ApiErrorResponse {
  * Used for catch blocks where the error type is not guaranteed
  */
 export interface UnknownError extends Error {
-  response?: {
-    data?: ApiErrorResponse | undefined;
-    status?: number | undefined;
-  } | undefined;
+  response?:
+    | {
+        data?: ApiErrorResponse | undefined;
+        status?: number | undefined;
+      }
+    | undefined;
   code?: string | undefined;
 }
 

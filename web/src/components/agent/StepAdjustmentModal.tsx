@@ -88,7 +88,9 @@ const AdjustmentItem: React.FC<AdjustmentItemProps> = ({ adjustment, onApprove, 
           key="approve"
           type="text"
           icon={<CheckOutlined />}
-          onClick={() => { onApprove(adjustment.step_id); }}
+          onClick={() => {
+            onApprove(adjustment.step_id);
+          }}
           className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
           title="Approve adjustment"
         >
@@ -98,7 +100,9 @@ const AdjustmentItem: React.FC<AdjustmentItemProps> = ({ adjustment, onApprove, 
           key="reject"
           type="text"
           icon={<CloseOutlined />}
-          onClick={() => { onReject(adjustment.step_id); }}
+          onClick={() => {
+            onReject(adjustment.step_id);
+          }}
           className="text-red-500 hover:text-red-600 hover:bg-red-50"
           title="Reject adjustment"
         >

@@ -337,7 +337,9 @@ const DeadLetterQueue: React.FC = () => {
               type="text"
               size="small"
               icon={<EyeOutlined />}
-              onClick={() => { viewMessageDetail(record); }}
+              onClick={() => {
+                viewMessageDetail(record);
+              }}
             />
           </Tooltip>
           {record.can_retry && (
@@ -357,7 +359,9 @@ const DeadLetterQueue: React.FC = () => {
                 size="small"
                 danger
                 icon={<DeleteOutlined />}
-                onClick={() => { openDiscardModal([record.id]); }}
+                onClick={() => {
+                  openDiscardModal([record.id]);
+                }}
               />
             </Tooltip>
           )}
@@ -369,7 +373,9 @@ const DeadLetterQueue: React.FC = () => {
   // Row selection
   const rowSelection = {
     selectedRowKeys,
-    onChange: (keys: React.Key[]) => { setSelectedRowKeys(keys); },
+    onChange: (keys: React.Key[]) => {
+      setSelectedRowKeys(keys);
+    },
     getCheckboxProps: (record: DLQMessage) => ({
       disabled: record.status !== 'pending',
     }),
@@ -567,7 +573,9 @@ const DeadLetterQueue: React.FC = () => {
                   <Button
                     danger
                     icon={<DeleteOutlined />}
-                    onClick={() => { openDiscardModal(selectedRowKeys as string[]); }}
+                    onClick={() => {
+                      openDiscardModal(selectedRowKeys as string[]);
+                    }}
                   >
                     Discard Selected
                   </Button>
@@ -591,7 +599,9 @@ const DeadLetterQueue: React.FC = () => {
             pageSize: pagination.pageSize,
             showSizeChanger: true,
             showTotal: (total) => `Total ${total} messages`,
-            onChange: (page, pageSize) => { setPagination({ current: page, pageSize }); },
+            onChange: (page, pageSize) => {
+              setPagination({ current: page, pageSize });
+            },
           }}
           scroll={{ x: 900 }}
         />
@@ -601,9 +611,16 @@ const DeadLetterQueue: React.FC = () => {
       <Modal
         title="Message Details"
         open={detailModalVisible}
-        onCancel={() => { setDetailModalVisible(false); }}
+        onCancel={() => {
+          setDetailModalVisible(false);
+        }}
         footer={[
-          <Button key="close" onClick={() => { setDetailModalVisible(false); }}>
+          <Button
+            key="close"
+            onClick={() => {
+              setDetailModalVisible(false);
+            }}
+          >
             Close
           </Button>,
           selectedMessage?.can_retry && (
@@ -703,7 +720,9 @@ const DeadLetterQueue: React.FC = () => {
       <Modal
         title="Discard Message(s)"
         open={discardModalVisible}
-        onCancel={() => { setDiscardModalVisible(false); }}
+        onCancel={() => {
+          setDiscardModalVisible(false);
+        }}
         onOk={handleDiscardConfirm}
         okText="Discard"
         okButtonProps={{ danger: true }}
@@ -717,7 +736,9 @@ const DeadLetterQueue: React.FC = () => {
         <Text>Please provide a reason for discarding:</Text>
         <TextArea
           value={discardReason}
-          onChange={(e) => { setDiscardReason(e.target.value); }}
+          onChange={(e) => {
+            setDiscardReason(e.target.value);
+          }}
           placeholder="e.g., Duplicate event, Stale data, Manual fix applied..."
           rows={3}
           style={{ marginTop: 8 }}

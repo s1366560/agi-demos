@@ -106,7 +106,12 @@ export const SubAgentList: React.FC = () => {
     if (error) message.error(error);
   }, [error]);
 
-  useEffect(() => () => { clearError(); }, [clearError]);
+  useEffect(
+    () => () => {
+      clearError();
+    },
+    [clearError]
+  );
 
   // Handlers
   const handleCreate = useCallback(() => {

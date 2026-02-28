@@ -222,7 +222,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
             }}
             rows={10}
             className="font-mono text-sm"
-            status={jsonError ? 'error' : '' as const}
+            status={jsonError ? 'error' : ('' as const)}
           />
           {jsonError && <Alert type="error" message={jsonError} showIcon className="mt-2" />}
         </Form.Item>

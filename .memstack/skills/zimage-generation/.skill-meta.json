@@ -1,0 +1,9 @@
+{
+  "source": "toolsai/free-zimage-skills",
+  "skill_name": "zimage-generation",
+  "branch": "main",
+  "source_path": "SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

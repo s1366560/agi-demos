@@ -100,7 +100,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   const lastMessageCount = useRef(messages.length);
 
   // Virtualizer instance
-// eslint-disable-next-line react-hooks/incompatible-library
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
@@ -175,7 +175,9 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     if (!element) return;
 
     element.addEventListener('scroll', handleScroll, { passive: true });
-    return () => { element.removeEventListener('scroll', handleScroll); };
+    return () => {
+      element.removeEventListener('scroll', handleScroll);
+    };
   }, [handleScroll]);
 
   /**
