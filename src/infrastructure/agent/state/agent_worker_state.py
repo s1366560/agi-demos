@@ -37,6 +37,7 @@ import redis.asyncio as redis
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 from src.infrastructure.agent.plugins.registry import (
     PluginDiagnostic,
+    PluginSkillBuildContext,
     PluginToolBuildContext,
     get_plugin_registry,
 )
@@ -439,6 +440,13 @@ async def get_or_create_tools(
 
     # 11. Add plugin tools
     await _add_plugin_tools(tools, tenant_id, project_id)
+
+    # 11b. Add sandbox plugin tools (dependency-managed)
+    sandbox_id = kwargs.get("sandbox_id")
+    sandbox_port = kwargs.get("sandbox_port")
+    await _add_sandbox_plugin_tools(
+        tools, tenant_id, project_id, sandbox_id, sandbox_port, redis_client
+    )
 
     # 12. Add custom tools from .memstack/tools/
     _add_custom_tools(tools, project_id)
@@ -882,6 +890,274 @@ async def _add_plugin_tools(
             len(plugin_tools),
             project_id,
         )
+
+
+async def _add_sandbox_plugin_tools(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+    sandbox_id: str | None,
+    sandbox_port: Any,
+    redis_client: Any,
+) -> None:
+    """Load sandbox plugin tool factories and wrap them with dependency management."""
+    if sandbox_id is None or sandbox_port is None:
+        logger.debug(
+            "Agent Worker: No sandbox available, skipping sandbox plugin tools"
+        )
+        return
+
+    try:
+        from src.infrastructure.agent.plugins.registry import get_plugin_registry
+
+        plugin_registry = get_plugin_registry()
+        sandbox_factories = plugin_registry.list_sandbox_tool_factories()
+
+        if not sandbox_factories:
+            return
+
+        orchestrator = _build_sandbox_orchestrator(
+            redis_client=redis_client,
+            sandbox_port=sandbox_port,
+        )
+
+        added_count = 0
+        for plugin_name, factories in sandbox_factories.items():
+            deps_service_key = f"{plugin_name}:sandbox_deps"
+            declared_deps = plugin_registry.get_service(deps_service_key)
+
+            for factory in factories:
+                count = await _process_sandbox_factory(
+                    factory=factory,
+                    plugin_name=plugin_name,
+                    declared_deps=declared_deps,
+                    tools=tools,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    sandbox_id=sandbox_id,
+                    sandbox_port=sandbox_port,
+                    orchestrator=orchestrator,
+                )
+                added_count += count
+
+        if added_count > 0:
+            logger.info(
+                "Agent Worker: Added %d sandbox plugin tools "
+                "for project %s",
+                added_count,
+                project_id,
+            )
+    except Exception:
+        logger.debug(
+            "Agent Worker: Sandbox plugin tools not available",
+            exc_info=True,
+        )
+
+
+def _build_sandbox_orchestrator(
+    *,
+    redis_client: Any,
+    sandbox_port: Any,
+) -> Any:
+    """Build a DependencyOrchestrator for one sandbox session."""
+    from src.infrastructure.agent.plugins.sandbox_deps.orchestrator import (
+        DependencyOrchestrator,
+    )
+    from src.infrastructure.agent.plugins.sandbox_deps.sandbox_installer import (
+        SandboxDependencyInstaller as SbxInstaller,
+    )
+    from src.infrastructure.agent.plugins.sandbox_deps.security_gate import (
+        SecurityGate,
+    )
+    from src.infrastructure.agent.plugins.sandbox_deps.state_store import (
+        DepsStateStore,
+    )
+
+    state_store = DepsStateStore(redis_client=redis_client)
+    security_gate = SecurityGate()
+    sandbox_installer = SbxInstaller(
+        sandbox_tool_caller=sandbox_port.call_tool,
+        security_gate=security_gate,
+    )
+    return DependencyOrchestrator(
+        state_store=state_store,
+        sandbox_installer=sandbox_installer,
+        security_gate=security_gate,
+    )
+
+
+async def _process_sandbox_factory(
+    *,
+    factory: Any,
+    plugin_name: str,
+    declared_deps: Any,
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+    sandbox_id: str,
+    sandbox_port: Any,
+    orchestrator: Any,
+) -> int:
+    """Process a single sandbox plugin factory, returning the count of tools added."""
+    import inspect
+
+    from src.infrastructure.agent.plugins.registry import PluginToolBuildContext
+
+    try:
+        build_ctx = PluginToolBuildContext(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            base_tools=tools,
+        )
+        factory_result = factory(build_ctx)
+
+        if inspect.isawaitable(factory_result):
+            factory_result = await factory_result
+
+        if not isinstance(factory_result, dict):
+            return 0
+
+        added = 0
+        for tool_name, tool_meta in factory_result.items():
+            tool_info = _build_tool_from_meta(
+                tool_name=tool_name,
+                tool_meta=tool_meta,
+                declared_deps=declared_deps,
+                tools=tools,
+                plugin_name=plugin_name,
+                sandbox_id=sandbox_id,
+                project_id=project_id,
+                sandbox_port=sandbox_port,
+                orchestrator=orchestrator,
+            )
+            if tool_info is not None:
+                tools[tool_name] = tool_info
+                added += 1
+        return added
+    except Exception:
+        logger.warning(
+            "Agent Worker: Failed to build sandbox "
+            "plugin tool from '%s'",
+            plugin_name,
+            exc_info=True,
+        )
+        return 0
+
+
+def _build_tool_from_meta(
+    *,
+    tool_name: str,
+    tool_meta: Any,
+    declared_deps: Any,
+    tools: dict[str, Any],
+    plugin_name: str,
+    sandbox_id: str,
+    project_id: str,
+    sandbox_port: Any,
+    orchestrator: Any,
+) -> Any:
+    """Extract metadata from a factory result entry and build a ToolInfo, or return None."""
+    from src.infrastructure.agent.plugins.sandbox_deps.models import (
+        RuntimeDependencies,
+    )
+    from src.infrastructure.agent.plugins.sandbox_deps.sandbox_plugin_tool_wrapper import (
+        create_sandbox_plugin_tool,
+    )
+
+    if tool_name in tools:
+        logger.debug(
+            "Agent Worker: Sandbox plugin tool '%s' "
+            "skipped (name conflict)",
+            tool_name,
+        )
+        return None
+
+    tool_description = ""
+    tool_parameters: dict[str, Any] = {}
+    tool_permission: str | None = None
+    tool_deps = declared_deps
+
+    if isinstance(tool_meta, dict):
+        tool_description = tool_meta.get("description", "")
+        tool_parameters = tool_meta.get("parameters", {})
+        tool_permission = tool_meta.get("permission")
+        if "dependencies" in tool_meta:
+            tool_deps = tool_meta["dependencies"]
+
+    if tool_deps is None:
+        return None
+
+    if not isinstance(tool_deps, RuntimeDependencies):
+        return None
+
+    return create_sandbox_plugin_tool(
+        plugin_id=plugin_name,
+        tool_name=tool_name,
+        description=tool_description,
+        parameters=tool_parameters,
+        sandbox_id=sandbox_id,
+        project_id=project_id,
+        sandbox_port=sandbox_port,
+        orchestrator=orchestrator,
+        dependencies=tool_deps,
+        permission=tool_permission,
+    )
+async def _add_plugin_skills(
+    skills: list[Any],
+    tenant_id: str,
+    project_id: str | None,
+    agent_mode: str = "default",
+) -> list[Any]:
+    """Load plugin runtime and add plugin-provided skills.
+
+    Returns a new list with plugin skills appended (no name conflicts
+    with existing filesystem/database skills).
+    """
+    from src.infrastructure.agent.tools.plugin_skills import build_plugin_skills
+
+    # Ensure plugin runtime is loaded before building plugin-provided skills.
+    runtime_manager = get_plugin_runtime_manager()
+    runtime_diagnostics = await runtime_manager.ensure_loaded()
+    for diagnostic in runtime_diagnostics:
+        _log_plugin_diagnostic(diagnostic, context="runtime_load_skills")
+
+    plugin_registry = get_plugin_registry()
+    plugin_skills = await build_plugin_skills(
+        plugin_registry,
+        PluginSkillBuildContext(
+            tenant_id=tenant_id,
+            project_id=project_id or "",
+            agent_mode=agent_mode,
+        ),
+        discovered_plugins=runtime_manager.discovered_plugins,
+    )
+
+    if not plugin_skills:
+        return skills
+
+    existing_names = {getattr(s, "name", None) for s in skills}
+    added = 0
+    merged = list(skills)
+    for skill in plugin_skills:
+        if skill.name in existing_names:
+            logger.debug(
+                "Agent Worker: Plugin skill '%s' skipped (name conflict with existing skill)",
+                skill.name,
+            )
+            continue
+        merged.append(skill)
+        existing_names.add(skill.name)
+        added += 1
+
+    if added:
+        logger.info(
+            "Agent Worker: Added %d plugin skills for tenant=%s project=%s",
+            added,
+            tenant_id,
+            project_id,
+        )
+
+    return merged
 
 
 def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
@@ -2430,6 +2706,12 @@ async def get_or_create_skills(
                     )
 
             skills = list(loaded_by_name.values())
+
+            # Merge plugin-provided skills
+            try:
+                skills = await _add_plugin_skills(skills, tenant_id, project_id)
+            except Exception as e:
+                logger.warning("Agent Worker: Plugin skills loading failed: %s", e)
             _skills_cache[cache_key] = skills
             logger.info(
                 "Agent Worker: Skills cached for %s, total=%d, errors=%d",

@@ -69,14 +69,14 @@ async def test_tool_calculator(ctx: object, operation: str, a: float, b: float) 
             result = a * b
         elif operation == "divide":
             if b == 0:
-                return ToolResult(error="Division by zero is not allowed")
+                return ToolResult(output="Division by zero is not allowed", is_error=True)
             result = a / b
         else:
-            return ToolResult(error=f"Unknown operation: {operation}")
+            return ToolResult(output=f"Unknown operation: {operation}", is_error=True)
         
         return ToolResult(output=f"Result: {result}")
     except Exception as e:
-        return ToolResult(error=f"Calculation error: {e!s}")
+        return ToolResult(output=f"Calculation error: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -103,13 +103,13 @@ async def test_tool_calculator(ctx: object, operation: str, a: float, b: float) 
 async def test_tool_error(ctx: object, error_type: str, message: str) -> ToolResult:
     """Return an error result to test error handling."""
     if error_type == "validation":
-        return ToolResult(error=f"Validation error: {message}")
+        return ToolResult(output=f"Validation error: {message}", is_error=True)
     elif error_type == "runtime":
-        return ToolResult(error=f"Runtime error: {message}")
+        return ToolResult(output=f"Runtime error: {message}", is_error=True)
     elif error_type == "custom":
-        return ToolResult(error=message)
+        return ToolResult(output=message, is_error=True)
     else:
-        return ToolResult(error="Unknown error type")
+        return ToolResult(output="Unknown error type", is_error=True)
 
 
 @tool_define(
@@ -193,10 +193,10 @@ async def test_tool_validation(
     """Test parameter validation constraints."""
     # Manual validation as JSON Schema is checked by the framework
     if len(username) < 3 or len(username) > 20:
-        return ToolResult(error="Username must be 3-20 characters")
+        return ToolResult(output="Username must be 3-20 characters", is_error=True)
     
     if not username.isalnum():
-        return ToolResult(error="Username must be alphanumeric")
+        return ToolResult(output="Username must be alphanumeric", is_error=True)
     
     return ToolResult(output=f"Valid: username={username}, count={count}, enabled={enabled}")
 
@@ -227,4 +227,4 @@ async def test_tool_status(ctx: object, check_type: str) -> ToolResult:
     elif check_type == "full":
         return ToolResult(output="Full status: All systems operational | Tools: echo, calculator, error, complex, validation, status")
     else:
-        return ToolResult(error="Unknown check type")
+        return ToolResult(output="Unknown check type", is_error=True)

@@ -6,6 +6,14 @@
     }
   },
   "tenants": {
+    "872d2a79-9ad8-4281-a76d-bdf90058687a": {
+      "plugins": {
+        "feishu-channel-plugin": {
+          "enabled": true,
+          "updated_at": "2026-03-01T02:01:09.906054+00:00"
+        }
+      }
+    },
     "d76c3bdb-d8a6-407b-8c70-dd455e5df3a4": {
       "plugins": {
         "feishu-channel-plugin": {

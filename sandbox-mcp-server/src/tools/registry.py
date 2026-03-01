@@ -19,6 +19,11 @@ from src.tools.ast_tools import (
     create_ast_parse_tool,
 )
 from src.tools.bash_tool import create_bash_tool
+from src.tools.deps_tools import (
+    create_deps_check_tool,
+    create_deps_install_tool,
+    create_plugin_tool_exec_tool,
+)
 from src.tools.desktop_tools import (
     create_change_resolution_tool,
     create_desktop_status_tool,
@@ -195,6 +200,11 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_mcp_server_list_tool())
     registry.register(create_mcp_server_discover_tools_tool())
     registry.register(create_mcp_server_call_tool_tool())
+
+    # Register dependency management tools
+    registry.register(create_deps_install_tool())
+    registry.register(create_deps_check_tool())
+    registry.register(create_plugin_tool_exec_tool())
 
     logger.info(f"Tool registry initialized with {len(registry.list_names())} tools")
     return registry

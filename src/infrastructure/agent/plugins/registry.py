@@ -9,13 +9,50 @@ from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
 
+import jsonschema
+
 logger = logging.getLogger(__name__)
 
 PluginToolFactory = Callable[["PluginToolBuildContext"], dict[str, Any] | Awaitable[dict[str, Any]]]
 ChannelReloadHook = Callable[["ChannelReloadContext"], None | Awaitable[None]]
 ChannelAdapterFactory = Callable[["ChannelAdapterBuildContext"], Any | Awaitable[Any]]
 PluginHookHandler = Callable[[Mapping[str, Any]], None | Awaitable[None]]
+
+# Well-known hook names recognised by the agent runtime.
+# Plugins may register handlers for any string, but these names have
+# documented semantics and are invoked by the core pipeline.
+WELL_KNOWN_HOOKS: frozenset[str] = frozenset(
+    {
+        "before_tool_selection",
+        "after_tool_selection",
+        "before_tool_execution",
+        "after_tool_execution",
+        "before_response",
+        "after_response",
+        "before_planning",
+        "after_planning",
+        "on_error",
+        "on_session_start",
+        "on_session_end",
+        "on_context_overflow",
+    }
+)
 PluginCommandHandler = Callable[[Mapping[str, Any]], Any | Awaitable[Any]]
+PluginSkillFactory = Callable[
+    ["PluginSkillBuildContext"], list[dict[str, Any]] | Awaitable[list[dict[str, Any]]]
+]
+PluginHttpHandler = Callable[..., Any | Awaitable[Any]]
+PluginCliHandler = Callable[[Mapping[str, Any]], Any | Awaitable[Any]]
+PluginLifecycleHandler = Callable[[], None | Awaitable[None]]
+
+LIFECYCLE_EVENTS: frozenset[str] = frozenset(
+    {
+        "on_load",
+        "on_enable",
+        "on_disable",
+        "on_unload",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +62,15 @@ class PluginToolBuildContext:
     tenant_id: str
     project_id: str
     base_tools: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class PluginSkillBuildContext:
+    """Build context passed to plugin skill factories."""
+
+    tenant_id: str
+    project_id: str
+    agent_mode: str
 
 
 @dataclass(frozen=True)
@@ -57,6 +103,37 @@ class ChannelTypeConfigMetadata:
 
 
 @dataclass(frozen=True)
+class PluginHttpRoute:
+    """Metadata for one HTTP route registered by a plugin."""
+
+    plugin_name: str
+    method: str
+    path: str
+    handler: PluginHttpHandler
+    summary: str | None = None
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PluginCliCommand:
+    """Metadata for one CLI command registered by a plugin."""
+
+    plugin_name: str
+    name: str
+    handler: PluginCliHandler
+    description: str | None = None
+    args_schema: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class PluginConfigSchema:
+    """Validated config schema registered by a plugin."""
+
+    plugin_name: str
+    schema: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class PluginDiagnostic:
     """Diagnostic record emitted by plugin runtime operations."""
 
@@ -71,14 +148,21 @@ class AgentPluginRegistry:
 
     def __init__(self) -> None:
         self._tool_factories: dict[str, PluginToolFactory] = {}
+        self._skill_factories: dict[str, PluginSkillFactory] = {}
         self._channel_reload_hooks: dict[str, ChannelReloadHook] = {}
         self._channel_adapter_factories: dict[str, tuple[str, ChannelAdapterFactory]] = {}
         self._channel_type_metadata: dict[str, ChannelTypeConfigMetadata] = {}
-        self._hook_handlers: dict[str, dict[str, PluginHookHandler]] = {}
+        self._hook_handlers: dict[str, dict[str, tuple[int, PluginHookHandler]]] = {}
         self._commands: dict[str, tuple[str, PluginCommandHandler]] = {}
         self._services: dict[str, tuple[str, Any]] = {}
         self._providers: dict[str, tuple[str, Any]] = {}
+        self._http_routes: dict[str, list[PluginHttpRoute]] = {}
+        self._cli_commands: dict[str, list[PluginCliCommand]] = {}
+        self._lifecycle_hooks: dict[str, dict[str, PluginLifecycleHandler]] = {}
         self._lock = RLock()
+        self._lock = RLock()
+        self._config_schemas: dict[str, PluginConfigSchema] = {}
+        self._sandbox_tool_factories: dict[str, list[PluginToolFactory]] = {}
 
     def register_tool_factory(
         self,
@@ -92,6 +176,106 @@ class AgentPluginRegistry:
             if plugin_name in self._tool_factories and not overwrite:
                 raise ValueError(f"Tool factory already registered for plugin: {plugin_name}")
             self._tool_factories[plugin_name] = factory
+
+    def register_sandbox_tool_factory(
+        self,
+        plugin_name: str,
+        factory: PluginToolFactory,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Register a sandbox tool factory for a plugin.
+
+        Unlike regular tool factories which are keyed by plugin name (one per plugin),
+        sandbox tool factories allow multiple registrations per plugin since a plugin
+        may declare several sandbox-side tools.
+
+        When *overwrite* is True, all existing factories for *plugin_name* are replaced.
+        """
+        with self._lock:
+            if overwrite:
+                self._sandbox_tool_factories[plugin_name] = [factory]
+            else:
+                self._sandbox_tool_factories.setdefault(plugin_name, []).append(factory)
+    def register_skill_factory(
+        self,
+        plugin_name: str,
+        factory: PluginSkillFactory,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Register a plugin skill factory."""
+        with self._lock:
+            if plugin_name in self._skill_factories and not overwrite:
+                raise ValueError(f"Skill factory already registered for plugin: {plugin_name}")
+            self._skill_factories[plugin_name] = factory
+
+    def register_http_route(
+        self,
+        plugin_name: str,
+        method: str,
+        path: str,
+        handler: PluginHttpHandler,
+        *,
+        summary: str | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """Register an HTTP route for a plugin."""
+        normalized_method = (method or "").strip().upper()
+        normalized_path = (path or "").strip()
+        if not normalized_method:
+            raise ValueError("method is required")
+        if not normalized_path:
+            raise ValueError("path is required")
+        route = PluginHttpRoute(
+            plugin_name=plugin_name,
+            method=normalized_method,
+            path=normalized_path,
+            handler=handler,
+            summary=summary,
+            tags=list(tags or []),
+        )
+        with self._lock:
+            existing = self._http_routes.setdefault(plugin_name, [])
+            for existing_route in existing:
+                if (
+                    existing_route.method == normalized_method
+                    and existing_route.path == normalized_path
+                ):
+                    raise ValueError(
+                        f"HTTP route already registered for plugin={plugin_name}: "
+                        f"{normalized_method} {normalized_path}"
+                    )
+            existing.append(route)
+
+    def register_cli_command(
+        self,
+        plugin_name: str,
+        name: str,
+        handler: PluginCliHandler,
+        *,
+        description: str | None = None,
+        args_schema: dict[str, Any] | None = None,
+    ) -> None:
+        """Register a CLI command for a plugin."""
+        normalized_name = (name or "").strip().lower()
+        if not normalized_name:
+            raise ValueError("name is required")
+        command = PluginCliCommand(
+            plugin_name=plugin_name,
+            name=normalized_name,
+            handler=handler,
+            description=description,
+            args_schema=dict(args_schema) if isinstance(args_schema, dict) else None,
+        )
+        with self._lock:
+            existing = self._cli_commands.setdefault(plugin_name, [])
+            for existing_cmd in existing:
+                if existing_cmd.name == normalized_name:
+                    raise ValueError(
+                        f"CLI command already registered for plugin={plugin_name}: {normalized_name}"
+                    )
+            existing.append(command)
 
     def register_channel_reload_hook(
         self,
@@ -150,9 +334,18 @@ class AgentPluginRegistry:
         hook_name: str,
         handler: PluginHookHandler,
         *,
+        priority: int = 100,
         overwrite: bool = False,
     ) -> None:
-        """Register a named runtime hook handler."""
+        """Register a named runtime hook handler.
+
+        Args:
+            plugin_name: Owning plugin identifier.
+            hook_name: Hook point name (see ``WELL_KNOWN_HOOKS`` for documented names).
+            handler: Async or sync callable invoked when the hook fires.
+            priority: Numeric priority -- lower values run first.  Default ``100``.
+            overwrite: Allow replacing an existing handler from the same plugin.
+        """
         normalized_hook_name = (hook_name or "").strip().lower()
         if not normalized_hook_name:
             raise ValueError("hook_name is required")
@@ -162,7 +355,7 @@ class AgentPluginRegistry:
                 raise ValueError(
                     f"Hook already registered for plugin={plugin_name}: {normalized_hook_name}"
                 )
-            bucket[plugin_name] = handler
+            bucket[plugin_name] = (priority, handler)
 
     def register_command(
         self,
@@ -232,6 +425,16 @@ class AgentPluginRegistry:
         with self._lock:
             return dict(self._tool_factories)
 
+    def list_sandbox_tool_factories(self) -> dict[str, list[PluginToolFactory]]:
+        """Return a snapshot of registered sandbox tool factories."""
+        with self._lock:
+            return {k: list(v) for k, v in self._sandbox_tool_factories.items()}
+
+    def list_skill_factories(self) -> dict[str, PluginSkillFactory]:
+        """Return a snapshot of registered skill factories."""
+        with self._lock:
+            return dict(self._skill_factories)
+
     def list_channel_adapter_factories(self) -> dict[str, tuple[str, ChannelAdapterFactory]]:
         """Return a snapshot of channel adapter factories keyed by channel_type."""
         with self._lock:
@@ -242,12 +445,20 @@ class AgentPluginRegistry:
         with self._lock:
             return dict(self._channel_type_metadata)
 
-    def list_hooks(self) -> dict[str, dict[str, PluginHookHandler]]:
-        """Return registered hook handlers grouped by hook name."""
+    def list_hooks(self) -> dict[str, dict[str, tuple[int, PluginHookHandler]]]:
+        """Return registered hook handlers grouped by hook name.
+
+        Each entry maps *plugin_name* to a ``(priority, handler)`` tuple.
+        """
         with self._lock:
             return {
                 hook_name: dict(handlers) for hook_name, handlers in self._hook_handlers.items()
             }
+
+    @staticmethod
+    def list_well_known_hooks() -> frozenset[str]:
+        """Return the set of well-known hook names with documented semantics."""
+        return WELL_KNOWN_HOOKS
 
     def list_commands(self) -> dict[str, tuple[str, PluginCommandHandler]]:
         """Return command handlers keyed by command name."""
@@ -264,22 +475,98 @@ class AgentPluginRegistry:
         with self._lock:
             return dict(self._providers)
 
+    def list_http_routes(self) -> dict[str, list[PluginHttpRoute]]:
+        """Return registered HTTP routes grouped by plugin name."""
+        with self._lock:
+            return {plugin: list(routes) for plugin, routes in self._http_routes.items()}
+
+    def list_cli_commands(self) -> dict[str, list[PluginCliCommand]]:
+        """Return registered CLI commands grouped by plugin name."""
+        with self._lock:
+            return {plugin: list(cmds) for plugin, cmds in self._cli_commands.items()}
+
+    def register_lifecycle_hook(
+        self,
+        plugin_name: str,
+        event: str,
+        handler: PluginLifecycleHandler,
+    ) -> None:
+        """Register a lifecycle hook handler for a plugin."""
+        normalized_event = (event or "").strip().lower()
+        if normalized_event not in LIFECYCLE_EVENTS:
+            raise ValueError(
+                f"Unknown lifecycle event '{normalized_event}'. "
+                f"Expected one of: {sorted(LIFECYCLE_EVENTS)}"
+            )
+        with self._lock:
+            bucket = self._lifecycle_hooks.setdefault(normalized_event, {})
+            bucket[plugin_name] = handler
+
+    async def notify_lifecycle(
+        self,
+        event: str,
+        *,
+        plugin_names: list[str] | None = None,
+    ) -> list[PluginDiagnostic]:
+        """Invoke lifecycle handlers for the given event."""
+        normalized_event = (event or "").strip().lower()
+        if normalized_event not in LIFECYCLE_EVENTS:
+            return []
+
+        with self._lock:
+            raw_handlers = dict(self._lifecycle_hooks.get(normalized_event, {}))
+
+        diagnostics: list[PluginDiagnostic] = []
+        for plugin_name, handler in raw_handlers.items():
+            if plugin_names is not None and plugin_name not in plugin_names:
+                continue
+            try:
+                result = handler()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:
+                diagnostics.append(
+                    PluginDiagnostic(
+                        plugin_name=plugin_name,
+                        code="lifecycle_hook_failed",
+                        message=f"{normalized_event}: {exc}",
+                        level="error",
+                    )
+                )
+        return diagnostics
+
+    def list_lifecycle_hooks(self) -> dict[str, dict[str, PluginLifecycleHandler]]:
+        """Return registered lifecycle hooks grouped by event name."""
+        with self._lock:
+            return {event: dict(handlers) for event, handlers in self._lifecycle_hooks.items()}
+
     async def notify_hook(
         self,
         hook_name: str,
         *,
         payload: Mapping[str, Any] | None = None,
     ) -> list[PluginDiagnostic]:
-        """Invoke named hook handlers and collect diagnostics."""
+        """Invoke named hook handlers sorted by priority and collect diagnostics.
+
+        Handlers with a *lower* numeric priority run first.  Handlers sharing
+        the same priority execute in registration order.
+        """
         normalized_name = (hook_name or "").strip().lower()
         if not normalized_name:
             return []
 
         with self._lock:
-            handlers = dict(self._hook_handlers.get(normalized_name, {}))
+            raw_handlers = dict(self._hook_handlers.get(normalized_name, {}))
+
+        # Sort by priority (lower = earlier).  dict ordering is stable so equal
+        # priorities preserve registration order.
+        sorted_handlers = sorted(
+            raw_handlers.items(),
+            key=lambda item: item[1][0],
+        )
 
         diagnostics: list[PluginDiagnostic] = []
-        for plugin_name, handler in handlers.items():
+        for plugin_name, (_priority, handler) in sorted_handlers:
             try:
                 result = handler(dict(payload or {}))
                 if inspect.isawaitable(result):
@@ -366,7 +653,7 @@ class AgentPluginRegistry:
                 if inspect.isawaitable(produced):
                     produced = await produced
                 if not isinstance(produced, dict):
-                    diagnostics.append(  # type: ignore[unreachable]
+                    diagnostics.append(
                         PluginDiagnostic(
                             plugin_name=plugin_name,
                             code="invalid_tool_factory_result",
@@ -406,6 +693,51 @@ class AgentPluginRegistry:
                 )
 
         return plugin_tools, diagnostics
+
+    async def build_skills(
+        self,
+        context: PluginSkillBuildContext,
+    ) -> tuple[list[dict[str, Any]], list[PluginDiagnostic]]:
+        """Build plugin-provided skill definitions for the given context."""
+        skill_factories = self.list_skill_factories()
+        diagnostics: list[PluginDiagnostic] = []
+        plugin_skills: list[dict[str, Any]] = []
+
+        for plugin_name, factory in skill_factories.items():
+            try:
+                produced = factory(context)
+                if inspect.isawaitable(produced):
+                    produced = await produced
+                if not isinstance(produced, list):
+                    diagnostics.append(
+                        PluginDiagnostic(
+                            plugin_name=plugin_name,
+                            code="invalid_skill_factory_result",
+                            message="Skill factory must return list[dict[str, Any]]",
+                            level="error",
+                        )
+                    )
+                    continue
+                plugin_skills.extend(produced)
+                diagnostics.append(
+                    PluginDiagnostic(
+                        plugin_name=plugin_name,
+                        code="plugin_skills_loaded",
+                        message=f"Registered {len(produced)} plugin skill(s)",
+                        level="info",
+                    )
+                )
+            except Exception as exc:
+                diagnostics.append(
+                    PluginDiagnostic(
+                        plugin_name=plugin_name,
+                        code="skill_factory_failed",
+                        message=str(exc),
+                        level="error",
+                    )
+                )
+
+        return plugin_skills, diagnostics
 
     async def notify_channel_reload(
         self,
@@ -498,6 +830,56 @@ class AgentPluginRegistry:
             self._commands.clear()
             self._services.clear()
             self._providers.clear()
+            self._skill_factories.clear()
+            self._http_routes.clear()
+            self._cli_commands.clear()
+            self._lifecycle_hooks.clear()
+            self._config_schemas.clear()
+            self._sandbox_tool_factories.clear()
+
+    def register_config_schema(self, plugin_name: str, schema: dict[str, Any]) -> None:
+        """Register a JSON Schema for validating a plugin's configuration."""
+        if not isinstance(schema, dict) or not schema:
+            raise ValueError("schema must be a non-empty dict")
+        with self._lock:
+            self._config_schemas[plugin_name] = PluginConfigSchema(
+                plugin_name=plugin_name,
+                schema=dict(schema),
+            )
+
+    def validate_config(self, plugin_name: str, config: dict[str, Any]) -> list[PluginDiagnostic]:
+        """Validate plugin config against its registered JSON Schema."""
+        with self._lock:
+            entry = self._config_schemas.get(plugin_name)
+        if entry is None:
+            return []
+        diagnostics: list[PluginDiagnostic] = []
+        try:
+            jsonschema.validate(instance=config, schema=entry.schema)
+        except jsonschema.ValidationError as exc:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="config_validation_failed",
+                    message=str(exc.message),
+                    level="error",
+                )
+            )
+        except jsonschema.SchemaError as exc:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="config_schema_invalid",
+                    message=str(exc.message),
+                    level="error",
+                )
+            )
+        return diagnostics
+
+    def list_config_schemas(self) -> dict[str, PluginConfigSchema]:
+        """Return a snapshot of registered config schemas."""
+        with self._lock:
+            return dict(self._config_schemas)
 
 
 _global_plugin_registry = AgentPluginRegistry()

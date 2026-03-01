@@ -56,6 +56,7 @@ class PluginRuntimeManager:
                 return []
 
             if force_reload:
+                await self._registry.notify_lifecycle("on_unload")
                 self._registry.clear()
 
             discovered, discovery_diagnostics = discover_plugins(
@@ -82,6 +83,11 @@ class PluginRuntimeManager:
     async def reload(self) -> list[PluginDiagnostic]:
         """Force plugin re-discovery and registry rebuild."""
         return await self.ensure_loaded(force_reload=True)
+
+    @property
+    def discovered_plugins(self) -> list[DiscoveredPlugin]:
+        """Return a copy of the last discovered plugin list."""
+        return list(self._last_discovered)
 
     def list_plugins(
         self,
@@ -175,7 +181,12 @@ class PluginRuntimeManager:
             previous_state = self._state_store.get_plugin(plugin_name)
             self._state_store.update_plugin(plugin_name, enabled=enabled)
             try:
-                return await self.reload()
+                lifecycle_event = "on_enable" if enabled else "on_disable"
+                lifecycle_diags = await self._registry.notify_lifecycle(
+                    lifecycle_event, plugin_names=[plugin_name]
+                )
+                reload_diags = await self.reload()
+                return lifecycle_diags + reload_diags
             except Exception:
                 self._restore_plugin_state(plugin_name, previous_state)
                 raise

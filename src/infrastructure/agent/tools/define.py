@@ -37,7 +37,13 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.plugins.sandbox_deps.models import (
+        ExecutionContext,
+        RuntimeDependencies,
+    )
 
 # ---------------------------------------------------------------------------
 # ToolInfo dataclass
@@ -58,6 +64,8 @@ class ToolInfo:
         model_filter: Optional callable that decides if tool is available
             for a given model identifier string.
         tags: Freeform tags for filtering.
+        execution_context: Optional execution context (host, sandbox, or hybrid).
+        dependencies: Optional runtime dependencies for this tool.
     """
 
     name: str
@@ -68,6 +76,8 @@ class ToolInfo:
     category: str = "general"
     model_filter: Callable[[str], bool] | None = None
     tags: frozenset[str] = field(default_factory=lambda: frozenset[str]())
+    execution_context: ExecutionContext | None = None
+    dependencies: RuntimeDependencies | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +118,8 @@ def tool_define(
     category: str = "general",
     model_filter: Callable[[str], bool] | None = None,
     tags: frozenset[str] | None = None,
+    execution_context: ExecutionContext | None = None,
+    dependencies: RuntimeDependencies | None = None,
 ) -> Callable[[Callable[..., Awaitable[Any]]], ToolInfo]:
     """Decorator factory that converts an async function into a :class:`ToolInfo`.
 
@@ -126,6 +138,8 @@ def tool_define(
         model_filter: Optional predicate ``(model_id) -> bool`` that
             controls whether the tool is offered to a specific model.
         tags: Optional freeform tags for filtering.
+        execution_context: Optional execution context (host, sandbox, or hybrid).
+        dependencies: Optional runtime dependencies for this tool.
 
     Returns:
         A decorator that accepts an async callable and returns a
@@ -142,6 +156,8 @@ def tool_define(
             category=category,
             model_filter=model_filter,
             tags=tags if tags is not None else frozenset(),
+            execution_context=execution_context,
+            dependencies=dependencies,
         )
         # Attach metadata to the original function for introspection.
         fn._tool_info = info  # type: ignore[attr-defined]
@@ -231,6 +247,7 @@ __all__ = [
     "ToolInfo",
     "clear_registry",
     "get_registered_tools",
+    "pop_registered_tool",
     "tool_define",
     "tool_info_to_openai_format",
     "wrap_legacy_tool",

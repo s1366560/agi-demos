@@ -3,3 +3,5 @@
 # Keep this file empty (or with only comments) to skip heartbeat API calls.
 
 # Add tasks below when you want the agent to check something periodically.
+
+# 2026-02-28 测试记录：心跳功能测试 ✅

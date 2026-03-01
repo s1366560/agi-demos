@@ -1,0 +1,10 @@
+{
+  "id": "pdf-assistant",
+  "kind": "pdf-assistant",
+  "name": "PDF Assistant",
+  "description": "A powerful PDF processing assistant that can extract text, images, tables, merge/split PDFs, add watermarks, encrypt, and more.",
+  "version": "1.0.0",
+  "channels": [],
+  "providers": ["pdf-storage"],
+  "skills": ["./skills"]
+}

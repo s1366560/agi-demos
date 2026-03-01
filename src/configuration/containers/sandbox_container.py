@@ -206,3 +206,39 @@ class SandboxContainer:
             return {str(cwd_memstack): mount_point}
 
         return None
+
+    def dependency_orchestrator(self) -> Any:
+        """Get DependencyOrchestrator for sandbox dependency management.
+
+        Coordinates dependency installation across host and sandbox runtimes.
+        Requires redis_client and sandbox_adapter_factory to be set.
+        """
+        from src.infrastructure.agent.plugins.sandbox_deps.orchestrator import (
+            DependencyOrchestrator,
+        )
+        from src.infrastructure.agent.plugins.sandbox_deps.sandbox_installer import (
+            SandboxDependencyInstaller,
+        )
+        from src.infrastructure.agent.plugins.sandbox_deps.security_gate import SecurityGate
+        from src.infrastructure.agent.plugins.sandbox_deps.state_store import DepsStateStore
+
+        security_gate = SecurityGate()
+        state_store = DepsStateStore(redis_client=self._redis_client)
+
+        sandbox_adapter = (
+            self._sandbox_adapter_factory() if self._sandbox_adapter_factory else None
+        )
+        assert sandbox_adapter is not None, (
+            "sandbox_adapter_factory is required for DependencyOrchestrator"
+        )
+
+        sandbox_installer = SandboxDependencyInstaller(
+            sandbox_tool_caller=sandbox_adapter.execute_tool,
+            security_gate=security_gate,
+        )
+
+        return DependencyOrchestrator(
+            state_store=state_store,
+            sandbox_installer=sandbox_installer,
+            security_gate=security_gate,
+        )

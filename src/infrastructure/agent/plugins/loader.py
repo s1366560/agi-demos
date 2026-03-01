@@ -36,6 +36,16 @@ class AgentPluginLoader:
                 setup_result = setup_fn(api)
                 if inspect.isawaitable(setup_result):
                     await setup_result
+                lifecycle_diags = await self._registry.notify_lifecycle(
+                    "on_load", plugin_names=[plugin_name]
+                )
+                diagnostics.extend(lifecycle_diags)
+                # Validate plugin config if schema was registered during setup
+                config_diagnostics = self._registry.validate_config(
+                    plugin_name,
+                    getattr(plugin, "config", None) or {},
+                )
+                diagnostics.extend(config_diagnostics)
             except Exception as exc:
                 # Plugin setup errors are isolated to keep the rest of plugins loadable.
                 diagnostics.append(

@@ -1,0 +1,10 @@
+{
+  "id": "example-showcase",
+  "kind": "showcase",
+  "name": "Example Showcase Plugin",
+  "description": "A comprehensive example plugin demonstrating ALL MemStack plugin capabilities: tools, skills, hooks, HTTP routes, CLI commands, lifecycle hooks, config schema validation, commands, services, and providers.",
+  "version": "1.0.0",
+  "channels": [],
+  "providers": ["example-greeting"],
+  "skills": ["./skills"]
+}

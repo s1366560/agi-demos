@@ -45,7 +45,7 @@ async def pdf_merge(ctx: object, input_files: list[str], output_file: str) -> To
 
         return ToolResult(output=f"Successfully merged {len(input_files)} PDFs into {output_file}")
     except Exception as e:
-        return ToolResult(output="", error=f"Error merging PDFs: {e!s}")
+        return ToolResult(output=f"Error merging PDFs: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -103,7 +103,7 @@ async def pdf_split(
             output=f"Split {input_file} into {end - start} pages in {output_dir}"
         )
     except Exception as e:
-        return ToolResult(output="", error=f"Error splitting PDF: {e!s}")
+        return ToolResult(output=f"Error splitting PDF: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -151,7 +151,7 @@ async def pdf_extract_text(
         else:
             return ToolResult(output=text)
     except Exception as e:
-        return ToolResult(output="", error=f"Error extracting text: {e!s}")
+        return ToolResult(output=f"Error extracting text: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -208,7 +208,7 @@ async def pdf_extract_tables(
                 result += df.to_string(index=False) + "\n"
             return ToolResult(output=result)
     except Exception as e:
-        return ToolResult(output="", error=f"Error extracting tables: {e!s}")
+        return ToolResult(output=f"Error extracting tables: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -247,7 +247,7 @@ async def pdf_extract_metadata(ctx: object, input_file: str) -> ToolResult:
 
         return ToolResult(output=result)
     except Exception as e:
-        return ToolResult(output="", error=f"Error extracting metadata: {e!s}")
+        return ToolResult(output=f"Error extracting metadata: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -299,7 +299,7 @@ async def pdf_rotate(
             output=f"Rotated {len(pages) if pages else len(reader.pages)} pages by {degrees} degrees. Saved to {output_file}"
         )
     except Exception as e:
-        return ToolResult(output="", error=f"Error rotating PDF: {e!s}")
+        return ToolResult(output=f"Error rotating PDF: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -340,7 +340,7 @@ async def pdf_add_watermark(
 
         return ToolResult(output=f"Watermark added to {input_file}. Saved to {output_file}")
     except Exception as e:
-        return ToolResult(output="", error=f"Error adding watermark: {e!s}")
+        return ToolResult(output=f"Error adding watermark: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -389,7 +389,7 @@ async def pdf_encrypt(
 
         return ToolResult(output=f"PDF encrypted and saved to {output_file}")
     except Exception as e:
-        return ToolResult(output="", error=f"Error encrypting PDF: {e!s}")
+        return ToolResult(output=f"Error encrypting PDF: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -439,7 +439,7 @@ async def pdf_create(
         doc.build(story)
         return ToolResult(output=f"PDF created: {output_file}")
     except Exception as e:
-        return ToolResult(output="", error=f"Error creating PDF: {e!s}")
+        return ToolResult(output=f"Error creating PDF: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -484,7 +484,7 @@ async def pdf_ocr(
         else:
             return ToolResult(output=text)
     except Exception as e:
-        return ToolResult(output="", error=f"Error performing OCR: {e!s}")
+        return ToolResult(output=f"Error performing OCR: {e!s}", is_error=True)
 
 
 @tool_define(
@@ -508,4 +508,4 @@ async def pdf_get_page_count(ctx: object, input_file: str) -> ToolResult:
         reader = PdfReader(input_file)
         return ToolResult(output=f"{len(reader.pages)}")
     except Exception as e:
-        return ToolResult(output="", error=f"Error reading PDF: {e!s}")
+        return ToolResult(output=f"Error reading PDF: {e!s}", is_error=True)

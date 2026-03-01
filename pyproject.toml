@@ -94,6 +94,7 @@ include = '\.pyi?$'
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+exclude = [".memstack", ".claude", "alembic", "examples", "sandbox-mcp-server", "scripts", "sdk", "conftest.py"]
 
 [tool.ruff.lint]
 select = [
@@ -160,7 +161,7 @@ ignore = [
 
 # Test files relaxed (assert allowed, annotations optional, broad exceptions OK)
 "src/tests/**" = [
-    "ANN001", "ANN002", "ANN003", "ANN201", "ANN202",
+    "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN401",
     "N802", "N803", "E741", "B017", "B023", "RUF043",
     "S101",   # assert is expected in tests
     "S105", "S106", "S107", "S108",  # hardcoded passwords/paths in test fixtures
@@ -184,6 +185,10 @@ ignore = [
 # Infrastructure modules that use subprocess (agent tools, MCP)
 "src/infrastructure/agent/tools/*" = ["S", "ANN401"]
 "src/infrastructure/mcp/*" = ["S603", "S607"]
+
+# Sandbox plugin wrappers (closure-based, requires **kwargs: Any)
+"src/infrastructure/agent/plugins/sandbox_deps/sandbox_plugin_tool_wrapper.py" = ["ANN401"]
+
 
 # Files with intentional try-except-pass or TCH import optimization TODOs
 "src/application/services/agent/conversation_manager.py" = ["TC005"]
@@ -291,6 +296,7 @@ ignore = [
 "src/infrastructure/agent/plugins/manager.py" = ["ANN401"]
 "src/infrastructure/agent/plugins/registry.py" = ["ANN401"]
 "src/infrastructure/agent/plugins/runtime_api.py" = ["ANN401"]
+"src/infrastructure/agent/plugins/sdk.py" = ["ANN401"]
 "src/infrastructure/agent/plugins/selection_pipeline.py" = ["ANN401"]
 "src/infrastructure/agent/plugins/state_store.py" = ["ANN401"]
 

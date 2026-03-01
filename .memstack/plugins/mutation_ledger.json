@@ -12110,5 +12110,139 @@
     "tenant_id": "tenant-1",
     "timestamp": "2026-02-28T05:11:46.090030+00:00",
     "trace_id": "plugin_manager:b36877eccc7d4523be9f2dc8e700d64a"
+  },
+  {
+    "action": "disable",
+    "details": {
+      "mutation_transaction": {
+        "action": "disable",
+        "plugin_name": "feishu-channel-plugin",
+        "project_id": "f23b215d-8c18-4202-81f0-4a675eb725b4",
+        "requirement": null,
+        "source": "plugin_manager",
+        "status": "plan",
+        "tenant_id": "872d2a79-9ad8-4281-a76d-bdf90058687a",
+        "timeline": [
+          {
+            "details": {},
+            "phase": "plan",
+            "timestamp": "2026-03-01T02:01:05.700369+00:00"
+          }
+        ],
+        "trace_id": "plugin_manager:c2cc389c2ba64f16b0f3bfd69e6cfb25",
+        "transaction_id": "mutation:7de8e785f25b4360bcec9161caadd0cb"
+      },
+      "provenance": {
+        "added": [],
+        "after_count": 1,
+        "after_snapshot": [
+          {
+            "discovered": true,
+            "enabled": false,
+            "kind": null,
+            "manifest_id": null,
+            "name": "feishu-channel-plugin",
+            "package": null,
+            "providers": [],
+            "requirement": null,
+            "skills": [],
+            "source": "local",
+            "version": null
+          }
+        ],
+        "before_count": 1,
+        "changed": [
+          "feishu-channel-plugin"
+        ],
+        "removed": []
+      }
+    },
+    "dry_run": false,
+    "message": "plugin disabled",
+    "mutation_fingerprint": "tool=plugin_manager|action=disable|plugin_name=feishu-channel-plugin|tenant_id=872d2a79-9ad8-4281-a76d-bdf90058687a|project_id=f23b215d-8c18-4202-81f0-4a675eb725b4",
+    "plugin_name": "feishu-channel-plugin",
+    "project_id": "f23b215d-8c18-4202-81f0-4a675eb725b4",
+    "requirement": null,
+    "rollback": {
+      "action": "enable",
+      "available": true,
+      "inputs": {
+        "plugin_name": "feishu-channel-plugin"
+      },
+      "reason": "inverse disable by enabling the same plugin",
+      "source_action": "disable"
+    },
+    "source": "plugin_manager",
+    "status": "applied",
+    "tenant_id": "872d2a79-9ad8-4281-a76d-bdf90058687a",
+    "timestamp": "2026-03-01T02:01:05.721998+00:00",
+    "trace_id": "plugin_manager:c2cc389c2ba64f16b0f3bfd69e6cfb25"
+  },
+  {
+    "action": "enable",
+    "details": {
+      "mutation_transaction": {
+        "action": "enable",
+        "plugin_name": "feishu-channel-plugin",
+        "project_id": "f23b215d-8c18-4202-81f0-4a675eb725b4",
+        "requirement": null,
+        "source": "plugin_manager",
+        "status": "plan",
+        "tenant_id": "872d2a79-9ad8-4281-a76d-bdf90058687a",
+        "timeline": [
+          {
+            "details": {},
+            "phase": "plan",
+            "timestamp": "2026-03-01T02:01:09.893806+00:00"
+          }
+        ],
+        "trace_id": "plugin_manager:8d783fefb3534692b53109f4cb41d2c1",
+        "transaction_id": "mutation:56e4da519b0849718e09543f49742893"
+      },
+      "provenance": {
+        "added": [],
+        "after_count": 1,
+        "after_snapshot": [
+          {
+            "discovered": true,
+            "enabled": true,
+            "kind": null,
+            "manifest_id": null,
+            "name": "feishu-channel-plugin",
+            "package": null,
+            "providers": [],
+            "requirement": null,
+            "skills": [],
+            "source": "local",
+            "version": null
+          }
+        ],
+        "before_count": 1,
+        "changed": [
+          "feishu-channel-plugin"
+        ],
+        "removed": []
+      }
+    },
+    "dry_run": false,
+    "message": "plugin enabled",
+    "mutation_fingerprint": "tool=plugin_manager|action=enable|plugin_name=feishu-channel-plugin|tenant_id=872d2a79-9ad8-4281-a76d-bdf90058687a|project_id=f23b215d-8c18-4202-81f0-4a675eb725b4",
+    "plugin_name": "feishu-channel-plugin",
+    "project_id": "f23b215d-8c18-4202-81f0-4a675eb725b4",
+    "requirement": null,
+    "rollback": {
+      "action": "disable",
+      "available": true,
+      "inputs": {
+        "plugin_name": "feishu-channel-plugin"
+      },
+      "reason": "inverse enable by disabling the same plugin",
+      "source_action": "enable"
+    },
+    "source": "plugin_manager",
+    "status": "applied",
+    "tenant_id": "872d2a79-9ad8-4281-a76d-bdf90058687a",
+    "timestamp": "2026-03-01T02:01:09.916627+00:00",
+    "trace_id": "plugin_manager:8d783fefb3534692b53109f4cb41d2c1"
   }
 ]
