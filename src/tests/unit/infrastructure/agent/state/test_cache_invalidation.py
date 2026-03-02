@@ -9,7 +9,10 @@ The tests verify that cache invalidation cascades properly when
 MCP tools are registered or updated.
 """
 
-from unittest.mock import MagicMock
+from __future__ import annotations
+
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -246,22 +249,28 @@ class TestUnifiedCacheInvalidation:
 
 
 class TestCacheInvalidationIntegration:
-    """Integration tests for cache invalidation with RegisterMCPServerTool."""
+    """Integration tests for cache invalidation with register_mcp_server_tool."""
 
     @pytest.mark.asyncio
-    async def test_register_mcp_server_invalidates_all_caches(self):
+    async def test_register_mcp_server_invalidates_all_caches(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """
-        Verify RegisterMCPServerTool calls unified invalidation.
+        Verify register_mcp_server_tool calls unified invalidation.
 
         After registering a new MCP server, all relevant caches should be
         invalidated so the new tools are immediately available.
         """
         from src.infrastructure.agent.state import agent_worker_state
+        from src.infrastructure.agent.tools import register_mcp_server as _mod
+        from src.infrastructure.agent.tools.context import ToolContext
         from src.infrastructure.agent.tools.register_mcp_server import (
-            RegisterMCPServerTool,
+            register_mcp_server_tool,
         )
 
-        # Setup: Mock sandbox adapter and tools
+        _MOD = "src.infrastructure.agent.tools.register_mcp_server"
+
+        # Setup: IDs and mock adapter
         tenant_id = "test-tenant-reg"
         project_id = "test-project-reg"
 
@@ -270,33 +279,68 @@ class TestCacheInvalidationIntegration:
         # Populate caches before registration
         agent_worker_state._tools_cache[project_id] = {"old_tool": MagicMock()}
 
-        tool = RegisterMCPServerTool(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            sandbox_adapter=mock_adapter,
-            sandbox_id="test-sandbox",
-            session_factory=None,
-        )
+        # Configure module-level DI state
+        monkeypatch.setattr(_mod, "_register_mcp_tenant_id", tenant_id)
+        monkeypatch.setattr(_mod, "_register_mcp_project_id", project_id)
+        monkeypatch.setattr(_mod, "_register_mcp_sandbox_adapter", mock_adapter)
+        monkeypatch.setattr(_mod, "_register_mcp_sandbox_id", "test-sandbox")
+        monkeypatch.setattr(_mod, "_register_mcp_session_factory", None)
 
-        # Mock the sandbox adapter responses
-        async def mock_call_tool(**kwargs):
+        # Mock sandbox adapter call_tool responses
+        async def mock_call_tool(**kwargs: Any) -> dict[str, Any]:
             tool_name = kwargs.get("tool_name", "")
-            if tool_name == "mcp_server_install" or tool_name == "mcp_server_start":
+            if tool_name in ("mcp_server_install", "mcp_server_start"):
                 return {"content": [{"type": "text", "text": '{"success": true}'}]}
-            elif tool_name == "mcp_server_discover_tools":
+            if tool_name == "mcp_server_discover_tools":
                 return {"content": [{"type": "text", "text": "[]"}]}
             return {"content": []}
 
         mock_adapter.call_tool = mock_call_tool
 
-        # Act: Execute the tool (this should call the real invalidate function)
-        await tool.execute(
+        # Stub _register_mcp_persist_server (DB operation)
+        monkeypatch.setattr(
+            _MOD + "._register_mcp_persist_server",
+            AsyncMock(return_value=None),
+        )
+
+        # Stub _register_mcp_emit_events with a function that performs
+        # cache invalidation (mimicking the real lifecycle orchestrator)
+        # then returns a plausible result dict.
+        async def _fake_emit_events(
+            ctx: Any,
+            server_name: Any,
+            namespaced_tool_names: Any,
+            *,
+            discovered_tools: Any = None,
+        ) -> dict[str, Any]:
+            _ = agent_worker_state.invalidate_all_caches_for_project(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                clear_tool_definitions=True,
+            )
+            return {"cache_invalidation": {}, "probe": {"status": "ok"}}
+
+        monkeypatch.setattr(
+            _MOD + "._register_mcp_emit_events", _fake_emit_events
+        )
+
+        # Build a ToolContext for the call
+        ctx = ToolContext(
+            session_id="s-1",
+            message_id="m-1",
+            call_id="c-1",
+            agent_name="test-agent",
+            conversation_id="conv-1",
+        )
+
+        # Act: Execute the tool
+        await register_mcp_server_tool.execute(
+            ctx,
             server_name="test-server",
             server_type="stdio",
             command="node",
             args=["server.js"],
         )
 
-        # Assert: Caches should be invalidated
-        # tools_cache for this project should be cleared
+        # Assert: tools_cache for this project should be cleared
         assert project_id not in agent_worker_state._tools_cache

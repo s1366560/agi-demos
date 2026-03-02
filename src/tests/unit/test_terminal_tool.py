@@ -1,4 +1,4 @@
-"""Unit tests for TerminalTool.
+"""Unit tests for terminal_tool module-level functions and tool.
 
 Tests the terminal management tool for starting, stopping, and checking
 the status of web terminal sessions in sandbox environments.
@@ -8,60 +8,80 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.tools.terminal_tool import (
     TerminalStatus,
-    TerminalTool,
+    configure_terminal,
+    terminal_tool,
 )
 
 
+def _make_ctx() -> ToolContext:
+    """Create a minimal ToolContext for testing."""
+    return ToolContext(
+        session_id="test-session",
+        message_id="test-msg",
+        call_id="test-call",
+        agent_name="test-agent",
+        conversation_id="test-conv",
+    )
+
 class TestTerminalTool:
-    """Test suite for TerminalTool."""
+    """Test suite for terminal_tool @tool_define function."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_terminal_state(self):
+        """Reset module-level terminal state between tests."""
+        configure_terminal()
+        yield
+        configure_terminal()
 
     @pytest.fixture
-    def mock_sandbox_adapter(self):
+    def mock_adapter(self):
         """Create a mock sandbox adapter."""
         adapter = AsyncMock()
         adapter.call_tool = AsyncMock()
         return adapter
 
-    @pytest.fixture
-    def terminal_tool(self, mock_sandbox_adapter):
-        """Create a TerminalTool instance with mocked dependencies."""
-        return TerminalTool(sandbox_adapter=mock_sandbox_adapter)
-
-    def test_tool_initialization(self, terminal_tool):
-        """Test tool is initialized with correct name and description."""
+    def test_tool_registration_in_registry(self):
+        """Test tool has name 'terminal'."""
         assert terminal_tool.name == "terminal"
-        assert "terminal" in terminal_tool.description.lower()
-        assert "ttyd" in terminal_tool.description or "shell" in terminal_tool.description
 
-    def test_get_parameters_schema(self, terminal_tool):
-        """Test parameters schema is correctly defined."""
-        schema = terminal_tool.get_parameters_schema()
+    def test_tool_description_contains_terminal(self):
+        """Test tool has a meaningful description mentioning terminal/ttyd."""
+        desc = terminal_tool.description.lower()
+        assert "terminal" in desc
+        assert "ttyd" in desc or "shell" in desc
 
-        assert schema["type"] == "object"
-        assert "properties" in schema
-        assert "action" in schema["properties"]
-        assert schema["properties"]["action"]["type"] == "string"
-        assert "enum" in schema["properties"]["action"]
-        assert "start" in schema["properties"]["action"]["enum"]
-        assert "stop" in schema["properties"]["action"]["enum"]
-        assert "status" in schema["properties"]["action"]["enum"]
+    def test_parameters_schema_has_action(self):
+        """Test parameters schema defines action enum with start/stop/status."""
+        params = terminal_tool.parameters
+        assert params["type"] == "object"
+        assert "properties" in params
+        assert "action" in params["properties"]
+        assert params["properties"]["action"]["type"] == "string"
+        assert "enum" in params["properties"]["action"]
+        assert "start" in params["properties"]["action"]["enum"]
+        assert "stop" in params["properties"]["action"]["enum"]
+        assert "status" in params["properties"]["action"]["enum"]
 
-    def test_validate_args_valid_actions(self, terminal_tool):
-        """Test argument validation for all valid actions."""
-        assert terminal_tool.validate_args(action="start")
-        assert terminal_tool.validate_args(action="stop")
-        assert terminal_tool.validate_args(action="status")
+    def test_parameters_schema_has_port(self):
+        """Test parameters schema defines optional port with default 7681."""
+        params = terminal_tool.parameters
+        assert "port" in params["properties"]
+        assert params["properties"]["port"]["type"] == "integer"
+        assert params["properties"]["port"]["default"] == 7681
 
-    def test_validate_args_invalid_action(self, terminal_tool):
-        """Test argument validation rejects invalid action."""
-        assert not terminal_tool.validate_args(action="restart")
+    def test_parameters_schema_requires_action(self):
+        """Test parameters schema lists action as required."""
+        params = terminal_tool.parameters
+        assert "action" in params["required"]
 
-    @pytest.mark.asyncio
-    async def test_execute_start_success(self, terminal_tool, mock_sandbox_adapter):
-        """Test starting terminal successfully."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_execute_start_success(self, mock_adapter):
+        """Test starting terminal returns success with port info."""
+        configure_terminal(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -71,15 +91,17 @@ class TestTerminalTool:
             "is_error": False,
         }
 
-        result = await terminal_tool.execute(action="start")
+        ctx = _make_ctx()
+        result = await terminal_tool.execute(ctx, action="start")
 
-        # Terminal may show as running or not depending on mock response
-        assert "7681" in result
+        assert isinstance(result, ToolResult)
+        assert not result.is_error
+        assert "7681" in result.output
 
-    @pytest.mark.asyncio
-    async def test_execute_start_with_port(self, terminal_tool, mock_sandbox_adapter):
-        """Test starting terminal with custom port."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_execute_start_with_custom_port(self, mock_adapter):
+        """Test starting terminal with non-default port passes port in mcp args."""
+        configure_terminal(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -89,35 +111,38 @@ class TestTerminalTool:
             "is_error": False,
         }
 
-        await terminal_tool.execute(action="start", port=8681)
+        ctx = _make_ctx()
+        await terminal_tool.execute(ctx, action="start", port=8681)
 
-        call_args = mock_sandbox_adapter.call_tool.call_args
+        call_args = mock_adapter.call_tool.call_args
+        assert call_args[0][0] == "test-sandbox"
         assert call_args[0][1] == "start_terminal"
         assert call_args[0][2]["port"] == 8681
 
-    @pytest.mark.asyncio
-    async def test_execute_stop_success(self, terminal_tool, mock_sandbox_adapter):
-        """Test stopping terminal successfully."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_execute_stop_success(self, mock_adapter):
+        """Test stopping terminal returns success message."""
+        configure_terminal(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {"type": "text", "text": '{"success": true, "message": "Terminal stopped"}'}
             ],
             "is_error": False,
         }
 
-        result = await terminal_tool.execute(action="stop")
+        ctx = _make_ctx()
+        result = await terminal_tool.execute(ctx, action="stop")
 
-        # Stop command returns success message
-        assert (
-            "successfully" in result.lower()
-            or "stopped" in result.lower()
-            or "not running" in result.lower()
-        )
+        assert isinstance(result, ToolResult)
+        assert not result.is_error
+        call_args = mock_adapter.call_tool.call_args
+        assert call_args[0][0] == "test-sandbox"
+        assert call_args[0][1] == "stop_terminal"
+        assert call_args[0][2] == {"_workspace_dir": "/workspace"}
 
-    @pytest.mark.asyncio
-    async def test_execute_status_running(self, terminal_tool, mock_sandbox_adapter):
+    async def test_execute_status_running(self, mock_adapter):
         """Test getting status when terminal is running."""
-        mock_sandbox_adapter.call_tool.return_value = {
+        configure_terminal(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -127,22 +152,46 @@ class TestTerminalTool:
             "is_error": False,
         }
 
-        result = await terminal_tool.execute(action="status")
+        ctx = _make_ctx()
+        result = await terminal_tool.execute(ctx, action="status")
 
-        assert "running" in result.lower()
+        assert isinstance(result, ToolResult)
+        assert not result.is_error
+        assert "running" in result.output.lower()
 
-    @pytest.mark.asyncio
-    async def test_execute_error_handling(self, terminal_tool, mock_sandbox_adapter):
-        """Test error handling when sandbox call fails."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_execute_error_handling(self, mock_adapter):
+        """Test error handling when sandbox call returns is_error=True."""
+        configure_terminal(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [{"type": "text", "text": "Terminal failed to start"}],
             "is_error": True,
         }
 
-        result = await terminal_tool.execute(action="start")
+        ctx = _make_ctx()
+        result = await terminal_tool.execute(ctx, action="start")
 
-        assert "error" in result.lower()
+        assert isinstance(result, ToolResult)
+        assert "error" in result.output.lower()
 
+    async def test_execute_invalid_action_returns_error(self):
+        """Test invalid action returns ToolResult with is_error=True."""
+        ctx = _make_ctx()
+        result = await terminal_tool.execute(ctx, action="invalid")
+
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        assert "Unknown action" in result.output
+
+    async def test_execute_no_adapter_returns_error(self):
+        """Test that calling without adapter or orchestrator returns error."""
+        configure_terminal()
+
+        ctx = _make_ctx()
+        result = await terminal_tool.execute(ctx, action="start")
+
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        assert "no orchestrator" in result.output.lower() or "error" in result.output.lower()
 
 class TestTerminalStatus:
     """Test suite for TerminalStatus data class."""

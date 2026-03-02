@@ -417,7 +417,7 @@ async def get_or_create_tools(
     # 3. Add SkillLoaderTool
     await _add_skill_loader_tool(tools, tenant_id, project_id, agent_mode)
 
-    # 4. Add SkillInstallerTool and PluginManagerTool
+    # 4. Configure skill_installer and plugin_manager tools
     _add_skill_installer_tools(tools, tenant_id, project_id)
 
     # 5. Add SkillSyncTool
@@ -432,7 +432,7 @@ async def get_or_create_tools(
     # 8. Add Todo Tools
     _add_todo_tools(tools, project_id)
 
-    # 9. Add RegisterMCPServerTool
+    # 9. Configure register_mcp_server tool
     _add_register_mcp_server_tool(tools, tenant_id, project_id)
 
     # 10. Add Memory Tools
@@ -465,24 +465,27 @@ async def _get_or_create_builtin_tools(
     redis_client: Any,
 ) -> dict[str, Any]:
     """Get or create cached built-in tools, returning a copy."""
-    from src.infrastructure.agent.tools import WebScrapeTool, WebSearchTool
-    from src.infrastructure.agent.tools.clarification import ClarificationTool
-    from src.infrastructure.agent.tools.decision import DecisionTool
+    from src.infrastructure.agent.tools.clarification import configure_clarification
+    from src.infrastructure.agent.tools.decision import configure_decision
+    from src.infrastructure.agent.tools.define import get_registered_tools
 
     async with _tools_cache_lock:
         if project_id not in _tools_cache:
-            _tools_cache[project_id] = {
-                "web_search": WebSearchTool(redis_client),
-                "web_scrape": WebScrapeTool(),
-                "ask_clarification": ClarificationTool(),
-                "request_decision": DecisionTool(),
-            }
-
             from src.infrastructure.agent.tools.web_scrape import configure_web_scrape
             from src.infrastructure.agent.tools.web_search import configure_web_search
 
             configure_web_search(redis_client=redis_client)
             configure_web_scrape()
+            configure_clarification(hitl_handler=None)
+            configure_decision(hitl_handler=None)
+
+            registry = get_registered_tools()
+            _tools_cache[project_id] = {
+                "web_search": registry["web_search"],
+                "web_scrape": registry["web_scrape"],
+                "ask_clarification": registry["ask_clarification"],
+                "request_decision": registry["request_decision"],
+            }
             logger.info(f"Agent Worker: Tool set cached for project {project_id}")
 
     return dict(_tools_cache[project_id])
@@ -523,7 +526,9 @@ async def _add_skill_loader_tool(
 ) -> None:
     """Add SkillLoaderTool initialized with skill list in description."""
     try:
-        skill_loader = await get_or_create_skill_loader_tool(
+        from src.infrastructure.agent.tools.skill_loader import set_sandbox_id
+
+        skill_loader_info = await get_or_create_skill_loader_tool(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode=agent_mode,
@@ -531,20 +536,11 @@ async def _add_skill_loader_tool(
         # Set sandbox_id from loaded sandbox tools for resource sync
         sandbox_id = _find_sandbox_id(tools)
         if sandbox_id:
-            skill_loader.set_sandbox_id(sandbox_id)
-        tools["skill_loader"] = skill_loader
-
-        from src.infrastructure.agent.tools.skill_loader import configure_skill_loader_tool
-
-        configure_skill_loader_tool(
-            skill_service=getattr(skill_loader, "_skill_service", None),
-            tenant_id=tenant_id,
-            project_id=project_id,
-            agent_mode=agent_mode,
-            sandbox_id=sandbox_id or "",
-        )
+            set_sandbox_id(sandbox_id)
+        tools["skill_loader"] = skill_loader_info
         logger.info(
-            f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
+            f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, "
+            f"agent_mode={agent_mode}"
         )
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillLoaderTool: {e}")
@@ -555,29 +551,12 @@ def _add_skill_installer_tools(
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Add SkillInstallerTool and PluginManagerTool."""
+    """Configure skill_installer and plugin_manager @tool_define tools."""
     try:
-        from src.infrastructure.agent.tools.plugin_manager import PluginManagerTool
-        from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
-
-        project_path = resolve_project_base_path(project_id)
-        skill_installer = SkillInstallerTool(
-            project_path=project_path,
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        tools["skill_installer"] = skill_installer
-        logger.info(f"Agent Worker: SkillInstallerTool added for project {project_id}")
-
-        plugin_manager = PluginManagerTool(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        tools["plugin_manager"] = plugin_manager
-
         from src.infrastructure.agent.tools.plugin_manager import configure_plugin_manager
         from src.infrastructure.agent.tools.skill_installer import configure_skill_installer
 
+        project_path = resolve_project_base_path(project_id)
         configure_skill_installer(
             project_path=project_path,
             tenant_id=tenant_id,
@@ -587,10 +566,11 @@ def _add_skill_installer_tools(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        logger.info(f"Agent Worker: PluginManagerTool added for project {project_id}")
+        logger.info(
+            f"Agent Worker: skill_installer + plugin_manager configured for project {project_id}"
+        )
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to create SkillInstallerTool/PluginManagerTool: {e}")
-
+        logger.warning(f"Agent Worker: Failed to configure skill_installer/plugin_manager: {e}")
 
 def _add_skill_sync_tool(
     tools: dict[str, Any],
@@ -602,25 +582,10 @@ def _add_skill_sync_tool(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as sync_session_factory,
         )
-        from src.infrastructure.agent.tools.skill_sync import SkillSyncTool
-
-        skill_sync_tool = SkillSyncTool(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            sandbox_adapter=_mcp_sandbox_adapter,
-            session_factory=sync_session_factory,
-        )
-        # Set sandbox_id from loaded sandbox tools
-        sandbox_id = _find_sandbox_id(tools)
-        if sandbox_id:
-            skill_sync_tool.set_sandbox_id(sandbox_id)
-        # Set reference to skill_loader for cache invalidation
-        if "skill_loader" in tools:
-            skill_sync_tool.set_skill_loader_tool(tools["skill_loader"])
-        tools["skill_sync"] = skill_sync_tool
-
+        from src.infrastructure.agent.tools.define import get_registered_tools
         from src.infrastructure.agent.tools.skill_sync import configure_skill_sync
 
+        sandbox_id = _find_sandbox_id(tools)
         configure_skill_sync(
             tenant_id=tenant_id,
             project_id=project_id,
@@ -629,6 +594,8 @@ def _add_skill_sync_tool(
             session_factory=sync_session_factory,
             skill_loader_tool=tools.get("skill_loader"),
         )
+        registry = get_registered_tools()
+        tools["skill_sync"] = registry["skill_sync"]
         logger.info(f"Agent Worker: SkillSyncTool added for tenant {tenant_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillSyncTool: {e}")
@@ -644,44 +611,11 @@ def _add_env_var_tools(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
-        from src.infrastructure.agent.tools.env_var_tools import (
-            CheckEnvVarsTool,
-            GetEnvVarTool,
-            RequestEnvVarTool,
-        )
+        from src.infrastructure.agent.tools.define import get_registered_tools
+        from src.infrastructure.agent.tools.env_var_tools import configure_env_var_tools
         from src.infrastructure.security.encryption_service import get_encryption_service
 
         encryption_service = get_encryption_service()
-
-        # Create env var tools with session_factory for worker context
-        # Each tool will create its own session when execute() is called
-        get_env_var_tool = GetEnvVarTool(
-            repository=None,  # Will use session_factory instead
-            encryption_service=encryption_service,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            session_factory=async_session_factory,
-        )
-        request_env_var_tool = RequestEnvVarTool(
-            repository=None,  # Will use session_factory instead
-            encryption_service=encryption_service,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            session_factory=async_session_factory,
-        )
-        check_env_vars_tool = CheckEnvVarsTool(
-            repository=None,  # Will use session_factory instead
-            encryption_service=encryption_service,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            session_factory=async_session_factory,
-        )
-
-        tools["get_env_var"] = get_env_var_tool
-        tools["request_env_var"] = request_env_var_tool
-        tools["check_env_vars"] = check_env_vars_tool
-
-        from src.infrastructure.agent.tools.env_var_tools import configure_env_var_tools
 
         configure_env_var_tools(
             encryption_service=encryption_service,
@@ -689,6 +623,10 @@ def _add_env_var_tools(
             tenant_id=tenant_id,
             project_id=project_id,
         )
+        registry = get_registered_tools()
+        tools["get_env_var"] = registry["get_env_var"]
+        tools["request_env_var"] = registry["request_env_var"]
+        tools["check_env_vars"] = registry["check_env_vars"]
         logger.info(
             f"Agent Worker: Environment variable tools added for tenant {tenant_id}, "
             f"project {project_id}"
@@ -700,21 +638,17 @@ def _add_env_var_tools(
 def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
     """Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)."""
     try:
-        from src.infrastructure.agent.tools.clarification import ClarificationTool
-        from src.infrastructure.agent.tools.decision import DecisionTool
-
-        clarification_tool = ClarificationTool()
-        decision_tool = DecisionTool()
-
         from src.infrastructure.agent.tools.clarification import configure_clarification
         from src.infrastructure.agent.tools.decision import configure_decision
+        from src.infrastructure.agent.tools.define import get_registered_tools
 
         # hitl_handler is injected later by the processor/session; pass None for now
         configure_clarification(hitl_handler=None)
         configure_decision(hitl_handler=None)
 
-        tools["ask_clarification"] = clarification_tool
-        tools["request_decision"] = decision_tool
+        registry = get_registered_tools()
+        tools["ask_clarification"] = registry["ask_clarification"]
+        tools["request_decision"] = registry["request_decision"]
         logger.info(
             f"Agent Worker: Human-in-the-loop tools (ask_clarification, request_decision) "
             f"added for project {project_id}"
@@ -724,16 +658,11 @@ def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
 
 
 def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
-    """Add Todo Tools (DB-persistent task tracking)."""
+    """Configure todo @tool_define tools (DB-persistent task tracking)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as todo_session_factory,
         )
-        from src.infrastructure.agent.tools.todo_tools import TodoReadTool, TodoWriteTool
-
-        tools["todoread"] = TodoReadTool(session_factory=todo_session_factory)
-        tools["todowrite"] = TodoWriteTool(session_factory=todo_session_factory)
-
         from src.infrastructure.agent.tools.todo_tools import (
             configure_todoread,
             configure_todowrite,
@@ -741,37 +670,25 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
 
         configure_todoread(session_factory=todo_session_factory)
         configure_todowrite(session_factory=todo_session_factory)
-        logger.info(f"Agent Worker: Todo tools added for project {project_id}")
+        logger.info(f"Agent Worker: Todo tools configured for project {project_id}")
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to create todo tools: {e}")
-
+        logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
 
 def _add_register_mcp_server_tool(
     tools: dict[str, Any],
     tenant_id: str,
     project_id: str,
 ) -> None:
-    """Add RegisterMCPServerTool for registering full MCP servers built in sandbox."""
+    """Configure register_mcp_server @tool_define tool."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
         )
-        from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
-
-        sandbox_id_for_tools = _find_sandbox_id(tools)
-
-        register_server_tool = RegisterMCPServerTool(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            sandbox_adapter=_mcp_sandbox_adapter,
-            sandbox_id=sandbox_id_for_tools,
-            session_factory=app_session_factory,
-        )
-        tools["register_mcp_server"] = register_server_tool
-
         from src.infrastructure.agent.tools.register_mcp_server import (
             configure_register_mcp_server_tool,
         )
+
+        sandbox_id_for_tools = _find_sandbox_id(tools)
 
         configure_register_mcp_server_tool(
             session_factory=app_session_factory,
@@ -780,10 +697,9 @@ def _add_register_mcp_server_tool(
             sandbox_adapter=_mcp_sandbox_adapter,
             sandbox_id=sandbox_id_for_tools,
         )
-        logger.info(f"Agent Worker: RegisterMCPServerTool added for project {project_id}")
+        logger.info(f"Agent Worker: register_mcp_server configured for project {project_id}")
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to create RegisterMCPServerTool: {e}")
-
+        logger.warning(f"Agent Worker: Failed to configure register_mcp_server: {e}")
 
 def _add_memory_tools(
     tools: dict[str, Any],
@@ -792,12 +708,11 @@ def _add_memory_tools(
     redis_client: Any,
     tenant_id: str = "",
 ) -> None:
-    """Add Memory Tools (memory_search + memory_get + memory_create + memory_update + memory_delete)."""
+    """Configure memory @tool_define tools (search + get + create + update + delete)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as mem_session_factory,
         )
-        from src.infrastructure.agent.tools.memory_tools import MemoryGetTool, MemorySearchTool
         from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
         from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
         from src.infrastructure.memory.chunk_search import ChunkHybridSearch
@@ -808,19 +723,13 @@ def _add_memory_tools(
             chunk_search = ChunkHybridSearch(
                 cast(EmbeddingService, cached_emb), mem_session_factory
             )
-            tools["memory_search"] = MemorySearchTool(
-                chunk_search=chunk_search,
-                graph_service=graph_service,
-                project_id=project_id,
-            )
-            tools["memory_get"] = MemoryGetTool(
-                session_factory=mem_session_factory,
-                project_id=project_id,
-            )
 
             from src.infrastructure.agent.tools.memory_tools import (
+                configure_memory_create,
                 configure_memory_get,
                 configure_memory_search,
+                memory_delete_tool,
+                memory_update_tool,
             )
 
             configure_memory_search(
@@ -832,18 +741,6 @@ def _add_memory_tools(
                 session_factory=mem_session_factory,
                 project_id=project_id,
             )
-
-            from src.infrastructure.agent.tools.memory_tools import (
-                MemoryCreateTool,
-                configure_memory_create,
-            )
-
-            tools["memory_create"] = MemoryCreateTool(
-                session_factory=mem_session_factory,
-                graph_service=graph_service,
-                project_id=project_id,
-                tenant_id=tenant_id,
-            )
             configure_memory_create(
                 session_factory=mem_session_factory,
                 graph_service=graph_service,
@@ -854,14 +751,9 @@ def _add_memory_tools(
 
             # memory_update and memory_delete are @tool_define ToolInfo instances.
             # They reuse _memcreate_* globals set by configure_memory_create().
-            from src.infrastructure.agent.tools.memory_tools import (
-                memory_delete_tool,
-                memory_update_tool,
-            )
-
             tools["memory_update"] = memory_update_tool
             tools["memory_delete"] = memory_delete_tool
-            logger.info(f"Agent Worker: Memory tools added for project {project_id}")
+            logger.info(f"Agent Worker: Memory tools configured for project {project_id}")
     except Exception as e:
         logger.debug(f"Agent Worker: Memory tools not available: {e}")
 
@@ -1700,7 +1592,7 @@ def _wrap_sandbox_tools(
     tool_list: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Wrap sandbox MCP tools with SandboxMCPToolWrapper, filtering internal tools."""
-    from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
+    from src.infrastructure.agent.tools.sandbox_tool_wrapper import create_sandbox_mcp_tool
 
     # MCP management tools are internal, not exposed to agents
     _MCP_MANAGEMENT_TOOLS = {
@@ -1724,15 +1616,15 @@ def _wrap_sandbox_tools(
 
         assert _mcp_sandbox_adapter is not None
         adapter: SandboxPort = _mcp_sandbox_adapter
-        wrapper = SandboxMCPToolWrapper(
+        tool_info_obj = create_sandbox_mcp_tool(
             sandbox_id=project_sandbox_id,
             tool_name=tool_name,
             tool_schema=tool_info,
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         # Use namespaced name as the key
-        tools[wrapper.name] = wrapper
+        tools[tool_info_obj.name] = tool_info_obj
 
     return tools
 
@@ -2946,7 +2838,7 @@ def invalidate_skills_cache(tenant_id: str | None = None) -> None:
 # ============================================================================
 
 
-async def get_or_create_skill_loader_tool(
+async def get_or_create_skill_loader_tool(  # noqa: C901
     tenant_id: str,
     project_id: str | None = None,
     agent_mode: str = "default",
@@ -2973,7 +2865,12 @@ async def get_or_create_skill_loader_tool(
     from src.application.services.skill_service import SkillService
     from src.domain.model.agent.skill import Skill, SkillStatus
     from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
-    from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
+    from src.infrastructure.agent.tools.define import get_registered_tools
+    from src.infrastructure.agent.tools.skill_loader import (
+        configure_skill_loader_tool,
+        get_available_skills,
+        set_available_skills,
+    )
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
     # NOTE: NullSkillRepository is intentionally used here instead of SqlSkillRepository.
@@ -3055,11 +2952,11 @@ async def get_or_create_skill_loader_tool(
                 filesystem_loader=fs_loader,
             )
 
-            # Create SkillLoaderTool
-            tool = SkillLoaderTool(
+            # Configure the @tool_define skill_loader with deps
+            configure_skill_loader_tool(
                 skill_service=skill_service,
                 tenant_id=tenant_id,
-                project_id=project_id,
+                project_id=project_id or "",
                 agent_mode=agent_mode,
             )
 
@@ -3074,12 +2971,18 @@ async def get_or_create_skill_loader_tool(
                 if "*" in getattr(skill, "agent_modes", ["*"])
                 or agent_mode in getattr(skill, "agent_modes", [])
             ]
-            await tool.initialize_with_skills(filtered_skills)
+            set_available_skills([s.name for s in filtered_skills])
 
-            _skill_loader_cache[cache_key] = tool
+            # Get ToolInfo from registry
+            registry = get_registered_tools()
+            tool_info = registry.get("skill_loader")
+            if tool_info is None:
+                tool_info = get_registered_tools()["skill_loader"]
+
+            _skill_loader_cache[cache_key] = tool_info
             logger.info(
                 f"Agent Worker: SkillLoaderTool cached for {cache_key}, "
-                f"skills in description: {len(tool.get_available_skills())}"
+                f"skills in description: {len(get_available_skills())}"
             )
 
         return _skill_loader_cache[cache_key]

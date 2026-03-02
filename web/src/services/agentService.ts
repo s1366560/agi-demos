@@ -402,7 +402,7 @@ class AgentServiceImpl implements AgentService {
     return restApi.respondToClarificationHttp(requestId, answer);
   }
 
-  respondToDecision(requestId: string, decision: string): Promise<void> {
+  respondToDecision(requestId: string, decision: string | string[]): Promise<void> {
     if (this.isConnected()) {
       this.send({
         type: 'decision_respond',

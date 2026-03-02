@@ -1,226 +1,303 @@
-"""Tests for DebugMCPServerTool.
+"""Tests for debug_mcp_server functional tool API.
 
-This test file follows TDD methodology:
-1. Write failing test first (RED)
-2. Implement minimal code to pass (GREEN)
-3. Refactor while keeping tests passing (REFACTOR)
-
-The tests verify that the DebugMCPServerTool provides useful debugging
-information for MCP servers running inside sandboxes.
+Verifies configure_debug_mcp_server + debug_mcp_server_tool provide
+useful debugging information for MCP servers running inside sandboxes.
 """
 
+from __future__ import annotations
+
+import json
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 
+import src.infrastructure.agent.tools.debug_mcp_server as _debug_mod
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.debug_mcp_server import (
+    configure_debug_mcp_server,
+    debug_mcp_server_tool,
+)
+from src.infrastructure.agent.tools.result import ToolResult
 
+# ---------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------
+
+
+def _make_ctx() -> ToolContext:
+    return ToolContext(
+        session_id="test-session",
+        message_id="test-msg",
+        call_id="test-call",
+        agent_name="test-agent",
+        conversation_id="test-conv",
+    )
+
+
+_tool_exec = debug_mcp_server_tool.execute
+
+
+@pytest.fixture(autouse=True)
+def _reset_debug_mcp_state() -> Any:
+    """Reset module-level state between tests."""
+    yield
+    _debug_mod._debug_mcp_sandbox_adapter = None
+    _debug_mod._debug_mcp_sandbox_id = ""
+
+
+# ---------------------------------------------------------------
+# Unit tests
+# ---------------------------------------------------------------
+
+
+@pytest.mark.unit
 class TestDebugMCPServerTool:
-    """Test DebugMCPServerTool functionality."""
+    """Test debug_mcp_server_tool functionality."""
 
-    @pytest.mark.asyncio
-    async def test_tool_exists(self):
-        """
-        RED Test: Verify that DebugMCPServerTool class exists.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
+    async def test_tool_exists(self) -> None:
+        """Verify that debug_mcp_server_tool is importable."""
+        assert debug_mcp_server_tool is not None
 
-        assert DebugMCPServerTool is not None
-
-    @pytest.mark.asyncio
-    async def test_tool_returns_server_logs(self):
-        """
-        Test that DebugMCPServerTool returns server logs.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
+    async def test_tool_returns_server_logs(self) -> None:
+        """Tool returns server logs in parsed output."""
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool = AsyncMock(
-            return_value={
-                "content": [
-                    {"type": "text", "text": "[INFO] Server started\n[ERROR] Connection failed"}
-                ],
-            }
-        )
-
-        tool = DebugMCPServerTool(
-            sandbox_adapter=mock_adapter,
-            sandbox_id="sandbox-1",
-        )
-
-        result = await tool.execute(server_name="test-server")
-
-        assert "logs" in result
-        assert "Server started" in result["logs"] or "logs" in str(result)
-
-    @pytest.mark.asyncio
-    async def test_tool_returns_process_info(self):
-        """
-        Test that DebugMCPServerTool returns process information.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
-        mock_adapter = AsyncMock()
-
-        # Mock mcp_server_status response
         mock_adapter.call_tool = AsyncMock(
             return_value={
                 "content": [
                     {
                         "type": "text",
-                        "text": '{"status": "running", "pid": 12345, "memory_mb": 50, "cpu_percent": 2.5}',
+                        "text": json.dumps(
+                            {
+                                "status": "running",
+                                "logs": ("[INFO] Server started\n[ERROR] Connection failed"),
+                            }
+                        ),
                     }
                 ],
             }
         )
 
-        tool = DebugMCPServerTool(
+        configure_debug_mcp_server(
             sandbox_adapter=mock_adapter,
             sandbox_id="sandbox-1",
         )
 
-        result = await tool.execute(server_name="test-server")
+        result = await _tool_exec(_make_ctx(), server_name="test-server")
 
-        # Should have process info
-        assert "status" in result or "process" in result or "running" in str(result)
+        assert isinstance(result, ToolResult)
+        parsed = json.loads(result.output)
+        assert "logs" in parsed
 
-    @pytest.mark.asyncio
-    async def test_tool_returns_last_error(self):
-        """
-        Test that DebugMCPServerTool returns last error information.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
+    async def test_tool_returns_process_info(self) -> None:
+        """Tool returns process information in parsed output."""
         mock_adapter = AsyncMock()
-
-        # Mock response with error info
         mock_adapter.call_tool = AsyncMock(
             return_value={
                 "content": [
                     {
                         "type": "text",
-                        "text": '{"last_error": "Connection refused", "error_count": 3}',
+                        "text": json.dumps(
+                            {
+                                "status": "running",
+                                "pid": 12345,
+                                "memory_mb": 50,
+                                "cpu_percent": 2.5,
+                            }
+                        ),
                     }
                 ],
             }
         )
 
-        tool = DebugMCPServerTool(
+        configure_debug_mcp_server(
             sandbox_adapter=mock_adapter,
             sandbox_id="sandbox-1",
         )
 
-        result = await tool.execute(server_name="broken-server")
+        result = await _tool_exec(_make_ctx(), server_name="test-server")
 
-        # Should have error info
-        assert "error" in result or "Connection refused" in str(result)
+        assert isinstance(result, ToolResult)
+        parsed = json.loads(result.output)
+        assert "process_info" in parsed or "status" in parsed
 
-    @pytest.mark.asyncio
-    async def test_tool_handles_nonexistent_server(self):
-        """
-        Test that DebugMCPServerTool handles non-existent server gracefully.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
+    async def test_tool_returns_last_error(self) -> None:
+        """Tool returns last error information."""
         mock_adapter = AsyncMock()
         mock_adapter.call_tool = AsyncMock(
             return_value={
-                "content": [{"type": "text", "text": '{"error": "Server not found"}'}],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "last_error": "Connection refused",
+                                "error_count": 3,
+                            }
+                        ),
+                    }
+                ],
+            }
+        )
+
+        configure_debug_mcp_server(
+            sandbox_adapter=mock_adapter,
+            sandbox_id="sandbox-1",
+        )
+
+        result = await _tool_exec(_make_ctx(), server_name="broken-server")
+
+        assert isinstance(result, ToolResult)
+        parsed = json.loads(result.output)
+        assert "last_error" in parsed or "error" in parsed or "Connection refused" in result.output
+
+    async def test_tool_handles_nonexistent_server(self) -> None:
+        """Tool handles non-existent server gracefully."""
+        mock_adapter = AsyncMock()
+        mock_adapter.call_tool = AsyncMock(
+            return_value={
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps({"error": "Server not found"}),
+                    }
+                ],
                 "is_error": True,
             }
         )
 
-        tool = DebugMCPServerTool(
+        configure_debug_mcp_server(
             sandbox_adapter=mock_adapter,
             sandbox_id="sandbox-1",
         )
 
-        result = await tool.execute(server_name="nonexistent")
+        result = await _tool_exec(_make_ctx(), server_name="nonexistent")
 
-        # Should return result without raising exception
-        # Either has error info or registered: False
-        assert isinstance(result, dict)
+        assert isinstance(result, ToolResult)
+        parsed = json.loads(result.output)
+        assert isinstance(parsed, dict)
         assert (
-            result.get("registered") is False
-            or "error" in result
-            or "not found" in str(result).lower()
+            parsed.get("registered") is False
+            or "error" in parsed
+            or "not found" in result.output.lower()
         )
 
-    @pytest.mark.asyncio
-    async def test_tool_has_name_and_description(self):
-        """
-        Test that DebugMCPServerTool has proper name and description.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
-        mock_adapter = AsyncMock()
-        tool = DebugMCPServerTool(
-            sandbox_adapter=mock_adapter,
-            sandbox_id="sandbox-1",
+    async def test_tool_has_name_and_description(self) -> None:
+        """Tool has proper name and description."""
+        assert debug_mcp_server_tool.name == "debug_mcp_server"
+        assert (
+            "debug" in debug_mcp_server_tool.description.lower()
+            or "mcp" in debug_mcp_server_tool.description.lower()
         )
 
-        assert tool.name == "debug_mcp_server"
-        assert "debug" in tool.description.lower() or "mcp" in tool.description.lower()
+
+# ---------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestDebugMCPServerToolIntegration:
-    """Integration tests for DebugMCPServerTool."""
+    """Integration tests for debug_mcp_server_tool."""
 
-    @pytest.mark.asyncio
-    async def test_tool_aggregates_multiple_debug_sources(self):
-        """
-        Test that DebugMCPServerTool aggregates info from multiple sources.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
+    async def test_tool_aggregates_multiple_debug_sources(
+        self,
+    ) -> None:
+        """Tool aggregates info from multiple MCP calls."""
         mock_adapter = AsyncMock()
+        calls: list[str] = []
 
-        # Track which tools were called
-        calls = []
-
-        async def track_call(tool_name, **kwargs):
+        async def track_call(
+            sandbox_id: str,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **kwargs: Any,
+        ) -> dict[str, Any]:
+            _ = sandbox_id
+            _ = arguments
+            _ = kwargs
             calls.append(tool_name)
             if tool_name == "mcp_server_list":
                 return {
-                    "content": [{"type": "text", "text": '[{"name": "test", "status": "running"}]'}]
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                [
+                                    {
+                                        "name": "test",
+                                        "status": "running",
+                                    }
+                                ]
+                            ),
+                        }
+                    ]
                 }
-            elif tool_name == "mcp_server_status":
-                return {"content": [{"type": "text", "text": '{"pid": 123, "status": "running"}'}]}
-            elif tool_name == "mcp_server_logs":
-                return {"content": [{"type": "text", "text": "[INFO] Running"}]}
+            if tool_name == "mcp_server_status":
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {
+                                    "pid": 123,
+                                    "status": "running",
+                                }
+                            ),
+                        }
+                    ]
+                }
+            if tool_name == "mcp_server_logs":
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "[INFO] Running",
+                        }
+                    ]
+                }
             return {"content": [{"type": "text", "text": "{}"}]}
 
         mock_adapter.call_tool = track_call
 
-        tool = DebugMCPServerTool(
+        configure_debug_mcp_server(
             sandbox_adapter=mock_adapter,
             sandbox_id="sandbox-1",
         )
 
-        _ = await tool.execute(server_name="test-server", include_logs=True)
+        _ = await _tool_exec(
+            _make_ctx(),
+            server_name="test-server",
+            include_logs=True,
+        )
 
-        # Should have called multiple debug endpoints
         assert len(calls) >= 2, f"Expected multiple calls, got: {calls}"
 
-    @pytest.mark.asyncio
-    async def test_tool_supports_log_tail_option(self):
-        """
-        Test that DebugMCPServerTool supports log tail/limit option.
-        """
-        from src.infrastructure.agent.tools.debug_mcp_server import DebugMCPServerTool
-
+    async def test_tool_supports_log_tail_option(
+        self,
+    ) -> None:
+        """Tool passes log_lines option to the adapter."""
         mock_adapter = AsyncMock()
         mock_adapter.call_tool = AsyncMock(
             return_value={
-                "content": [{"type": "text", "text": "Last 10 lines..."}],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Last 10 lines...",
+                    }
+                ],
             }
         )
 
-        tool = DebugMCPServerTool(
+        configure_debug_mcp_server(
             sandbox_adapter=mock_adapter,
             sandbox_id="sandbox-1",
         )
 
-        _ = await tool.execute(server_name="test-server", log_lines=10)
+        _ = await _tool_exec(
+            _make_ctx(),
+            server_name="test-server",
+            log_lines=10,
+        )
 
-        # Should have called with log limit
         assert mock_adapter.call_tool.called

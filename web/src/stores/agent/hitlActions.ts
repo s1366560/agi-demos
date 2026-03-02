@@ -108,7 +108,7 @@ export function createHITLActions(deps: HITLActionDeps) {
       }
     },
 
-    respondToDecision: async (requestId: string, decision: string): Promise<void> => {
+    respondToDecision: async (requestId: string, decision: string | string[]): Promise<void> => {
       const { activeConversationId } = get();
       if (!activeConversationId) return;
 
@@ -120,7 +120,7 @@ export function createHITLActions(deps: HITLActionDeps) {
         setState((state: any) => ({
           timeline: updateHITLEventInTimeline(state.timeline, requestId, 'decision_asked', {
             answered: true,
-            decision,
+            decision: Array.isArray(decision) ? decision.join(', ') : decision,
           }),
           pendingDecision: null,
           agentState: 'thinking',

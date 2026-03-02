@@ -217,6 +217,7 @@ export {
   Tag,
   Input,
   Radio,
+  Checkbox,
   Select,
   Modal,
   Form,

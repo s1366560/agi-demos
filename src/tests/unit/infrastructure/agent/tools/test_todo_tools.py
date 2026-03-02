@@ -1,92 +1,103 @@
-"""Tests for todo tools (DB-persistent).
+"""Tests for todo tools (@tool_define version).
 
 Tests for todoread and todowrite tools. Without a real DB session factory,
-the tools return graceful errors. We test validation and argument handling.
+the tools return graceful errors. We test metadata, parameter schemas, and
+error handling.
 
-Note: session_id is injected by the processor at execution time, not by the LLM.
-The tool schemas do not expose session_id to the LLM.
+Note: session_id comes from ToolContext, not as a kwarg.
 """
 
+from __future__ import annotations
+
 import json
+from typing import Any
 
 import pytest
 
+from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.todo_tools import (
-    TodoReadTool,
-    TodoWriteTool,
+    todoread_tool,
+    todowrite_tool,
 )
 
 
-class TestTodoReadTool:
-    """Test suite for TodoReadTool."""
+def _make_ctx(**overrides: Any) -> ToolContext:
+    """Create a minimal ToolContext for testing."""
+    defaults: dict[str, Any] = {
+        "session_id": "session-1",
+        "message_id": "msg-1",
+        "call_id": "call-1",
+        "agent_name": "test-agent",
+        "conversation_id": "conv-1",
+    }
+    defaults.update(overrides)
+    return ToolContext(**defaults)
 
-    @pytest.fixture
-    def tool(self):
-        """Provide a TodoReadTool instance (no DB)."""
-        return TodoReadTool()
+
+class TestTodoReadTool:
+    """Test suite for todoread tool (@tool_define)."""
 
     @pytest.mark.asyncio
-    async def test_read_without_session_factory(self, tool):
+    async def test_read_without_session_factory(self) -> None:
         """Without session_factory, returns error."""
-        result = await tool.execute(session_id="session-1")
-        data = json.loads(result)
+        ctx = _make_ctx()
+        result = await todoread_tool.execute(ctx)
+        data = json.loads(result.output)
         assert "error" in data
         assert data["todos"] == []
+        assert result.is_error is True
 
-    def test_validate_args_valid(self, tool):
-        assert tool.validate_args() is True
-        assert tool.validate_args(status="pending") is True
+    def test_tool_name(self) -> None:
+        assert todoread_tool.name == "todoread"
 
-    def test_validate_args_invalid_status(self, tool):
-        assert tool.validate_args(status="invalid") is False
-
-    def test_tool_name(self, tool):
-        assert tool.name == "todoread"
-
-    def test_parameters_schema_no_session_id(self, tool):
-        """session_id is injected by processor, not exposed in LLM schema."""
-        schema = tool.get_parameters_schema()
+    def test_parameters_schema_no_session_id(self) -> None:
+        """session_id is injected by processor via ToolContext, not exposed in LLM schema."""
+        schema = todoread_tool.parameters
         assert "session_id" not in schema["properties"]
         assert "status" in schema["properties"]
 
+    def test_valid_status_enum_in_schema(self) -> None:
+        """Status parameter should list valid enum values."""
+        schema = todoread_tool.parameters
+        status_prop = schema["properties"]["status"]
+        assert "enum" in status_prop
+        assert "pending" in status_prop["enum"]
+        assert "in_progress" in status_prop["enum"]
+
 
 class TestTodoWriteTool:
-    """Test suite for TodoWriteTool."""
-
-    @pytest.fixture
-    def tool(self):
-        """Provide a TodoWriteTool instance (no DB)."""
-        return TodoWriteTool()
+    """Test suite for todowrite tool (@tool_define)."""
 
     @pytest.mark.asyncio
-    async def test_write_without_session_factory(self, tool):
+    async def test_write_without_session_factory(self) -> None:
         """Without session_factory, returns error."""
-        result = await tool.execute(session_id="s1", action="replace", todos=[])
-        data = json.loads(result)
+        ctx = _make_ctx()
+        result = await todowrite_tool.execute(ctx, action="replace", todos=[])
+        data = json.loads(result.output)
         assert "error" in data
+        assert result.is_error is True
 
-    def test_validate_args_valid(self, tool):
-        assert tool.validate_args(action="replace") is True
-        assert tool.validate_args(action="add") is True
-        assert tool.validate_args(action="update", todo_id="1") is True
+    def test_tool_name(self) -> None:
+        assert todowrite_tool.name == "todowrite"
 
-    def test_validate_args_invalid_action(self, tool):
-        assert tool.validate_args(action="invalid") is False
-
-    def test_validate_args_update_without_todo_id(self, tool):
-        assert tool.validate_args(action="update") is False
-
-    def test_tool_name(self, tool):
-        assert tool.name == "todowrite"
-
-    def test_parameters_schema_no_session_id(self, tool):
-        """session_id is injected by processor, not exposed in LLM schema."""
-        schema = tool.get_parameters_schema()
+    def test_parameters_schema_no_session_id(self) -> None:
+        """session_id is injected by processor via ToolContext, not exposed in LLM schema."""
+        schema = todowrite_tool.parameters
         assert "session_id" not in schema["properties"]
         assert "action" in schema["properties"]
         assert "todos" in schema["properties"]
 
-    def test_consume_pending_events_empty(self, tool):
-        """No events before execute."""
-        events = tool.consume_pending_events()
+    def test_action_enum_in_schema(self) -> None:
+        """Action parameter should list valid enum values."""
+        schema = todowrite_tool.parameters
+        action_prop = schema["properties"]["action"]
+        assert "enum" in action_prop
+        assert "replace" in action_prop["enum"]
+        assert "add" in action_prop["enum"]
+        assert "update" in action_prop["enum"]
+
+    def test_consume_pending_events_via_context(self) -> None:
+        """Events are consumed from ToolContext, not from the tool itself."""
+        ctx = _make_ctx()
+        events = ctx.consume_pending_events()
         assert events == []

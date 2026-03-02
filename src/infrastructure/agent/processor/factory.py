@@ -59,6 +59,7 @@ class ProcessorFactory:
     base_api_key: str | None = None
     base_url: str | None = None
     tool_pipeline: ToolPipeline | None = None
+    plugin_registry: object | None = None
 
     def create_for_subagent(
         self,
@@ -96,6 +97,7 @@ class ProcessorFactory:
             max_tokens=subagent.max_tokens,
             max_steps=subagent.max_iterations,
             llm_client=self.llm_client,
+            plugin_registry=self.plugin_registry,
         )
 
         return SessionProcessor(

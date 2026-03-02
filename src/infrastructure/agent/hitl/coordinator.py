@@ -16,6 +16,7 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
@@ -165,6 +166,13 @@ class HITLCoordinator:
         logger.info(
             f"[HITLCoordinator] Received response for {hitl_type.value}: request_id={request_id}"
         )
+
+        # Defensive: handle string response_data (serialization inconsistency)
+        if isinstance(response_data, str):
+            try:
+                response_data = json.loads(response_data)
+            except (json.JSONDecodeError, TypeError):
+                return response_data
 
         if response_data.get("cancelled") or response_data.get("timeout"):
             return _type_default(hitl_type)

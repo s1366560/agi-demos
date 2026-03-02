@@ -129,6 +129,9 @@ class ProcessorConfig:
     # Processing limits
     max_steps: int = 50  # Maximum steps before forcing stop
     max_tool_calls_per_step: int = 10  # Max tool calls per LLM response
+    # Parallel tool execution
+    enable_parallel_tool_execution: bool = False  # Execute tools concurrently
+    parallel_tool_batch_size: int = 5  # Max concurrent tool executions
     doom_loop_threshold: int = 3  # Consecutive identical calls to trigger
     max_no_progress_steps: int = 3  # Consecutive no-progress checks before stop
 
@@ -147,6 +150,9 @@ class ProcessorConfig:
 
     # LLM Client (optional, provides circuit breaker + rate limiter)
     llm_client: Any | None = None
+
+    # Plugin registry (optional, for hook notifications)
+    plugin_registry: Any | None = None
 
     # Tool refresh callback (optional, enables dynamic tool loading)
     # When provided, _refresh_tools() can fetch updated tools at runtime
@@ -249,6 +255,8 @@ class SessionProcessor:
         self._tool_pipeline = tool_pipeline
         # LLM client for streaming (with circuit breaker + rate limiter)
         self._llm_client = config.llm_client
+        # Plugin registry for hook notifications (optional)
+        self._plugin_registry = config.plugin_registry
 
         # Session state
         self._state = ProcessorState.IDLE
@@ -301,6 +309,20 @@ class SessionProcessor:
     def state(self) -> ProcessorState:
         """Get current processor state."""
         return self._state
+
+
+    async def _notify_plugin_hook(
+        self,
+        hook_name: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        """Fire a plugin hook if registry is available. Errors are logged, never raised."""
+        if self._plugin_registry is None:
+            return
+        try:
+            await self._plugin_registry.notify_hook(hook_name, payload=payload)
+        except Exception:
+            logger.warning("Plugin hook %r failed", hook_name, exc_info=True)
 
     def _get_hitl_coordinator(self) -> HITLCoordinator:
         """Get or create the HITL coordinator for current context."""
@@ -486,6 +508,11 @@ class SessionProcessor:
         yield AgentStartEvent()
         self._state = ProcessorState.THINKING
 
+        await self._notify_plugin_hook("on_session_start", {
+            "session_id": session_id,
+            "message_count": len(messages),
+        })
+
         # --- Command interception: handle slash commands before ReAct loop ---
         cmd_events = await self._try_intercept_command(messages)
         if cmd_events is not None:
@@ -531,8 +558,18 @@ class SessionProcessor:
             async for event in self._emit_completion_events(result, session_id, messages):
                 yield event
 
+            await self._notify_plugin_hook("on_session_end", {
+                "session_id": session_id,
+                "step_count": self._step_count,
+                "result": result.name if hasattr(result, "name") else str(result),
+            })
         except Exception as e:
             logger.error(f"Processor error: {e}", exc_info=True)
+            await self._notify_plugin_hook("on_error", {
+                "session_id": session_id,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            })
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR
 
@@ -708,16 +745,17 @@ class SessionProcessor:
 
     def _build_command_context(self) -> dict[str, Any]:
         """Build context dict for command handlers."""
-        # Prefer live skills from SkillLoaderTool (dynamically updated cache)
+        # Prefer live skills from module-level cache (dynamically updated)
         # over stale self.config.skill_names (set once at init time).
         skills: list[str] = list(self.config.skill_names)
-        skill_loader_def = self.tools.get("skill_loader")
-        if skill_loader_def is not None:
-            tool_inst = getattr(skill_loader_def, "_tool_instance", None)
-            if tool_inst is not None and hasattr(tool_inst, "get_available_skills"):
-                live_skills = tool_inst.get_available_skills()
-                if live_skills:
-                    skills = live_skills
+        if self.tools.get("skill_loader") is not None:
+            from src.infrastructure.agent.tools.skill_loader import (
+                get_available_skills,
+            )
+
+            live_skills = get_available_skills()
+            if live_skills:
+                skills = live_skills
         ctx: dict[str, Any] = {
             "model_name": self.config.model,
             "tools": list(self.tools.keys()),
@@ -939,7 +977,8 @@ class SessionProcessor:
         # Track state for this step
         text_buffer = ""
         reasoning_buffer = ""
-        tool_calls_completed = []
+        tool_calls_completed: list[str] = []
+        deferred_tool_calls: list[tuple[str, str, str, dict[str, Any]]] = []
         step_tokens = TokenUsage()
         step_cost = 0.0
         finish_reason = "stop"
@@ -1103,13 +1142,29 @@ class SessionProcessor:
                                 tool_execution_id=tool_part.tool_execution_id,
                             )
 
-                            # Execute tool
-                            async for tool_event in self._execute_tool(
-                                session_id, call_id, tool_name, arguments
+                            # Execute tool: check parallel mode
+                            _is_hitl = self._check_hitl_dispatch(
+                                tool_name
+                            )
+                            if (
+                                not self.config.enable_parallel_tool_execution
+                                or _is_hitl
                             ):
-                                yield tool_event
-
-                            tool_calls_completed.append(call_id)
+                                # Sequential: execute immediately
+                                async for tool_event in self._execute_tool(
+                                    session_id,
+                                    call_id,
+                                    tool_name,
+                                    arguments,
+                                ):
+                                    yield tool_event
+                                tool_calls_completed.append(call_id)
+                            else:
+                                # Parallel: defer execution
+                                deferred_tool_calls.append(
+                                    (session_id, call_id,
+                                     tool_name, arguments)
+                                )
 
                     elif event.type == StreamEventType.USAGE:
                         # Extract usage data
@@ -1191,6 +1246,60 @@ class SessionProcessor:
                     # Not retryable or max retries exceeded
                     raise
 
+        # After stream completes, execute deferred tool calls in parallel
+        if deferred_tool_calls:
+            batch_size = self.config.parallel_tool_batch_size
+            for batch_start in range(
+                0, len(deferred_tool_calls), batch_size
+            ):
+                batch = deferred_tool_calls[
+                    batch_start:batch_start + batch_size
+                ]
+
+                async def _run_tool(
+                    sid: str = "",
+                    cid: str = "",
+                    tname: str = "",
+                    args: dict[str, Any] | None = None,
+                ) -> tuple[str, list[ProcessorEvent]]:
+                    events: list[ProcessorEvent] = []
+                    async for ev in self._execute_tool(
+                        sid, cid, tname, args or {}
+                    ):
+                        events.append(ev)
+                    return cid, events
+
+                tasks = [
+                    _run_tool(
+                        sid=sid, cid=cid,
+                        tname=tname, args=args,
+                    )
+                    for sid, cid, tname, args in batch
+                ]
+                results = await asyncio.gather(
+                    *tasks, return_exceptions=True
+                )
+
+                for result in results:
+                    if isinstance(result, BaseException):
+                        logger.error(
+                            "[Processor] Parallel tool"
+                            " execution failed:"
+                            f" {result}"
+                        )
+                        yield AgentErrorEvent(
+                            message=(
+                                "Tool execution"
+                                " failed:"
+                                f" {result}"
+                            ),
+                            code="TOOL_EXECUTION_ERROR",
+                        )
+                        continue
+                    cid, events = result
+                    for ev in events:
+                        yield ev
+                    tool_calls_completed.append(cid)
         # Update message tokens and cost
         self._current_message.tokens = {
             "input": step_tokens.input,
@@ -2443,6 +2552,12 @@ class SessionProcessor:
                 return
             arguments = cleaned
 
+            await self._notify_plugin_hook("before_tool_execution", {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "call_id": call_id,
+                "session_id": session_id,
+            })
             try:
                 # 6. Pipeline execution (doom loop + permission + invoke)
                 async for ev in self._execute_tool_via_pipeline(
@@ -2455,6 +2570,14 @@ class SessionProcessor:
                 ):
                     yield ev
 
+                await self._notify_plugin_hook(
+                    "after_tool_execution",
+                    {
+                        "tool_name": tool_name,
+                        "call_id": call_id,
+                        "session_id": session_id,
+                    },
+                )
                 # 7. Side effects (same as non-pipeline path)
                 async for ev in self._emit_tool_side_effects(
                     tool_name,
@@ -2524,6 +2647,12 @@ class SessionProcessor:
         arguments = cleaned
 
         # 6. Invoke tool + emit observe
+        await self._notify_plugin_hook("before_tool_execution", {
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "call_id": call_id,
+            "session_id": session_id,
+        })
         try:
             async for ev in self._invoke_and_emit_observe(
                 tool_name,
@@ -2534,6 +2663,14 @@ class SessionProcessor:
             ):
                 yield ev
 
+            await self._notify_plugin_hook(
+                "after_tool_execution",
+                {
+                    "tool_name": tool_name,
+                    "call_id": call_id,
+                    "session_id": session_id,
+                },
+            )
             # 7. Side effects
             async for ev in self._emit_tool_side_effects(
                 tool_name,

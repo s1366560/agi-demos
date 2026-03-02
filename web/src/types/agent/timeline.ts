@@ -336,6 +336,8 @@ export interface DecisionAskedTimelineEvent extends BaseTimelineEvent {
   allowCustom: boolean;
   context?: Record<string, unknown> | undefined;
   defaultOption?: string | undefined;
+  selectionMode?: 'single' | 'multiple' | undefined;
+  maxSelections?: number | undefined;
   answered?: boolean | undefined;
   decision?: string | undefined;
 }

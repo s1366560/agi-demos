@@ -32,7 +32,17 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from src.domain.events.agent_events import (
+    AgentCompleteEvent,
+    AgentContextCompressedEvent,
+    AgentContextStatusEvent,
+    AgentContextSummaryGeneratedEvent,
     AgentDomainEvent,
+    AgentErrorEvent,
+    AgentPlanSuggestedEvent,
+    AgentPolicyFilteredEvent,
+    AgentSelectionTraceEvent,
+    AgentSkillMatchedEvent,
+    AgentThoughtEvent,
 )
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
@@ -57,6 +67,7 @@ from ..plugins.selection_pipeline import (
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
 from ..routing import (
     ExecutionPath,
+    IntentGate,
     RoutingDecision,
 )
 from ..skill import SkillProtocol
@@ -188,6 +199,8 @@ class ReActAgent:
     _stream_tools_to_use: list[ToolDefinition]
     _stream_final_content: str
     _stream_success: bool
+    # _intent_gate
+    _intent_gate: IntentGate
 
     def __init__(  # noqa: PLR0913
         self,
@@ -353,6 +366,7 @@ class ReActAgent:
                 workspace_manager=workspace_manager,
             )
         self._plan_detector = plan_detector or PlanDetector()
+        self._intent_gate = IntentGate()
 
         self._init_tool_pipeline(
             tool_selection_pipeline,
@@ -903,7 +917,22 @@ class ReActAgent:
                 },
             )
 
-        # Default to ReAct loop -- prompt-driven routing replaces confidence scoring
+        # Intent gate: lightweight pattern-based pre-classification
+        gate_result = self._intent_gate.classify(
+            message,
+            _available_skills=[
+                s.name for s in (self.skills or [])
+            ],
+        )
+        if gate_result is not None:
+            if gate_result.metadata is None:
+                gate_result.metadata = {}
+            gate_result.metadata["domain_lane"] = domain_lane
+            gate_result.metadata["router_fabric_version"] = "lane-v1"
+            return gate_result
+
+        # Default to ReAct loop -- prompt-driven routing replaces
+        # confidence scoring
         return RoutingDecision(
             path=ExecutionPath.REACT_LOOP,
             confidence=0.5,
@@ -1216,16 +1245,15 @@ class ReActAgent:
         """Detect plan mode and yield suggestion event if appropriate."""
         suggestion = self._plan_detector.detect(user_message)
         if suggestion.should_suggest:
-            yield {
-                "type": "plan_suggested",
-                "data": {
-                    "plan_id": "",  # Will be set by PlanCoordinator
-                    "conversation_id": conversation_id,
-                    "reason": suggestion.reason,
-                    "confidence": suggestion.confidence,
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            yield cast(
+                dict[str, Any],
+                AgentPlanSuggestedEvent(
+                    plan_id="",
+                    conversation_id=conversation_id,
+                    reason=suggestion.reason,
+                    confidence=suggestion.confidence,
+                ).to_event_dict(),
+            )
             logger.info(
                 f"[ReActAgent] Plan Mode suggested (confidence={suggestion.confidence:.2f})"
             )
@@ -1292,14 +1320,16 @@ class ReActAgent:
                 is_forced = True
                 logger.info(f"[ReActAgent] Forced skill found: {found_skill.name}")
             else:
-                yield {
-                    "type": "thought",
-                    "data": {
-                        "content": f"Forced skill '{forced_skill_name}' not found, "
-                        f"falling back to normal matching",
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
+                yield cast(
+                    dict[str, Any],
+                    AgentThoughtEvent(
+                        content=(
+                            f"Forced skill '{forced_skill_name}'"
+                            f" not found, falling back to"
+                            f" normal matching"
+                        ),
+                    ).to_event_dict(),
+                )
                 matched_skill, skill_score = self._match_skill(processed_user_message)
         else:
             matched_skill, skill_score = self._match_skill(processed_user_message)
@@ -1320,17 +1350,16 @@ class ReActAgent:
                 f"prompt_len={len(matched_skill.prompt_template or '')}, "
                 f"tools={list(matched_skill.tools)}"
             )
-            yield {
-                "type": "skill_matched",
-                "data": {
-                    "skill_id": matched_skill.id,
-                    "skill_name": matched_skill.name,
-                    "tools": list(matched_skill.tools),
-                    "match_score": skill_score,
-                    "execution_mode": execution_mode,
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            yield cast(
+                dict[str, Any],
+                AgentSkillMatchedEvent(
+                    skill_id=matched_skill.id,
+                    skill_name=matched_skill.name,
+                    tools=list(matched_skill.tools),
+                    match_score=skill_score,
+                    execution_mode=execution_mode,
+                ).to_event_dict(),
+            )
 
         self._stream_skill_state = {
             "matched_skill": matched_skill,
@@ -1439,11 +1468,12 @@ class ReActAgent:
 
         # Emit context_compressed event if compression occurred
         if context_result.was_compressed:
-            yield {
-                "type": "context_compressed",
-                "data": context_result.to_event_data(),
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            yield cast(
+                dict[str, Any],
+                AgentContextCompressedEvent(
+                    **context_result.to_event_data()
+                ).to_event_dict(),
+            )
             logger.info(
                 f"Context compressed: {context_result.original_message_count} -> "
                 f"{context_result.final_message_count} messages, "
@@ -1451,16 +1481,23 @@ class ReActAgent:
             )
 
             if context_result.summary and not cached_summary:
-                yield {
-                    "type": "context_summary_generated",
-                    "data": {
-                        "summary_text": context_result.summary,
-                        "summary_tokens": context_result.estimated_tokens,
-                        "messages_covered_count": context_result.summarized_message_count,
-                        "compression_level": context_result.compression_strategy.value,
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
+                yield cast(
+                    dict[str, Any],
+                    AgentContextSummaryGeneratedEvent(
+                        summary_text=context_result.summary,
+                        summary_tokens=(
+                            context_result.estimated_tokens
+                        ),
+                        messages_covered_count=(
+                            context_result
+                            .summarized_message_count
+                        ),
+                        compression_level=(
+                            context_result
+                            .compression_strategy.value
+                        ),
+                    ).to_event_dict(),
+                )
 
             # Pre-compaction memory flush
             if self._memory_flush and conversation_context:
@@ -1483,24 +1520,30 @@ class ReActAgent:
 
         # Emit initial context_status
         compression_level = context_result.metadata.get("compression_level", "none")
-        yield {
-            "type": "context_status",
-            "data": {
-                "current_tokens": context_result.estimated_tokens,
-                "token_budget": context_result.token_budget,
-                "occupancy_pct": round(context_result.budget_utilization_pct, 1),
-                "compression_level": compression_level,
-                "token_distribution": {},
-                "compression_history_summary": context_result.metadata.get(
-                    "compression_history", {}
+        yield cast(
+            dict[str, Any],
+            AgentContextStatusEvent(
+                current_tokens=(
+                    context_result.estimated_tokens
                 ),
-                "from_cache": cached_summary is not None,
-                "messages_in_summary": (
+                token_budget=context_result.token_budget,
+                occupancy_pct=round(
+                    context_result.budget_utilization_pct,
+                    1,
+                ),
+                compression_level=compression_level,
+                token_distribution={},
+                compression_history_summary=(
+                    context_result.metadata.get(
+                        "compression_history", {}
+                    )
+                ),
+                from_cache=cached_summary is not None,
+                messages_in_summary=(
                     cached_summary.messages_covered_count if cached_summary else 0
                 ),
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+            ).to_event_dict(),
+        )
 
     def _stream_prepare_tools(
         self,
@@ -1548,35 +1591,48 @@ class ReActAgent:
                 if isinstance(stage.get("explain"), dict)
                 and stage["explain"].get("budget_exceeded")  # type: ignore[attr-defined]
             ]
-            yield {
-                "type": "selection_trace",
-                "data": {
-                    "route_id": route_id,
-                    "trace_id": trace_id,
-                    "initial_count": trace_data[0]["before_count"],
-                    "final_count": trace_data[-1]["after_count"],
-                    "removed_total": removed_total,
-                    "domain_lane": selection_context.metadata.get("domain_lane"),
-                    "tool_budget": tool_budget,
-                    "budget_exceeded_stages": budget_exceeded_stages,
-                    "stages": trace_data,
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            yield cast(
+                dict[str, Any],
+                AgentSelectionTraceEvent(
+                    route_id=route_id,
+                    trace_id=trace_id,
+                    initial_count=cast(
+                        int, trace_data[0]["before_count"]
+                    ),
+                    final_count=cast(
+                        int, trace_data[-1]["after_count"]
+                    ),
+                    removed_total=removed_total,
+                    domain_lane=(
+                        selection_context.metadata.get(
+                            "domain_lane"
+                        )
+                    ),
+                    tool_budget=tool_budget,
+                    budget_exceeded_stages=[
+                        str(s) for s in budget_exceeded_stages
+                    ],
+                    stages=trace_data,
+                ).to_event_dict(),
+            )
             if removed_total > 0:
-                yield {
-                    "type": "policy_filtered",
-                    "data": {
-                        "route_id": route_id,
-                        "trace_id": trace_id,
-                        "removed_total": removed_total,
-                        "stage_count": len(trace_data),
-                        "domain_lane": selection_context.metadata.get("domain_lane"),
-                        "tool_budget": tool_budget,
-                        "budget_exceeded_stages": budget_exceeded_stages,
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
+                yield cast(
+                    dict[str, Any],
+                    AgentPolicyFilteredEvent(
+                        route_id=route_id,
+                        trace_id=trace_id,
+                        removed_total=removed_total,
+                        stage_count=len(trace_data),
+                        domain_lane=(
+                            selection_context.metadata
+                            .get("domain_lane")
+                        ),
+                        tool_budget=tool_budget,
+                        budget_exceeded_stages=[
+                            str(s) for s in budget_exceeded_stages
+                        ],
+                    ).to_event_dict(),
+                )
         tools_to_use = list(current_tool_definitions)
 
         # When a forced skill is active, keep all core tools available
@@ -1817,14 +1873,13 @@ class ReActAgent:
         except Exception as e:
             logger.error(f"[ReActAgent] Error in stream: {e}", exc_info=True)
             self._stream_success = False
-            yield {
-                "type": "error",
-                "data": {
-                    "message": str(e),
-                    "code": type(e).__name__,
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            yield cast(
+                dict[str, Any],
+                AgentErrorEvent(
+                    message=str(e),
+                    code=type(e).__name__,
+                ).to_event_dict(),
+            )
 
     async def _stream_post_process(
         self,
@@ -1876,14 +1931,17 @@ class ReActAgent:
                 logger.debug(f"[ReActAgent] Conversation indexing skipped: {e}")
 
         # Yield final complete event
-        yield {
-            "type": "complete",
-            "data": {
-                "content": final_content,
-                "skill_used": matched_skill.name if matched_skill else None,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentCompleteEvent(
+                content=final_content,
+                skill_used=(
+                    matched_skill.name
+                    if matched_skill
+                    else None
+                ),
+            ).to_event_dict(),
+        )
 
     def _stream_decide_route(
         self,
@@ -2430,8 +2488,7 @@ class ReActAgent:
         restart_callback: Callable[..., Coroutine[Any, Any, str]],
     ) -> None:
         """Append session management tools."""
-        self._tool_builder.append_nested_session_tools(
-            append_fn=append_fn,
+        for td in self._tool_builder.make_nested_session_tool_defs(
             conversation_id=conversation_id,
             nested_depth=nested_depth,
             max_delegation_depth=max_delegation_depth,
@@ -2439,7 +2496,8 @@ class ReActAgent:
             nested_descriptions=nested_descriptions,
             cancel_callback=cancel_callback,
             restart_callback=restart_callback,
-        )
+        ):
+            append_fn(td)
 
     def _append_nested_delegate_tools(
         self,
@@ -2453,15 +2511,15 @@ class ReActAgent:
         nested_depth: int,
     ) -> None:
         """Append delegate and parallel-delegate tools."""
-        self._tool_builder.append_nested_delegate_tools(
-            append_fn=append_fn,
+        for td in self._tool_builder.make_nested_delegate_tool_defs(
             nested_candidates=nested_candidates,
             nested_map=nested_map,
             nested_descriptions=nested_descriptions,
             delegate_callback=delegate_callback,
             conversation_id=conversation_id,
             nested_depth=nested_depth,
-        )
+        ):
+            append_fn(td)
 
     async def _execute_subagent(
         self,

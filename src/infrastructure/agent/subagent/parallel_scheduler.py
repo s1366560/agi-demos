@@ -12,12 +12,16 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.agent.processor.factory import ProcessorFactory
 
+from src.domain.events.agent_events import (
+    AgentParallelCompletedEvent,
+    AgentParallelStartedEvent,
+)
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 
@@ -141,14 +145,13 @@ class ParallelScheduler:
         if not executions:
             return
 
-        yield {
-            "type": "parallel_started",
-            "data": {
-                "task_count": len(executions),
-                "task_ids": list(executions.keys()),
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentParallelStartedEvent(
+                task_count=len(executions),
+                task_ids=list(executions.keys()),
+            ).to_event_dict(),
+        )
 
         ctx = _RunTaskContext(
             completed_ids=set(),
@@ -173,16 +176,23 @@ class ParallelScheduler:
             yield event
 
         # Final summary event
-        yield {
-            "type": "parallel_completed",
-            "data": {
-                "total_tasks": len(executions),
-                "succeeded": sum(1 for e in executions.values() if e.completed and not e.error),
-                "failed": sum(1 for e in executions.values() if e.error),
-                "results": [r.to_event_data() for r in ctx.results],
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentParallelCompletedEvent(
+                total_tasks=len(executions),
+                succeeded=sum(
+                    1 for e in executions.values()
+                    if e.completed and not e.error
+                ),
+                failed=sum(
+                    1 for e in executions.values()
+                    if e.error
+                ),
+                results=[
+                    r.to_event_data() for r in ctx.results
+                ],
+            ).to_event_dict(),
+        )
 
     @staticmethod
     def _build_execution_map(

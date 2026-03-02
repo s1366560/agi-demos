@@ -49,7 +49,7 @@ def _load_pricing_from_file() -> tuple[CostDict, ModelCost]:
 
     try:
         with open(file_path) as f:
-            data = yaml.safe_load(f)
+            data: dict[str, object] = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ValueError(f"Invalid YAML in pricing file: {e}") from e
 
@@ -57,25 +57,29 @@ def _load_pricing_from_file() -> tuple[CostDict, ModelCost]:
         raise ValueError("Pricing file must contain a YAML dictionary")
 
     # Load default pricing
-    default_data = data.get("default", {})
+    default_data_obj = data.get("default", {})
+    if not isinstance(default_data_obj, dict):
+        raise ValueError("'default' section must be a dictionary")
+    default_data: dict[str, object] = default_data_obj
     default_cost = _parse_model_cost(default_data)
 
     # Load all model costs
-    models_data = data.get("models", {})
-    if not isinstance(models_data, dict):
+    models_data_obj = data.get("models", {})
+    if not isinstance(models_data_obj, dict):
         raise ValueError("'models' section must be a dictionary")
+    models_data: dict[str, object] = models_data_obj
 
     model_costs: CostDict = {}
     for model_name, cost_data in models_data.items():
         if not isinstance(cost_data, dict):
-            msg = f"Model '{model_name}' cost data must be a dictionary"
-            raise ValueError(msg)
+            raise ValueError(
+                f"Model '{model_name}' cost data must be a dictionary"
+            )
         model_costs[model_name] = _parse_model_cost(cost_data)
 
     return model_costs, default_cost
 
-
-def _parse_model_cost(data: dict[str, str | None]) -> ModelCost:
+def _parse_model_cost(data: dict[str, object]) -> ModelCost:
     """
     Parse a single model cost configuration from dictionary.
 
@@ -176,6 +180,8 @@ def get_model_costs() -> CostDict:
     return _pricing_cache
 
 
+
+
 def get_default_cost() -> ModelCost:
     """
     Get the default model cost for unknown models.
@@ -186,7 +192,7 @@ def get_default_cost() -> ModelCost:
         Default ModelCost configuration
     """
     # Trigger reload check
-    get_model_costs()
+    _ = get_model_costs()
 
     if _default_cost_cache is None:
         # Fallback (should never happen if get_model_costs succeeds)

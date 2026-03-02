@@ -35,6 +35,7 @@ import {
   Form,
   Input,
   Radio,
+  Checkbox,
   Button,
   Tag,
   Typography,
@@ -353,12 +354,17 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
   submitText,
 }) => {
   const data = request.clarificationData;
+  const hasOptions = data?.options && data.options.length > 0;
   const [selectedOption, setSelectedOption] = useState<string | null>(
     data?.options.find((opt) => opt.recommended)?.id || null
   );
   const [customInput, setCustomInput] = useState('');
 
   const handleSubmit = () => {
+    if (!hasOptions && customInput.trim()) {
+      onSubmit({ answer: customInput.trim() });
+      return;
+    }
     if (selectedOption === 'custom' && data?.allowCustom) {
       if (customInput.trim()) {
         onSubmit({ answer: customInput.trim() });
@@ -368,7 +374,11 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
     }
   };
 
-  const isSubmitDisabled = !selectedOption || (selectedOption === 'custom' && !customInput.trim());
+  const isSubmitDisabled = (() => {
+    if (!hasOptions) return !customInput.trim();
+    if (selectedOption === 'custom') return !customInput.trim();
+    return !selectedOption;
+  })();
 
   return (
     <div className="space-y-4">
@@ -377,56 +387,78 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
         {request.question || data?.question}
       </Paragraph>
 
-      {/* Options */}
-      <Radio.Group
-        value={selectedOption}
-        onChange={(e) => {
-          setSelectedOption(e.target.value);
-        }}
-        className="w-full"
-      >
-        <Space direction="vertical" className="w-full" size="middle">
-          {data?.options.map((option) => (
-            <Radio key={option.id} value={option.id} className="w-full">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <Text strong>{option.label}</Text>
-                  {option.recommended && (
-                    <Tag color="green" className="text-xs">
-                      推荐
-                    </Tag>
+      {/* Options or empty-options fallback */}
+      {hasOptions ? (
+        <Radio.Group
+          value={selectedOption}
+          onChange={(e) => {
+            setSelectedOption(e.target.value);
+          }}
+          className="w-full"
+        >
+          <Space direction="vertical" className="w-full" size="middle">
+            {data?.options.map((option, idx) => (
+            <Radio key={option.id || `option-${idx}`} value={option.id} className="w-full">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <Text strong>{option.label}</Text>
+                    {option.recommended && (
+                      <Tag color="green" className="text-xs">
+                        推荐
+                      </Tag>
+                    )}
+                  </div>
+                  {option.description && (
+                    <Text type="secondary" className="text-sm mt-1">
+                      {option.description}
+                    </Text>
                   )}
                 </div>
-                {option.description && (
-                  <Text type="secondary" className="text-sm mt-1">
-                    {option.description}
-                  </Text>
-                )}
-              </div>
-            </Radio>
-          ))}
+              </Radio>
+            ))}
 
-          {data?.allowCustom && (
-            <Radio value="custom" className="w-full">
-              <div className="flex flex-col w-full">
-                <Text strong>自定义输入</Text>
-                {selectedOption === 'custom' && (
-                  <TextArea
-                    value={customInput}
-                    onChange={(e) => {
-                      setCustomInput(e.target.value);
-                    }}
-                    placeholder="输入您的答案..."
-                    rows={3}
-                    className="mt-2"
-                    autoFocus
-                  />
-                )}
-              </div>
-            </Radio>
-          )}
-        </Space>
-      </Radio.Group>
+            {data?.allowCustom && (
+              <Radio value="custom" className="w-full">
+                <div className="flex flex-col w-full">
+                  <Text strong>自定义输入</Text>
+                  {selectedOption === 'custom' && (
+                    <TextArea
+                      value={customInput}
+                      onChange={(e) => {
+                        setCustomInput(e.target.value);
+                      }}
+                      placeholder="输入您的答案..."
+                      rows={3}
+                      className="mt-2"
+                      autoFocus
+                    />
+                  )}
+                </div>
+              </Radio>
+            )}
+          </Space>
+        </Radio.Group>
+      ) : data?.allowCustom ? (
+        <div className="space-y-2">
+          <Text type="secondary">暂无预设选项，请直接输入</Text>
+          <TextArea
+            value={customInput}
+            onChange={(e) => {
+              setCustomInput(e.target.value);
+            }}
+            placeholder="输入您的答案..."
+            rows={3}
+            autoFocus
+          />
+        </div>
+      ) : (
+        <Alert
+          message="暂无可选选项"
+          description="当前没有可供选择的选项"
+          type="info"
+          showIcon
+        />
+      )}
 
       <Divider />
 
@@ -459,22 +491,44 @@ const DecisionContent: React.FC<HITLContentProps> = ({
   submitText,
 }) => {
   const data = request.decisionData;
+  const hasOptions = data?.options && data.options.length > 0;
+  const isMultiSelect = data?.selectionMode === 'multiple';
   const [selectedOption, setSelectedOption] = useState<string | null>(
     data?.options.find((opt) => opt.recommended)?.id || data?.defaultOption || null
   );
+  const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
   const [customInput, setCustomInput] = useState('');
 
+  const toggleMultiSelect = useCallback((id: string) => {
+    setSelectedMultiple((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
   const handleSubmit = () => {
+    if (!hasOptions && customInput.trim()) {
+      onSubmit({ decision: customInput.trim() });
+      return;
+    }
     if (selectedOption === 'custom' && data?.allowCustom) {
       if (customInput.trim()) {
         onSubmit({ decision: customInput.trim() });
+      }
+    } else if (isMultiSelect) {
+      if (selectedMultiple.length > 0) {
+        onSubmit({ decision: selectedMultiple });
       }
     } else if (selectedOption) {
       onSubmit({ decision: selectedOption });
     }
   };
 
-  const isSubmitDisabled = !selectedOption || (selectedOption === 'custom' && !customInput.trim());
+  const isSubmitDisabled = (() => {
+    if (!hasOptions) return !customInput.trim();
+    if (isMultiSelect) return selectedMultiple.length === 0;
+    if (selectedOption === 'custom') return !customInput.trim();
+    return !selectedOption;
+  })();
 
   const selectedOptionData = data?.options.find((opt) => opt.id === selectedOption);
   const hasHighRisk = selectedOptionData?.risks && selectedOptionData.risks.length > 0;
@@ -501,54 +555,87 @@ const DecisionContent: React.FC<HITLContentProps> = ({
       <Divider />
 
       {/* Options */}
-      <div className="space-y-3">
-        {data?.options.map((option) => (
-          <DecisionOptionCard
-            key={option.id}
-            option={option}
-            selected={selectedOption === option.id}
-            onSelect={() => {
-              setSelectedOption(option.id);
-            }}
-          />
-        ))}
-
-        {data?.allowCustom && (
-          <div
-            onClick={() => {
-              setSelectedOption('custom');
-            }}
-            className={`
-              p-4 rounded-lg border-2 cursor-pointer transition-all
-              ${
-                selectedOption === 'custom'
-                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+      {hasOptions ? (
+        <div className="space-y-3">
+          {data?.options.map((option, idx) => (
+            <DecisionOptionCard
+              key={option.id || `option-${idx}`}
+              option={option}
+              selected={
+                isMultiSelect
+                  ? selectedMultiple.includes(option.id)
+                  : selectedOption === option.id
               }
-            `}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Radio checked={selectedOption === 'custom'} />
-              <Text strong>自定义决策</Text>
+              isMultiSelect={isMultiSelect}
+              onSelect={() => {
+                if (isMultiSelect) {
+                  toggleMultiSelect(option.id);
+                } else {
+                  setSelectedOption(option.id);
+                }
+              }}
+            />
+          ))}
+
+          {data?.allowCustom && !isMultiSelect && (
+            <div
+              onClick={() => {
+                setSelectedOption('custom');
+              }}
+              className={`
+                p-4 rounded-lg border-2 cursor-pointer transition-all
+                ${
+                  selectedOption === 'custom'
+                    ? 'border-primary-500 bg-primary-50'
+                      + ' dark:bg-primary-900/20'
+                    : 'border-slate-200 dark:border-slate-700'
+                      + ' hover:border-primary-300'
+                }
+              `}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Radio checked={selectedOption === 'custom'} />
+                <Text strong>自定义决策</Text>
+              </div>
+              {selectedOption === 'custom' && (
+                <TextArea
+                  value={customInput}
+                  onChange={(e) => {
+                    setCustomInput(e.target.value);
+                  }}
+                  placeholder="输入您的决策..."
+                  rows={3}
+                  className="ml-6"
+                  autoFocus
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                />
+              )}
             </div>
-            {selectedOption === 'custom' && (
-              <TextArea
-                value={customInput}
-                onChange={(e) => {
-                  setCustomInput(e.target.value);
-                }}
-                placeholder="输入您的决策..."
-                rows={3}
-                className="ml-6"
-                autoFocus
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
-              />
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : data?.allowCustom ? (
+        <div className="space-y-2">
+          <Text type="secondary">暂无预设选项，请直接输入</Text>
+          <TextArea
+            value={customInput}
+            onChange={(e) => {
+              setCustomInput(e.target.value);
+            }}
+            placeholder="输入您的决策..."
+            rows={3}
+            autoFocus
+          />
+        </div>
+      ) : (
+        <Alert
+          message="暂无可选选项"
+          description="当前没有可供选择的决策选项"
+          type="info"
+          showIcon
+        />
+      )}
 
       <Divider />
 
@@ -573,8 +660,9 @@ const DecisionContent: React.FC<HITLContentProps> = ({
 const DecisionOptionCard: React.FC<{
   option: DecisionOption;
   selected: boolean;
+  isMultiSelect?: boolean;
   onSelect: () => void;
-}> = ({ option, selected, onSelect }) => {
+}> = ({ option, selected, isMultiSelect = false, onSelect }) => {
   const hasRisks = option.risks && option.risks.length > 0;
 
   return (
@@ -585,13 +673,18 @@ const DecisionOptionCard: React.FC<{
         ${
           selected
             ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-            : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+            : 'border-slate-200 dark:border-slate-700'
+              + ' hover:border-primary-300'
         }
       `}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-1">
-          <Radio checked={selected} />
+          {isMultiSelect ? (
+            <Checkbox checked={selected} />
+          ) : (
+            <Radio checked={selected} />
+          )}
           <Text strong className="text-base">
             {option.label}
           </Text>
@@ -604,7 +697,11 @@ const DecisionOptionCard: React.FC<{
       </div>
 
       {option.description && (
-        <Paragraph className="text-sm text-slate-600 dark:text-slate-400 mb-3 ml-6">
+        <Paragraph
+          className={
+            'text-sm text-slate-600 dark:text-slate-400 mb-3 ml-6'
+          }
+        >
           {option.description}
         </Paragraph>
       )}
@@ -612,13 +709,21 @@ const DecisionOptionCard: React.FC<{
       {(option.estimatedTime || option.estimatedCost) && (
         <div className="flex gap-4 ml-6 mb-2">
           {option.estimatedTime && (
-            <div className="flex items-center gap-1 text-xs text-slate-500">
+            <div
+              className={
+                'flex items-center gap-1 text-xs text-slate-500'
+              }
+            >
               <ClockCircleOutlined />
               <span>{option.estimatedTime}</span>
             </div>
           )}
           {option.estimatedCost && (
-            <div className="flex items-center gap-1 text-xs text-slate-500">
+            <div
+              className={
+                'flex items-center gap-1 text-xs text-slate-500'
+              }
+            >
               <span>$</span>
               <span>{option.estimatedCost}</span>
             </div>

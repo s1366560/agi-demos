@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
 
 
-from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -385,169 +384,6 @@ def render_template_content(content: str, variables: dict[str, str]) -> str:
 # Tool Implementation
 # =============================================================================
 
-
-class CreateMCPServerFromTemplateTool(AgentTool):
-    """Tool for creating MCP servers from templates.
-
-    Creates a new MCP server based on a predefined template,
-    writing files to the sandbox and optionally installing dependencies.
-    """
-
-    def __init__(
-        self,
-        sandbox_adapter: SandboxPort,
-        sandbox_id: str,
-        workspace_path: str = "/workspace",
-    ) -> None:
-        """Initialize the template tool.
-
-        Args:
-            sandbox_adapter: MCPSandboxAdapter instance
-            sandbox_id: Sandbox container ID
-            workspace_path: Path to workspace in sandbox
-        """
-        super().__init__(
-            name="create_mcp_server_from_template",
-            description=(
-                "Create a new MCP server from a predefined template. "
-                "Available templates: web-dashboard, api-wrapper, data-processor. "
-                "Creates server files and optionally installs dependencies."
-            ),
-        )
-        self._sandbox_adapter = sandbox_adapter
-        self._sandbox_id = sandbox_id
-        self._workspace_path = workspace_path
-
-    @property
-    @override
-    def name(self) -> str:
-        return "create_mcp_server_from_template"
-
-    @property
-    @override
-    def description(self) -> str:
-        return (
-            "Create a new MCP server from a predefined template. "
-            "Available templates: web-dashboard, api-wrapper, data-processor. "
-            "Creates server files and optionally installs dependencies."
-        )
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "template": {
-                    "type": "string",
-                    "description": "Template name (web-dashboard, api-wrapper, data-processor)",
-                    "enum": ["web-dashboard", "api-wrapper", "data-processor"],
-                },
-                "server_name": {
-                    "type": "string",
-                    "description": "Name for the new server (alphanumeric and dashes)",
-                },
-                "install_deps": {
-                    "type": "boolean",
-                    "description": "Whether to install dependencies (default: true)",
-                    "default": True,
-                },
-            },
-            "required": ["template", "server_name"],
-        }
-
-    @override
-    def get_parameters_schema(self) -> dict[str, Any]:
-        return self.parameters
-
-    async def execute(  # type: ignore[override]
-        self,
-        template: str,
-        server_name: str,
-        install_deps: bool = True,
-    ) -> str:
-        """Execute the template creation tool.
-
-        Args:
-            template: Template name
-            server_name: Name for the new server
-            install_deps: Whether to install dependencies
-
-        Returns:
-            Result message
-        """
-        # Validate template
-        template_data = get_template_by_name(template)
-        if not template_data:
-            available = ", ".join(t["name"] for t in list_available_templates())
-            return f"Error: Template '{template}' not found. Available: {available}"
-
-        # Validate server name
-        if not re.match(r"^[a-z][a-z0-9-]*$", server_name):
-            return (
-                f"Error: Invalid server name '{server_name}'. "
-                "Use lowercase letters, numbers, and dashes only."
-            )
-
-        logger.info("Creating MCP server '%s' from template '%s'", server_name, template)
-
-        # Render and write files
-        server_path = f"{self._workspace_path}/{server_name}"
-        files_created = []
-
-        for file_info in template_data["files"]:
-            # Render content
-            rendered_content = render_template_content(
-                file_info["content"],
-                {"server_name": server_name, "description": f"{server_name} MCP server"},
-            )
-
-            # Render path
-            rendered_path = render_template_content(file_info["path"], {"server_name": server_name})
-
-            full_path = f"{self._workspace_path}/{rendered_path}"
-
-            # Write file
-            try:
-                await self._sandbox_adapter.call_tool(
-                    sandbox_id=self._sandbox_id,
-                    tool_name="write",
-                    arguments={
-                        "path": full_path,
-                        "content": rendered_content,
-                    },
-                )
-                files_created.append(rendered_path)
-                logger.debug("Created file: %s", rendered_path)
-            except Exception as e:
-                logger.error("Failed to write file %s: %s", rendered_path, e)
-                return f"Error: Failed to create file {rendered_path}: {e}"
-
-        # Install dependencies
-        if install_deps and template_data.get("dependencies"):
-            deps = " ".join(template_data["dependencies"])
-            try:
-                await self._sandbox_adapter.call_tool(
-                    sandbox_id=self._sandbox_id,
-                    tool_name="bash",
-                    arguments={
-                        "command": f"cd {server_path} && pip install {deps}",
-                    },
-                )
-                logger.info("Installed dependencies: %s", deps)
-            except Exception as e:
-                logger.warning("Failed to install dependencies: %s", e)
-                # Continue anyway - deps can be installed manually
-
-        return (
-            f"Successfully created MCP server '{server_name}' from template '{template}'.\n"
-            f"Files created: {', '.join(files_created)}\n"
-            f"Dependencies: {', '.join(template_data.get('dependencies', []))}"
-        )
-
-
-# =============================================================================
-# Functional tool: @tool_define version
-# =============================================================================
 
 # ---------------------------------------------------------------------------
 # Module-level DI references

@@ -1,7 +1,7 @@
 """Unit tests for Environment Variable Tools.
 
-Tests the GetEnvVarTool and CheckEnvVarsTool for managing agent tool
-environment variables.
+Tests the get_env_var_tool and check_env_vars_tool decorator-based tools
+for managing agent tool environment variables.
 
 NOTE: RequestEnvVarTool is now tested via HITL strategy tests.
 See src/tests/unit/agent/test_temporal_hitl_handler.py for HITL-related tests.
@@ -16,14 +16,51 @@ from src.domain.model.agent.tool_environment_variable import (
     EnvVarScope,
     ToolEnvironmentVariable,
 )
+from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.env_var_tools import (
-    CheckEnvVarsTool,
-    GetEnvVarTool,
+    check_env_vars_tool,
+    configure_env_var_tools,
+    get_env_var_tool,
 )
+from src.infrastructure.agent.tools.result import ToolResult
+
+
+@pytest.fixture
+def tool_ctx():
+    """Create a ToolContext for testing."""
+    return ToolContext(
+        session_id="sess-1",
+        message_id="msg-1",
+        call_id="call-1",
+        agent_name="test-agent",
+        conversation_id="conv-1",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_env_var_state():
+    """Reset all module-level globals between tests."""
+    from src.infrastructure.agent.tools import env_var_tools as mod
+
+    mod._env_var_repo = None
+    mod._encryption_svc = None
+    mod._hitl_handler_ref = None
+    mod._session_factory_ref = None
+    mod._tenant_id_ref = None
+    mod._project_id_ref = None
+    mod._event_publisher_ref = None
+    yield
+    mod._env_var_repo = None
+    mod._encryption_svc = None
+    mod._hitl_handler_ref = None
+    mod._session_factory_ref = None
+    mod._tenant_id_ref = None
+    mod._project_id_ref = None
+    mod._event_publisher_ref = None
 
 
 class TestGetEnvVarTool:
-    """Tests for GetEnvVarTool."""
+    """Tests for get_env_var_tool."""
 
     @pytest.fixture
     def mock_repository(self):
@@ -37,48 +74,41 @@ class TestGetEnvVarTool:
         service.decrypt.return_value = "decrypted-value"
         return service
 
-    @pytest.fixture
-    def get_env_tool(self, mock_repository, mock_encryption_service):
-        """Create GetEnvVarTool with mocked dependencies."""
-        tool = GetEnvVarTool(
+    def test_tool_initialization(self):
+        """Test tool is initialized with correct name and description."""
+        assert get_env_var_tool.name == "get_env_var"
+        assert "environment variable" in get_env_var_tool.description.lower()
+
+    async def test_missing_tenant_returns_error(
+        self, tool_ctx, mock_repository, mock_encryption_service
+    ):
+        """Test that calling without tenant_id returns an error ToolResult."""
+        # Configure WITHOUT tenant_id
+        configure_env_var_tools(
+            repository=mock_repository,
+            encryption_service=mock_encryption_service,
+        )
+
+        result = await get_env_var_tool.execute(tool_ctx, tool_name="test", variable_name="VAR")
+
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        result_data = json.loads(result.output)
+        assert result_data["status"] == "error"
+        assert (
+            "missing tenant" in result_data["message"].lower()
+            or "invalid" in result_data["message"].lower()
+        )
+
+    async def test_execute_found(self, tool_ctx, mock_repository, mock_encryption_service):
+        """Test getting an existing env var."""
+        configure_env_var_tools(
             repository=mock_repository,
             encryption_service=mock_encryption_service,
             tenant_id="tenant-123",
             project_id="project-456",
         )
-        return tool
 
-    def test_tool_initialization(self, get_env_tool):
-        """Test tool is initialized with correct name and description."""
-        assert get_env_tool.name == "get_env_var"
-        assert "environment variable" in get_env_tool.description.lower()
-
-    def test_validate_args_missing_tenant(self, mock_repository, mock_encryption_service):
-        """Test validation fails without tenant_id."""
-        tool = GetEnvVarTool(
-            repository=mock_repository,
-            encryption_service=mock_encryption_service,
-        )
-        assert tool.validate_args(tool_name="test", variable_name="VAR") is False
-
-    def test_validate_args_missing_tool_name(self, get_env_tool):
-        """Test validation fails without tool_name."""
-        assert get_env_tool.validate_args(variable_name="VAR") is False
-
-    def test_validate_args_valid(self, get_env_tool):
-        """Test validation passes with all required args."""
-        assert (
-            get_env_tool.validate_args(
-                tool_name="web_search",
-                variable_name="API_KEY",
-            )
-            is True
-        )
-
-    @pytest.mark.asyncio
-    async def test_execute_found(self, get_env_tool, mock_repository, mock_encryption_service):
-        """Test getting an existing env var."""
-        # Setup mock
         env_var = ToolEnvironmentVariable(
             id="ev-123",
             tenant_id="tenant-123",
@@ -90,61 +120,61 @@ class TestGetEnvVarTool:
         )
         mock_repository.get.return_value = env_var
 
-        result = await get_env_tool.execute(
-            tool_name="web_search",
-            variable_name="API_KEY",
+        result = await get_env_var_tool.execute(
+            tool_ctx, tool_name="web_search", variable_name="API_KEY"
         )
 
-        result_data = json.loads(result)
+        assert isinstance(result, ToolResult)
+        result_data = json.loads(result.output)
         assert result_data["status"] == "found"
         assert result_data["value"] == "decrypted-value"
         assert result_data["is_secret"] is True
         mock_encryption_service.decrypt.assert_called_once_with("encrypted-value")
 
-    @pytest.mark.asyncio
-    async def test_execute_not_found(self, get_env_tool, mock_repository):
+    async def test_execute_not_found(self, tool_ctx, mock_repository, mock_encryption_service):
         """Test getting a non-existent env var."""
+        configure_env_var_tools(
+            repository=mock_repository,
+            encryption_service=mock_encryption_service,
+            tenant_id="tenant-123",
+            project_id="project-456",
+        )
         mock_repository.get.return_value = None
 
-        result = await get_env_tool.execute(
-            tool_name="web_search",
-            variable_name="MISSING_KEY",
+        result = await get_env_var_tool.execute(
+            tool_ctx, tool_name="web_search", variable_name="MISSING_KEY"
         )
 
-        result_data = json.loads(result)
+        assert isinstance(result, ToolResult)
+        result_data = json.loads(result.output)
         assert result_data["status"] == "not_found"
         assert "MISSING_KEY" in result_data["message"]
 
-    @pytest.mark.asyncio
-    async def test_get_all_for_tool(self, get_env_tool, mock_repository, mock_encryption_service):
-        """Test getting all env vars for a tool."""
-        env_vars = [
-            ToolEnvironmentVariable(
-                id="ev-1",
-                tenant_id="tenant-123",
-                tool_name="web_search",
-                variable_name="API_KEY",
-                encrypted_value="enc-key",
-            ),
-            ToolEnvironmentVariable(
-                id="ev-2",
-                tenant_id="tenant-123",
-                tool_name="web_search",
-                variable_name="ENDPOINT",
-                encrypted_value="enc-endpoint",
-            ),
-        ]
-        mock_repository.get_for_tool.return_value = env_vars
+    async def test_execute_error_returns_error_result(
+        self, tool_ctx, mock_repository, mock_encryption_service
+    ):
+        """Test that a repository exception returns an error ToolResult."""
+        configure_env_var_tools(
+            repository=mock_repository,
+            encryption_service=mock_encryption_service,
+            tenant_id="tenant-123",
+            project_id="project-456",
+        )
+        mock_repository.get.side_effect = RuntimeError("DB connection failed")
 
-        result = await get_env_tool.get_all_for_tool("web_search")
+        result = await get_env_var_tool.execute(
+            tool_ctx, tool_name="web_search", variable_name="API_KEY"
+        )
 
-        assert len(result) == 2
-        assert "API_KEY" in result
-        assert "ENDPOINT" in result
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        result_data = json.loads(result.output)
+        assert result_data["status"] == "error"
+        assert "DB connection failed" in result_data["message"]
 
 
 class TestCheckEnvVarsTool:
-    """Tests for CheckEnvVarsTool."""
+    """Tests for check_env_vars_tool."""
 
     @pytest.fixture
     def mock_repository(self):
@@ -156,25 +186,20 @@ class TestCheckEnvVarsTool:
         """Create a mock encryption service."""
         return MagicMock()
 
-    @pytest.fixture
-    def check_env_tool(self, mock_repository, mock_encryption_service):
-        """Create CheckEnvVarsTool with mocked dependencies."""
-        tool = CheckEnvVarsTool(
+    def test_tool_initialization(self):
+        """Test tool is initialized with correct name and description."""
+        assert check_env_vars_tool.name == "check_env_vars"
+        assert "environment variable" in check_env_vars_tool.description.lower()
+
+    async def test_execute_all_available(self, tool_ctx, mock_repository, mock_encryption_service):
+        """Test checking vars when all are available."""
+        configure_env_var_tools(
             repository=mock_repository,
             encryption_service=mock_encryption_service,
             tenant_id="tenant-123",
             project_id="project-456",
         )
-        return tool
 
-    def test_tool_initialization(self, check_env_tool):
-        """Test tool is initialized with correct name and description."""
-        assert check_env_tool.name == "check_env_vars"
-        assert "environment variable" in check_env_tool.description.lower()
-
-    @pytest.mark.asyncio
-    async def test_execute_all_available(self, check_env_tool, mock_repository):
-        """Test checking vars when all are available."""
         env_vars = [
             ToolEnvironmentVariable(
                 id="1",
@@ -193,20 +218,26 @@ class TestCheckEnvVarsTool:
         ]
         mock_repository.get_for_tool.return_value = env_vars
 
-        result = await check_env_tool.execute(
-            tool_name="web_search",
-            required_vars=["API_KEY", "ENDPOINT"],
+        result = await check_env_vars_tool.execute(
+            tool_ctx, tool_name="web_search", required_vars=["API_KEY", "ENDPOINT"]
         )
 
-        result_data = json.loads(result)
+        assert isinstance(result, ToolResult)
+        result_data = json.loads(result.output)
         assert result_data["status"] == "checked"
         assert result_data["all_available"] is True
         assert len(result_data["available"]) == 2
         assert len(result_data["missing"]) == 0
 
-    @pytest.mark.asyncio
-    async def test_execute_some_missing(self, check_env_tool, mock_repository):
+    async def test_execute_some_missing(self, tool_ctx, mock_repository, mock_encryption_service):
         """Test checking vars when some are missing."""
+        configure_env_var_tools(
+            repository=mock_repository,
+            encryption_service=mock_encryption_service,
+            tenant_id="tenant-123",
+            project_id="project-456",
+        )
+
         env_vars = [
             ToolEnvironmentVariable(
                 id="1",
@@ -218,16 +249,58 @@ class TestCheckEnvVarsTool:
         ]
         mock_repository.get_for_tool.return_value = env_vars
 
-        result = await check_env_tool.execute(
+        result = await check_env_vars_tool.execute(
+            tool_ctx,
             tool_name="web_search",
             required_vars=["API_KEY", "SECRET_KEY", "ENDPOINT"],
         )
 
-        result_data = json.loads(result)
+        assert isinstance(result, ToolResult)
+        result_data = json.loads(result.output)
         assert result_data["status"] == "checked"
         assert result_data["all_available"] is False
         assert result_data["available"] == ["API_KEY"]
         assert set(result_data["missing"]) == {"SECRET_KEY", "ENDPOINT"}
+
+    async def test_missing_tenant_returns_error(
+        self, tool_ctx, mock_repository, mock_encryption_service
+    ):
+        """Test that calling without tenant_id returns an error ToolResult."""
+        configure_env_var_tools(
+            repository=mock_repository,
+            encryption_service=mock_encryption_service,
+        )
+
+        result = await check_env_vars_tool.execute(
+            tool_ctx, tool_name="web_search", required_vars=["API_KEY"]
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        result_data = json.loads(result.output)
+        assert result_data["status"] == "error"
+
+    async def test_execute_error_returns_error_result(
+        self, tool_ctx, mock_repository, mock_encryption_service
+    ):
+        """Test that a repository exception returns an error ToolResult."""
+        configure_env_var_tools(
+            repository=mock_repository,
+            encryption_service=mock_encryption_service,
+            tenant_id="tenant-123",
+            project_id="project-456",
+        )
+        mock_repository.get_for_tool.side_effect = RuntimeError("DB error")
+
+        result = await check_env_vars_tool.execute(
+            tool_ctx, tool_name="web_search", required_vars=["API_KEY"]
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        result_data = json.loads(result.output)
+        assert result_data["status"] == "error"
+        assert "DB error" in result_data["message"]
 
 
 class TestToolEnvironmentVariableDomainModel:

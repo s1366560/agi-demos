@@ -1,37 +1,51 @@
-"""Tests for SkillInstallerTool.
+"""Tests for skill_installer @tool_define implementation.
 
-This module contains unit tests for the skill installer tool
-that allows agents to install skills from skills.sh ecosystem.
+This module tests the skill_installer_tool function and its helper
+functions (_inst_parse_skill_source, _inst_get_install_path, _inst_fetch_file).
 """
+
+from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
+from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.tools.skill_installer import (
+    _inst_fetch_file,
+    _inst_get_install_path,
+    _inst_parse_skill_source,
+    configure_skill_installer,
+    skill_installer_tool,
+)
+
+
+def _make_ctx(**overrides: Any) -> ToolContext:
+    defaults: dict[str, Any] = {
+        "session_id": "session-1",
+        "message_id": "msg-1",
+        "call_id": "call-1",
+        "agent_name": "test-agent",
+        "conversation_id": "conv-1",
+    }
+    defaults.update(overrides)
+    return ToolContext(**defaults)
 
 
 class TestSkillInstallerTool:
-    """Test cases for SkillInstallerTool."""
+    """Test cases for skill_installer @tool_define implementation."""
 
-    @pytest.fixture
-    def tool(self, tmp_path: Path) -> SkillInstallerTool:
-        """Create a SkillInstallerTool instance with temp directory."""
-        return SkillInstallerTool(project_path=tmp_path)
+    def test_tool_info_name_and_description(self) -> None:
+        """Test that the ToolInfo has correct name and description."""
+        assert skill_installer_tool.name == "skill_installer"
+        assert "skills.sh" in skill_installer_tool.description
 
-    def test_init(self, tmp_path: Path) -> None:
-        """Test tool initialization."""
-        tool = SkillInstallerTool(project_path=tmp_path)
-        assert tool.name == "skill_installer"
-        assert "skills.sh" in tool.description
-        assert tool._project_path == tmp_path
-
-    def test_get_parameters_schema(self, tool: SkillInstallerTool) -> None:
-        """Test parameters schema."""
-        schema = tool.get_parameters_schema()
-
+    def test_parameters_schema(self) -> None:
+        """Test parameters schema from ToolInfo."""
+        schema = skill_installer_tool.parameters
         assert schema["type"] == "object"
         assert "skill_source" in schema["properties"]
         assert "skill_name" in schema["properties"]
@@ -39,112 +53,122 @@ class TestSkillInstallerTool:
         assert "branch" in schema["properties"]
         assert "skill_source" in schema["required"]
 
-    def test_validate_args_valid(self, tool: SkillInstallerTool) -> None:
-        """Test argument validation with valid args."""
-        assert tool.validate_args(skill_source="vercel-labs/agent-skills")
-        assert tool.validate_args(skill_source="owner/repo", skill_name="my-skill")
-
-    def test_validate_args_invalid(self, tool: SkillInstallerTool) -> None:
-        """Test argument validation with invalid args."""
-        assert not tool.validate_args()
-        assert not tool.validate_args(skill_source="")
-        assert not tool.validate_args(skill_source=123)
-
-    def test_parse_skill_source_owner_repo(self, tool: SkillInstallerTool) -> None:
+    def test_parse_skill_source_owner_repo(self) -> None:
         """Test parsing owner/repo format."""
-        owner, repo, skill = tool._parse_skill_source("vercel-labs/agent-skills")
+        owner, repo, skill = _inst_parse_skill_source("vercel-labs/agent-skills")
         assert owner == "vercel-labs"
         assert repo == "agent-skills"
         assert skill is None
 
-    def test_parse_skill_source_github_url(self, tool: SkillInstallerTool) -> None:
+    def test_parse_skill_source_github_url(self) -> None:
         """Test parsing GitHub URL format."""
-        owner, repo, skill = tool._parse_skill_source("https://github.com/vercel-labs/agent-skills")
+        owner, repo, skill = _inst_parse_skill_source("https://github.com/vercel-labs/agent-skills")
         assert owner == "vercel-labs"
         assert repo == "agent-skills"
         assert skill is None
 
-    def test_parse_skill_source_skills_sh_url(self, tool: SkillInstallerTool) -> None:
+    def test_parse_skill_source_skills_sh_url(self) -> None:
         """Test parsing skills.sh URL format."""
-        owner, repo, skill = tool._parse_skill_source(
+        owner, repo, skill = _inst_parse_skill_source(
             "https://skills.sh/vercel-labs/agent-skills/react-best-practices"
         )
         assert owner == "vercel-labs"
         assert repo == "agent-skills"
         assert skill == "react-best-practices"
 
-    def test_parse_skill_source_invalid(self, tool: SkillInstallerTool) -> None:
+    def test_parse_skill_source_invalid(self) -> None:
         """Test parsing invalid format."""
         with pytest.raises(ValueError):
-            tool._parse_skill_source("invalid-format")
+            _ = _inst_parse_skill_source("invalid-format")
 
-    def test_get_install_path_project(self, tool: SkillInstallerTool, tmp_path: Path) -> None:
+    def test_get_install_path_project(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test getting project-level install path."""
-        path = tool._get_install_path("project", "my-skill")
+        monkeypatch.setattr(
+            "src.infrastructure.agent.tools.skill_installer._skill_inst_project_path",
+            tmp_path,
+        )
+        path = _inst_get_install_path("project", "my-skill")
         assert path == tmp_path / ".memstack" / "skills" / "my-skill"
 
-    def test_get_install_path_global(self, tool: SkillInstallerTool) -> None:
+    def test_get_install_path_global(self) -> None:
         """Test getting global install path."""
-        path = tool._get_install_path("global", "my-skill")
+        path = _inst_get_install_path("global", "my-skill")
         assert str(path).endswith(".memstack/skills/my-skill")
         assert "~" not in str(path)  # Should be expanded
 
-    @pytest.mark.asyncio
-    async def test_execute_missing_skill_source(self, tool: SkillInstallerTool) -> None:
-        """Test execute with missing skill_source."""
-        result = await tool.execute()
-        assert result["title"] == "Skill Installation Failed"
-        assert "skill_source parameter is required" in result["output"]
+    async def test_execute_missing_skill_source(
+        self, tmp_path: Path,
+    ) -> None:
+        """Test execute with empty skill_source."""
+        configure_skill_installer(project_path=tmp_path)
+        ctx = _make_ctx()
+        result = await skill_installer_tool.execute(ctx, skill_source="")
+        assert (
+            result.is_error
+            or "required" in result.output.lower()
+            or "empty" in result.output.lower()
+        )
 
-    @pytest.mark.asyncio
-    async def test_execute_invalid_install_location(self, tool: SkillInstallerTool) -> None:
+    async def test_execute_invalid_install_location(
+        self, tmp_path: Path,
+    ) -> None:
         """Test execute with invalid install_location."""
-        result = await tool.execute(
+        configure_skill_installer(project_path=tmp_path)
+        ctx = _make_ctx()
+        result = await skill_installer_tool.execute(
+            ctx,
             skill_source="owner/repo",
             skill_name="my-skill",
             install_location="invalid",
         )
-        assert result["title"] == "Skill Installation Failed"
-        assert "Invalid install_location" in result["output"]
+        assert "Invalid install_location" in result.output
 
-    @pytest.mark.asyncio
     async def test_execute_skill_already_exists(
-        self, tool: SkillInstallerTool, tmp_path: Path
+        self, tmp_path: Path,
     ) -> None:
         """Test execute when skill already exists."""
+        configure_skill_installer(project_path=tmp_path)
         # Create existing skill directory
         skill_dir = tmp_path / ".memstack" / "skills" / "my-skill"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text("# Existing Skill")
+        _ = (skill_dir / "SKILL.md").write_text("# Existing Skill")
 
-        result = await tool.execute(
+        ctx = _make_ctx()
+        result = await skill_installer_tool.execute(
+            ctx,
             skill_source="owner/repo",
             skill_name="my-skill",
             install_location="project",
         )
 
-        assert "already installed" in result["title"]
-        assert result["metadata"]["reason"] == "already_exists"
+        assert result.title is not None
+        assert "already installed" in result.title
+        assert result.metadata.get("reason") == "already_exists"
 
-    @pytest.mark.asyncio
-    async def test_execute_successful_install(
-        self, tool: SkillInstallerTool, tmp_path: Path
-    ) -> None:
+    @patch(
+        "src.infrastructure.agent.tools.skill_installer._inst_fetch_file",
+        new_callable=AsyncMock,
+    )
+    async def test_execute_successful_install(self, mock_fetch: AsyncMock, tmp_path: Path) -> None:
         """Test successful skill installation."""
+        configure_skill_installer(project_path=tmp_path)
         skill_content = "# Test Skill\n\nThis is a test skill."
+        mock_fetch.return_value = skill_content
 
-        with patch.object(tool, "_fetch_file", new_callable=AsyncMock) as mock_fetch:
-            mock_fetch.return_value = skill_content
+        ctx = _make_ctx()
+        result = await skill_installer_tool.execute(
+            ctx,
+            skill_source="owner/repo",
+            skill_name="test-skill",
+            install_location="project",
+        )
 
-            result = await tool.execute(
-                skill_source="owner/repo",
-                skill_name="test-skill",
-                install_location="project",
-            )
-
-        assert "Successfully installed" in result["title"]
-        assert result["metadata"]["action"] == "install"
-        assert result["metadata"]["skill_name"] == "test-skill"
+        assert result.title is not None
+        assert "Successfully installed" in result.title
+        assert result.metadata.get("action") == "install"
+        assert result.metadata.get("skill_name") == "test-skill"
 
         # Verify file was created
         skill_file = tmp_path / ".memstack" / "skills" / "test-skill" / "SKILL.md"
@@ -158,40 +182,49 @@ class TestSkillInstallerTool:
         assert meta["skill_name"] == "test-skill"
         assert meta["source"] == "owner/repo"
 
-    @pytest.mark.asyncio
-    async def test_execute_skill_not_found(self, tool: SkillInstallerTool) -> None:
+    @patch(
+        "src.infrastructure.agent.tools.skill_installer._inst_fetch_file",
+        new_callable=AsyncMock,
+    )
+    async def test_execute_skill_not_found(self, mock_fetch: AsyncMock, tmp_path: Path) -> None:
         """Test execute when skill is not found."""
-        with patch.object(tool, "_fetch_file", new_callable=AsyncMock) as mock_fetch:
-            mock_fetch.return_value = None
+        configure_skill_installer(project_path=tmp_path)
+        mock_fetch.return_value = None
 
-            result = await tool.execute(
-                skill_source="owner/repo",
-                skill_name="nonexistent-skill",
-                install_location="project",
-            )
+        ctx = _make_ctx()
+        result = await skill_installer_tool.execute(
+            ctx,
+            skill_source="owner/repo",
+            skill_name="nonexistent-skill",
+            install_location="project",
+        )
 
-        assert result["title"] == "Skill Installation Failed"
-        assert "Could not find SKILL.md" in result["output"]
+        assert "Could not find SKILL.md" in result.output
 
-    @pytest.mark.asyncio
-    async def test_execute_discover_multiple_skills(self, tool: SkillInstallerTool) -> None:
+    @patch(
+        "src.infrastructure.agent.tools.skill_installer._inst_discover_skills_in_repo",
+        new_callable=AsyncMock,
+    )
+    async def test_execute_discover_multiple_skills(
+        self, mock_discover: AsyncMock, tmp_path: Path
+    ) -> None:
         """Test execute discovering multiple skills in repo."""
-        with patch.object(
-            tool, "_discover_skills_in_repo", new_callable=AsyncMock
-        ) as mock_discover:
-            mock_discover.return_value = ["skill-a", "skill-b", "skill-c"]
+        configure_skill_installer(project_path=tmp_path)
+        mock_discover.return_value = ["skill-a", "skill-b", "skill-c"]
 
-            result = await tool.execute(
-                skill_source="owner/repo",
-                install_location="project",
-            )
+        ctx = _make_ctx()
+        result = await skill_installer_tool.execute(
+            ctx,
+            skill_source="owner/repo",
+            install_location="project",
+        )
 
-        assert "Multiple skills available" in result["title"]
-        assert result["metadata"]["action"] == "list"
-        assert len(result["metadata"]["available_skills"]) == 3
+        assert result.title is not None
+        assert "Multiple skills available" in result.title
+        assert result.metadata.get("action") == "list"
+        assert len(result.metadata.get("available_skills", [])) == 3
 
-    @pytest.mark.asyncio
-    async def test_fetch_file_success(self, tool: SkillInstallerTool) -> None:
+    async def test_fetch_file_success(self) -> None:
         """Test fetching file from GitHub."""
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_response = MagicMock()
@@ -204,12 +237,11 @@ class TestSkillInstallerTool:
             mock_client.__aexit__ = AsyncMock()
             mock_client_class.return_value = mock_client
 
-            content = await tool._fetch_file("owner", "repo", "SKILL.md")
+            content = await _inst_fetch_file("owner", "repo", "SKILL.md")
 
             assert content == "# Test Content"
 
-    @pytest.mark.asyncio
-    async def test_fetch_file_not_found(self, tool: SkillInstallerTool) -> None:
+    async def test_fetch_file_not_found(self) -> None:
         """Test fetching non-existent file."""
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_response = MagicMock()
@@ -221,30 +253,25 @@ class TestSkillInstallerTool:
             mock_client.__aexit__ = AsyncMock()
             mock_client_class.return_value = mock_client
 
-            content = await tool._fetch_file("owner", "repo", "nonexistent.md")
+            content = await _inst_fetch_file("owner", "repo", "nonexistent.md")
 
             assert content is None
 
 
 @pytest.mark.unit
 class TestSkillInstallerToolUnit:
-    """Unit tests for SkillInstallerTool with markers."""
+    """Unit tests for skill_installer with markers."""
 
-    @pytest.fixture
-    def tool(self, tmp_path: Path) -> SkillInstallerTool:
-        """Create a SkillInstallerTool instance."""
-        return SkillInstallerTool(project_path=tmp_path)
-
-    def test_description_contains_usage_examples(self, tool: SkillInstallerTool) -> None:
+    def test_description_contains_usage_examples(self) -> None:
         """Test that description contains usage examples."""
-        desc = tool.description
+        desc = skill_installer_tool.description
         assert "skill_installer" in desc
         assert "vercel-labs/agent-skills" in desc
         assert "project" in desc
         assert "global" in desc
 
-    def test_parameters_have_descriptions(self, tool: SkillInstallerTool) -> None:
+    def test_parameters_have_descriptions(self) -> None:
         """Test that all parameters have descriptions."""
-        schema = tool.get_parameters_schema()
+        schema = skill_installer_tool.parameters
         for prop_name, prop_def in schema["properties"].items():
             assert "description" in prop_def, f"Parameter {prop_name} missing description"

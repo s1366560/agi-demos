@@ -217,6 +217,16 @@ class AgentEventType(str, Enum):
     # =========================================================================
     CANVAS_UPDATED = "canvas_updated"
 
+    # =========================================================================
+    # Agent routing & orchestration events
+    # =========================================================================
+    PLAN_SUGGESTED = "plan_suggested"
+    SELECTION_TRACE = "selection_trace"
+    POLICY_FILTERED = "policy_filtered"
+    PARALLEL_STARTED = "parallel_started"
+    PARALLEL_COMPLETED = "parallel_completed"
+    BACKGROUND_LAUNCHED = "background_launched"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -319,6 +329,13 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.TOOLS_UPDATED: EventCategory.AGENT,
     # Canvas events
     AgentEventType.CANVAS_UPDATED: EventCategory.AGENT,
+    # Agent routing & orchestration events
+    AgentEventType.PLAN_SUGGESTED: EventCategory.AGENT,
+    AgentEventType.SELECTION_TRACE: EventCategory.AGENT,
+    AgentEventType.POLICY_FILTERED: EventCategory.AGENT,
+    AgentEventType.PARALLEL_STARTED: EventCategory.AGENT,
+    AgentEventType.PARALLEL_COMPLETED: EventCategory.AGENT,
+    AgentEventType.BACKGROUND_LAUNCHED: EventCategory.AGENT,
 }
 
 

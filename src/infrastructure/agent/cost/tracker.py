@@ -6,7 +6,7 @@ Supports cache tokens, reasoning tokens, and context overflow pricing.
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from .pricing_loader import get_default_cost, get_model_costs
 
@@ -68,7 +68,7 @@ class ModelCost:
     cache_read: Decimal | None = None
     cache_write: Decimal | None = None
     reasoning: Decimal | None = None  # If different from output
-    context_over_200k: Optional["ModelCost"] = None  # Pricing for >200k context
+    context_over_200k: "ModelCost | None" = None  # Pricing for >200k context
 
 
 class BudgetExceededError(Exception):
@@ -276,8 +276,10 @@ class CostTracker:
         # Enforce per-request limit
         if self.max_cost_per_request > 0 and cost > self.max_cost_per_request:
             raise BudgetExceededError(
-                f"Request cost ${float(cost):.6f} exceeds per-request limit "
-                f"${float(self.max_cost_per_request):.6f}",
+                (
+                    f"Request cost ${float(cost):.6f} exceeds "
+                    f"per-request limit ${float(self.max_cost_per_request):.6f}"
+                ),
                 current_cost=float(cost),
                 limit=float(self.max_cost_per_request),
             )
@@ -287,8 +289,10 @@ class CostTracker:
         # Enforce per-session limit
         if self.max_cost_per_session > 0 and self.total_cost > self.max_cost_per_session:
             raise BudgetExceededError(
-                f"Session cost ${float(self.total_cost):.6f} exceeds session limit "
-                f"${float(self.max_cost_per_session):.6f}",
+                (
+                    f"Session cost ${float(self.total_cost):.6f} exceeds "
+                    f"session limit ${float(self.max_cost_per_session):.6f}"
+                ),
                 current_cost=float(self.total_cost),
                 limit=float(self.max_cost_per_session),
             )

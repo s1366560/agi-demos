@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -83,11 +84,23 @@ class RayHITLHandler:
         default_value: str | None = None,
         request_id: str | None = None,
     ) -> str:
+        # Normalize options (handle None)
+        normalized_options = options or []
+
+        # Auto-enable allow_custom when options are empty
+        effective_allow_custom = allow_custom
+        if not normalized_options:
+            effective_allow_custom = True
+            logger.info(
+                "[RayHITL] Clarification called with empty options, "
+                "auto-enabling allow_custom for free-form response"
+            )
+
         request_data = {
             "question": question,
-            "options": options or [],
+            "options": normalized_options,
             "clarification_type": clarification_type,
-            "allow_custom": allow_custom,
+            "allow_custom": effective_allow_custom,
             "context": context or {},
             "default_value": default_value,
         }
@@ -110,14 +123,30 @@ class RayHITLHandler:
         context: dict[str, Any] | None = None,
         default_option: str | None = None,
         request_id: str | None = None,
+        selection_mode: str = "single",
+        max_selections: int | None = None,
     ) -> str:
+        # Normalize options (handle None/empty)
+        normalized_options = options if options else []
+
+        # Auto-enable allow_custom when options are empty
+        effective_allow_custom = allow_custom
+        if not normalized_options:
+            effective_allow_custom = True
+            logger.info(
+                "[RayHITL] Decision called with empty options, "
+                "auto-enabling allow_custom for free-form response"
+            )
+
         request_data = {
             "question": question,
-            "options": options,
+            "options": normalized_options,
             "decision_type": decision_type,
-            "allow_custom": allow_custom,
+            "allow_custom": effective_allow_custom,
             "context": context or {},
             "default_option": default_option,
+            "selection_mode": selection_mode,
+            "max_selections": max_selections,
         }
         if request_id:
             request_data["_request_id"] = request_id
@@ -189,6 +218,13 @@ class RayHITLHandler:
             preinjected = self._preinjected_response
             preinjected_type = preinjected.get("hitl_type", "")
             preinjected_data = preinjected.get("response_data", {})
+
+            # Defensive: handle string response_data (serialization inconsistency)
+            if isinstance(preinjected_data, str):
+                try:
+                    preinjected_data = json.loads(preinjected_data)
+                except (json.JSONDecodeError, TypeError):
+                    preinjected_data = {}
 
             if preinjected_type == hitl_type.value:
                 # Consume the preinjected response

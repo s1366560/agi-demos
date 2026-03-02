@@ -443,7 +443,10 @@ function OptionButton({
 /**
  * Render clarification_asked event (inline in timeline)
  */
-function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEvent }) {
+function ClarificationAskedItem({
+  event,
+}: { event: ClarificationAskedTimelineEvent }) {
+  const hasOptions = event.options && event.options.length > 0;
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [customAnswer, setCustomAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -451,7 +454,9 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
   const isAnswered = event.answered || false;
 
   const handleSubmit = async () => {
-    const answer = selectedOption || customAnswer;
+    const answer = hasOptions
+      ? selectedOption || customAnswer
+      : customAnswer;
     if (!answer) return;
 
     setIsSubmitting(true);
@@ -461,6 +466,12 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
       setIsSubmitting(false);
     }
   };
+
+  const isSubmitDisabled = (() => {
+    if (isSubmitting) return true;
+    if (!hasOptions) return !customAnswer.trim();
+    return !selectedOption && !customAnswer;
+  })();
 
   return (
     <div className="flex flex-col gap-1">
@@ -485,23 +496,35 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
 
           {!isAnswered ? (
             <>
-              <div className="space-y-2 mb-3">
-                {event.options.map((option: ClarificationOption) => (
-                  <OptionButton
-                    key={option.id}
-                    option={option}
-                    isSelected={selectedOption === option.id}
-                    isRecommended={option.recommended}
-                    onClick={() => {
-                      setSelectedOption(option.id);
-                      setCustomAnswer('');
-                    }}
-                    disabled={isSubmitting}
-                  />
-                ))}
-              </div>
+              {hasOptions ? (
+                <div className="space-y-2 mb-3">
+                {event.options.map((option: ClarificationOption, idx: number) => (
+                      <OptionButton
+                        key={option.id || `option-${idx}`}
+                        option={option}
+                        isSelected={selectedOption === option.id}
+                        isRecommended={option.recommended}
+                        onClick={() => {
+                          setSelectedOption(option.id);
+                          setCustomAnswer('');
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    )
+                  )}
+                </div>
+              ) : event.allowCustom ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                  暂无预设选项，请直接输入
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
+                  暂无可选选项
+                </p>
+              )}
 
-              {event.allowCustom && (
+              {(event.allowCustom || !hasOptions) &&
+                (hasOptions || event.allowCustom) && (
                 <div className="mb-3">
                   <input
                     type="text"
@@ -522,7 +545,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
                 onClick={() => {
                   void handleSubmit();
                 }}
-                disabled={isSubmitting || (!selectedOption && !customAnswer)}
+                disabled={isSubmitDisabled}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSubmitting ? '提交中...' : '确认'}
@@ -530,7 +553,8 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
             </>
           ) : (
             <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">已选择:</span> {event.answer}
+              <span className="font-medium">已选择:</span>{' '}
+              {event.answer}
             </div>
           )}
         </div>
@@ -548,13 +572,32 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
 function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(event.defaultOption || null);
   const [customDecision, setCustomDecision] = useState('');
+  const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { respondToDecision } = useAgentV3Store();
   const isAnswered = event.answered || false;
+  const hasOptions = event.options && event.options.length > 0;
+  const isMultiSelect = event.selectionMode === 'multiple';
+
+  const toggleMultiSelect = (optionId: string) => {
+    setSelectedMultiple((prev) =>
+      prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]
+    );
+  };
 
   const handleSubmit = async () => {
-    const decision = selectedOption || customDecision;
-    if (!decision) return;
+    let decision: string | string[];
+    if (!hasOptions && customDecision) {
+      decision = customDecision;
+    } else if (isMultiSelect) {
+      decision = selectedMultiple;
+    } else if (customDecision) {
+      decision = customDecision;
+    } else if (selectedOption) {
+      decision = selectedOption;
+    } else {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -563,6 +606,14 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
       setIsSubmitting(false);
     }
   };
+
+  const isSubmitDisabled = (() => {
+    if (isSubmitting) return true;
+    if (!hasOptions) return !customDecision;
+    if (isMultiSelect) return selectedMultiple.length === 0;
+    if (customDecision) return false;
+    return !selectedOption;
+  })();
 
   return (
     <div className="flex flex-col gap-1">
@@ -575,11 +626,11 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
         <div className="flex-1 min-w-0 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wider">
-              需要决策
+              {isMultiSelect ? '\u591A\u9009\u51B3\u7B56' : '\u9700\u8981\u51B3\u7B56'}
             </span>
             {isAnswered && (
               <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                已决定
+                \u5DF2\u51B3\u5B9A
               </span>
             )}
           </div>
@@ -587,35 +638,68 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
 
           {!isAnswered ? (
             <>
-              <div className="space-y-2 mb-3">
-                {event.options.map((option: DecisionOption) => (
-                  <OptionButton
-                    key={option.id}
-                    option={option}
-                    isSelected={selectedOption === option.id}
-                    isRecommended={option.recommended}
-                    onClick={() => {
-                      setSelectedOption(option.id);
-                      setCustomDecision('');
-                    }}
-                    disabled={isSubmitting}
-                  />
-                ))}
-              </div>
+              {hasOptions ? (
+                <>
+                  <div className="space-y-2 mb-3">
+                {event.options.map((option: DecisionOption, idx: number) => (
+                        <OptionButton
+                          key={option.id || `option-${idx}`}
+                          option={option}
+                          isSelected={
+                            isMultiSelect
+                              ? selectedMultiple.includes(
+                                  option.id
+                                )
+                              : selectedOption === option.id
+                          }
+                          isRecommended={option.recommended}
+                          onClick={() => {
+                            if (isMultiSelect) {
+                              toggleMultiSelect(option.id);
+                            } else {
+                              setSelectedOption(option.id);
+                              setCustomDecision('');
+                            }
+                          }}
+                          disabled={isSubmitting}
+                        />
+                      )
+                    )}
+                  </div>
 
-              {event.allowCustom && (
+                  {event.allowCustom && !isMultiSelect && (
+                    <div className="mb-3">
+                      <input
+                        type="text"
+                        placeholder="\u6216\u8F93\u5165\u81EA\u5B9A\u4E49\u51B3\u7B56..."
+                        value={customDecision}
+                        onChange={(e) => {
+                          setCustomDecision(e.target.value);
+                          setSelectedOption(null);
+                        }}
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : event.allowCustom ? (
                 <div className="mb-3">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                    \u6CA1\u6709\u9884\u8BBE\u9009\u9879\uFF0C\u8BF7\u76F4\u63A5\u8F93\u5165\u4F60\u7684\u51B3\u7B56\uFF1A
+                  </p>
                   <input
                     type="text"
-                    placeholder="或输入自定义决策..."
+                    placeholder="\u8F93\u5165\u4F60\u7684\u51B3\u7B56..."
                     value={customDecision}
-                    onChange={(e) => {
-                      setCustomDecision(e.target.value);
-                      setSelectedOption(null);
-                    }}
+                    onChange={(e) => setCustomDecision(e.target.value)}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
+                </div>
+              ) : (
+                <div className="mb-3 text-xs text-slate-400 dark:text-slate-500 italic">
+                  \u6CA1\u6709\u53EF\u7528\u7684\u9009\u9879
                 </div>
               )}
 
@@ -624,15 +708,20 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
                 onClick={() => {
                   void handleSubmit();
                 }}
-                disabled={isSubmitting || (!selectedOption && !customDecision)}
+                disabled={isSubmitDisabled}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSubmitting ? '提交中...' : '确认决策'}
+                {isSubmitting
+                  ? '\u63D0\u4EA4\u4E2D...'
+                  : isMultiSelect
+                    ? `\u786E\u8BA4\u9009\u62E9 (${selectedMultiple.length})`
+                    : '\u786E\u8BA4\u51B3\u7B56'}
               </button>
             </>
           ) : (
             <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">已决定:</span> {event.decision}
+              <span className="font-medium">\u5DF2\u51B3\u5B9A\uFF1A</span>{' '}
+              {event.decision}
             </div>
           )}
         </div>

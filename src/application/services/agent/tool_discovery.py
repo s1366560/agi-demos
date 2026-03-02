@@ -3,17 +3,26 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.infrastructure.agent.tools import (
-    SkillInstallerTool,
-    SkillLoaderTool,
-    WebScrapeTool,
-    WebSearchTool,
-)
+from src.infrastructure.agent.tools.define import get_registered_tools
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_tool_modules_imported() -> None:
+    """Import tool modules to trigger @tool_define registration side effects.
+
+    Each module-level @tool_define decorator registers a ToolInfo in the global
+    _TOOL_REGISTRY when the module is first imported. We import them here so
+    that get_registered_tools() returns complete data.
+    """
+    import src.infrastructure.agent.tools.clarification  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.decision  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.skill_installer  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.web_scrape  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.web_search  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 
 class ToolDiscoveryService:
@@ -38,45 +47,37 @@ class ToolDiscoveryService:
         tools_list = list(self._tool_definitions_cache)
 
         if self._skill_service:
-            skill_loader = SkillLoaderTool(
-                skill_service=self._skill_service,
-                tenant_id=tenant_id,
-                project_id=project_id,
-                agent_mode=agent_mode,
-            )
-            await skill_loader.initialize()
-            tools_list.append(
-                {
-                    "name": "skill_loader",
-                    "description": skill_loader.description,
-                }
-            )
+            # Import to trigger registration
+            import src.infrastructure.agent.tools.skill_loader  # noqa: F401  # pyright: ignore[reportUnusedImport]
+
+            registry = get_registered_tools()
+            skill_loader_info = registry.get("skill_loader")
+            if skill_loader_info:
+                tools_list.append(
+                    {
+                        "name": "skill_loader",
+                        "description": skill_loader_info.description,
+                    }
+                )
 
         return tools_list
 
     def _build_base_tool_definitions(self) -> list[dict[str, Any]]:
         """Build and cache base tool definitions (static tools only)."""
-        from src.infrastructure.agent.tools import ClarificationTool, DecisionTool
-
-        return [
-            {
-                "name": "ask_clarification",
-                "description": ClarificationTool().description,
-            },
-            {
-                "name": "request_decision",
-                "description": DecisionTool().description,
-            },
-            {
-                "name": "web_search",
-                "description": WebSearchTool(self._redis_client).description,
-            },
-            {
-                "name": "web_scrape",
-                "description": WebScrapeTool().description,
-            },
-            {
-                "name": "skill_installer",
-                "description": SkillInstallerTool().description,
-            },
-        ]
+        _ensure_tool_modules_imported()
+        registry = get_registered_tools()
+        _TOOL_NAME_MAP = {
+            "ask_clarification": "ask_clarification",
+            "request_decision": "request_decision",
+            "web_search": "web_search",
+            "web_scrape": "web_scrape",
+            "skill_installer": "skill_installer",
+        }
+        result: list[dict[str, Any]] = []
+        for display_name, registry_name in _TOOL_NAME_MAP.items():
+            info = registry.get(registry_name)
+            if info:
+                result.append({"name": display_name, "description": info.description})
+            else:
+                logger.warning("Tool '%s' not found in registry; skipping", registry_name)
+        return result

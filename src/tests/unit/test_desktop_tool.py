@@ -1,4 +1,4 @@
-"""Unit tests for DesktopTool.
+"""Unit tests for desktop_tool.
 
 Tests the desktop management tool for starting, stopping, and checking
 the status of remote desktop sessions in sandbox environments.
@@ -8,75 +8,76 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.desktop_tool import (
     DesktopStatus,
-    DesktopTool,
+    configure_desktop,
+    desktop_tool,
 )
+from src.infrastructure.agent.tools.result import ToolResult
+
+
+def _make_ctx() -> ToolContext:
+    """Create a minimal ToolContext for testing."""
+    return ToolContext(
+        session_id="test-session",
+        message_id="test-msg",
+        call_id="test-call",
+        agent_name="test-agent",
+        conversation_id="test-conv",
+    )
 
 
 class TestDesktopTool:
-    """Test suite for DesktopTool."""
+    """Test suite for the @tool_define-based desktop_tool function."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_desktop_state(self):
+        """Reset module-level desktop state between tests."""
+        configure_desktop()
+        yield
+        configure_desktop()
 
     @pytest.fixture
-    def mock_sandbox_adapter(self):
-        """Create a mock sandbox adapter."""
+    def mock_adapter(self):
+        """Create a mock sandbox adapter with call_tool."""
         adapter = AsyncMock()
         adapter.call_tool = AsyncMock()
         return adapter
 
-    @pytest.fixture
-    def desktop_tool(self, mock_sandbox_adapter):
-        """Create a DesktopTool instance with mocked dependencies."""
-        return DesktopTool(sandbox_adapter=mock_sandbox_adapter)
+    # ------------------------------------------------------------------
+    # Registration and metadata
+    # ------------------------------------------------------------------
 
-    def test_tool_initialization(self, desktop_tool):
-        """Test tool is initialized with correct name and description."""
+    def test_tool_registered_in_registry(self):
+        """Test that desktop tool has correct name."""
         assert desktop_tool.name == "desktop"
-        assert "remote desktop" in desktop_tool.description.lower()
-        assert (
-            "noVNC" in desktop_tool.description
-            or "LXDE" in desktop_tool.description
-            or "KasmVNC" in desktop_tool.description
-        )
 
-    def test_get_parameters_schema(self, desktop_tool):
-        """Test parameters schema is correctly defined."""
-        schema = desktop_tool.get_parameters_schema()
+    def test_tool_description_mentions_kasmvnc(self):
+        """Test that description includes KasmVNC reference."""
+        assert "KasmVNC" in desktop_tool.description
+
+    def test_parameters_schema_structure(self):
+        """Test parameters schema has correct structure and action enum."""
+        schema = desktop_tool.parameters
 
         assert schema["type"] == "object"
         assert "properties" in schema
         assert "action" in schema["properties"]
         assert schema["properties"]["action"]["type"] == "string"
         assert "enum" in schema["properties"]["action"]
-        assert "start" in schema["properties"]["action"]["enum"]
-        assert "stop" in schema["properties"]["action"]["enum"]
-        assert "status" in schema["properties"]["action"]["enum"]
+        assert set(schema["properties"]["action"]["enum"]) == {"start", "stop", "status"}
+        assert schema["required"] == ["action"]
 
-    def test_validate_args_valid_start(self, desktop_tool):
-        """Test argument validation for valid start action."""
-        assert desktop_tool.validate_args(action="start")
+    # ------------------------------------------------------------------
+    # Start action
+    # ------------------------------------------------------------------
 
-    def test_validate_args_valid_stop(self, desktop_tool):
-        """Test argument validation for valid stop action."""
-        assert desktop_tool.validate_args(action="stop")
-
-    def test_validate_args_valid_status(self, desktop_tool):
-        """Test argument validation for valid status action."""
-        assert desktop_tool.validate_args(action="status")
-
-    def test_validate_args_invalid_action(self, desktop_tool):
-        """Test argument validation rejects invalid action."""
-        assert not desktop_tool.validate_args(action="invalid")
-
-    def test_validate_args_missing_action(self, desktop_tool):
-        """Test argument validation rejects missing action."""
-        assert not desktop_tool.validate_args()
-
-    @pytest.mark.asyncio
-    async def test_execute_start_success(self, desktop_tool, mock_sandbox_adapter):
-        """Test starting desktop successfully."""
-        # Mock successful response
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_start_success_returns_url_and_port(self, mock_adapter):
+        """Test starting desktop successfully returns URL and port info."""
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -85,17 +86,52 @@ class TestDesktopTool:
             ],
             "is_error": False,
         }
+        ctx = _make_ctx()
 
-        result = await desktop_tool.execute(action="start", resolution="1280x720")
+        # Act
+        result = await desktop_tool.execute(ctx, action="start", resolution="1280x720")
 
-        assert "started successfully" in result.lower() or "successfully" in result.lower()
-        assert "6080" in result
-        mock_sandbox_adapter.call_tool.assert_called_once()
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert not result.is_error
+        assert "started successfully" in result.output.lower() or "successfully" in result.output.lower()
+        assert "6080" in result.output
+        mock_adapter.call_tool.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_execute_start_with_options(self, desktop_tool, mock_sandbox_adapter):
-        """Test starting desktop with custom options."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_start_with_non_default_options_sends_custom_args(self, mock_adapter):
+        """Test start with non-default options includes them in mcp_args."""
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": '{"success": true, "url": "http://localhost:7080/vnc.html"}',
+                }
+            ],
+            "is_error": False,
+        }
+        ctx = _make_ctx()
+
+        # Act
+        await desktop_tool.execute(
+            ctx, action="start", resolution="2560x1440", display=":2", port=7080
+        )
+
+        # Assert
+        call_args = mock_adapter.call_tool.call_args
+        assert call_args[0][0] == "test-sandbox"
+        assert call_args[0][1] == "start_desktop"
+        args_dict = call_args[0][2]
+        assert args_dict["resolution"] == "2560x1440"
+        assert args_dict["display"] == ":2"
+        assert args_dict["port"] == 7080
+
+    async def test_start_with_defaults_omits_default_values(self, mock_adapter):
+        """Test start with default values does not send them in mcp_args."""
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -104,23 +140,28 @@ class TestDesktopTool:
             ],
             "is_error": False,
         }
+        ctx = _make_ctx()
 
-        await desktop_tool.execute(
-            action="start",
-            resolution="1920x1080",
-            display=":2",
-            port=7080,
-        )
+        # Act  (all defaults: resolution=1920x1080, display=:1, port=6080)
+        await desktop_tool.execute(ctx, action="start")
 
-        # Verify the tool was called with correct parameters
-        call_args = mock_sandbox_adapter.call_tool.call_args
-        assert call_args[0][1] == "start_desktop"
-        assert "resolution" in call_args[0][2]
+        # Assert - only _workspace_dir should be in args
+        call_args = mock_adapter.call_tool.call_args
+        args_dict = call_args[0][2]
+        assert "resolution" not in args_dict
+        assert "display" not in args_dict
+        assert "port" not in args_dict
+        assert args_dict["_workspace_dir"] == "/workspace"
 
-    @pytest.mark.asyncio
-    async def test_execute_stop_success(self, desktop_tool, mock_sandbox_adapter):
+    # ------------------------------------------------------------------
+    # Stop action
+    # ------------------------------------------------------------------
+
+    async def test_stop_success_returns_stopped_message(self, mock_adapter):
         """Test stopping desktop successfully."""
-        mock_sandbox_adapter.call_tool.return_value = {
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -129,18 +170,27 @@ class TestDesktopTool:
             ],
             "is_error": False,
         }
+        ctx = _make_ctx()
 
-        result = await desktop_tool.execute(action="stop")
+        # Act
+        result = await desktop_tool.execute(ctx, action="stop")
 
-        assert "stopped" in result.lower()
-        mock_sandbox_adapter.call_tool.assert_called_once_with(
-            "test_sandbox", "stop_desktop", {"_workspace_dir": "/workspace"}
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert "stopped" in result.output.lower()
+        mock_adapter.call_tool.assert_called_once_with(
+            "test-sandbox", "stop_desktop", {"_workspace_dir": "/workspace"}
         )
 
-    @pytest.mark.asyncio
-    async def test_execute_status_running(self, desktop_tool, mock_sandbox_adapter):
+    # ------------------------------------------------------------------
+    # Status action
+    # ------------------------------------------------------------------
+
+    async def test_status_running_shows_url_and_port(self, mock_adapter):
         """Test getting status when desktop is running."""
-        mock_sandbox_adapter.call_tool.return_value = {
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [
                 {
                     "type": "text",
@@ -149,55 +199,105 @@ class TestDesktopTool:
             ],
             "is_error": False,
         }
+        ctx = _make_ctx()
 
-        result = await desktop_tool.execute(action="status")
+        # Act
+        result = await desktop_tool.execute(ctx, action="status")
 
-        assert "running" in result.lower()
-        assert "6080" in result
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert "running" in result.output.lower()
+        assert "6080" in result.output
 
-    @pytest.mark.asyncio
-    async def test_execute_status_stopped(self, desktop_tool, mock_sandbox_adapter):
+    async def test_status_stopped_shows_not_running(self, mock_adapter):
         """Test getting status when desktop is stopped."""
-        mock_sandbox_adapter.call_tool.return_value = {
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [{"type": "text", "text": '{"running": false, "url": null}'}],
             "is_error": False,
         }
+        ctx = _make_ctx()
 
-        result = await desktop_tool.execute(action="status")
+        # Act
+        result = await desktop_tool.execute(ctx, action="status")
 
-        assert "not running" in result.lower() or "stopped" in result.lower()
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert "not running" in result.output.lower() or "stopped" in result.output.lower()
 
-    @pytest.mark.asyncio
-    async def test_execute_error_handling(self, desktop_tool, mock_sandbox_adapter):
-        """Test error handling when sandbox call fails."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    # ------------------------------------------------------------------
+    # Error handling
+    # ------------------------------------------------------------------
+
+    async def test_error_response_propagates_error_text(self, mock_adapter):
+        """Test error handling when adapter returns is_error=True."""
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [{"type": "text", "text": "Desktop not available"}],
             "is_error": True,
         }
+        ctx = _make_ctx()
 
-        result = await desktop_tool.execute(action="start")
+        # Act
+        result = await desktop_tool.execute(ctx, action="start")
 
-        assert "error" in result.lower()
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert "error" in result.output.lower()
 
-    @pytest.mark.asyncio
-    async def test_execute_invalid_response_format(self, desktop_tool, mock_sandbox_adapter):
-        """Test handling of invalid JSON response."""
-        mock_sandbox_adapter.call_tool.return_value = {
+    async def test_invalid_json_response_handled_gracefully(self, mock_adapter):
+        """Test handling of invalid JSON response from adapter."""
+        # Arrange
+        configure_desktop(sandbox_port=mock_adapter, sandbox_id="test-sandbox")
+        mock_adapter.call_tool.return_value = {
             "content": [{"type": "text", "text": "invalid json"}],
             "is_error": False,
         }
+        ctx = _make_ctx()
 
-        result = await desktop_tool.execute(action="status")
+        # Act
+        result = await desktop_tool.execute(ctx, action="status")
 
-        # Should return a formatted error message
-        assert "error" in result.lower() or "failed" in result.lower()
+        # Assert
+        assert isinstance(result, ToolResult)
+        # "invalid" is an error word, so it gets prefixed with "Error:"
+        assert "error" in result.output.lower()
 
-    @pytest.mark.asyncio
-    async def test_execute_invalid_action(self, desktop_tool):
-        """Test execution with invalid action returns error."""
-        result = await desktop_tool.execute(action="invalid")
+    # ------------------------------------------------------------------
+    # Invalid action
+    # ------------------------------------------------------------------
 
-        assert "invalid" in result.lower() or "unknown" in result.lower()
+    async def test_invalid_action_returns_error(self):
+        """Test execution with unknown action returns ToolResult with is_error."""
+        # Arrange
+        ctx = _make_ctx()
+
+        # Act
+        result = await desktop_tool.execute(ctx, action="invalid")
+
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        assert "Unknown action" in result.output
+
+    # ------------------------------------------------------------------
+    # No adapter configured
+    # ------------------------------------------------------------------
+
+    async def test_no_adapter_configured_returns_error(self):
+        """Test that executing without adapter/orchestrator returns error."""
+        # Arrange - configure_desktop() already called by autouse fixture (no deps)
+        ctx = _make_ctx()
+
+        # Act
+        result = await desktop_tool.execute(ctx, action="start")
+
+        # Assert
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        assert "No orchestrator or sandbox adapter" in result.output
 
 
 class TestDesktopStatus:

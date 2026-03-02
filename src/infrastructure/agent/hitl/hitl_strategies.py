@@ -81,7 +81,7 @@ class ClarificationStrategy(HITLTypeStrategy):
         **kwargs: Any,
     ) -> HITLRequest:
         question = request_data.get("question", "")
-        options_data = request_data.get("options", [])
+        options_data = request_data.get("options", []) or []
         clarification_type = ClarificationType(request_data.get("clarification_type", "custom"))
 
         options: list[ClarificationOption] = []
@@ -103,6 +103,10 @@ class ClarificationStrategy(HITLTypeStrategy):
                     )
                 )
 
+        # Auto-enable allow_custom when options are empty
+        allow_custom = request_data.get("allow_custom", True)
+        if not options:
+            allow_custom = True
         request_id = request_data.get("_request_id") or self.generate_request_id()
 
         return create_clarification_request(
@@ -111,7 +115,7 @@ class ClarificationStrategy(HITLTypeStrategy):
             question=question,
             options=options,
             clarification_type=clarification_type,
-            allow_custom=request_data.get("allow_custom", True),
+            allow_custom=allow_custom,
             timeout_seconds=kwargs.get("timeout_seconds", 300.0),
             tenant_id=kwargs.get("tenant_id"),
             project_id=kwargs.get("project_id"),
@@ -120,6 +124,8 @@ class ClarificationStrategy(HITLTypeStrategy):
         )
 
     def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+        if isinstance(response_data, str):
+            return response_data
         return response_data.get("answer", "")
 
     def get_default_response(self, request: HITLRequest) -> Any:
@@ -150,8 +156,13 @@ class DecisionStrategy(HITLTypeStrategy):
         **kwargs: Any,
     ) -> HITLRequest:
         question = request_data.get("question", "")
-        options_data = request_data.get("options", [])
-        decision_type = DecisionType(request_data.get("decision_type", "single_choice"))
+        options_data = request_data.get("options", []) or []
+        decision_type_str = request_data.get("decision_type", "single_choice")
+        selection_mode = request_data.get("selection_mode", "single")
+        if selection_mode == "multiple":
+            decision_type = DecisionType("multi_choice")
+        else:
+            decision_type = DecisionType(decision_type_str)
 
         options: list[DecisionOption] = []
         for opt in options_data:
@@ -180,6 +191,10 @@ class DecisionStrategy(HITLTypeStrategy):
                     )
                 )
 
+        # Auto-enable allow_custom when options are empty
+        allow_custom = request_data.get("allow_custom", False)
+        if not options:
+            allow_custom = True
         request_id = request_data.get("_request_id") or self.generate_request_id()
 
         return create_decision_request(
@@ -188,7 +203,7 @@ class DecisionStrategy(HITLTypeStrategy):
             question=question,
             options=options,
             decision_type=decision_type,
-            allow_custom=request_data.get("allow_custom", False),
+            allow_custom=allow_custom,
             timeout_seconds=kwargs.get("timeout_seconds", 300.0),
             tenant_id=kwargs.get("tenant_id"),
             project_id=kwargs.get("project_id"),
@@ -199,7 +214,12 @@ class DecisionStrategy(HITLTypeStrategy):
         )
 
     def extract_response_value(self, response_data: dict[str, Any]) -> Any:
-        return response_data.get("decision", "")
+        if isinstance(response_data, str):
+            return response_data
+        decision = response_data.get("decision", "")
+        if isinstance(decision, list):
+            return decision
+        return decision
 
     def get_default_response(self, request: HITLRequest) -> Any:
         if request.decision_data and request.decision_data.default_option:
@@ -272,6 +292,8 @@ class EnvVarStrategy(HITLTypeStrategy):
         )
 
     def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+        if isinstance(response_data, str):
+            return response_data
         return response_data.get("values", {})
 
     def get_default_response(self, request: HITLRequest) -> Any:
@@ -320,6 +342,8 @@ class PermissionStrategy(HITLTypeStrategy):
         )
 
     def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+        if isinstance(response_data, str):
+            return response_data in ("allow", "allow_always")
         action = response_data.get("action", "deny")
         return action in ("allow", "allow_always")
 

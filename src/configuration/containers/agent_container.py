@@ -435,13 +435,12 @@ class AgentContainer:
     # === Multi-Level Thinking Use Cases ===
 
     def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
-        """Get ExecuteStepUseCase with dependencies injected."""
-        from src.infrastructure.agent.tools import (
-            DesktopTool,
-            TerminalTool,
-            WebScrapeTool,
-            WebSearchTool,
-        )
+        """Get ExecuteStepUseCase with dependencies injected.
+        
+        NOTE: ExecuteStepUseCase is a placeholder (raises NotImplementedError).
+        Tools are configured via module-level configure_*() functions for the
+        main ReAct agent system; this use case just needs valid DI wiring.
+        """
         from src.infrastructure.agent.tools.desktop_tool import (
             configure_desktop,
         )
@@ -459,18 +458,14 @@ class AgentContainer:
             self._sandbox_orchestrator_factory() if self._sandbox_orchestrator_factory else None
         )
 
-        tools: dict[str, AgentToolBase] = {
-            "web_search": WebSearchTool(self._redis_client),
-            "web_scrape": WebScrapeTool(),
-            "desktop": DesktopTool(orchestrator=sandbox_orchestrator),
-            "terminal": TerminalTool(orchestrator=sandbox_orchestrator),
-        }
-
-        # Configure decorator-based tool globals
+        # Configure decorator-based tool globals (used by the main agent system)
         configure_web_search(redis_client=self._redis_client)
         configure_web_scrape()
         configure_desktop(sandbox_orchestrator=sandbox_orchestrator)
         configure_terminal(sandbox_orchestrator=sandbox_orchestrator)
+
+        # Pass empty tools dict; ExecuteStepUseCase is a placeholder
+        tools: dict[str, AgentToolBase] = {}
 
         return ExecuteStepUseCase(
             llm=llm,

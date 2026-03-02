@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from src.domain.model.agent.subagent import SubAgent
 
 from .processor import ToolDefinition
+from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
     pass
@@ -129,19 +130,11 @@ class SubAgentToolBuilder:
         }
         nested_depth = delegation_depth + 1
 
-        def _append_nested_tool(tool_instance: Any) -> None:
-            if tool_instance.name in existing_tool_names:
+        def _append_tool_def(td: ToolDefinition) -> None:
+            if td.name in existing_tool_names:
                 return
-            filtered_tools.append(
-                ToolDefinition(
-                    name=tool_instance.name,
-                    description=tool_instance.description,
-                    parameters=tool_instance.get_parameters_schema(),
-                    execute=tool_instance.execute,
-                    _tool_instance=tool_instance,
-                )
-            )
-            existing_tool_names.add(tool_instance.name)
+            filtered_tools.append(td)
+            existing_tool_names.add(td.name)
 
         delegate_cb, spawn_cb, cancel_cb = self.build_nested_subagent_callbacks(
             nested_map=nested_map,
@@ -153,8 +146,7 @@ class SubAgentToolBuilder:
             delegation_depth=delegation_depth,
         )
 
-        self.append_nested_session_tools(
-            append_fn=_append_nested_tool,
+        for td in self.make_nested_session_tool_defs(
             conversation_id=conversation_id,
             nested_depth=nested_depth,
             max_delegation_depth=max_delegation_depth,
@@ -162,17 +154,18 @@ class SubAgentToolBuilder:
             nested_descriptions=nested_descriptions,
             cancel_callback=cancel_cb,
             restart_callback=spawn_cb,
-        )
+        ):
+            _append_tool_def(td)
 
-        self.append_nested_delegate_tools(
-            append_fn=_append_nested_tool,
+        for td in self.make_nested_delegate_tool_defs(
             nested_candidates=nested_candidates,
             nested_map=nested_map,
             nested_descriptions=nested_descriptions,
             delegate_callback=delegate_cb,
             conversation_id=conversation_id,
             nested_depth=nested_depth,
-        )
+        ):
+            _append_tool_def(td)
 
     # ------------------------------------------------------------------
     # Nested callback builders
@@ -288,10 +281,9 @@ class SubAgentToolBuilder:
     # Session tool appenders
     # ------------------------------------------------------------------
 
-    def append_nested_session_tools(
+    def make_nested_session_tool_defs(
         self,
         *,
-        append_fn: Callable[[Any], None],
         conversation_id: str,
         nested_depth: int,
         max_delegation_depth: int,
@@ -299,108 +291,52 @@ class SubAgentToolBuilder:
         nested_descriptions: dict[str, str],
         cancel_callback: Callable[..., Coroutine[Any, Any, bool]],
         restart_callback: Callable[..., Coroutine[Any, Any, str]],
-    ) -> None:
-        """Append session management tools (list, history, wait, timeline, overview, control).
-        
-        NOTE: Decorator-based configure_*() calls are NOT added here
-        because nested sessions share module-level globals with the
-        parent conversation. Calling configure() here would overwrite
-        the parent's configuration.
-        Nested tools use the class-based path exclusively.
+    ) -> list[ToolDefinition]:
+        """Build nested session ToolDefinitions via the factory function.
+
+        Each ToolDefinition uses a save/restore pattern for module globals.
         """
-        from ..tools.subagent_sessions import (
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsOverviewTool,
-            SessionsTimelineTool,
-            SessionsWaitTool,
-            SubAgentsControlTool,
-        )
+        from ..tools.subagent_sessions import make_nested_session_tool_defs
 
         nested_visibility = "tree" if nested_depth < max_delegation_depth else "self"
-        append_fn(
-            SessionsListTool(
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-                requester_session_key=conversation_id,
-                visibility_default=nested_visibility,
-            )
-        )
-        append_fn(
-            SessionsHistoryTool(
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-                requester_session_key=conversation_id,
-                visibility_default=nested_visibility,
-            )
-        )
-        append_fn(
-            SessionsWaitTool(
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-            )
-        )
-        append_fn(
-            SessionsTimelineTool(
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-            )
-        )
-        append_fn(
-            SessionsOverviewTool(
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-                requester_session_key=conversation_id,
-                visibility_default=nested_visibility,
-                observability_stats_provider=(self.deps.get_observability_stats_fn),
-            )
-        )
-        append_fn(
-            SubAgentsControlTool(
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-                subagent_names=list(nested_map.keys()),
-                subagent_descriptions=nested_descriptions,
-                cancel_callback=cancel_callback,
-                restart_callback=restart_callback,
-                max_active_runs=self.deps.max_subagent_active_runs,
-                max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-                max_children_per_requester=(self.deps.max_subagent_children_per_requester),
-                requester_session_key=conversation_id,
-                delegation_depth=nested_depth,
-                max_delegation_depth=(self.deps.max_subagent_delegation_depth),
-            )
+        return make_nested_session_tool_defs(
+            run_registry=self.deps.subagent_run_registry,
+            conversation_id=conversation_id,
+            requester_session_key=conversation_id,
+            visibility_default=nested_visibility,
+            observability_stats_provider=self.deps.get_observability_stats_fn,
+            subagent_names=list(nested_map.keys()),
+            subagent_descriptions=nested_descriptions,
+            cancel_callback=cancel_callback,
+            restart_callback=restart_callback,
+            max_active_runs=self.deps.max_subagent_active_runs,
+            max_active_runs_per_lineage=self.deps.max_subagent_active_runs_per_lineage,
+            max_children_per_requester=self.deps.max_subagent_children_per_requester,
+            delegation_depth=nested_depth,
+            max_delegation_depth=self.deps.max_subagent_delegation_depth,
         )
 
     # ------------------------------------------------------------------
     # Delegate tool appenders
     # ------------------------------------------------------------------
 
-    def append_nested_delegate_tools(
+    def make_nested_delegate_tool_defs(
         self,
         *,
-        append_fn: Callable[[Any], None],
         nested_candidates: list[SubAgent],
         nested_map: dict[str, Any],
         nested_descriptions: dict[str, str],
         delegate_callback: Callable[..., Coroutine[Any, Any, str]],
         conversation_id: str,
         nested_depth: int,
-    ) -> None:
-        """Append delegate and parallel-delegate tools for nested SubAgent invocation.
-        
-        NOTE: Decorator-based configure_*() calls are NOT added here
-        because nested delegates share module-level globals with the
-        parent conversation. Calling configure() here would overwrite
-        the parent's configuration.
-        Nested tools use the class-based path exclusively.
-        """
-        from ..tools.delegate_subagent import (
-            DelegateSubAgentTool,
-            ParallelDelegateSubAgentTool,
-        )
+    ) -> list[ToolDefinition]:
+        """Build nested delegate ToolDefinitions via the factory function.
 
-        nested_delegate_tool = DelegateSubAgentTool(
+        Each ToolDefinition uses a save/restore pattern for module globals.
+        """
+        from ..tools.delegate_subagent import make_nested_delegate_tool_defs
+
+        return make_nested_delegate_tool_defs(
             subagent_names=list(nested_map.keys()),
             subagent_descriptions=nested_descriptions,
             execute_callback=delegate_callback,
@@ -408,21 +344,8 @@ class SubAgentToolBuilder:
             conversation_id=conversation_id,
             delegation_depth=nested_depth,
             max_active_runs=self.deps.max_subagent_active_runs,
+            include_parallel=(len(nested_candidates) >= 2),
         )
-        append_fn(nested_delegate_tool)
-
-        if len(nested_candidates) >= 2:
-            nested_parallel_tool = ParallelDelegateSubAgentTool(
-                subagent_names=list(nested_map.keys()),
-                subagent_descriptions=nested_descriptions,
-                execute_callback=delegate_callback,
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-                delegation_depth=nested_depth,
-                max_active_runs=self.deps.max_subagent_active_runs,
-            )
-            append_fn(nested_parallel_tool)
-
     # ------------------------------------------------------------------
     # Top-level tool definitions builder
     # ------------------------------------------------------------------
@@ -440,21 +363,11 @@ class SubAgentToolBuilder:
         tools_to_use: list[ToolDefinition],
     ) -> list[ToolDefinition]:
         """Build and append all SubAgent tool definitions to tools list."""
+        from ..tools.define import get_registered_tools
         from ..tools.delegate_subagent import (
-            DelegateSubAgentTool,
-            ParallelDelegateSubAgentTool,
             configure_delegate_subagent,
         )
         from ..tools.subagent_sessions import (
-            SessionsAckTool,
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsOverviewTool,
-            SessionsSendTool,
-            SessionsSpawnTool,
-            SessionsTimelineTool,
-            SessionsWaitTool,
-            SubAgentsControlTool,
             configure_session_tools,
             configure_sessions_ack,
             configure_sessions_overview,
@@ -462,15 +375,6 @@ class SubAgentToolBuilder:
             configure_sessions_wait,
             configure_subagents_control,
         )
-
-        def _to_td(tool_instance: Any) -> ToolDefinition:
-            return ToolDefinition(
-                name=tool_instance.name,
-                description=tool_instance.description,
-                parameters=tool_instance.get_parameters_schema(),
-                execute=tool_instance.execute,
-                _tool_instance=tool_instance,
-            )
 
         # Configure decorator-based tool globals for this conversation
         configure_delegate_subagent(
@@ -562,134 +466,41 @@ class SubAgentToolBuilder:
             ),
         )
 
-        delegate_tool = DelegateSubAgentTool(
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
-            execute_callback=delegate_callback,
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            delegation_depth=0,
-            max_active_runs=self.deps.max_subagent_active_runs,
-        )
-        tools_to_use.append(_to_td(delegate_tool))
-
-        sessions_spawn_tool = SessionsSpawnTool(
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
-            spawn_callback=spawn_callback,
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            max_active_runs=self.deps.max_subagent_active_runs,
-            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
-        )
-        tools_to_use.append(_to_td(sessions_spawn_tool))
-
-        sessions_send_tool = SessionsSendTool(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            spawn_callback=spawn_callback,
-            max_active_runs=self.deps.max_subagent_active_runs,
-            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
-        )
-        tools_to_use.append(_to_td(sessions_send_tool))
-
-        tools_to_use.append(
-            _to_td(
-                SessionsListTool(
-                    run_registry=self.deps.subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                    visibility_default="tree",
+        # Look up all @tool_define tools (delegate + session) from the registry
+        _all_tool_names = [
+            "delegate_to_subagent",
+            "sessions_spawn_v2",
+            "sessions_list_v2",
+            "sessions_history_v2",
+            "sessions_timeline_v2",
+            "sessions_overview",
+            "sessions_wait",
+            "sessions_ack",
+            "sessions_send_v2",
+            "subagents_v2",
+        ]
+        registry = get_registered_tools()
+        tools_dict: dict[str, Any] = {}
+        for tool_name in _all_tool_names:
+            tool_info = registry.get(tool_name)
+            if tool_info is None:
+                logger.warning(
+                    "Tool %r not found in registry", tool_name
                 )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsHistoryTool(
-                    run_registry=self.deps.subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                    visibility_default="tree",
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsWaitTool(
-                    run_registry=self.deps.subagent_run_registry,
-                    conversation_id=conversation_id,
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsAckTool(
-                    run_registry=self.deps.subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsTimelineTool(
-                    run_registry=self.deps.subagent_run_registry,
-                    conversation_id=conversation_id,
-                )
-            )
-        )
-
-        tools_to_use.append(
-            _to_td(
-                SessionsOverviewTool(
-                    run_registry=self.deps.subagent_run_registry,
-                    conversation_id=conversation_id,
-                    requester_session_key=conversation_id,
-                    visibility_default="tree",
-                    observability_stats_provider=(self.deps.get_observability_stats_fn),
-                )
-            )
-        )
-
-        subagents_control_tool = SubAgentsControlTool(
-            run_registry=self.deps.subagent_run_registry,
-            conversation_id=conversation_id,
-            subagent_names=list(subagent_map.keys()),
-            subagent_descriptions=subagent_descriptions,
-            cancel_callback=cancel_callback,
-            restart_callback=spawn_callback,
-            max_active_runs=self.deps.max_subagent_active_runs,
-            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
-            requester_session_key=conversation_id,
-            delegation_depth=0,
-            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
-        )
-        tools_to_use.append(_to_td(subagents_control_tool))
+                continue
+            tools_dict[tool_name] = tool_info
+        tools_to_use.extend(convert_tools(tools_dict))
 
         # Inject parallel delegation tool when 2+ SubAgents available
         if len(enabled_subagents) >= 2:
-            parallel_tool = ParallelDelegateSubAgentTool(
-                subagent_names=list(subagent_map.keys()),
-                subagent_descriptions=subagent_descriptions,
-                execute_callback=delegate_callback,
-                run_registry=self.deps.subagent_run_registry,
-                conversation_id=conversation_id,
-                delegation_depth=0,
-                max_active_runs=self.deps.max_subagent_active_runs,
-            )
-            tools_to_use.append(_to_td(parallel_tool))
+            parallel_info = registry.get("parallel_delegate_subagents")
+            if parallel_info is not None:
+                tools_to_use.extend(
+                    convert_tools({"parallel_delegate_subagents": parallel_info})
+                )
+            else:
+                logger.warning(
+                    "Tool 'parallel_delegate_subagents' not found in registry"
+                )
 
         return tools_to_use

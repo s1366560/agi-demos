@@ -251,6 +251,11 @@ class MarkdownParser:
         if not isinstance(metadata, dict):
             metadata = {}
 
+        # Merge top-level mcp-servers into metadata["mcp_servers"]
+        mcp_servers = frontmatter.get("mcp-servers")
+        if mcp_servers and isinstance(mcp_servers, list):
+            metadata["mcp_servers"] = mcp_servers
+
         version_field = frontmatter.get("version")
         version_str = str(version_field).strip() if version_field is not None else None
 

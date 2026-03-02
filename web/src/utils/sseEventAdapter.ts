@@ -516,6 +516,8 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         allowCustom: data.allow_custom,
         context: data.context,
         defaultOption: data.default_option,
+        selectionMode: data.selection_mode,
+        maxSelections: data.max_selections,
         answered: false,
       };
     }

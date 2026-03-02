@@ -21,13 +21,20 @@ __all__ = [
     "AgentArtifactCloseEvent",
     "AgentArtifactOpenEvent",
     "AgentArtifactUpdateEvent",
+    "AgentBackgroundLaunchedEvent",
     "AgentCanvasUpdatedEvent",
+    "AgentContextSummaryGeneratedEvent",
     "AgentDomainEvent",
     "AgentElicitationAnsweredEvent",
     "AgentElicitationAskedEvent",
     "AgentEventType",
     "AgentMCPAppRegisteredEvent",
     "AgentMCPAppResultEvent",
+    "AgentParallelCompletedEvent",
+    "AgentParallelStartedEvent",
+    "AgentPlanSuggestedEvent",
+    "AgentPolicyFilteredEvent",
+    "AgentSelectionTraceEvent",
     "AgentSuggestionsEvent",
     "get_frontend_event_types",
 ]
@@ -77,6 +84,17 @@ class AgentCompleteEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COMPLETE
     result: Any | None = None
     trace_url: str | None = None
+    content: str | None = None
+    skill_used: str | None = None
+    subagent_used: str | None = None
+    subagent_result: Any | None = None
+    orchestration_mode: str | None = None
+    subtask_count: int | None = None
+    step_count: int | None = None
+    session_id: str | None = None
+    route_id: str | None = None
+    trace_id: str | None = None
+    execution_id: str | None = None
 
 
 class AgentErrorEvent(AgentDomainEvent):
@@ -252,6 +270,8 @@ class AgentDecisionAskedEvent(AgentDomainEvent):
     allow_custom: bool = False
     default_option: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
+    selection_mode: str = "single"
+    max_selections: int | None = None
 
 
 class AgentDecisionAnsweredEvent(AgentDomainEvent):
@@ -341,6 +361,8 @@ class AgentContextStatusEvent(AgentDomainEvent):
     compression_level: str
     token_distribution: dict[str, int] = {}
     compression_history_summary: dict[str, Any] = {}
+    from_cache: bool = False
+    messages_in_summary: int = 0
 
 
 # === Pattern Events ===
@@ -824,6 +846,115 @@ class AgentCanvasUpdatedEvent(AgentDomainEvent):
     block: dict[str, Any] | None = None  # Serialised CanvasBlock (None for delete)
 
 
+
+
+# =========================================================================
+# Agent Routing & Orchestration Events
+# =========================================================================
+
+
+class AgentPlanSuggestedEvent(AgentDomainEvent):
+    """Event: Agent suggests switching to plan mode."""
+
+    event_type: AgentEventType = AgentEventType.PLAN_SUGGESTED
+    plan_id: str
+    conversation_id: str
+    reason: str
+    confidence: float
+
+
+class AgentContextSummaryGeneratedEvent(AgentDomainEvent):
+    """Event: Context summary was generated during compression."""
+
+    event_type: AgentEventType = (
+        AgentEventType.CONTEXT_SUMMARY_GENERATED
+    )
+    summary_text: str
+    summary_tokens: int
+    messages_covered_count: int
+    compression_level: str
+
+
+class AgentSelectionTraceEvent(AgentDomainEvent):
+    """Event: Tool selection trace for debugging."""
+
+    event_type: AgentEventType = AgentEventType.SELECTION_TRACE
+    route_id: str | None = None
+    trace_id: str | None = None
+    initial_count: int = 0
+    final_count: int = 0
+    removed_total: int = 0
+    domain_lane: str | None = None
+    tool_budget: int = 0
+    budget_exceeded_stages: list[str] = Field(
+        default_factory=list
+    )
+    stages: list[dict[str, Any]] = Field(
+        default_factory=list
+    )
+
+
+class AgentPolicyFilteredEvent(AgentDomainEvent):
+    """Event: Policy filter summary for debugging."""
+
+    event_type: AgentEventType = AgentEventType.POLICY_FILTERED
+    route_id: str | None = None
+    trace_id: str | None = None
+    removed_total: int = 0
+    stage_count: int = 0
+    domain_lane: str | None = None
+    tool_budget: int = 0
+    budget_exceeded_stages: list[str] = Field(
+        default_factory=list
+    )
+
+
+class AgentParallelStartedEvent(AgentDomainEvent):
+    """Event: Parallel subagent execution started."""
+
+    event_type: AgentEventType = AgentEventType.PARALLEL_STARTED
+    task_count: int
+    session_id: str | None = None
+    route_id: str | None = None
+    trace_id: str | None = None
+    subtasks: list[dict[str, Any]] = Field(
+        default_factory=list
+    )
+    task_ids: list[str] = Field(default_factory=list)
+
+
+class AgentParallelCompletedEvent(AgentDomainEvent):
+    """Event: Parallel subagent execution completed."""
+
+    event_type: AgentEventType = (
+        AgentEventType.PARALLEL_COMPLETED
+    )
+    total_tasks: int
+    session_id: str | None = None
+    route_id: str | None = None
+    trace_id: str | None = None
+    completed: int = 0
+    all_succeeded: bool = False
+    total_tokens: int = 0
+    failed_agents: list[str] = Field(
+        default_factory=list
+    )
+    succeeded: int = 0
+    failed: int = 0
+    results: list[Any] = Field(default_factory=list)
+
+
+class AgentBackgroundLaunchedEvent(AgentDomainEvent):
+    """Event: Background subagent execution launched."""
+
+    event_type: AgentEventType = (
+        AgentEventType.BACKGROUND_LAUNCHED
+    )
+    execution_id: str
+    subagent_id: str
+    subagent_name: str
+    task: str
+
 # Event Type Utilities
 # =========================================================================
 
@@ -885,6 +1016,13 @@ def get_event_type_docstring() -> str:
         AgentMemoryRecalledEvent,
         AgentMemoryCapturedEvent,
         AgentCanvasUpdatedEvent,
+        AgentPlanSuggestedEvent,
+        AgentContextSummaryGeneratedEvent,
+        AgentSelectionTraceEvent,
+        AgentPolicyFilteredEvent,
+        AgentParallelStartedEvent,
+        AgentParallelCompletedEvent,
+        AgentBackgroundLaunchedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

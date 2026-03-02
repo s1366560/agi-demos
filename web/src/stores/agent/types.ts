@@ -158,7 +158,7 @@ export interface AgentV3State {
   ) => Promise<void>;
   respondToDecision: (
     requestId: string,
-    decision: string
+    decision: string | string[]
   ) => Promise<void>;
   respondToEnvVar: (
     requestId: string,

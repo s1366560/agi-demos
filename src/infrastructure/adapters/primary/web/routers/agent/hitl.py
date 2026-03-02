@@ -260,9 +260,12 @@ async def respond_to_hitl(
         logger.info(f"HITL response published to Redis Stream: {request.request_id}")
 
         # Update database record
+        decision_val = request.response_data.get("decision")
+        if isinstance(decision_val, list):
+            decision_val = json.dumps(decision_val)
         response_str = (
             request.response_data.get("answer")
-            or request.response_data.get("decision")
+            or decision_val
             or str(request.response_data.get("values", {}))
             or request.response_data.get("action")
         )
@@ -385,7 +388,7 @@ async def _publish_hitl_response_to_redis(
         message_data = {
             "request_id": request_id,
             "hitl_type": hitl_type,
-            "response_data": json.dumps(response_data),
+            "response_data": response_data,
             "user_id": user_id,
             "conversation_id": conversation_id,
             "tenant_id": tenant_id,

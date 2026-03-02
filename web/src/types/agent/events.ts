@@ -463,6 +463,8 @@ export interface DecisionAskedEventData {
   allow_custom: boolean;
   context: Record<string, unknown>;
   default_option?: string | undefined;
+  selection_mode?: 'single' | 'multiple' | undefined;
+  max_selections?: number | undefined;
 }
 
 

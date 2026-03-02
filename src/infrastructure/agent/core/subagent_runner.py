@@ -14,8 +14,14 @@ import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
+from src.domain.events.agent_events import (
+    AgentBackgroundLaunchedEvent,
+    AgentCompleteEvent,
+    AgentParallelCompletedEvent,
+    AgentParallelStartedEvent,
+)
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 
@@ -210,15 +216,16 @@ class SubAgentSessionRunner:
 
         result = process.result
 
-        yield {
-            "type": "complete",
-            "data": {
-                "content": result.final_content if result else "",
-                "subagent_used": subagent.name,
-                "subagent_result": (result.to_event_data() if result else None),
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentCompleteEvent(
+                content=result.final_content if result else "",
+                subagent_used=subagent.name,
+                subagent_result=(
+                    result.to_event_data() if result else None
+                ),
+            ).to_event_dict(),
+        )
 
     async def execute_parallel(
         self,
@@ -234,14 +241,14 @@ class SubAgentSessionRunner:
         """Execute multiple SubAgents in parallel via ParallelScheduler."""
         from ..subagent.parallel_scheduler import ParallelScheduler
 
-        yield {
-            "type": "parallel_started",
-            "data": {
-                "task_count": len(subtasks),
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-                "subtasks": [
+        yield cast(
+            dict[str, Any],
+            AgentParallelStartedEvent(
+                task_count=len(subtasks),
+                session_id=conversation_id or None,
+                route_id=route_id,
+                trace_id=route_id,
+                subtasks=[
                     {
                         "id": st.id,
                         "description": st.description,
@@ -249,9 +256,8 @@ class SubAgentSessionRunner:
                     }
                     for st in subtasks
                 ],
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+            ).to_event_dict(),
+        )
 
         subagent_map = {sa.name: sa for sa in self.deps.subagents}
 
@@ -302,33 +308,33 @@ class SubAgentSessionRunner:
             results,
         )
 
-        yield {
-            "type": "parallel_completed",
-            "data": {
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-                "total_tasks": len(subtasks),
-                "completed": len(results),
-                "all_succeeded": aggregated.all_succeeded,
-                "total_tokens": aggregated.total_tokens,
-                "failed_agents": list(aggregated.failed_agents),
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentParallelCompletedEvent(
+                session_id=conversation_id or None,
+                route_id=route_id,
+                trace_id=route_id,
+                total_tasks=len(subtasks),
+                completed=len(results),
+                all_succeeded=aggregated.all_succeeded,
+                total_tokens=aggregated.total_tokens,
+                failed_agents=list(
+                    aggregated.failed_agents
+                ),
+            ).to_event_dict(),
+        )
 
-        yield {
-            "type": "complete",
-            "data": {
-                "content": aggregated.summary,
-                "orchestration_mode": "parallel",
-                "subtask_count": len(subtasks),
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentCompleteEvent(
+                content=aggregated.summary,
+                orchestration_mode="parallel",
+                subtask_count=len(subtasks),
+                session_id=conversation_id or None,
+                route_id=route_id,
+                trace_id=route_id,
+            ).to_event_dict(),
+        )
 
     async def execute_chain(
         self,
@@ -402,18 +408,21 @@ class SubAgentSessionRunner:
             yield event
 
         chain_result = chain.result
-        yield {
-            "type": "complete",
-            "data": {
-                "content": (chain_result.final_summary if chain_result else ""),
-                "orchestration_mode": "chain",
-                "step_count": len(chain_steps),
-                "session_id": conversation_id or None,
-                "route_id": route_id,
-                "trace_id": route_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentCompleteEvent(
+                content=(
+                    chain_result.final_summary
+                    if chain_result
+                    else ""
+                ),
+                orchestration_mode="chain",
+                step_count=len(chain_steps),
+                session_id=conversation_id or None,
+                route_id=route_id,
+                trace_id=route_id,
+            ).to_event_dict(),
+        )
 
     async def execute_background(
         self,
@@ -447,30 +456,29 @@ class SubAgentSessionRunner:
             factory=self.deps.factory,
         )
 
-        yield {
-            "type": "background_launched",
-            "data": {
-                "execution_id": execution_id,
-                "subagent_id": subagent.id,
-                "subagent_name": subagent.display_name,
-                "task": user_message[:200],
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        yield cast(
+            dict[str, Any],
+            AgentBackgroundLaunchedEvent(
+                execution_id=execution_id,
+                subagent_id=subagent.id,
+                subagent_name=subagent.display_name,
+                task=user_message[:200],
+            ).to_event_dict(),
+        )
 
-        yield {
-            "type": "complete",
-            "data": {
-                "content": (
-                    f"Task delegated to {subagent.display_name} in background "
-                    f"(ID: {execution_id}). You will be notified when "
-                    "it completes."
+        yield cast(
+            dict[str, Any],
+            AgentCompleteEvent(
+                content=(
+                    f"Task delegated to "
+                    f"{subagent.display_name} in background "
+                    f"(ID: {execution_id}). You will be "
+                    "notified when it completes."
                 ),
-                "orchestration_mode": "background",
-                "execution_id": execution_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+                orchestration_mode="background",
+                execution_id=execution_id,
+            ).to_event_dict(),
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle hooks & observability

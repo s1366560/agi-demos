@@ -128,6 +128,7 @@ export interface DecisionRequestData {
   allowCustom: boolean;
   defaultOption?: string | undefined;
   maxSelections?: number | undefined;
+  selectionMode?: 'single' | 'multiple' | undefined;
   context: Record<string, unknown>;
 }
 
@@ -381,10 +382,17 @@ export function apiToUnifiedRequest(
       hitlType === 'decision'
         ? {
             question: apiRequest.question,
-            decisionType: 'single_choice',
+            decisionType:
+              (apiRequest.metadata?.decision_type as DecisionType) ||
+              'single_choice',
             options: (apiRequest.options as DecisionOption[]) || [],
-            allowCustom: false,
+            allowCustom: (apiRequest.metadata?.allow_custom as boolean) ?? false,
             context: apiRequest.context || {},
+            selectionMode:
+              (apiRequest.metadata?.selection_mode as 'single' | 'multiple') ||
+              'single',
+            maxSelections:
+              (apiRequest.metadata?.max_selections as number) || undefined,
           }
         : undefined,
     envVarData:

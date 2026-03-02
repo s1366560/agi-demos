@@ -392,6 +392,12 @@ class Settings(BaseSettings):
     mcp_websocket_heartbeat: int | None = Field(
         default=None, alias="MCP_WEBSOCKET_HEARTBEAT"
     )  # seconds; None disables heartbeat (prevents PONG timeout killing long tool calls)
+    mcp_max_global_connections: int = Field(
+        default=100, alias="MCP_MAX_GLOBAL_CONNECTIONS"
+    )
+    mcp_connection_ttl: int = Field(
+        default=300, alias="MCP_CONNECTION_TTL"
+    )  # seconds
 
     # Plan Mode Detection Settings (Hybrid Detection Strategy)
     plan_mode_enabled: bool = Field(default=False, alias="PLAN_MODE_ENABLED")

@@ -194,6 +194,7 @@ class FileSystemSkillLoader:
             license=markdown.license,
             compatibility=markdown.compatibility,
             version_label=markdown.version,
+            metadata=markdown.metadata or None,
         )
 
     def invalidate_cache(self) -> None:

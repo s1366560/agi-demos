@@ -953,6 +953,8 @@ async def _get_redis_client() -> aioredis.Redis:
 
 def _format_clarification_response(response_data: dict[str, Any]) -> str:
     """Format clarification HITL response."""
+    if isinstance(response_data, str):
+        return f"User clarification: {response_data}"
     selected = (
         response_data.get("selected_option_id")
         or response_data.get("selected_options")
@@ -970,6 +972,8 @@ def _format_clarification_response(response_data: dict[str, Any]) -> str:
 
 def _format_decision_response(response_data: dict[str, Any]) -> str:
     """Format decision HITL response."""
+    if isinstance(response_data, str):
+        return f"User decision: {response_data}"
     selected = response_data.get("selected_option_id") or response_data.get("decision")
     custom = response_data.get("custom_input") or response_data.get("decision")
     if custom:
@@ -981,6 +985,8 @@ def _format_decision_response(response_data: dict[str, Any]) -> str:
 
 def _format_env_var_response(response_data: dict[str, Any]) -> str:
     """Format env_var HITL response."""
+    if isinstance(response_data, str):
+        return f"User provided environment variables: {response_data}"
     values = response_data.get("values", {})
     provided_vars = list(values.keys()) if values else []
     if provided_vars:
@@ -990,6 +996,8 @@ def _format_env_var_response(response_data: dict[str, Any]) -> str:
 
 def _format_permission_response(response_data: dict[str, Any]) -> str:
     """Format permission HITL response."""
+    if isinstance(response_data, str):
+        return f"User permission response: {response_data}"
     granted = response_data.get("granted")
     if granted is None:
         granted = response_data.get("action") == "allow"
@@ -1012,6 +1020,8 @@ def _format_hitl_response_as_tool_result(
     response_data: dict[str, Any],
 ) -> str:
     """Format HITL response data as a tool result content string."""
+    if isinstance(response_data, str):
+        return f"User responded to {hitl_type} request: {response_data}"
     if response_data.get("cancelled") or response_data.get("timeout"):
         return f"User did not complete {hitl_type} request"
     formatter = _HITL_FORMATTERS.get(hitl_type)

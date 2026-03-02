@@ -11,6 +11,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, override
 
+from src.infrastructure.mcp.clients.global_connection_limiter import (
+    GlobalConnectionLimiter,
+    get_global_limiter,
+)
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ class MCPConnectionPool:
         pool_size: int = 3,
         timeout: float = 30.0,
         connect_timeout: float = 10.0,
+        global_limiter: GlobalConnectionLimiter | None = None,
     ) -> None:
         """Initialize the connection pool.
 
@@ -44,6 +49,8 @@ class MCPConnectionPool:
             pool_size: Maximum number of connections in the pool.
             timeout: Default timeout for operations.
             connect_timeout: Timeout for initial connection.
+            global_limiter: Optional global connection limiter. If None,
+                the module-level singleton from get_global_limiter() is used.
         """
         self._url = url
         self._pool_size = pool_size
@@ -53,6 +60,8 @@ class MCPConnectionPool:
         self._lock = asyncio.Lock()
         self._created_count = 0
         self._semaphore = asyncio.Semaphore(pool_size)
+        self._global_limiter = global_limiter or get_global_limiter()
+        self._global_limiter.register_pool(self._url, self._evict_one_idle)
 
     @property
     def available_count(self) -> int:
@@ -78,8 +87,14 @@ class MCPConnectionPool:
         Raises:
             ConnectionError: If unable to establish a connection.
         """
-        # Wait for a slot in the pool
-        await self._semaphore.acquire()
+        # Acquire global connection slot first
+        await self._global_limiter.acquire(self._url)
+        try:
+            # Wait for a slot in the pool
+            await self._semaphore.acquire()
+        except BaseException:
+            await self._global_limiter.release(self._url)
+            raise
 
         # Try to get an existing connection
         while not self._connections.empty():
@@ -98,9 +113,15 @@ class MCPConnectionPool:
                 # Decrement created count since we're removing this connection
                 async with self._lock:
                     self._created_count -= 1
-                # Release semaphore for the discarded connection and re-acquire for retry
+                # Release semaphore for the discarded connection and re-acquire
                 self._semaphore.release()
-                await self._semaphore.acquire()
+                await self._global_limiter.release(self._url)
+                await self._global_limiter.acquire(self._url)
+                try:
+                    await self._semaphore.acquire()
+                except BaseException:
+                    await self._global_limiter.release(self._url)
+                    raise
         # Create a new connection
         async with self._lock:
             self._created_count += 1
@@ -122,6 +143,7 @@ class MCPConnectionPool:
             self._semaphore.release()
             async with self._lock:
                 self._created_count -= 1
+            await self._global_limiter.release(self._url)
             raise ConnectionError(f"Failed to create connection: {e}") from e
 
     async def return_connection(self, client: MCPWebSocketClient) -> None:
@@ -142,6 +164,7 @@ class MCPConnectionPool:
             async with self._lock:
                 self._created_count -= 1
             self._semaphore.release()
+            await self._global_limiter.release(self._url)
             return
 
         # Return to pool
@@ -155,8 +178,9 @@ class MCPConnectionPool:
             async with self._lock:
                 self._created_count -= 1
 
-        # Release the semaphore slot
+        # Release the semaphore slot and global slot
         self._semaphore.release()
+        await self._global_limiter.release(self._url)
 
     async def close_all(self) -> None:
         """Close all connections in the pool.
@@ -166,16 +190,23 @@ class MCPConnectionPool:
         """
         logger.info(f"Closing all connections in pool ({self.available_count} available)")
 
+        closed_count = 0
         while not self._connections.empty():
             client = self._connections.get_nowait()
             try:
                 await client.disconnect()
             except Exception as e:
                 logger.warning(f"Error disconnecting client during close_all: {e}")
+            closed_count += 1
+
+        # Release global slots for all closed connections
+        for _ in range(closed_count):
+            await self._global_limiter.release(self._url)
 
         async with self._lock:
             self._created_count = 0
 
+        self._global_limiter.unregister_pool(self._url)
         logger.info("All pool connections closed")
 
     @asynccontextmanager
@@ -199,6 +230,36 @@ class MCPConnectionPool:
         finally:
             if conn is not None:
                 await self.return_connection(conn)
+
+    async def _evict_one_idle(self) -> bool:
+        """Try to evict one idle connection from this pool's queue.
+
+        This is registered as the eviction callback with the global limiter.
+        It removes one idle connection from the queue and disconnects it.
+
+        Returns:
+            True if a connection was evicted, False if the queue was empty.
+        """
+        if self._connections.empty():
+            return False
+
+        try:
+            client = self._connections.get_nowait()
+        except asyncio.QueueEmpty:
+            return False
+
+        try:
+            await client.disconnect()
+        except Exception as e:
+            logger.warning(f"Error disconnecting evicted client: {e}")
+
+        async with self._lock:
+            self._created_count -= 1
+
+        self._semaphore.release()
+        await self._global_limiter.release(self._url)
+        logger.debug("Evicted one idle connection from pool")
+        return True
 
     @override
     def __repr__(self) -> str:

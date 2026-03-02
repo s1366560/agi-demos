@@ -1,12 +1,25 @@
-"""Unit tests for SandboxMCPToolWrapper.
+"""Unit tests for create_sandbox_mcp_tool.
 
 TDD: Tests written first (RED phase).
 """
 
-import pytest
 
+from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.mcp_errors import RetryConfig
-from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
+from src.infrastructure.agent.tools.sandbox_tool_wrapper import (
+    create_sandbox_mcp_tool,
+)
+
+
+def _make_ctx() -> ToolContext:
+    """Create a minimal ToolContext for testing."""
+    return ToolContext(
+        session_id="test-session",
+        message_id="test-msg",
+        call_id="test-call",
+        agent_name="test-agent",
+        conversation_id="test-conv",
+    )
 
 
 class MockSandboxAdapter:
@@ -23,7 +36,7 @@ class MockSandboxAdapter:
         self.call_count = 0
         self.error_message = error_message
 
-    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
         """Mock call_tool method with optional failure simulation."""
         self.call_count += 1
 
@@ -40,75 +53,84 @@ class MockSandboxAdapter:
         }
 
 
-class TestSandboxMCPToolWrapperPermission:
-    """Test SandboxMCPToolWrapper permission attribute."""
+class TestSandboxMCPToolPermission:
+    """Test create_sandbox_mcp_tool permission attribute."""
 
     def test_read_tool_has_read_permission(self):
         """Test that read tools have 'read' permission."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="abc123def",
             tool_name="file_read",
             tool_schema={
                 "name": "file_read",
                 "description": "Read a file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.permission == "read"
         assert tool.name == "file_read"
-        assert tool.sandbox_id == "abc123def"
 
     def test_write_tool_has_write_permission(self):
         """Test that write tools have 'write' permission."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="abc123def",
             tool_name="file_write",
             tool_schema={
                 "name": "file_write",
                 "description": "Write a file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.permission == "write"
         assert tool.name == "file_write"
-        assert tool.sandbox_id == "abc123def"
 
     def test_bash_tool_has_bash_permission(self):
         """Test that bash tools have 'bash' permission."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="abc123def",
             tool_name="bash",
             tool_schema={
                 "name": "bash",
                 "description": "Execute bash command",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.permission == "bash"
         assert tool.name == "bash"
-        assert tool.sandbox_id == "abc123def"
 
     def test_unknown_tool_has_ask_permission(self):
         """Test that unknown tools default to 'ask' permission."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="abc123def",
             tool_name="unknown_custom_tool",
             tool_schema={
                 "name": "unknown_custom_tool",
                 "description": "Unknown tool",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.permission == "ask"
@@ -116,15 +138,18 @@ class TestSandboxMCPToolWrapperPermission:
     def test_create_file_has_write_permission(self):
         """Test that create_file tool has 'write' permission."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="xyz789",
             tool_name="create_file",
             tool_schema={
                 "name": "create_file",
                 "description": "Create a file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.permission == "write"
@@ -132,64 +157,72 @@ class TestSandboxMCPToolWrapperPermission:
     def test_list_files_has_read_permission(self):
         """Test that list_files tool has 'read' permission."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="xyz789",
             tool_name="list_files",
             tool_schema={
                 "name": "list_files",
                 "description": "List files",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.permission == "read"
 
 
-class TestSandboxMCPToolWrapperAttributes:
-    """Test SandboxMCPToolWrapper attributes."""
+class TestSandboxMCPToolAttributes:
+    """Test create_sandbox_mcp_tool attributes."""
 
     def test_tool_name_is_original_name(self):
         """Test that tool name uses original name without prefix."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="bash",
             tool_schema={
                 "name": "bash",
                 "description": "Execute bash",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
         assert tool.name == "bash"
-        assert tool.sandbox_id == "test123"
 
-    def test_sandbox_id_attribute(self):
-        """Test that sandbox_id is stored as attribute."""
+    def test_tool_description_from_schema(self):
+        """Test that tool description comes from schema."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
-            sandbox_id="verylongsandboxid123",
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
             tool_name="bash",
             tool_schema={
                 "name": "bash",
                 "description": "Execute bash commands",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        assert tool.sandbox_id == "verylongsandboxid123"
+        assert tool.description == "Execute bash commands"
 
 
-class TestSandboxMCPToolWrapperParameters:
-    """Test SandboxMCPToolWrapper parameter schema conversion."""
+class TestSandboxMCPToolParameters:
+    """Test create_sandbox_mcp_tool parameter schema conversion."""
 
-    def test_get_parameters_schema_from_mcp_schema(self):
+    def test_parameters_from_mcp_schema(self):
         """Test parameter schema conversion from MCP format."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
@@ -211,10 +244,10 @@ class TestSandboxMCPToolWrapperParameters:
                     "required": ["path"],
                 },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        schema = tool.get_parameters_schema()
+        schema = tool.parameters
 
         assert schema["type"] == "object"
         assert "path" in schema["properties"]
@@ -222,10 +255,14 @@ class TestSandboxMCPToolWrapperParameters:
         assert "path" in schema["required"]
         assert "offset" in schema["properties"]
 
-    def test_validate_args_with_required_params(self):
-        """Test argument validation with required parameters."""
+
+class TestSandboxMCPToolExecute:
+    """Test create_sandbox_mcp_tool execution."""
+
+    async def test_execute_success(self):
+        """Test successful tool execution."""
         adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
@@ -239,25 +276,32 @@ class TestSandboxMCPToolWrapperParameters:
                     "required": ["path"],
                 },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        # Valid args
-        assert tool.validate_args(path="/tmp/test") is True
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/tmp/test")
 
-        # Missing required arg
-        assert tool.validate_args() is False
-        assert tool.validate_args(offset=100) is False
+        assert "Mock result from file_read" in result.output
 
+    async def test_execute_error_response(self):
+        """Test tool execution with error response."""
 
-class TestSandboxMCPToolWrapperExecute:
-    """Test SandboxMCPToolWrapper execution."""
+        class ErrorAdapter:
+            async def call_tool(
+                self,
+                sandbox_id: str,
+                tool_name: str,
+                kwargs: dict,
+                **kw,
+            ):
+                return {
+                    "content": [{"text": "File not found"}],
+                    "is_error": True,
+                }
 
-    @pytest.mark.asyncio
-    async def test_execute_success(self):
-        """Test successful tool execution."""
-        adapter = MockSandboxAdapter()
-        tool = SandboxMCPToolWrapper(
+        adapter = ErrorAdapter()
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
@@ -265,52 +309,24 @@ class TestSandboxMCPToolWrapperExecute:
                 "description": "Read file",
                 "input_schema": {
                     "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": ["path"],
+                    "properties": {},
                 },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        result = await tool.execute(path="/tmp/test")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/nonexistent")
 
-        assert "Mock result from file_read" in result
-
-    @pytest.mark.asyncio
-    async def test_execute_error_response(self):
-        """Test tool execution with error response."""
-
-        class ErrorAdapter:
-            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
-                return {
-                    "content": [{"text": "File not found"}],
-                    "is_error": True,
-                }
-
-        adapter = ErrorAdapter()
-        tool = SandboxMCPToolWrapper(
-            sandbox_id="test123",
-            tool_name="file_read",
-            tool_schema={
-                "name": "file_read",
-                "description": "Read file",
-                "input_schema": {"type": "object", "properties": {}},
-            },
-            sandbox_adapter=adapter,
-        )
-
-        # Should raise RuntimeError for non-retryable errors
-        with pytest.raises(RuntimeError) as excinfo:
-            await tool.execute(path="/nonexistent")
-
-        assert "Tool execution failed" in str(excinfo.value)
-        assert "File not found" in str(excinfo.value)
+        # New API catches RuntimeError and returns ToolResult
+        assert result.is_error is True
+        assert "Tool execution failed" in result.output
+        assert "File not found" in result.output
 
 
-class TestSandboxMCPToolWrapperRetry:
-    """Test SandboxMCPToolWrapper retry mechanism."""
+class TestSandboxMCPToolRetry:
+    """Test create_sandbox_mcp_tool retry mechanism."""
 
-    @pytest.mark.asyncio
     async def test_retry_on_connection_error(self):
         """Test that connection errors trigger retry."""
         # Adapter that fails once then succeeds
@@ -322,25 +338,28 @@ class TestSandboxMCPToolWrapperRetry:
             jitter=False,
         )
 
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
                 "name": "file_read",
                 "description": "Read file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
             retry_config=retry_config,
         )
 
-        result = await tool.execute(path="/tmp/test")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/tmp/test")
 
         # Should succeed after retry
-        assert "Mock result from file_read" in result
+        assert "Mock result from file_read" in result.output
         assert adapter.call_count == 2  # First fail, then success
 
-    @pytest.mark.asyncio
     async def test_no_retry_on_parameter_error(self):
         """Test that parameter errors don't trigger retry."""
         # Adapter that returns parameter error
@@ -355,26 +374,29 @@ class TestSandboxMCPToolWrapperRetry:
             jitter=False,
         )
 
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
                 "name": "file_read",
                 "description": "Read file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
             retry_config=retry_config,
         )
 
-        # Should raise RuntimeError immediately without retry (parameter error is not retryable)
-        with pytest.raises(RuntimeError) as excinfo:
-            await tool.execute(path="/tmp/test")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/tmp/test")
 
-        assert "Tool execution failed" in str(excinfo.value)
+        # New API returns ToolResult with is_error=True
+        assert result.is_error is True
+        assert "Tool execution failed" in result.output
         assert adapter.call_count == 1  # No retry
 
-    @pytest.mark.asyncio
     async def test_retry_exhaustion(self):
         """Test behavior when max retries is exhausted."""
         # Adapter that always fails with connection error
@@ -386,27 +408,30 @@ class TestSandboxMCPToolWrapperRetry:
             jitter=False,
         )
 
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
                 "name": "file_read",
                 "description": "Read file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
             retry_config=retry_config,
         )
 
-        # Should raise RuntimeError after exhausting retries
-        with pytest.raises(RuntimeError) as excinfo:
-            await tool.execute(path="/tmp/test")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/tmp/test")
 
-        assert "Tool execution failed" in str(excinfo.value)
-        # max_retries=2 means 1 initial + 2 retries = 3 total attempts
+        # New API returns ToolResult with is_error=True
+        assert result.is_error is True
+        assert "Tool execution failed" in result.output
+        # max_retries=2 means 1 initial + 2 retries = 3 total
         assert adapter.call_count == 3
 
-    @pytest.mark.asyncio
     async def test_custom_retry_config(self):
         """Test custom retry configuration."""
         adapter = MockSandboxAdapter(fail_count=2, error_message="connection reset")
@@ -417,33 +442,42 @@ class TestSandboxMCPToolWrapperRetry:
             jitter=False,
         )
 
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
                 "name": "file_read",
                 "description": "Read file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
             retry_config=retry_config,
         )
 
-        result = await tool.execute(path="/tmp/test")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/tmp/test")
 
-        assert "Mock result from file_read" in result
+        assert "Mock result from file_read" in result.output
         assert adapter.call_count == 3  # 2 failures + 1 success
 
 
-class TestSandboxMCPToolWrapperErrorFieldHandling:
-    """Test SandboxMCPToolWrapper error field handling (is_error vs isError)."""
+class TestSandboxMCPToolErrorFieldHandling:
+    """Test create_sandbox_mcp_tool error field handling."""
 
-    @pytest.mark.asyncio
     async def test_handles_mcp_isError_field(self):
-        """Test that wrapper correctly handles MCP-style isError field."""
+        """Test that wrapper handles MCP-style isError field."""
 
         class MCPStyleErrorAdapter:
-            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+            async def call_tool(
+                self,
+                sandbox_id: str,
+                tool_name: str,
+                kwargs: dict,
+                **kw,
+            ):
                 # Return MCP-style response with isError (camelCase)
                 return {
                     "content": [{"text": "File not found"}],
@@ -451,62 +485,82 @@ class TestSandboxMCPToolWrapperErrorFieldHandling:
                 }
 
         adapter = MCPStyleErrorAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="export_artifact",
             tool_schema={
                 "name": "export_artifact",
                 "description": "Export artifact",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        # Should raise RuntimeError when isError=True
-        with pytest.raises(RuntimeError) as excinfo:
-            await tool.execute(file_path="/nonexistent.txt")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, file_path="/nonexistent.txt")
 
-        assert "Tool execution failed" in str(excinfo.value)
-        assert "File not found" in str(excinfo.value)
+        # New API returns ToolResult with is_error=True
+        assert result.is_error is True
+        assert "Tool execution failed" in result.output
+        assert "File not found" in result.output
 
-    @pytest.mark.asyncio
     async def test_handles_snake_case_is_error_field(self):
-        """Test that wrapper correctly handles snake_case is_error field."""
+        """Test that wrapper handles snake_case is_error field."""
 
         class SnakeCaseErrorAdapter:
-            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+            async def call_tool(
+                self,
+                sandbox_id: str,
+                tool_name: str,
+                kwargs: dict,
+                **kw,
+            ):
                 # Return response with snake_case is_error
                 return {
                     "content": [{"text": "Permission denied"}],
-                    "is_error": True,  # Some internal code might use snake_case
+                    "is_error": True,
                 }
 
         adapter = SnakeCaseErrorAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="file_read",
             tool_schema={
                 "name": "file_read",
                 "description": "Read file",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        # Should raise RuntimeError when is_error=True
-        with pytest.raises(RuntimeError) as excinfo:
-            await tool.execute(path="/etc/passwd")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, path="/etc/passwd")
 
-        assert "Tool execution failed" in str(excinfo.value)
+        # New API returns ToolResult with is_error=True
+        assert result.is_error is True
+        assert "Tool execution failed" in result.output
 
-    @pytest.mark.asyncio
     async def test_artifact_result_returned_on_success(self):
-        """Test that artifact data is returned on successful export_artifact."""
+        """Test that artifact data is returned on success."""
 
         class ArtifactSuccessAdapter:
-            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+            async def call_tool(
+                self,
+                sandbox_id: str,
+                tool_name: str,
+                kwargs: dict,
+                **kw,
+            ):
                 return {
-                    "content": [{"type": "text", "text": "File exported"}],
+                    "content": [
+                        {"type": "text", "text": "File exported"},
+                    ],
                     "isError": False,
                     "artifact": {
                         "filename": "test.png",
@@ -520,21 +574,26 @@ class TestSandboxMCPToolWrapperErrorFieldHandling:
                 }
 
         adapter = ArtifactSuccessAdapter()
-        tool = SandboxMCPToolWrapper(
+        tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
             tool_name="export_artifact",
             tool_schema={
                 "name": "export_artifact",
                 "description": "Export artifact",
-                "input_schema": {"type": "object", "properties": {}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
             },
-            sandbox_adapter=adapter,
+            sandbox_port=adapter,
         )
 
-        result = await tool.execute(file_path="/workspace/test.png")
+        ctx = _make_ctx()
+        result = await tool.execute(ctx, file_path="/workspace/test.png")
 
-        # Should return dict with artifact info
-        assert isinstance(result, dict)
-        assert "artifact" in result
-        assert result["artifact"]["filename"] == "test.png"
-        assert result["artifact"]["encoding"] == "base64"
+        # New API returns ToolResult with artifact info string
+        assert result.is_error is False
+        assert "test.png" in result.output
+        assert "image/png" in result.output
+        assert "1234" in result.output
+        assert "image" in result.output

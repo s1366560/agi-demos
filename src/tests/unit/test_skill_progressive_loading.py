@@ -593,7 +593,21 @@ FS Content.
 
 
 class TestSkillLoaderTool:
-    """Tests for SkillLoaderTool."""
+    """Tests for skill_loader_tool (module-level @tool_define API)."""
+
+    @pytest.fixture(autouse=True)
+    def _configure_and_reset(self, mock_skill_service):
+        """Configure module deps before each test, reset after."""
+        import src.infrastructure.agent.tools.skill_loader as _mod
+
+        _mod.configure_skill_loader_tool(
+            skill_service=mock_skill_service,
+            tenant_id="test-tenant",
+            project_id="test-project",
+        )
+        yield
+        _mod._skill_loader_deps = None
+        _mod._available_skill_names = []
 
     @pytest.fixture
     def mock_skill_service(self):
@@ -602,13 +616,27 @@ class TestSkillLoaderTool:
         mock.list_available_skills = AsyncMock(return_value=[])
         mock.load_skill_content = AsyncMock(return_value=None)
         mock.record_skill_usage = AsyncMock()
-        mock.format_skill_list_for_tool = Mock(return_value="No skills available.")
         return mock
 
-    @pytest.mark.asyncio
+    @staticmethod
+    def _make_ctx():
+        """Build a minimal ToolContext for tests."""
+        from src.infrastructure.agent.tools.context import ToolContext
+
+        return ToolContext(
+            session_id="test-session",
+            message_id="test-msg",
+            call_id="test-call",
+            agent_name="test-agent",
+            conversation_id="test-conv",
+        )
+
     async def test_initialize_builds_description(self, mock_skill_service):
-        """Test that initialize builds tool description with skills."""
-        from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
+        """Test configure + set_available_skills populates cache."""
+        from src.infrastructure.agent.tools.skill_loader import (
+            get_available_skills,
+            set_available_skills,
+        )
 
         skills = [
             Skill(
@@ -622,122 +650,91 @@ class TestSkillLoaderTool:
                 status=SkillStatus.ACTIVE,
             ),
         ]
-        mock_skill_service.list_available_skills = AsyncMock(return_value=skills)
-        mock_skill_service.format_skill_list_for_tool = Mock(
-            return_value="Available skills:\n  - test-skill: A test skill"
+        mock_skill_service.list_available_skills = AsyncMock(
+            return_value=skills,
         )
 
-        tool = SkillLoaderTool(
-            skill_service=mock_skill_service,
-            tenant_id="test-tenant",
-        )
+        set_available_skills([s.name for s in skills])
 
-        await tool.initialize()
+        cached = get_available_skills()
+        assert len(cached) == 1
+        assert "test-skill" in cached
 
-        assert "test-skill" in tool.description
-        assert len(tool.get_available_skills()) == 1
-
-    @pytest.mark.asyncio
     async def test_execute_loads_skill_content(self, mock_skill_service):
-        """Test that execute loads and returns skill content as structured dict."""
-        from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
+        """Test skill_loader_tool returns ToolResult with content."""
+        from src.infrastructure.agent.tools.skill_loader import (
+            skill_loader_tool,
+        )
 
         mock_skill_service.load_skill_content = AsyncMock(
-            return_value="# Skill Instructions\n\nDo the thing."
+            return_value="# Skill Instructions\n\nDo the thing.",
         )
 
-        tool = SkillLoaderTool(
-            skill_service=mock_skill_service,
-            tenant_id="test-tenant",
-        )
+        ctx = self._make_ctx()
+        result = await skill_loader_tool.execute(ctx, name="my-skill")
 
-        result = await tool.execute(skill_name="my-skill")
-
-        # Result is now a structured dict
-        assert isinstance(result, dict)
-        assert result["title"] == "Loaded skill: my-skill"
-        assert "## Skill: my-skill" in result["output"]
-        assert "# Skill Instructions" in result["output"]
-        assert result["metadata"]["name"] == "my-skill"
+        assert not result.is_error
+        assert result.title == "Loaded skill: my-skill"
+        assert "## Skill: my-skill" in result.output
+        assert "# Skill Instructions" in result.output
+        assert result.metadata["name"] == "my-skill"
         mock_skill_service.load_skill_content.assert_called_once_with(
             tenant_id="test-tenant",
             skill_name="my-skill",
         )
 
-    @pytest.mark.asyncio
     async def test_execute_handles_not_found(self, mock_skill_service):
-        """Test that execute returns error dict for non-existent skill."""
-        from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
-
-        mock_skill_service.load_skill_content = AsyncMock(return_value=None)
-
-        tool = SkillLoaderTool(
-            skill_service=mock_skill_service,
-            tenant_id="test-tenant",
+        """Test error ToolResult for non-existent skill."""
+        from src.infrastructure.agent.tools.skill_loader import (
+            skill_loader_tool,
         )
-        tool._skills_cache = [
-            Skill(
-                id="1",
-                tenant_id="t1",
-                name="other-skill",
-                description="Other",
-                trigger_type=TriggerType.KEYWORD,
-                trigger_patterns=[],
-                tools=["memory_search"],
-                status=SkillStatus.ACTIVE,
-            ),
-        ]
 
-        result = await tool.execute(skill_name="nonexistent")
+        mock_skill_service.load_skill_content = AsyncMock(
+            return_value=None,
+        )
+        mock_skill_service.list_available_skills = AsyncMock(
+            return_value=[
+                Skill(
+                    id="1",
+                    tenant_id="t1",
+                    name="other-skill",
+                    description="Other",
+                    trigger_type=TriggerType.KEYWORD,
+                    trigger_patterns=[],
+                    tools=["memory_search"],
+                    status=SkillStatus.ACTIVE,
+                ),
+            ],
+        )
 
-        # Result is now a structured dict
-        assert isinstance(result, dict)
-        assert result["metadata"]["error"] is True
-        assert "not found" in result["output"]
-        assert "other-skill" in result["output"]  # Should list available skills
+        ctx = self._make_ctx()
+        result = await skill_loader_tool.execute(
+            ctx, name="nonexistent"
+        )
 
-    @pytest.mark.asyncio
+        assert result.is_error
+        assert "not found" in result.output.lower()
+        assert "other-skill" in result.output
+
     async def test_execute_validates_empty_skill_name(self, mock_skill_service):
-        """Test that execute validates skill_name parameter."""
-        from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
-
-        tool = SkillLoaderTool(
-            skill_service=mock_skill_service,
-            tenant_id="test-tenant",
+        """Test error ToolResult for empty skill name."""
+        from src.infrastructure.agent.tools.skill_loader import (
+            skill_loader_tool,
         )
 
-        result = await tool.execute(skill_name="")
+        ctx = self._make_ctx()
+        result = await skill_loader_tool.execute(ctx, name="")
 
-        # Result is now a structured dict
-        assert isinstance(result, dict)
-        assert result["metadata"]["error"] is True
-        assert "required" in result["output"]
+        assert result.is_error
+        assert "required" in result.output.lower()
 
-    def test_get_parameters_schema(self, mock_skill_service):
-        """Test that parameters schema is correct."""
-        from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
-
-        tool = SkillLoaderTool(
-            skill_service=mock_skill_service,
-            tenant_id="test-tenant",
+    def test_get_available_skills_after_set(self):
+        """Test get/set available skills cache round-trip."""
+        from src.infrastructure.agent.tools.skill_loader import (
+            get_available_skills,
+            set_available_skills,
         )
-        tool._skills_cache = [
-            Skill(
-                id="1",
-                tenant_id="t1",
-                name="cached-skill",
-                description="Cached",
-                trigger_type=TriggerType.KEYWORD,
-                trigger_patterns=[],
-                tools=["memory_search"],
-                status=SkillStatus.ACTIVE,
-            ),
-        ]
 
-        schema = tool.get_parameters_schema()
-
-        assert schema["type"] == "object"
-        assert "skill_name" in schema["properties"]
-        assert schema["required"] == ["skill_name"]
-        # Should have enum with cached skill names
-        assert schema["properties"]["skill_name"]["enum"] == ["cached-skill"]
+        set_available_skills(["cached-skill"])
+        cached = get_available_skills()
+        assert cached == ["cached-skill"]

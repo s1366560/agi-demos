@@ -9,6 +9,7 @@ The tests verify that when an MCP server is registered, the tools become
 immediately available without requiring an additional round-trip.
 """
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -74,46 +75,78 @@ class TestAgentToolsUpdatedEvent:
 
 
 class TestRegisterMCPServerToolEvents:
-    """Test that RegisterMCPServerTool emits tools updated events."""
+    """Test that register_mcp_server_tool emits tools updated events."""
 
     @pytest.mark.asyncio
-    async def test_register_emits_tools_updated_event(self):
+    async def test_register_emits_tools_updated_event(self, monkeypatch: pytest.MonkeyPatch):
         """
-        RED Test: Verify that RegisterMCPServerTool emits AgentToolsUpdatedEvent.
+        RED Test: Verify that register_mcp_server_tool emits AgentToolsUpdatedEvent.
         """
-        from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
+        from typing import Any
 
-        # Mock dependencies
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.register_mcp_server import (
+            register_mcp_server_tool,
+        )
+
+        _MOD = "src.infrastructure.agent.tools.register_mcp_server"
+
+        def _make_ctx(**overrides: Any) -> ToolContext:
+            defaults: dict[str, Any] = {
+                "session_id": "session-1",
+                "message_id": "msg-1",
+                "call_id": "call-1",
+                "agent_name": "test-agent",
+                "conversation_id": "conv-1",
+            }
+            defaults.update(overrides)
+            return ToolContext(**defaults)
+
+        # Mock sandbox adapter
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool = AsyncMock()
+        call_count = 0
 
-        # Mock successful install/start/discover
-        mock_adapter.call_tool.side_effect = [
-            # mcp_server_install
-            {"content": [{"type": "text", "text": '{"success": true}'}]},
-            # mcp_server_start
-            {"content": [{"type": "text", "text": '{"success": true}'}]},
-            # mcp_server_discover_tools
-            {
+        async def mock_call_tool(**kwargs: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:  # install + start succeed
+                return {"content": [{"type": "text", "text": '{"success": true}'}]}
+            # discover returns tools
+            return {
                 "content": [
                     {
                         "type": "text",
                         "text": '[{"name": "tool1", "_meta": {}}, {"name": "tool2", "_meta": {}}]',
                     }
                 ]
-            },
-        ]
+            }
 
-        tool = RegisterMCPServerTool(
-            tenant_id="tenant-1",
-            project_id="proj-1",
-            sandbox_adapter=mock_adapter,
-            sandbox_id="sandbox-1",
-            session_factory=None,
+        mock_adapter.call_tool = mock_call_tool
+
+        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_adapter", mock_adapter)
+        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_id", "sandbox-1")
+        monkeypatch.setattr(f"{_MOD}._register_mcp_tenant_id", "tenant-1")
+        monkeypatch.setattr(f"{_MOD}._register_mcp_project_id", "proj-1")
+        monkeypatch.setattr(f"{_MOD}._register_mcp_session_factory", None)
+        # Stub persist to avoid DB
+        monkeypatch.setattr(
+            f"{_MOD}._register_mcp_persist_server", AsyncMock(return_value=None)
+        )
+        # Stub SelfModifyingLifecycleOrchestrator.run_post_change
+        _LIFECYCLE = (
+            "src.infrastructure.agent.tools.self_modifying_lifecycle"
+            + ".SelfModifyingLifecycleOrchestrator.run_post_change"
+        )
+        monkeypatch.setattr(
+            _LIFECYCLE,
+            staticmethod(
+                lambda **kwargs: {"cache_invalidation": {}, "probe": {"status": "ok"}}  # type: ignore[arg-type]
+            ),
         )
 
-        # Execute
-        result = await tool.execute(
+        ctx = _make_ctx()
+        result = await register_mcp_server_tool.execute(
+            ctx,
             server_name="test-server",
             server_type="stdio",
             command="node",
@@ -121,11 +154,11 @@ class TestRegisterMCPServerToolEvents:
         )
 
         # Verify tool executed successfully
-        assert "Error:" not in result
-        assert "registered and started successfully" in result
+        assert not result.is_error
+        assert "registered and started successfully" in result.output
 
         # Verify pending events contain AgentToolsUpdatedEvent
-        events = tool.consume_pending_events()
+        events = ctx.consume_pending_events()
         tool_updated_events = [e for e in events if isinstance(e, AgentToolsUpdatedEvent)]
 
         assert len(tool_updated_events) == 1, (
@@ -134,54 +167,86 @@ class TestRegisterMCPServerToolEvents:
 
         event = tool_updated_events[0]
         assert event.server_name == "test-server"
-        assert "tool1" in event.tool_names or "mcp__test-server__tool1" in event.tool_names
+        assert "mcp__test-server__tool1" in event.tool_names
+        assert "mcp__test-server__tool2" in event.tool_names
         assert event.requires_refresh is True
 
     @pytest.mark.asyncio
-    async def test_register_includes_app_tools_in_event(self):
+    async def test_register_includes_app_tools_in_event(self, monkeypatch: pytest.MonkeyPatch):
         """
         Test that discovered MCP App tools are included in the event.
         """
-        from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
+        from typing import Any
 
-        mock_adapter = AsyncMock()
-        mock_adapter.call_tool = AsyncMock()
-
-        # Mock with tools that have UI metadata
-        mock_adapter.call_tool.side_effect = [
-            {"content": [{"type": "text", "text": '{"success": true}'}]},
-            {"content": [{"type": "text", "text": '{"success": true}'}]},
-            {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": """[
-                            {"name": "regular_tool", "_meta": {}},
-                            {
-                                "name": "ui_tool",
-                                "_meta": {
-                                    "ui": {
-                                        "resourceUri": "app://ui-tool",
-                                        "title": "UI Tool"
-                                    }
-                                }
-                            }
-                        ]""",
-                    }
-                ]
-            },
-        ]
-
-        tool = RegisterMCPServerTool(
-            tenant_id="tenant-1",
-            project_id="proj-1",
-            sandbox_adapter=mock_adapter,
-            sandbox_id="sandbox-1",
-            session_factory=AsyncMock(),
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.register_mcp_server import (
+            register_mcp_server_tool,
         )
 
-        # Execute
-        await tool.execute(
+        _MOD = "src.infrastructure.agent.tools.register_mcp_server"
+
+        def _make_ctx(**overrides: Any) -> ToolContext:
+            defaults: dict[str, Any] = {
+                "session_id": "session-1",
+                "message_id": "msg-1",
+                "call_id": "call-1",
+                "agent_name": "test-agent",
+                "conversation_id": "conv-1",
+            }
+            defaults.update(overrides)
+            return ToolContext(**defaults)
+
+        mock_adapter = AsyncMock()
+        call_count = 0
+
+        async def mock_call_tool(**kwargs: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return {"content": [{"type": "text", "text": '{"success": true}'}]}
+            tools_json = json.dumps([
+                {"name": "regular_tool", "_meta": {}},
+                {
+                    "name": "ui_tool",
+                    "_meta": {
+                        "ui": {
+                            "resourceUri": "app://ui-tool",
+                            "title": "UI Tool",
+                        }
+                    },
+                },
+            ])
+            return {"content": [{"type": "text", "text": tools_json}]}
+
+        mock_adapter.call_tool = mock_call_tool
+
+        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_adapter", mock_adapter)
+        monkeypatch.setattr(f"{_MOD}._register_mcp_sandbox_id", "sandbox-1")
+        monkeypatch.setattr(f"{_MOD}._register_mcp_tenant_id", "tenant-1")
+        monkeypatch.setattr(f"{_MOD}._register_mcp_project_id", "proj-1")
+        monkeypatch.setattr(f"{_MOD}._register_mcp_session_factory", AsyncMock())
+        # Stub persist helpers to avoid DB
+        monkeypatch.setattr(
+            f"{_MOD}._register_mcp_persist_server", AsyncMock(return_value=None)
+        )
+        monkeypatch.setattr(
+            f"{_MOD}._register_mcp_persist_app", AsyncMock(return_value="test-app-id")
+        )
+        # Stub SelfModifyingLifecycleOrchestrator.run_post_change
+        _LIFECYCLE = (
+            "src.infrastructure.agent.tools.self_modifying_lifecycle"
+            + ".SelfModifyingLifecycleOrchestrator.run_post_change"
+        )
+        monkeypatch.setattr(
+            _LIFECYCLE,
+            staticmethod(
+                lambda **kwargs: {"cache_invalidation": {}, "probe": {"status": "ok"}}  # type: ignore[arg-type]
+            ),
+        )
+
+        ctx = _make_ctx()
+        await register_mcp_server_tool.execute(
+            ctx,
             server_name="app-server",
             server_type="stdio",
             command="node",
@@ -189,7 +254,7 @@ class TestRegisterMCPServerToolEvents:
         )
 
         # Verify both tools are in the event
-        events = tool.consume_pending_events()
+        events = ctx.consume_pending_events()
         tool_updated_events = [e for e in events if isinstance(e, AgentToolsUpdatedEvent)]
 
         assert len(tool_updated_events) == 1
@@ -197,7 +262,6 @@ class TestRegisterMCPServerToolEvents:
 
         # Check that all tools are included
         assert len(event.tool_names) == 2
-
 
 class TestToolsUpdatedEventIntegration:
     """Integration tests for tools updated event handling."""

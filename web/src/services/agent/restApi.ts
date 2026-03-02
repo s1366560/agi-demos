@@ -300,7 +300,7 @@ export const restApi = {
     });
   },
 
-  async respondToDecisionHttp(requestId: string, decision: string): Promise<void> {
+  async respondToDecisionHttp(requestId: string, decision: string | string[]): Promise<void> {
     await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,
       hitl_type: 'decision',

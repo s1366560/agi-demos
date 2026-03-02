@@ -13,7 +13,7 @@
 
 import React, { memo, useState, useCallback, useEffect } from 'react';
 
-import { Radio, Input, Form } from 'antd';
+import { Radio, Input, Form, Checkbox } from 'antd';
 import {
   HelpCircle,
   GitBranch,
@@ -284,110 +284,127 @@ const ClarificationContent: React.FC<{
   );
   const [customInput, setCustomInput] = useState('');
 
+  const hasOptions = data.options && data.options.length > 0;
+
   const handleSubmit = useCallback(() => {
-    if (selected === '__custom__' && data.allow_custom) {
+    if (!hasOptions && data.allow_custom && customInput.trim()) {
+      onSubmit({ answer: customInput.trim() });
+    } else if (selected === '__custom__' && data.allow_custom) {
       if (customInput.trim()) {
         onSubmit({ answer: customInput.trim() });
       }
     } else if (selected) {
       onSubmit({ answer: selected });
     }
-  }, [selected, customInput, data.allow_custom, onSubmit]);
+  }, [selected, customInput, data.allow_custom, hasOptions, onSubmit]);
 
-  const isDisabled = !selected || (selected === '__custom__' && !customInput.trim());
+  const isDisabled = hasOptions ? (!selected || (selected === '__custom__' && !customInput.trim())) : !customInput.trim();
 
   return (
     <div className="space-y-4">
       <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">{data.question}</p>
 
       <div className="flex flex-col gap-3 w-full">
-        {data.options.map((option) => {
-          const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
-          return (
-            <div
-              key={option.id}
-              className={`p-3 rounded-xl border-2 transition-all ${
-                isSelected
-                  ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
-                  : isAnswered
-                    ? 'border-slate-100 dark:border-slate-800 opacity-50'
-                    : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 cursor-pointer'
-              }`}
-              onClick={
-                !isAnswered
-                  ? () => {
-                      setSelected(option.id);
-                    }
-                  : undefined
-              }
-            >
-              <div className="flex items-center gap-2">
-                {isAnswered ? (
-                  isSelected ? (
-                    <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  ) : (
-                    <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0" />
-                  )
-                ) : (
-                  <Radio value={option.id} checked={isSelected} className="flex-shrink-0">
-                    <></>
-                  </Radio>
-                )}
-                <span
-                  className={`font-medium text-sm ${
+        {hasOptions ? (
+          <>
+            {data.options.map((option, idx) => {
+              const optionKey = option.id || `option-${idx}`;
+              const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
+              return (
+                <div
+                  key={optionKey}
+                  className={`p-3 rounded-xl border-2 transition-all ${
                     isSelected
-                      ? 'text-slate-800 dark:text-slate-200'
-                      : 'text-slate-600 dark:text-slate-400'
+                      ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                      : isAnswered
+                        ? 'border-slate-100 dark:border-slate-800 opacity-50'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 cursor-pointer'
                   }`}
+                  onClick={
+                    !isAnswered
+                      ? () => {
+                          setSelected(option.id);
+                        }
+                      : undefined
+                  }
                 >
-                  {option.label}
-                </span>
-                {option.recommended && !isAnswered && (
-                  <LazyTag color="green" className="text-xs">
-                    推荐
-                  </LazyTag>
-                )}
-                {isSelected && isAnswered && (
-                  <LazyTag color="blue" className="text-xs ml-auto">
-                    已选择
-                  </LazyTag>
-                )}
+                  <div className="flex items-center gap-2">
+                    {isAnswered ? (
+                      isSelected ? (
+                        <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0" />
+                      )
+                    ) : (
+                      <Radio value={option.id} checked={isSelected} className="flex-shrink-0">
+                        <></>
+                      </Radio>
+                    )}
+                    <span
+                      className={`font-medium text-sm ${
+                        isSelected
+                          ? 'text-slate-800 dark:text-slate-200'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      {option.label}
+                    </span>
+                    {option.recommended && !isAnswered && (
+                      <LazyTag color="green" className="text-xs">
+                        推荐
+                      </LazyTag>
+                    )}
+                    {isSelected && isAnswered && (
+                      <LazyTag color="blue" className="text-xs ml-auto">
+                        已选择
+                      </LazyTag>
+                    )}
+                  </div>
+                  {option.description && (
+                    <p
+                      className={`text-xs ml-6 mt-1 leading-relaxed ${
+                        isSelected
+                          ? 'text-slate-500 dark:text-slate-400'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {option.description}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {data.allow_custom && !isAnswered && (
+              <div
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  selected === '__custom__'
+                    ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
+                }`}
+                onClick={() => {
+                  setSelected('__custom__');
+                }}
+              >
+                <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
+                  <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+                    自定义回答
+                  </span>
+                </Radio>
               </div>
-              {option.description && (
-                <p
-                  className={`text-xs ml-6 mt-1 leading-relaxed ${
-                    isSelected
-                      ? 'text-slate-500 dark:text-slate-400'
-                      : 'text-slate-400 dark:text-slate-500'
-                  }`}
-                >
-                  {option.description}
-                </p>
-              )}
-            </div>
-          );
-        })}
-        {data.allow_custom && !isAnswered && (
-          <div
-            className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
-              selected === '__custom__'
-                ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
-                : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
-            }`}
-            onClick={() => {
-              setSelected('__custom__');
-            }}
-          >
-            <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
-              <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-                自定义回答
-              </span>
-            </Radio>
-          </div>
+            )}
+          </>
+        ) : data.allow_custom ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+            暂无预设选项，请在下方输入您的回答
+          </p>
+        ) : (
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">
+            暂无可选选项
+          </p>
         )}
       </div>
 
-      {!isAnswered && selected === '__custom__' && data.allow_custom && (
+      {!isAnswered && data.allow_custom && (selected === '__custom__' || !hasOptions) && (
         <Input.TextArea
           value={customInput}
           onChange={(e) => {
@@ -429,164 +446,256 @@ const DecisionContent: React.FC<{
   const [selected, setSelected] = useState<string | null>(
     isAnswered ? answeredValue || null : data.default_option || null
   );
+  const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
+  const [customInput, setCustomInput] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const isMultiSelect = data.selection_mode === 'multiple';
+  const hasOptions = data.options && data.options.length > 0;
+
+  const toggleMultiSelect = useCallback((optionId: string) => {
+    setSelectedMultiple((prev) =>
+      prev.includes(optionId)
+        ? prev.filter((id) => id !== optionId)
+        : [...prev, optionId]
+    );
+  }, []);
+
   const handleSubmit = useCallback(() => {
-    if (selected) {
+    if (!hasOptions && data.allow_custom && customInput.trim()) {
+      onSubmit({ decision: customInput.trim() });
+    } else if (selected === '__custom__' && data.allow_custom) {
+      if (customInput.trim()) {
+        onSubmit({ decision: customInput.trim() });
+      }
+    } else if (isMultiSelect) {
+      if (selectedMultiple.length > 0) {
+        onSubmit({ decision: selectedMultiple });
+      }
+    } else if (selected) {
       onSubmit({ decision: selected });
     }
-  }, [selected, onSubmit]);
+  }, [
+    selected, selectedMultiple, customInput,
+    data.allow_custom, hasOptions, isMultiSelect, onSubmit,
+  ]);
+
+  const isDisabled = (() => {
+    if (!hasOptions) return !customInput.trim();
+    if (isMultiSelect) return selectedMultiple.length === 0;
+    if (selected === '__custom__') return !customInput.trim();
+    return !selected;
+  })();
 
   return (
     <div className="space-y-4">
       <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">{data.question}</p>
 
+      {isMultiSelect && !isAnswered && (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          可多选{data.max_selections ? `（最多 ${data.max_selections} 项）` : ''}
+        </p>
+      )}
+
       <div className="space-y-3">
-        {data.options.map((option) => {
-          const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
-          const isExpanded = expanded === option.id;
-          const hasDetails =
-            !isAnswered && (option.estimated_time || option.estimated_cost || option.risks?.length);
+        {hasOptions ? (
+          <>
+            {data.options.map((option, idx) => {
+              const optionKey = option.id || `option-${idx}`;
+              const isSelectedSingle = isAnswered
+                ? answeredValue === option.id
+                : selected === option.id;
+              const isSelectedMulti = selectedMultiple.includes(option.id);
+              const isOptionSelected = isMultiSelect ? isSelectedMulti : isSelectedSingle;
+              const isExpanded = expanded === option.id;
+              const hasDetails =
+                !isAnswered && (option.estimated_time || option.estimated_cost || option.risks?.length);
 
-          return (
-            <div
-              key={option.id}
-              className={`
-                rounded-xl p-4 transition-all border-2
-                ${
-                  isSelected
-                    ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
-                    : isAnswered
-                      ? 'border-slate-100 dark:border-slate-800 opacity-50'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer'
-                }
-              `}
-              onClick={
-                !isAnswered
-                  ? () => {
-                      setSelected(option.id);
+              return (
+                <div
+                  key={optionKey}
+                  className={`
+                    rounded-xl p-4 transition-all border-2
+                    ${
+                      isOptionSelected
+                        ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
+                        : isAnswered
+                          ? 'border-slate-100 dark:border-slate-800 opacity-50'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer'
                     }
-                  : undefined
-              }
-            >
-              <div className="flex items-start gap-3">
-                {isAnswered ? (
-                  isSelected ? (
-                    <CheckCircle2 className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <div className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0 mt-0.5" />
-                  )
-                ) : (
-                  <div
-                    className={`
-                    w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center
-                    ${isSelected ? 'border-amber-500 bg-amber-500' : 'border-slate-300 dark:border-slate-600'}
                   `}
-                  >
-                    {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`font-medium text-sm ${
-                        isSelected
-                          ? 'text-slate-800 dark:text-slate-200'
-                          : 'text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      {option.label}
-                    </span>
-                    {option.recommended && !isAnswered && (
-                      <LazyTag color="green" className="text-xs">
-                        推荐
-                      </LazyTag>
-                    )}
-                    {isSelected && isAnswered && (
-                      <LazyTag color="amber" className="text-xs ml-auto">
-                        已选择
-                      </LazyTag>
-                    )}
-                    {!isSelected && option.risks && option.risks.length > 0 && !isAnswered && (
-                      <LazyTag color="orange" className="text-xs">
-                        <AlertTriangle className="w-3 h-3 mr-1" />
-                        有风险
-                      </LazyTag>
-                    )}
-                  </div>
-                  {option.description && (
-                    <p
-                      className={`text-xs mt-1.5 leading-relaxed ${
-                        isSelected
-                          ? 'text-slate-500 dark:text-slate-400'
-                          : 'text-slate-400 dark:text-slate-500'
-                      }`}
-                    >
-                      {option.description}
-                    </p>
-                  )}
-
-                  {/* Metadata row - only show when not answered */}
-                  {!isAnswered && (option.estimated_time || option.estimated_cost) && (
-                    <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
-                      {option.estimated_time && (
-                        <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
-                          <Clock className="w-3 h-3" />
-                          {option.estimated_time}
-                        </span>
-                      )}
-                      {option.estimated_cost && (
-                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
-                          💰 {option.estimated_cost}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Expandable risks - only show when not answered */}
-                  {hasDetails && (
-                    <button
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpanded(isExpanded ? null : option.id);
-                      }}
-                    >
-                      {isExpanded ? (
-                        <ChevronUp className="w-3.5 h-3.5" />
+                  onClick={
+                    !isAnswered
+                      ? () => {
+                          if (isMultiSelect) {
+                            toggleMultiSelect(option.id);
+                          } else {
+                            setSelected(option.id);
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="flex items-start gap-3">
+                    {isAnswered ? (
+                      isOptionSelected ? (
+                        <CheckCircle2 className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                       ) : (
-                        <ChevronDown className="w-3.5 h-3.5" />
+                        <div className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0 mt-0.5" />
+                      )
+                    ) : isMultiSelect ? (
+                      <Checkbox checked={isSelectedMulti} className="mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <div
+                        className={`
+                        w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center
+                        ${isOptionSelected ? 'border-amber-500 bg-amber-500' : 'border-slate-300 dark:border-slate-600'}
+                      `}
+                      >
+                        {isOptionSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`font-medium text-sm ${
+                            isOptionSelected
+                              ? 'text-slate-800 dark:text-slate-200'
+                              : 'text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {option.label}
+                        </span>
+                        {option.recommended && !isAnswered && (
+                          <LazyTag color="green" className="text-xs">
+                            推荐
+                          </LazyTag>
+                        )}
+                        {isOptionSelected && isAnswered && (
+                          <LazyTag color="amber" className="text-xs ml-auto">
+                            已选择
+                          </LazyTag>
+                        )}
+                        {!isOptionSelected && option.risks && option.risks.length > 0 && !isAnswered && (
+                          <LazyTag color="orange" className="text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            有风险
+                          </LazyTag>
+                        )}
+                      </div>
+                      {option.description && (
+                        <p
+                          className={`text-xs mt-1.5 leading-relaxed ${
+                            isOptionSelected
+                              ? 'text-slate-500 dark:text-slate-400'
+                              : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          {option.description}
+                        </p>
                       )}
-                      {isExpanded ? '收起详情' : '查看详情'}
-                    </button>
-                  )}
 
-                  {isExpanded && option.risks && option.risks.length > 0 && (
-                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800/50">
-                      <p className="font-medium text-amber-700 dark:text-amber-400 mb-2 text-xs flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        风险提示
-                      </p>
-                      <ul className="list-disc list-inside text-amber-600 dark:text-amber-300 space-y-1 text-xs">
-                        {option.risks.map((risk, idx) => (
-                          <li key={idx}>{risk}</li>
-                        ))}
-                      </ul>
+                      {/* Metadata row - only show when not answered */}
+                      {!isAnswered && (option.estimated_time || option.estimated_cost) && (
+                        <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
+                          {option.estimated_time && (
+                            <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
+                              <Clock className="w-3 h-3" />
+                              {option.estimated_time}
+                            </span>
+                          )}
+                          {option.estimated_cost && (
+                            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
+                              💰 {option.estimated_cost}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Expandable risks - only show when not answered */}
+                      {hasDetails && (
+                        <button
+                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpanded(isExpanded ? null : option.id);
+                          }}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                          {isExpanded ? '收起详情' : '查看详情'}
+                        </button>
+                      )}
+
+                      {isExpanded && option.risks && option.risks.length > 0 && (
+                        <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                          <p className="font-medium text-amber-700 dark:text-amber-400 mb-2 text-xs flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            风险提示
+                          </p>
+                          <ul className="list-disc list-inside text-amber-600 dark:text-amber-300 space-y-1 text-xs">
+                            {option.risks.map((risk, rIdx) => (
+                              <li key={rIdx}>{risk}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
+              );
+            })}
+            {data.allow_custom && !isAnswered && !isMultiSelect && (
+              <div
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  selected === '__custom__'
+                    ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'
+                }`}
+                onClick={() => {
+                  setSelected('__custom__');
+                }}
+              >
+                <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
+                  <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+                    自定义决策
+                  </span>
+                </Radio>
               </div>
-            </div>
-          );
-        })}
+            )}
+          </>
+        ) : data.allow_custom ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+            暂无预设选项，请在下方输入您的决策
+          </p>
+        ) : (
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">
+            暂无可选选项
+          </p>
+        )}
       </div>
+
+      {!isAnswered && data.allow_custom && (selected === '__custom__' || !hasOptions) && !isMultiSelect && (
+        <Input.TextArea
+          value={customInput}
+          onChange={(e) => {
+            setCustomInput(e.target.value);
+          }}
+          placeholder="请输入您的决策..."
+          rows={3}
+          className="mt-2 rounded-xl"
+        />
+      )}
 
       {!isAnswered && (
         <div className="flex justify-end pt-2">
           <LazyButton
             type="primary"
             onClick={handleSubmit}
-            disabled={!selected}
+            disabled={isDisabled}
             loading={isSubmitting}
             size="middle"
             className="rounded-lg"

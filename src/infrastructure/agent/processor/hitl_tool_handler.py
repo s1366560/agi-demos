@@ -61,15 +61,22 @@ async def handle_clarification_tool(
         timeout = arguments.get("timeout", 300.0)
         default_value = arguments.get("default_value")
 
-        clarification_options = [
-            {
-                "id": opt.get("id", ""),
+        clarification_options: list[dict[str, Any]] = []
+        for i, opt in enumerate(options_raw):
+            clarification_options.append({
+                "id": opt.get("id") or str(i),
                 "label": opt.get("label", ""),
                 "description": opt.get("description"),
                 "recommended": opt.get("recommended", False),
-            }
-            for opt in options_raw
-        ]
+            })
+
+        # Auto-enable allow_custom when options are empty
+        if not clarification_options:
+            allow_custom = True
+            logger.info(
+                "[HITL] Clarification tool called with empty options, "
+                "auto-enabling allow_custom for free-form response"
+            )
 
         request_data = {
             "question": question,
@@ -162,19 +169,28 @@ async def handle_decision_tool(
         default_option = arguments.get("default_option")
         context = _ensure_dict(arguments.get("context", {}))
         timeout = arguments.get("timeout", 300.0)
+        selection_mode = arguments.get("selection_mode", "single")
+        max_selections = arguments.get("max_selections")
 
-        decision_options = [
-            {
-                "id": opt.get("id", ""),
+        decision_options: list[dict[str, Any]] = []
+        for i, opt in enumerate(options_raw):
+            decision_options.append({
+                "id": opt.get("id") or str(i),
                 "label": opt.get("label", ""),
                 "description": opt.get("description"),
                 "recommended": opt.get("recommended", False),
                 "estimated_time": opt.get("estimated_time"),
                 "estimated_cost": opt.get("estimated_cost"),
                 "risks": opt.get("risks", []),
-            }
-            for opt in options_raw
-        ]
+            })
+
+        # Auto-enable allow_custom when options are empty
+        if not decision_options:
+            allow_custom = True
+            logger.info(
+                "[HITL] Decision tool called with empty options, "
+                "auto-enabling allow_custom for free-form response"
+            )
 
         request_data = {
             "question": question,
@@ -183,6 +199,8 @@ async def handle_decision_tool(
             "allow_custom": allow_custom,
             "context": context,
             "default_option": default_option,
+            "selection_mode": selection_mode,
+            "max_selections": max_selections,
         }
 
         request_id = await coordinator.prepare_request(
@@ -199,6 +217,8 @@ async def handle_decision_tool(
             allow_custom=allow_custom,
             default_option=default_option,
             context=context,
+            selection_mode=selection_mode,
+            max_selections=max_selections,
         )
 
         start_time = time.time()

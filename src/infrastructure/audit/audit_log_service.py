@@ -34,7 +34,6 @@ class AuditLogEntry(BaseModel):
 
     class Config:
         json_encoders: ClassVar = {datetime: lambda v: v.isoformat()}
-        json_encoders = {datetime: lambda v: v.isoformat()}
 
 
 class AuditLogService:
