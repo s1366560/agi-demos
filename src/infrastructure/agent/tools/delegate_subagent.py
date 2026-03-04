@@ -289,7 +289,7 @@ async def _register_single_run(
     running = registry.mark_running(conv_id, run.run_id)
     if running:
         await ctx.emit(
-            {"type": "subagent_run_started", "data": running.to_event_data()}
+            {"type": "subagent_started", "data": running.to_event_data()}
         )
     return run.run_id
 
@@ -314,7 +314,7 @@ async def _finalize_success(
     )
     if completed:
         await ctx.emit(
-            {"type": "subagent_run_completed", "data": completed.to_event_data()}
+            {"type": "subagent_completed", "data": completed.to_event_data()}
         )
 
 
@@ -338,7 +338,7 @@ async def _finalize_failure(
     )
     if failed:
         await ctx.emit(
-            {"type": "subagent_run_failed", "data": failed.to_event_data()}
+            {"type": "subagent_failed", "data": failed.to_event_data()}
         )
 
 
@@ -410,7 +410,7 @@ async def _register_parallel_runs_new(
         running = registry.mark_running(conv_id, run.run_id)
         if running:
             await ctx.emit(
-                {"type": "subagent_run_started", "data": running.to_event_data()}
+                {"type": "subagent_started", "data": running.to_event_data()}
             )
     return run_ids
 

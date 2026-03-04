@@ -185,6 +185,11 @@ class AgentEventType(str, Enum):
     SUBAGENT_SPAWNING = "subagent_spawning"
     SUBAGENT_DOOM_LOOP = "subagent_doom_loop"
     SUBAGENT_RETRY = "subagent_retry"
+    SUBAGENT_QUEUED = "subagent_queued"
+    SUBAGENT_KILLED = "subagent_killed"
+    SUBAGENT_STEERED = "subagent_steered"
+    SUBAGENT_DEPTH_LIMITED = "subagent_depth_limited"
+    SUBAGENT_SESSION_UPDATE = "subagent_session_update"
 
     # =========================================================================
     # Control events (used by event bus)
@@ -346,6 +351,11 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.SUBAGENT_SPAWNING: EventCategory.AGENT,
     AgentEventType.SUBAGENT_DOOM_LOOP: EventCategory.AGENT,
     AgentEventType.SUBAGENT_RETRY: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_QUEUED: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_KILLED: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_STEERED: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_DEPTH_LIMITED: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_SESSION_UPDATE: EventCategory.AGENT,
 }
 
 

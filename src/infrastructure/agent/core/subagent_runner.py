@@ -21,6 +21,9 @@ from src.domain.events.agent_events import (
     AgentCompleteEvent,
     AgentParallelCompletedEvent,
     AgentParallelStartedEvent,
+    SubAgentDepthLimitedEvent,
+    SubAgentKilledEvent,
+    SubAgentQueuedEvent,
     SubAgentSpawningEvent,
 )
 from src.domain.model.agent.subagent import SubAgent
@@ -96,6 +99,7 @@ class SubAgentRunnerDeps:
     # -- Plugin registry (P1-C) --
     plugin_registry: Any = None  # AgentPluginRegistry | None
 
+
 # Mapping from SubAgent lifecycle event ``type`` values to
 # ``WELL_KNOWN_HOOKS`` names in the plugin registry.
 _EVENT_TYPE_TO_HOOK: dict[str, str] = {
@@ -107,6 +111,10 @@ _EVENT_TYPE_TO_HOOK: dict[str, str] = {
     "subagent_ended": "after_subagent_complete",
     "subagent_doom_loop": "on_subagent_doom_loop",
     "subagent_routed": "on_subagent_routed",
+    "subagent_queued": "before_subagent_spawn",
+    "subagent_killed": "after_subagent_complete",
+    "subagent_depth_limited": "on_subagent_depth_limited",
+    "subagent_session_update": "on_subagent_progress",
 }
 
 
@@ -238,9 +246,7 @@ class SubAgentSessionRunner:
             AgentCompleteEvent(
                 content=result.final_content if result else "",
                 subagent_used=subagent.name,
-                subagent_result=(
-                    result.to_event_data() if result else None
-                ),
+                subagent_result=(result.to_event_data() if result else None),
             ).to_event_dict(),
         )
 
@@ -335,9 +341,7 @@ class SubAgentSessionRunner:
                 completed=len(results),
                 all_succeeded=aggregated.all_succeeded,
                 total_tokens=aggregated.total_tokens,
-                failed_agents=list(
-                    aggregated.failed_agents
-                ),
+                failed_agents=list(aggregated.failed_agents),
             ).to_event_dict(),
         )
 
@@ -428,11 +432,7 @@ class SubAgentSessionRunner:
         yield cast(
             dict[str, Any],
             AgentCompleteEvent(
-                content=(
-                    chain_result.final_summary
-                    if chain_result
-                    else ""
-                ),
+                content=(chain_result.final_summary if chain_result else ""),
                 orchestration_mode="chain",
                 step_count=len(chain_steps),
                 session_id=conversation_id or None,
@@ -716,6 +716,43 @@ class SubAgentSessionRunner:
                 ],
             )
 
+    def check_spawn_limits(
+        self,
+        conversation_id: str,
+        current_depth: int,
+        subagent_name: str,
+    ) -> tuple[bool, list[dict[str, Any]]]:
+        """Check depth and concurrency hard limits before spawning a SubAgent.
+
+        Returns:
+            (allowed, event_dicts) -- If not allowed, event_dicts contains
+            the refusal event for the caller to emit.
+        """
+        # Depth limit check
+        max_depth = self.deps.max_subagent_delegation_depth
+        if current_depth >= max_depth:
+            event = SubAgentDepthLimitedEvent(
+                subagent_name=subagent_name,
+                current_depth=current_depth,
+                max_depth=max_depth,
+            )
+            return (False, [dict(event.to_event_dict())])
+
+        # Concurrency limit check
+        active_count = self.deps.subagent_run_registry.count_active_runs(
+            conversation_id,
+        )
+        max_active = self.deps.max_subagent_active_runs
+        if active_count >= max_active:
+            event = SubAgentQueuedEvent(
+                subagent_id="",
+                subagent_name=subagent_name,
+                reason="concurrency_limit",
+            )
+            return (False, [dict(event.to_event_dict())])
+
+        return (True, [])
+
     def runner_mark_error(
         self,
         conversation_id: str,
@@ -822,16 +859,18 @@ class SubAgentSessionRunner:
     ) -> None:
         """Emit spawning + spawned lifecycle hooks for a subagent session."""
         await self.emit_subagent_lifecycle_hook(
-            dict(SubAgentSpawningEvent(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                subagent_name=subagent.name,
-                spawn_mode=normalized_spawn_mode,
-                thread_requested=bool(thread_requested),
-                cleanup=normalized_cleanup,
-                model_override=requested_model_override,
-                thinking_override=requested_thinking_override,
-            ).to_event_dict())
+            dict(
+                SubAgentSpawningEvent(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    subagent_name=subagent.name,
+                    spawn_mode=normalized_spawn_mode,
+                    thread_requested=bool(thread_requested),
+                    cleanup=normalized_cleanup,
+                    model_override=requested_model_override,
+                    thinking_override=requested_thinking_override,
+                ).to_event_dict()
+            )
         )
         await self.emit_subagent_lifecycle_hook(
             {
@@ -989,6 +1028,14 @@ class SubAgentSessionRunner:
             result_error: str | None = None
 
             try:
+                await self.emit_subagent_lifecycle_hook(
+                    dict(
+                        SubAgentQueuedEvent(
+                            subagent_id=subagent.id,
+                            subagent_name=subagent.display_name,
+                        ).to_event_dict(),
+                    ),
+                )
                 lane_wait_start = time.time()
                 async with self.deps.subagent_lane_semaphore:
                     lane_wait_ms = int(
@@ -1042,9 +1089,27 @@ class SubAgentSessionRunner:
                     run_id,
                     configured_timeout,
                 )
+                await self.emit_subagent_lifecycle_hook(
+                    dict(
+                        SubAgentKilledEvent(
+                            subagent_id=subagent.id,
+                            subagent_name=subagent.display_name,
+                            kill_reason=f"Timed out after {configured_timeout}s",
+                        ).to_event_dict(),
+                    ),
+                )
             except asyncio.CancelledError:
                 cancelled_by_control = True
                 self.runner_mark_cancelled(conversation_id, run_id)
+                await self.emit_subagent_lifecycle_hook(
+                    dict(
+                        SubAgentKilledEvent(
+                            subagent_id=subagent.id,
+                            subagent_name=subagent.display_name,
+                            kill_reason="Cancelled by control",
+                        ).to_event_dict(),
+                    ),
+                )
                 raise
             except Exception as exc:
                 self.runner_mark_error(

@@ -125,12 +125,13 @@ class TestDelegateSubAgentTool:
 
         events = tool_ctx.consume_pending_events()
         # Events include: subagent_started, subagent_completed from callback,
-        # plus subagent_run_started/completed from registry.
-        # Filter to the callback-emitted events.
+        # plus subagent_started/completed from registry (which include run_id).
+        # Filter to the callback-emitted events (no run_id in data).
         callback_events = [
             e
             for e in events
             if isinstance(e, dict) and e.get("type") in ("subagent_started", "subagent_completed")
+            and "run_id" not in e.get("data", {})
         ]
         assert len(callback_events) == 2
         assert callback_events[0]["type"] == "subagent_started"
@@ -189,8 +190,8 @@ class TestDelegateSubAgentTool:
             event["type"] for event in events if isinstance(event, dict) and "type" in event
         ]
         assert event_types == [
-            "subagent_run_started",
-            "subagent_run_completed",
+            "subagent_started",
+            "subagent_completed",
         ]
         assert events[0]["data"]["conversation_id"] == "conv-1"
         assert events[1]["data"]["status"] == "completed"
@@ -217,8 +218,8 @@ class TestDelegateSubAgentTool:
             event["type"] for event in events if isinstance(event, dict) and "type" in event
         ]
         assert event_types == [
-            "subagent_run_started",
-            "subagent_run_failed",
+            "subagent_started",
+            "subagent_failed",
         ]
         assert events[1]["data"]["status"] == "failed"
         assert events[1]["data"]["error"] == "boom"
@@ -615,8 +616,8 @@ class TestParallelDelegateSubAgentTool:
         event_types = [
             event["type"] for event in events if isinstance(event, dict) and "type" in event
         ]
-        assert event_types.count("subagent_run_started") == 2
-        assert event_types.count("subagent_run_completed") == 2
+        assert event_types.count("subagent_started") == 2
+        assert event_types.count("subagent_completed") == 2
 
     async def test_parallel_execute_respects_max_active_runs_limit(self, tool_ctx):
         registry = SubAgentRunRegistry()

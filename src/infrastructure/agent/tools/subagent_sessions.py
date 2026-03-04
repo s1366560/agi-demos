@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from src.domain.events.agent_events import SubAgentDepthLimitedEvent
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.context import ToolContext
@@ -117,7 +118,6 @@ def _build_lifecycle_metadata(
     return metadata
 
 
-
 # ---------------------------------------------------------------------------
 # @tool_define decorator-based session tools (migrate batch 1 of 2)
 # ---------------------------------------------------------------------------
@@ -188,9 +188,7 @@ def configure_session_tools(  # noqa: PLR0913
     _sess_max_active_runs_per_lineage = max(1, max_active_runs_per_lineage)
     _sess_max_children_per_requester = max(1, max_children_per_requester)
     _sess_visibility_default = (
-        visibility_default
-        if visibility_default in {"self", "tree", "all"}
-        else "tree"
+        visibility_default if visibility_default in {"self", "tree", "all"} else "tree"
     )
 
 
@@ -239,8 +237,7 @@ def _spawn_check_capacity() -> str | None:
     active_runs = _sess_run_registry.count_active_runs(_sess_conversation_id)
     if active_runs >= _sess_max_active_runs:
         return (
-            f"Error: active SubAgent sessions limit reached "
-            f"({active_runs}/{_sess_max_active_runs})"
+            f"Error: active SubAgent sessions limit reached ({active_runs}/{_sess_max_active_runs})"
         )
     requester_runs = _sess_run_registry.count_active_runs_for_requester(
         _sess_conversation_id, _sess_requester_session_key
@@ -263,9 +260,7 @@ async def _spawn_with_retry_fn(
     """Retry spawn callback and record announce events."""
     assert _sess_run_registry is not None
     assert _sess_spawn_callback is not None
-    accepted_params, accepts_kwargs = _resolve_spawn_callback_signature(
-        _sess_spawn_callback
-    )
+    accepted_params, accepts_kwargs = _resolve_spawn_callback_signature(_sess_spawn_callback)
     filtered = _filter_spawn_options(spawn_options, accepted_params, accepts_kwargs)
     last_error: Exception | None = None
     for attempt in range(_sess_max_spawn_retries + 1):
@@ -357,9 +352,7 @@ async def _spawn_create_and_run(
     )
     running = _sess_run_registry.mark_running(_sess_conversation_id, run.run_id)
     if running:
-        await ctx.emit(
-            {"type": "subagent_run_started", "data": running.to_event_data()}
-        )
+        await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
         retry_count = await _spawn_with_retry_fn(
             ctx,
@@ -395,9 +388,7 @@ async def _spawn_create_and_run(
             error=str(exc),
         )
         if failed:
-            await ctx.emit(
-                {"type": "subagent_run_failed", "data": failed.to_event_data()}
-            )
+            await ctx.emit({"type": "subagent_failed", "data": failed.to_event_data()})
         return ToolResult(
             output=f"Error: failed to spawn session: {exc}",
             is_error=True,
@@ -449,24 +440,18 @@ def _spawn_success_result(
             },
             "run_timeout_seconds": {
                 "type": "integer",
-                "description": (
-                    "Optional timeout for the detached run (0 means no timeout)."
-                ),
+                "description": ("Optional timeout for the detached run (0 means no timeout)."),
                 "minimum": 0,
                 "maximum": 3600,
             },
             "mode": {
                 "type": "string",
-                "description": (
-                    "Spawn mode: run (one-shot) or session (persistent follow-up)."
-                ),
+                "description": ("Spawn mode: run (one-shot) or session (persistent follow-up)."),
                 "enum": ["run", "session"],
             },
             "thread": {
                 "type": "boolean",
-                "description": (
-                    "Whether thread binding is requested for this spawn."
-                ),
+                "description": ("Whether thread binding is requested for this spawn."),
             },
             "cleanup": {
                 "type": "string",
@@ -475,21 +460,15 @@ def _spawn_success_result(
             },
             "agent_id": {
                 "type": "string",
-                "description": (
-                    "Optional SubAgent override; must match an available subagent."
-                ),
+                "description": ("Optional SubAgent override; must match an available subagent."),
             },
             "model": {
                 "type": "string",
-                "description": (
-                    "Optional model override for this spawned session."
-                ),
+                "description": ("Optional model override for this spawned session."),
             },
             "thinking": {
                 "type": "string",
-                "description": (
-                    "Optional thinking/reasoning level hint for this spawned session."
-                ),
+                "description": ("Optional thinking/reasoning level hint for this spawned session."),
             },
         },
         "required": ["subagent_name", "task"],
@@ -518,12 +497,20 @@ async def sessions_spawn_tool(
         )
     error = _spawn_validate_basic(subagent_name, task)
     if error:
+        if "delegation depth" in error:
+            await ctx.emit(
+                dict(
+                    SubAgentDepthLimitedEvent(
+                        subagent_name=subagent_name or "unknown",
+                        current_depth=_sess_delegation_depth,
+                        max_depth=_sess_max_delegation_depth,
+                    ).to_event_dict()
+                )
+            )
         return ToolResult(output=error, is_error=True)
     spawn_mode = (mode or "run").strip().lower()
     cleanup_policy = (cleanup or "keep").strip().lower()
-    mode_error = _spawn_validate_mode_cleanup(
-        spawn_mode, bool(thread), cleanup_policy
-    )
+    mode_error = _spawn_validate_mode_cleanup(spawn_mode, bool(thread), cleanup_policy)
     if mode_error:
         return ToolResult(output=mode_error, is_error=True)
     if spawn_mode == "session":
@@ -567,10 +554,7 @@ def _spawn_resolve_agent_id(
         return subagent_name
     if requested not in _sess_subagent_names:
         return ToolResult(
-            output=(
-                "Error: invalid agent_id. "
-                f"Available: {', '.join(_sess_subagent_names)}"
-            ),
+            output=(f"Error: invalid agent_id. Available: {', '.join(_sess_subagent_names)}"),
             is_error=True,
         )
     return requested
@@ -799,9 +783,7 @@ def _timeline_append_announce_events(
         announce_type = str(item.get("type") or "unknown").strip() or "unknown"
         timestamp = str(item.get("timestamp") or fallback_ts.isoformat())
         payload: dict[str, Any] = {
-            str(key): value
-            for key, value in item.items()
-            if key not in {"type", "timestamp"}
+            str(key): value for key, value in item.items() if key not in {"type", "timestamp"}
         }
         events.append(
             {
@@ -829,9 +811,7 @@ def _timeline_append_ack_events(
             continue
         timestamp = str(item.get("timestamp") or fallback_ts.isoformat())
         payload: dict[str, Any] = {
-            str(key): value
-            for key, value in item.items()
-            if key not in {"type", "timestamp"}
+            str(key): value for key, value in item.items() if key not in {"type", "timestamp"}
         }
         events.append(
             {
@@ -857,16 +837,12 @@ def _timeline_append_ack_events(
             },
             "include_descendants": {
                 "type": "boolean",
-                "description": (
-                    "Include descendant runs in timeline replay."
-                ),
+                "description": ("Include descendant runs in timeline replay."),
                 "default": False,
             },
             "include_announce": {
                 "type": "boolean",
-                "description": (
-                    "Include announce retry/giveup events from metadata."
-                ),
+                "description": ("Include announce retry/giveup events from metadata."),
                 "default": True,
             },
         },
@@ -908,9 +884,7 @@ async def sessions_timeline_tool(
             runs[desc_run.run_id] = desc_run
     all_events: list[dict[str, Any]] = []
     for r in runs.values():
-        all_events.extend(
-            _timeline_events_for_run(r, include_announce=include_announce)
-        )
+        all_events.extend(_timeline_events_for_run(r, include_announce=include_announce))
     all_events.sort(key=lambda item: item.get("timestamp") or "")
     output = json.dumps(
         {
@@ -954,9 +928,7 @@ def configure_sessions_overview(
     global _sess_overview_observability_provider
     _sess_overview_run_registry = run_registry
     _sess_overview_conversation_id = conversation_id
-    _sess_overview_requester_session_key = (
-        requester_session_key or conversation_id
-    ).strip()
+    _sess_overview_requester_session_key = (requester_session_key or conversation_id).strip()
     valid = {"self", "tree", "all"}
     _sess_overview_visibility_default = (
         visibility_default if visibility_default in valid else "tree"
@@ -998,9 +970,7 @@ def configure_sessions_ack(
     global _sess_ack_requester_session_key
     _sess_ack_run_registry = run_registry
     _sess_ack_conversation_id = conversation_id
-    _sess_ack_requester_session_key = (
-        requester_session_key or conversation_id
-    ).strip()
+    _sess_ack_requester_session_key = (requester_session_key or conversation_id).strip()
 
 
 # -- Shared constants --
@@ -1062,9 +1032,7 @@ def _overview_collect_archive_lag(
     """Collect archive lag value for a terminal run."""
     if retention_seconds > 0:
         terminal_at = run.ended_at or run.created_at
-        lag_ms = int((now - terminal_at).total_seconds() * 1000) - (
-            retention_seconds * 1000
-        )
+        lag_ms = int((now - terminal_at).total_seconds() * 1000) - (retention_seconds * 1000)
         if lag_ms > 0:
             archive_lag_values.append(lag_ms)
 
@@ -1086,12 +1054,8 @@ def _overview_collect_run_stats(
     archive_lag_values: list[int] = []
     now = datetime.now(UTC)
     for run in runs:
-        status_counts[run.status.value] = (
-            status_counts.get(run.status.value, 0) + 1
-        )
-        subagent_counts[run.subagent_name] = (
-            subagent_counts.get(run.subagent_name, 0) + 1
-        )
+        status_counts[run.status.value] = status_counts.get(run.status.value, 0) + 1
+        subagent_counts[run.subagent_name] = subagent_counts.get(run.subagent_name, 0) + 1
         _overview_collect_error_stats(run, error_counts)
         astats = _overview_collect_announce_stats(run)
         announce_retry += astats["retry"]
@@ -1099,14 +1063,10 @@ def _overview_collect_run_stats(
         announce_delivered += astats["delivered"]
         announce_dropped += astats["dropped"]
         if run.status in _TERMINAL_STATUSES:
-            ann_status = str(
-                run.metadata.get("announce_status") or ""
-            ).strip().lower()
+            ann_status = str(run.metadata.get("announce_status") or "").strip().lower()
             if ann_status not in {"delivered", "giveup"}:
                 announce_backlog += 1
-            _overview_collect_archive_lag(
-                run, retention_seconds, now, archive_lag_values
-            )
+            _overview_collect_archive_lag(run, retention_seconds, now, archive_lag_values)
         lane_wait_ms = run.metadata.get("lane_wait_ms")
         if isinstance(lane_wait_ms, (int, float)):
             lane_wait_values.append(int(lane_wait_ms))
@@ -1148,9 +1108,8 @@ def _overview_build_response(
 ) -> str:
     """Build the JSON overview response."""
     status_counts: dict[str, int] = stats["status_counts"]
-    active_runs = (
-        status_counts.get(SubAgentRunStatus.PENDING.value, 0)
-        + status_counts.get(SubAgentRunStatus.RUNNING.value, 0)
+    active_runs = status_counts.get(SubAgentRunStatus.PENDING.value, 0) + status_counts.get(
+        SubAgentRunStatus.RUNNING.value, 0
     )
     by_subagent = [
         {"subagent_name": name, "count": count}
@@ -1249,17 +1208,13 @@ async def sessions_overview_tool(
             output=f"Error: invalid visibility '{vis}'",
             is_error=True,
         )
-    runs = registry.list_runs_for_requester(
-        conv_id, req_key, visibility=vis
-    )
+    runs = registry.list_runs_for_requester(conv_id, req_key, visibility=vis)
     retention = max(int(registry.terminal_retention_seconds), 0)
     stats = _overview_collect_run_stats(runs, retention)
     hook_failures = _overview_get_hook_failures(
         _sess_overview_observability_provider,
     )
-    output = _overview_build_response(
-        conv_id, vis, runs, stats, hook_failures
-    )
+    output = _overview_build_response(conv_id, vis, runs, stats, hook_failures)
     return ToolResult(output=output, title="Sessions Overview")
 
 
@@ -1270,10 +1225,7 @@ async def sessions_overview_tool(
 
 @tool_define(
     name="sessions_wait",
-    description=(
-        "Wait for a SubAgent run to reach terminal status "
-        "and return latest state."
-    ),
+    description=("Wait for a SubAgent run to reach terminal status and return latest state."),
     parameters={
         "type": "object",
         "properties": {
@@ -1359,17 +1311,9 @@ def _wait_build_result(
             "timed_out": not is_terminal and elapsed >= timeout,
             "waited_ms": int(elapsed * 1000),
             "announce": {
-                "status": str(
-                    run.metadata.get("announce_status") or ""
-                ).strip()
-                or None,
-                "attempt_count": int(
-                    run.metadata.get("announce_attempt_count") or 0
-                ),
-                "last_error": str(
-                    run.metadata.get("announce_last_error") or ""
-                ).strip()
-                or None,
+                "status": str(run.metadata.get("announce_status") or "").strip() or None,
+                "attempt_count": int(run.metadata.get("announce_attempt_count") or 0),
+                "last_error": str(run.metadata.get("announce_last_error") or "").strip() or None,
                 "payload": announce_payload,
             },
         },
@@ -1386,10 +1330,7 @@ def _wait_build_result(
 
 @tool_define(
     name="sessions_ack",
-    description=(
-        "Acknowledge a terminal SubAgent run "
-        "and record ack metadata."
-    ),
+    description=("Acknowledge a terminal SubAgent run and record ack metadata."),
     parameters={
         "type": "object",
         "properties": {
@@ -1463,10 +1404,7 @@ async def sessions_ack_tool(
     )
     if not updated:
         return ToolResult(
-            output=(
-                f"Error: run_id '{run_id}' changed while "
-                "acknowledging, please retry."
-            ),
+            output=(f"Error: run_id '{run_id}' changed while acknowledging, please retry."),
             is_error=True,
         )
     return ToolResult(
@@ -1553,23 +1491,15 @@ def configure_sessions_send(
     _sess_send_conversation_id = conversation_id
     _sess_send_spawn_callback = spawn_callback
     _sess_send_max_active_runs = max(1, max_active_runs)
-    _sess_send_max_active_runs_per_lineage = max(
-        1, max_active_runs_per_lineage or max_active_runs
-    )
-    _sess_send_max_children_per_requester = max(
-        1, max_children_per_requester or max_active_runs
-    )
-    _sess_send_requester_session_key = (
-        requester_session_key or conversation_id
-    ).strip()
+    _sess_send_max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
+    _sess_send_max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
+    _sess_send_requester_session_key = (requester_session_key or conversation_id).strip()
     _sess_send_delegation_depth = delegation_depth
     _sess_send_max_delegation_depth = max(1, max_delegation_depth)
     _sess_send_max_spawn_retries = max(0, max_spawn_retries)
     _sess_send_retry_delay_ms = max(1, retry_delay_ms)
     if spawn_callback is not None:
-        params, accepts_kw = _resolve_spawn_callback_signature(
-            spawn_callback
-        )
+        params, accepts_kw = _resolve_spawn_callback_signature(spawn_callback)
         _sess_send_spawn_callback_params = params
         _sess_send_spawn_callback_accepts_kwargs = accepts_kw
     else:
@@ -1605,9 +1535,7 @@ def _send_validate_params(
 def _send_check_capacity(lineage_root_run_id: str) -> str | None:
     """Check capacity limits for send. Returns error or None."""
     assert _sess_send_run_registry is not None
-    active_runs = _sess_send_run_registry.count_active_runs(
-        _sess_send_conversation_id
-    )
+    active_runs = _sess_send_run_registry.count_active_runs(_sess_send_conversation_id)
     if active_runs >= _sess_send_max_active_runs:
         return (
             f"Error: active SubAgent sessions limit reached "
@@ -1632,42 +1560,25 @@ def _send_check_capacity(lineage_root_run_id: str) -> str | None:
     return None
 
 
-def _send_build_follow_up_options(
-    parent_run: SubAgentRun, timeout_seconds: int
-) -> dict[str, Any]:
+def _send_build_follow_up_options(parent_run: SubAgentRun, timeout_seconds: int) -> dict[str, Any]:
     """Build spawn options from parent run metadata."""
     try:
-        parent_timeout = int(
-            parent_run.metadata.get("run_timeout_seconds") or 0
-        )
+        parent_timeout = int(parent_run.metadata.get("run_timeout_seconds") or 0)
     except (TypeError, ValueError):
         parent_timeout = 0
     return {
-        "spawn_mode": str(
-            parent_run.metadata.get("spawn_mode") or "run"
-        ),
-        "thread_requested": bool(
-            parent_run.metadata.get("thread_requested")
-        ),
-        "cleanup": str(
-            parent_run.metadata.get("cleanup") or "keep"
-        ),
-        "agent_id": str(
-            parent_run.metadata.get("agent_id")
-            or parent_run.subagent_name
-        ),
+        "spawn_mode": str(parent_run.metadata.get("spawn_mode") or "run"),
+        "thread_requested": bool(parent_run.metadata.get("thread_requested")),
+        "cleanup": str(parent_run.metadata.get("cleanup") or "keep"),
+        "agent_id": str(parent_run.metadata.get("agent_id") or parent_run.subagent_name),
         "model": (
             str(parent_run.metadata.get("model") or "").strip()
-            or str(
-                parent_run.metadata.get("model_override") or ""
-            ).strip()
+            or str(parent_run.metadata.get("model_override") or "").strip()
             or None
         ),
         "thinking": (
             str(parent_run.metadata.get("thinking") or "").strip()
-            or str(
-                parent_run.metadata.get("thinking_override") or ""
-            ).strip()
+            or str(parent_run.metadata.get("thinking_override") or "").strip()
             or None
         ),
         "requester_session_key": _sess_send_requester_session_key,
@@ -1688,9 +1599,7 @@ async def _send_invoke_spawn(
         _sess_send_spawn_callback_params,
         _sess_send_spawn_callback_accepts_kwargs,
     )
-    return await _sess_send_spawn_callback(
-        subagent_name, task, run_id, **filtered
-    )
+    return await _sess_send_spawn_callback(subagent_name, task, run_id, **filtered)
 
 
 async def _send_spawn_with_retry(
@@ -1793,10 +1702,7 @@ async def _send_spawn_with_retry(
             },
             "run_timeout_seconds": {
                 "type": "integer",
-                "description": (
-                    "Optional timeout for follow-up run "
-                    "(0 means no timeout)."
-                ),
+                "description": ("Optional timeout for follow-up run (0 means no timeout)."),
                 "minimum": 0,
                 "maximum": 3600,
             },
@@ -1821,10 +1727,18 @@ async def sessions_send_tool(
             is_error=True,
         )
     conv_id = _sess_send_conversation_id
-    error, timeout_seconds = _send_validate_params(
-        run_id, task, run_timeout_seconds
-    )
+    error, timeout_seconds = _send_validate_params(run_id, task, run_timeout_seconds)
     if error:
+        if "delegation depth" in error:
+            await ctx.emit(
+                dict(
+                    SubAgentDepthLimitedEvent(
+                        subagent_name="",
+                        current_depth=_sess_send_delegation_depth,
+                        max_depth=_sess_send_max_delegation_depth,
+                    ).to_event_dict()
+                )
+            )
         return ToolResult(output=error, is_error=True)
     parent_run = registry.get_run(conv_id, run_id)
     if not parent_run:
@@ -1832,15 +1746,11 @@ async def sessions_send_tool(
             output=f"Error: run_id '{run_id}' not found",
             is_error=True,
         )
-    lineage_root_run_id = str(
-        parent_run.metadata.get("lineage_root_run_id") or run_id
-    ).strip()
+    lineage_root_run_id = str(parent_run.metadata.get("lineage_root_run_id") or run_id).strip()
     capacity_error = _send_check_capacity(lineage_root_run_id)
     if capacity_error:
         return ToolResult(output=capacity_error, is_error=True)
-    follow_up_options = _send_build_follow_up_options(
-        parent_run, timeout_seconds
-    )
+    follow_up_options = _send_build_follow_up_options(parent_run, timeout_seconds)
     child_run = registry.create_run(
         conversation_id=conv_id,
         subagent_name=parent_run.subagent_name,
@@ -1853,9 +1763,7 @@ async def sessions_send_tool(
             delegation_depth=_sess_send_delegation_depth,
             extra={
                 **follow_up_options,
-                "max_active_runs_per_lineage": (
-                    _sess_send_max_active_runs_per_lineage
-                ),
+                "max_active_runs_per_lineage": (_sess_send_max_active_runs_per_lineage),
             },
         ),
         requester_session_key=_sess_send_requester_session_key,
@@ -1864,9 +1772,7 @@ async def sessions_send_tool(
     )
     running = registry.mark_running(conv_id, child_run.run_id)
     if running:
-        await ctx.emit(
-            {"type": "subagent_run_started", "data": running.to_event_data()}
-        )
+        await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
         retry_count = await _send_spawn_with_retry(
             ctx,
@@ -1906,9 +1812,7 @@ async def sessions_send_tool(
             error=str(exc),
         )
         if failed:
-            await ctx.emit(
-                {"type": "subagent_run_failed", "data": failed.to_event_data()}
-            )
+            await ctx.emit({"type": "subagent_failed", "data": failed.to_event_data()})
         return ToolResult(
             output=f"Error: failed to send follow-up: {exc}",
             is_error=True,
@@ -1924,9 +1828,7 @@ _ctrl_conversation_id: str = ""
 _ctrl_subagent_names: list[str] = []
 _ctrl_subagent_descriptions: dict[str, str] = {}
 _ctrl_cancel_callback: Callable[[str], Awaitable[bool]] | None = None
-_ctrl_restart_callback: (
-    Callable[[str, str, str], Awaitable[str]] | None
-) = None
+_ctrl_restart_callback: Callable[[str, str, str], Awaitable[str]] | None = None
 _ctrl_steer_rate_limit_ms: int = 2000
 _ctrl_max_active_runs: int = 16
 _ctrl_max_active_runs_per_lineage: int = 16
@@ -1946,9 +1848,7 @@ def configure_subagents_control(  # noqa: PLR0913
     subagent_descriptions: dict[str, str],
     cancel_callback: Callable[[str], Awaitable[bool]],
     *,
-    restart_callback: (
-        Callable[[str, str, str], Awaitable[str]] | None
-    ) = None,
+    restart_callback: (Callable[[str, str, str], Awaitable[str]] | None) = None,
     steer_rate_limit_ms: int = 2000,
     max_active_runs: int = 16,
     max_active_runs_per_lineage: int | None = None,
@@ -1982,22 +1882,14 @@ def configure_subagents_control(  # noqa: PLR0913
     _ctrl_restart_callback = restart_callback
     _ctrl_steer_rate_limit_ms = max(1, steer_rate_limit_ms)
     _ctrl_max_active_runs = max(1, max_active_runs)
-    _ctrl_max_active_runs_per_lineage = max(
-        1, max_active_runs_per_lineage or max_active_runs
-    )
-    _ctrl_max_children_per_requester = max(
-        1, max_children_per_requester or max_active_runs
-    )
-    _ctrl_requester_session_key = (
-        requester_session_key or conversation_id
-    ).strip()
+    _ctrl_max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
+    _ctrl_max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
+    _ctrl_requester_session_key = (requester_session_key or conversation_id).strip()
     _ctrl_delegation_depth = delegation_depth
     _ctrl_max_delegation_depth = max(1, max_delegation_depth)
     _ctrl_last_steer_at = {}
     if restart_callback is not None:
-        params, accepts_kw = _resolve_spawn_callback_signature(
-            restart_callback
-        )
+        params, accepts_kw = _resolve_spawn_callback_signature(restart_callback)
         _ctrl_spawn_callback_params = params
         _ctrl_spawn_callback_accepts_kwargs = accepts_kw
     else:
@@ -2059,15 +1951,9 @@ def _ctrl_resolve_by_label(
     assert _ctrl_run_registry is not None
     if not label:
         return [], "Error: label selector requires a non-empty value"
-    statuses = (
-        None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
-    )
-    runs = _ctrl_run_registry.list_runs(
-        _ctrl_conversation_id, statuses=statuses
-    )
-    matched = [
-        run for run in runs if (_ctrl_run_label(run) or "") == label
-    ]
+    statuses = None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
+    runs = _ctrl_run_registry.list_runs(_ctrl_conversation_id, statuses=statuses)
+    matched = [run for run in runs if (_ctrl_run_label(run) or "") == label]
     if not matched:
         return [], f"Error: no runs found for label '{label}'"
     return matched, None
@@ -2084,24 +1970,14 @@ def _ctrl_resolve_target_runs(
     if not token:
         return [], "Error: target (or run_id) is required"
     if token.lower() == "all":
-        statuses = (
-            None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
-        )
-        runs = _ctrl_run_registry.list_runs(
-            _ctrl_conversation_id, statuses=statuses
-        )
+        statuses = None if include_terminal else list(_CTRL_ACTIVE_STATUSES)
+        runs = _ctrl_run_registry.list_runs(_ctrl_conversation_id, statuses=statuses)
         return runs, None
     if token.startswith("#") or token.lower().startswith("index:"):
-        raw_idx = (
-            token[1:]
-            if token.startswith("#")
-            else token.split(":", 1)[1]
-        )
+        raw_idx = token[1:] if token.startswith("#") else token.split(":", 1)[1]
         return _ctrl_resolve_by_index(raw_idx)
     if token.lower().startswith("label:"):
-        return _ctrl_resolve_by_label(
-            token.split(":", 1)[1].strip(), include_terminal
-        )
+        return _ctrl_resolve_by_label(token.split(":", 1)[1].strip(), include_terminal)
     run = _ctrl_run_registry.get_run(_ctrl_conversation_id, token)
     if not run:
         return [], f"Error: run_id '{token}' not found"
@@ -2118,12 +1994,8 @@ def _ctrl_serialize_run_snapshot(
         "status": run.status.value,
         "task": run.task,
         "created_at": run.created_at.isoformat(),
-        "started_at": (
-            run.started_at.isoformat() if run.started_at else None
-        ),
-        "ended_at": (
-            run.ended_at.isoformat() if run.ended_at else None
-        ),
+        "started_at": (run.started_at.isoformat() if run.started_at else None),
+        "ended_at": (run.ended_at.isoformat() if run.ended_at else None),
         "summary": run.summary,
         "error": run.error,
         "execution_time_ms": run.execution_time_ms,
@@ -2167,9 +2039,7 @@ def _ctrl_handle_list() -> ToolResult:
     ]
     active_by_name: dict[str, int] = {}
     for run in active_runs:
-        active_by_name[run.subagent_name] = (
-            active_by_name.get(run.subagent_name, 0) + 1
-        )
+        active_by_name[run.subagent_name] = active_by_name.get(run.subagent_name, 0) + 1
     return ToolResult(
         output=json.dumps(
             {
@@ -2177,12 +2047,8 @@ def _ctrl_handle_list() -> ToolResult:
                 "subagents": [
                     {
                         "name": name,
-                        "description": (
-                            _ctrl_subagent_descriptions.get(name, "")
-                        ),
-                        "active_runs": (
-                            active_by_name.get(name, 0)
-                        ),
+                        "description": (_ctrl_subagent_descriptions.get(name, "")),
+                        "active_runs": (active_by_name.get(name, 0)),
                     }
                     for name in _ctrl_subagent_names
                 ],
@@ -2199,15 +2065,11 @@ def _ctrl_handle_list() -> ToolResult:
 # -- action: info --
 
 
-def _ctrl_handle_info(
-    run_id: str, target: str, include_descendants: bool
-) -> ToolResult:
+def _ctrl_handle_info(run_id: str, target: str, include_descendants: bool) -> ToolResult:
     """Handle info action."""
     assert _ctrl_run_registry is not None
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_runs, error = _ctrl_resolve_target_runs(
-        target_token, include_terminal=True
-    )
+    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     run_by_id: dict[str, SubAgentRun] = {}
@@ -2215,7 +2077,8 @@ def _ctrl_handle_info(
         run_by_id[run.run_id] = run
         if include_descendants:
             descendants = _ctrl_run_registry.list_descendant_runs(
-                _ctrl_conversation_id, run.run_id,
+                _ctrl_conversation_id,
+                run.run_id,
                 include_terminal=True,
             )
             for desc in descendants:
@@ -2228,9 +2091,7 @@ def _ctrl_handle_info(
                 "target": target_token,
                 "include_descendants": bool(include_descendants),
                 "run_count": len(runs),
-                "runs": [
-                    _ctrl_serialize_run_snapshot(r) for r in runs
-                ],
+                "runs": [_ctrl_serialize_run_snapshot(r) for r in runs],
             },
             ensure_ascii=False,
             indent=2,
@@ -2250,17 +2111,12 @@ async def _ctrl_handle_log(
 ) -> ToolResult:
     """Handle log action by building timeline from run registry."""
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_runs, error = _ctrl_resolve_target_runs(
-        target_token, include_terminal=True
-    )
+    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     if len(matched_runs) != 1:
         return ToolResult(
-            output=(
-                f"Error: log target '{target_token}' "
-                "requires exactly one matched run"
-            ),
+            output=(f"Error: log target '{target_token}' requires exactly one matched run"),
             is_error=True,
         )
     assert _ctrl_run_registry is not None
@@ -2276,9 +2132,7 @@ async def _ctrl_handle_log(
             runs[desc_run.run_id] = desc_run
     all_events: list[dict[str, Any]] = []
     for r in runs.values():
-        all_events.extend(
-            _timeline_events_for_run(r, include_announce=include_announce)
-        )
+        all_events.extend(_timeline_events_for_run(r, include_announce=include_announce))
     all_events.sort(key=lambda item: item.get("timestamp") or "")
     raw = json.dumps(
         {
@@ -2310,13 +2164,8 @@ async def _ctrl_send_dispatch(
     assert _ctrl_run_registry is not None
     assert _ctrl_restart_callback is not None
     conv_id = _ctrl_conversation_id
-    lineage_root = str(
-        parent_run.metadata.get("lineage_root_run_id")
-        or parent_run.run_id
-    ).strip()
-    follow_up = _send_build_follow_up_options(
-        parent_run, timeout_seconds
-    )
+    lineage_root = str(parent_run.metadata.get("lineage_root_run_id") or parent_run.run_id).strip()
+    follow_up = _send_build_follow_up_options(parent_run, timeout_seconds)
     follow_up["requester_session_key"] = _ctrl_requester_session_key
     child_run = _ctrl_run_registry.create_run(
         conversation_id=conv_id,
@@ -2330,25 +2179,17 @@ async def _ctrl_send_dispatch(
             delegation_depth=_ctrl_delegation_depth,
             extra={
                 **follow_up,
-                "max_active_runs_per_lineage": (
-                    _ctrl_max_active_runs_per_lineage
-                ),
+                "max_active_runs_per_lineage": (_ctrl_max_active_runs_per_lineage),
             },
         ),
         requester_session_key=_ctrl_requester_session_key,
         parent_run_id=parent_run.run_id,
         lineage_root_run_id=lineage_root,
     )
-    running = _ctrl_run_registry.mark_running(
-        conv_id, child_run.run_id
-    )
+    running = _ctrl_run_registry.mark_running(conv_id, child_run.run_id)
     if running:
-        await ctx.emit(
-            {"type": "subagent_run_started", "data": running.to_event_data()}
-        )
-    params, accepts_kw = _resolve_spawn_callback_signature(
-        _ctrl_restart_callback
-    )
+        await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
+    params, accepts_kw = _resolve_spawn_callback_signature(_ctrl_restart_callback)
     filtered = _filter_spawn_options(follow_up, params, accepts_kw)
     try:
         await _ctrl_restart_callback(
@@ -2382,9 +2223,7 @@ async def _ctrl_send_dispatch(
             error=str(exc),
         )
         if failed:
-            await ctx.emit(
-                {"type": "subagent_run_failed", "data": failed.to_event_data()}
-            )
+            await ctx.emit({"type": "subagent_failed", "data": failed.to_event_data()})
         return ToolResult(
             output=f"Error: failed to send follow-up: {exc}",
             is_error=True,
@@ -2406,33 +2245,23 @@ async def _ctrl_handle_send(
         )
     if not _ctrl_restart_callback:
         return ToolResult(
-            output=(
-                "Error: send is unavailable because "
-                "spawn callback is not configured"
-            ),
+            output=("Error: send is unavailable because spawn callback is not configured"),
             is_error=True,
         )
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_runs, error = _ctrl_resolve_target_runs(
-        target_token, include_terminal=True
-    )
+    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     if len(matched_runs) != 1:
         return ToolResult(
-            output=(
-                f"Error: send target '{target_token}' "
-                "requires exactly one matched run"
-            ),
+            output=(f"Error: send target '{target_token}' requires exactly one matched run"),
             is_error=True,
         )
     try:
         timeout = max(0, int(run_timeout_seconds or 0))
     except (TypeError, ValueError):
         timeout = 0
-    return await _ctrl_send_dispatch(
-        ctx, matched_runs[0], task, timeout
-    )
+    return await _ctrl_send_dispatch(ctx, matched_runs[0], task, timeout)
 
 
 # -- action: kill --
@@ -2468,9 +2297,7 @@ async def _ctrl_exec_cancellations(
     assert _ctrl_cancel_callback is not None
     cancelled_count = 0
     for cand_id, root_id in candidates.items():
-        cand = _ctrl_run_registry.get_run(
-            _ctrl_conversation_id, cand_id
-        )
+        cand = _ctrl_run_registry.get_run(_ctrl_conversation_id, cand_id)
         if not cand or cand.status not in _CTRL_ACTIVE_STATUSES:
             continue
         cancelled = await _ctrl_cancel_callback(cand.run_id)
@@ -2486,9 +2313,7 @@ async def _ctrl_exec_cancellations(
             expected_statuses=list(_CTRL_ACTIVE_STATUSES),
         )
         if updated:
-            await ctx.emit(
-                {"type": "subagent_killed", "data": updated.to_event_data()}
-            )
+            await ctx.emit({"type": "subagent_killed", "data": updated.to_event_data()})
         if cancelled or updated:
             cancelled_count += 1
     return cancelled_count
@@ -2503,30 +2328,17 @@ def _ctrl_kill_result_msg(
     """Build result message for kill operation."""
     if cancelled_count > 0:
         if is_direct:
-            return (
-                f"Cancelled {cancelled_count} run(s) "
-                f"in lineage rooted at {run_id}"
-            )
-        return (
-            f"Cancelled {cancelled_count} run(s) "
-            f"for target {target_token}"
-        )
+            return f"Cancelled {cancelled_count} run(s) in lineage rooted at {run_id}"
+        return f"Cancelled {cancelled_count} run(s) for target {target_token}"
     if is_direct:
-        return (
-            f"Marked run lineage {run_id} as cancelled "
-            "(tasks already finished or detached)"
-        )
+        return f"Marked run lineage {run_id} as cancelled (tasks already finished or detached)"
     return f"No active runs matched target '{target_token}'"
 
 
-async def _ctrl_handle_kill(
-    ctx: ToolContext, run_id: str, target: str
-) -> ToolResult:
+async def _ctrl_handle_kill(ctx: ToolContext, run_id: str, target: str) -> ToolResult:
     """Handle kill action."""
     target_token = _ctrl_resolve_target_token(run_id, target)
-    matched_roots, error = _ctrl_resolve_target_runs(
-        target_token, include_terminal=True
-    )
+    matched_roots, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return ToolResult(output=error, is_error=True)
     if (
@@ -2535,28 +2347,17 @@ async def _ctrl_handle_kill(
         and matched_roots[0].status not in _CTRL_ACTIVE_STATUSES
     ):
         return ToolResult(
-            output=(
-                f"Run {target_token} is already terminal "
-                f"({matched_roots[0].status.value})"
-            ),
+            output=(f"Run {target_token} is already terminal ({matched_roots[0].status.value})"),
         )
     candidates = _ctrl_collect_kill_candidates(matched_roots)
-    is_direct = bool(
-        target_token == run_id and run_id and not target
-    )
+    is_direct = bool(target_token == run_id and run_id and not target)
     if not candidates:
         return ToolResult(
-            output=_ctrl_kill_result_msg(
-                0, target_token, run_id, is_direct
-            ),
+            output=_ctrl_kill_result_msg(0, target_token, run_id, is_direct),
         )
-    cancelled = await _ctrl_exec_cancellations(
-        ctx, candidates, target_token
-    )
+    cancelled = await _ctrl_exec_cancellations(ctx, candidates, target_token)
     return ToolResult(
-        output=_ctrl_kill_result_msg(
-            cancelled, target_token, run_id, is_direct
-        ),
+        output=_ctrl_kill_result_msg(cancelled, target_token, run_id, is_direct),
         title=f"SubAgents: kill {target_token}",
     )
 
@@ -2568,15 +2369,10 @@ def _ctrl_steer_resolve_active(
     target_token: str,
 ) -> tuple[SubAgentRun | None, str | None]:
     """Resolve target to exactly one active run for steering."""
-    matched_runs, error = _ctrl_resolve_target_runs(
-        target_token, include_terminal=True
-    )
+    matched_runs, error = _ctrl_resolve_target_runs(target_token, include_terminal=True)
     if error:
         return None, error
-    active = [
-        r for r in matched_runs
-        if r.status in _CTRL_ACTIVE_STATUSES
-    ]
+    active = [r for r in matched_runs if r.status in _CTRL_ACTIVE_STATUSES]
     if len(active) != 1:
         if (
             len(matched_runs) == 1
@@ -2585,17 +2381,11 @@ def _ctrl_steer_resolve_active(
         ):
             return (
                 None,
-                (
-                    f"Run {target_token} is already terminal "
-                    f"({matched_runs[0].status.value})"
-                ),
+                (f"Run {target_token} is already terminal ({matched_runs[0].status.value})"),
             )
         return (
             None,
-            (
-                f"Error: steer target '{target_token}' "
-                "requires exactly one active run"
-            ),
+            (f"Error: steer target '{target_token}' requires exactly one active run"),
         )
     return active[0], None
 
@@ -2607,9 +2397,7 @@ def _ctrl_steer_check_rate_limit(
     now = datetime.now(UTC)
     last_steer = _ctrl_last_steer_at.get(resolved_run_id)
     if last_steer:
-        elapsed_ms = int(
-            (now - last_steer).total_seconds() * 1000
-        )
+        elapsed_ms = int((now - last_steer).total_seconds() * 1000)
         if elapsed_ms < _ctrl_steer_rate_limit_ms:
             return (
                 "Error: steer rate limit exceeded. "
@@ -2646,9 +2434,7 @@ async def _ctrl_steer_metadata_only(
         }
     )
     return ToolResult(
-        output=(
-            f"Steering instruction attached to run {resolved_run_id}"
-        ),
+        output=(f"Steering instruction attached to run {resolved_run_id}"),
         title=f"SubAgents: steer {resolved_run_id}",
     )
 
@@ -2670,17 +2456,10 @@ async def _ctrl_steer_with_restart(
         expected_statuses=list(_CTRL_ACTIVE_STATUSES),
     )
     if updated_old:
-        await ctx.emit(
-            {"type": "subagent_killed", "data": updated_old.to_event_data()}
-        )
-    restart_task = (
-        f"{run.task}\n\n[Steering Instruction]\n{instruction.strip()}"
-    )
+        await ctx.emit({"type": "subagent_killed", "data": updated_old.to_event_data()})
+    restart_task = f"{run.task}\n\n[Steering Instruction]\n{instruction.strip()}"
     now = datetime.now(UTC)
-    lineage_root = str(
-        run.metadata.get("lineage_root_run_id")
-        or resolved_run_id
-    ).strip()
+    lineage_root = str(run.metadata.get("lineage_root_run_id") or resolved_run_id).strip()
     replacement = _ctrl_run_registry.create_run(
         conversation_id=_ctrl_conversation_id,
         subagent_name=run.subagent_name,
@@ -2693,26 +2472,15 @@ async def _ctrl_steer_with_restart(
             "steered_at": now.isoformat(),
             "lineage_root_run_id": lineage_root,
         },
-        requester_session_key=str(
-            run.metadata.get("requester_session_key") or ""
-        ).strip(),
-        parent_run_id=str(
-            run.metadata.get("parent_run_id") or ""
-        ).strip()
-        or None,
+        requester_session_key=str(run.metadata.get("requester_session_key") or "").strip(),
+        parent_run_id=str(run.metadata.get("parent_run_id") or "").strip() or None,
         lineage_root_run_id=lineage_root,
     )
-    running = _ctrl_run_registry.mark_running(
-        _ctrl_conversation_id, replacement.run_id
-    )
+    running = _ctrl_run_registry.mark_running(_ctrl_conversation_id, replacement.run_id)
     if running:
-        await ctx.emit(
-            {"type": "subagent_run_started", "data": running.to_event_data()}
-        )
+        await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     try:
-        await _ctrl_restart_callback(
-            run.subagent_name, restart_task, replacement.run_id
-        )
+        await _ctrl_restart_callback(run.subagent_name, restart_task, replacement.run_id)
     except Exception as exc:
         failed = _ctrl_run_registry.mark_failed(
             conversation_id=_ctrl_conversation_id,
@@ -2721,14 +2489,9 @@ async def _ctrl_steer_with_restart(
             expected_statuses=[SubAgentRunStatus.RUNNING],
         )
         if failed:
-            await ctx.emit(
-                {"type": "subagent_run_failed", "data": failed.to_event_data()}
-            )
+            await ctx.emit({"type": "subagent_failed", "data": failed.to_event_data()})
         return ToolResult(
-            output=(
-                f"Error: failed to steer run "
-                f"{resolved_run_id}: {exc}"
-            ),
+            output=(f"Error: failed to steer run {resolved_run_id}: {exc}"),
             is_error=True,
         )
     if updated_old:
@@ -2741,11 +2504,7 @@ async def _ctrl_steer_with_restart(
         {
             "type": "subagent_steered",
             "data": {
-                **(
-                    running.to_event_data()
-                    if running
-                    else replacement.to_event_data()
-                ),
+                **(running.to_event_data() if running else replacement.to_event_data()),
                 "instruction": instruction,
                 "previous_run_id": resolved_run_id,
                 "new_run_id": replacement.run_id,
@@ -2754,10 +2513,7 @@ async def _ctrl_steer_with_restart(
         }
     )
     return ToolResult(
-        output=(
-            f"Steered run {resolved_run_id}; "
-            f"restarted as {replacement.run_id}"
-        ),
+        output=(f"Steered run {resolved_run_id}; restarted as {replacement.run_id}"),
         title=f"SubAgents: steer {resolved_run_id}",
     )
 
@@ -2785,9 +2541,7 @@ async def _ctrl_handle_steer(
     if rate_error:
         return ToolResult(output=rate_error, is_error=True)
     if not _ctrl_restart_callback:
-        return await _ctrl_steer_metadata_only(
-            ctx, run.run_id, instruction
-        )
+        return await _ctrl_steer_metadata_only(ctx, run.run_id, instruction)
     return await _ctrl_steer_with_restart(ctx, run, instruction)
 
 
@@ -2813,17 +2567,18 @@ async def _ctrl_handle_steer(
             "action": {
                 "type": "string",
                 "enum": [
-                    "list", "info", "log",
-                    "send", "kill", "steer",
+                    "list",
+                    "info",
+                    "log",
+                    "send",
+                    "kill",
+                    "steer",
                 ],
                 "description": "Control action.",
             },
             "run_id": {
                 "type": "string",
-                "description": (
-                    "Legacy target run id "
-                    "(use target for richer selectors)."
-                ),
+                "description": ("Legacy target run id (use target for richer selectors)."),
             },
             "target": {
                 "type": "string",
@@ -2834,39 +2589,27 @@ async def _ctrl_handle_steer(
             },
             "instruction": {
                 "type": "string",
-                "description": (
-                    "Steering instruction (required for steer)."
-                ),
+                "description": ("Steering instruction (required for steer)."),
             },
             "task": {
                 "type": "string",
-                "description": (
-                    "Follow-up task content "
-                    "(required for send)."
-                ),
+                "description": ("Follow-up task content (required for send)."),
             },
             "run_timeout_seconds": {
                 "type": "integer",
                 "description": (
-                    "Optional timeout for send action follow-up "
-                    "run (0 means no timeout)."
+                    "Optional timeout for send action follow-up run (0 means no timeout)."
                 ),
                 "minimum": 0,
                 "maximum": 3600,
             },
             "include_descendants": {
                 "type": "boolean",
-                "description": (
-                    "For info/log action, "
-                    "include descendants of matched runs."
-                ),
+                "description": ("For info/log action, include descendants of matched runs."),
             },
             "include_announce": {
                 "type": "boolean",
-                "description": (
-                    "For log action, "
-                    "include announce/ack events."
-                ),
+                "description": ("For log action, include announce/ack events."),
             },
         },
         "required": ["action"],
@@ -2896,13 +2639,9 @@ async def subagents_control_tool(
     if normalized == "list":
         return _ctrl_handle_list()
     if normalized == "info":
-        return _ctrl_handle_info(
-            run_id, target, include_descendants
-        )
+        return _ctrl_handle_info(run_id, target, include_descendants)
     if normalized == "log":
-        return await _ctrl_handle_log(
-            run_id, target, include_descendants, include_announce
-        )
+        return await _ctrl_handle_log(run_id, target, include_descendants, include_announce)
     return await _ctrl_dispatch_mutation(
         ctx,
         normalized,
@@ -2927,22 +2666,25 @@ async def _ctrl_dispatch_mutation(
     """Dispatch mutation actions with permission check."""
     blocked = _ctrl_ensure_mutation_allowed(action)
     if blocked:
+        if "delegation depth" in blocked:
+            await ctx.emit(
+                dict(
+                    SubAgentDepthLimitedEvent(
+                        subagent_name="",
+                        current_depth=_ctrl_delegation_depth,
+                        max_depth=_ctrl_max_delegation_depth,
+                    ).to_event_dict()
+                )
+            )
         return ToolResult(output=blocked, is_error=True)
     if action == "send":
-        return await _ctrl_handle_send(
-            ctx, run_id, target, task, run_timeout_seconds
-        )
+        return await _ctrl_handle_send(ctx, run_id, target, task, run_timeout_seconds)
     if action == "kill":
         return await _ctrl_handle_kill(ctx, run_id, target)
     if action == "steer":
-        return await _ctrl_handle_steer(
-            ctx, run_id, target, instruction
-        )
+        return await _ctrl_handle_steer(ctx, run_id, target, instruction)
     return ToolResult(
-        output=(
-            "Error: action must be one of "
-            "list|info|log|send|kill|steer"
-        ),
+        output=("Error: action must be one of list|info|log|send|kill|steer"),
         is_error=True,
     )
 
@@ -2992,32 +2734,47 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
     # -- helpers to snapshot / restore module globals -----------------------
 
     _sess_global_names = [
-        "_sess_run_registry", "_sess_spawn_callback",
-        "_sess_max_active_runs", "_sess_max_spawn_retries",
-        "_sess_retry_delay_ms", "_sess_subagent_names",
-        "_sess_subagent_descriptions", "_sess_conversation_id",
-        "_sess_requester_session_key", "_sess_delegation_depth",
-        "_sess_max_delegation_depth", "_sess_max_active_runs_per_lineage",
-        "_sess_max_children_per_requester", "_sess_visibility_default",
+        "_sess_run_registry",
+        "_sess_spawn_callback",
+        "_sess_max_active_runs",
+        "_sess_max_spawn_retries",
+        "_sess_retry_delay_ms",
+        "_sess_subagent_names",
+        "_sess_subagent_descriptions",
+        "_sess_conversation_id",
+        "_sess_requester_session_key",
+        "_sess_delegation_depth",
+        "_sess_max_delegation_depth",
+        "_sess_max_active_runs_per_lineage",
+        "_sess_max_children_per_requester",
+        "_sess_visibility_default",
     ]
     _overview_global_names = [
-        "_sess_overview_run_registry", "_sess_overview_conversation_id",
+        "_sess_overview_run_registry",
+        "_sess_overview_conversation_id",
         "_sess_overview_requester_session_key",
         "_sess_overview_visibility_default",
         "_sess_overview_observability_provider",
     ]
     _wait_global_names = [
-        "_sess_wait_run_registry", "_sess_wait_conversation_id",
+        "_sess_wait_run_registry",
+        "_sess_wait_conversation_id",
     ]
     _ctrl_global_names = [
-        "_ctrl_run_registry", "_ctrl_conversation_id",
-        "_ctrl_subagent_names", "_ctrl_subagent_descriptions",
-        "_ctrl_cancel_callback", "_ctrl_restart_callback",
-        "_ctrl_steer_rate_limit_ms", "_ctrl_max_active_runs",
+        "_ctrl_run_registry",
+        "_ctrl_conversation_id",
+        "_ctrl_subagent_names",
+        "_ctrl_subagent_descriptions",
+        "_ctrl_cancel_callback",
+        "_ctrl_restart_callback",
+        "_ctrl_steer_rate_limit_ms",
+        "_ctrl_max_active_runs",
         "_ctrl_max_active_runs_per_lineage",
         "_ctrl_max_children_per_requester",
-        "_ctrl_requester_session_key", "_ctrl_delegation_depth",
-        "_ctrl_max_delegation_depth", "_ctrl_last_steer_at",
+        "_ctrl_requester_session_key",
+        "_ctrl_delegation_depth",
+        "_ctrl_max_delegation_depth",
+        "_ctrl_last_steer_at",
         "_ctrl_spawn_callback_params",
         "_ctrl_spawn_callback_accepts_kwargs",
     ]
@@ -3040,6 +2797,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
         tool_info: Any,
     ) -> Callable[..., Awaitable[Any]]:
         """Wrap a session @tool_define for nested scope (list/history/timeline)."""
+
         async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
             snap = _snapshot(_sess_global_names)
             try:
@@ -3058,6 +2816,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                 return await tool_info.execute(ctx, **kwargs)
             finally:
                 _restore(snap)
+
         return _execute
 
     def _make_overview_tool() -> Callable[..., Awaitable[Any]]:
@@ -3074,6 +2833,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                 return await overview_info.execute(ctx, **kwargs)
             finally:
                 _restore(snap)
+
         return _execute
 
     def _make_wait_tool() -> Callable[..., Awaitable[Any]]:
@@ -3087,6 +2847,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                 return await wait_info.execute(ctx, **kwargs)
             finally:
                 _restore(snap)
+
         return _execute
 
     def _make_ctrl_tool() -> Callable[..., Awaitable[Any]]:
@@ -3110,6 +2871,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                 return await control_info.execute(ctx, **kwargs)
             finally:
                 _restore(snap)
+
         return _execute
 
     # -- assemble ToolDefinition list --------------------------------------

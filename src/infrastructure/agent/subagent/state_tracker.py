@@ -5,7 +5,10 @@ Tracks the lifecycle of SubAgent executions using in-memory state
 with an optional Redis persistence layer for cross-process visibility.
 """
 
+import asyncio
+import json
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -113,9 +116,12 @@ class StateTracker:
 
     MAX_TRACKED = 50  # Max states to keep per conversation
 
-    def __init__(self) -> None:
+    def __init__(self, redis_client: Any | None = None) -> None:  # noqa: ANN401
         # conversation_id -> {execution_id -> SubAgentState}
         self._states: dict[str, dict[str, SubAgentState]] = {}
+        self._redis: Any | None = redis_client
+        self._lock = threading.Lock()
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     def register(
         self,
@@ -137,33 +143,39 @@ class StateTracker:
         Returns:
             The created SubAgentState.
         """
-        state = SubAgentState(
-            execution_id=execution_id,
-            subagent_id=subagent_id,
-            subagent_name=subagent_name,
-            conversation_id=conversation_id,
-            task_description=task_description,
-        )
+        with self._lock:
+            state = SubAgentState(
+                execution_id=execution_id,
+                subagent_id=subagent_id,
+                subagent_name=subagent_name,
+                conversation_id=conversation_id,
+                task_description=task_description,
+            )
 
-        if conversation_id not in self._states:
-            self._states[conversation_id] = {}
+            if conversation_id not in self._states:
+                self._states[conversation_id] = {}
 
-        conv_states = self._states[conversation_id]
-        conv_states[execution_id] = state
+            conv_states = self._states[conversation_id]
+            conv_states[execution_id] = state
 
-        # Evict old completed states if over limit
-        if len(conv_states) > self.MAX_TRACKED:
-            self._evict_oldest(conversation_id)
+            # Evict old completed states if over limit
+            if len(conv_states) > self.MAX_TRACKED:
+                self._evict_oldest(conversation_id)
 
-        logger.debug(f"[StateTracker] Registered {execution_id} for {subagent_name}")
+            logger.debug(f"[StateTracker] Registered {execution_id} for {subagent_name}")
+
+        self._fire_and_forget_persist(state)
         return state
 
     def start(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Mark execution as started."""
-        state = self._get(execution_id, conversation_id)
+        with self._lock:
+            state = self._get(execution_id, conversation_id)
+            if state:
+                state.status = SubAgentStatus.RUNNING
+                state.started_at = datetime.now(UTC)
         if state:
-            state.status = SubAgentStatus.RUNNING
-            state.started_at = datetime.now(UTC)
+            self._fire_and_forget_persist(state)
         return state
 
     def complete(
@@ -175,14 +187,17 @@ class StateTracker:
         tool_calls_count: int = 0,
     ) -> SubAgentState | None:
         """Mark execution as completed."""
-        state = self._get(execution_id, conversation_id)
+        with self._lock:
+            state = self._get(execution_id, conversation_id)
+            if state:
+                state.status = SubAgentStatus.COMPLETED
+                state.completed_at = datetime.now(UTC)
+                state.progress = 100
+                state.result_summary = summary
+                state.tokens_used = tokens_used
+                state.tool_calls_count = tool_calls_count
         if state:
-            state.status = SubAgentStatus.COMPLETED
-            state.completed_at = datetime.now(UTC)
-            state.progress = 100
-            state.result_summary = summary
-            state.tokens_used = tokens_used
-            state.tool_calls_count = tool_calls_count
+            self._fire_and_forget_persist(state)
         return state
 
     def fail(
@@ -192,28 +207,37 @@ class StateTracker:
         error: str = "",
     ) -> SubAgentState | None:
         """Mark execution as failed."""
-        state = self._get(execution_id, conversation_id)
+        with self._lock:
+            state = self._get(execution_id, conversation_id)
+            if state:
+                state.status = SubAgentStatus.FAILED
+                state.completed_at = datetime.now(UTC)
+                state.error = error
         if state:
-            state.status = SubAgentStatus.FAILED
-            state.completed_at = datetime.now(UTC)
-            state.error = error
+            self._fire_and_forget_persist(state)
         return state
 
     def cancel(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Mark execution as cancelled."""
-        state = self._get(execution_id, conversation_id)
+        with self._lock:
+            state = self._get(execution_id, conversation_id)
+            if state:
+                state.status = SubAgentStatus.CANCELLED
+                state.completed_at = datetime.now(UTC)
         if state:
-            state.status = SubAgentStatus.CANCELLED
-            state.completed_at = datetime.now(UTC)
+            self._fire_and_forget_persist(state)
         return state
 
     def update_progress(
         self, execution_id: str, conversation_id: str, progress: int
     ) -> SubAgentState | None:
         """Update execution progress (0-100)."""
-        state = self._get(execution_id, conversation_id)
+        with self._lock:
+            state = self._get(execution_id, conversation_id)
+            if state:
+                state.progress = min(max(progress, 0), 100)
         if state:
-            state.progress = min(max(progress, 0), 100)
+            self._fire_and_forget_persist(state)
         return state
 
     def get_state(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
@@ -235,7 +259,8 @@ class StateTracker:
 
     def clear(self, conversation_id: str) -> None:
         """Clear all tracked states for a conversation."""
-        self._states.pop(conversation_id, None)
+        with self._lock:
+            self._states.pop(conversation_id, None)
 
     def _get(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Get state by execution and conversation ID."""
@@ -255,3 +280,89 @@ class StateTracker:
         while len(conv_states) > self.MAX_TRACKED and completed:
             eid, _ = completed.pop(0)
             del conv_states[eid]
+
+    def get_state_by_execution_id(self, execution_id: str) -> SubAgentState | None:
+        """Find state by execution_id across all conversations.
+
+        This scans all tracked conversations, so prefer get_state() when
+        the conversation_id is known.
+
+        Args:
+            execution_id: The execution ID to look up.
+
+        Returns:
+            The SubAgentState if found, else None.
+        """
+        with self._lock:
+            for conv_states in self._states.values():
+                if execution_id in conv_states:
+                    return conv_states[execution_id]
+        return None
+
+    def _fire_and_forget_persist(self, state: SubAgentState) -> None:
+        """Persist state to Redis in a fire-and-forget manner.
+
+        Creates an asyncio task if a Redis client is available.
+        Failures are logged but do not affect in-memory state.
+        """
+        if self._redis is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(self._persist_to_redis(state))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+        except RuntimeError:
+            # No running event loop; skip Redis persistence
+            logger.debug("[StateTracker] No event loop for Redis persist")
+
+    async def _persist_to_redis(self, state: SubAgentState) -> None:
+        """Write state to Redis with a TTL.
+
+        Key format: ``subagent:state:{conversation_id}:{execution_id}``
+        TTL: 3600 seconds (1 hour).
+        """
+        if self._redis is None:
+            return
+        key = f"subagent:state:{state.conversation_id}:{state.execution_id}"
+        try:
+            payload = json.dumps(state.to_dict())
+            await self._redis.setex(key, 3600, payload)
+        except Exception as exc:
+            logger.warning(f"[StateTracker] Redis persist failed for {key}: {exc}")
+
+    async def recover_from_redis(self, conversation_id: str) -> list[SubAgentState]:
+        """Recover states for a conversation from Redis.
+
+        Scans Redis for keys matching the conversation and deserializes
+        them back into ``SubAgentState`` objects.
+
+        Args:
+            conversation_id: Conversation to recover.
+
+        Returns:
+            List of recovered SubAgentState objects.
+        """
+        if self._redis is None:
+            return []
+
+        recovered: list[SubAgentState] = []
+        pattern = f"subagent:state:{conversation_id}:*"
+        try:
+            keys: list[str] = []
+            cursor: int | str = 0
+            while True:
+                cursor, batch = await self._redis.scan(cursor=cursor, match=pattern, count=100)
+                keys.extend(batch)
+                if cursor == 0:
+                    break
+
+            for key in keys:
+                raw = await self._redis.get(key)
+                if raw:
+                    data = json.loads(raw)
+                    recovered.append(SubAgentState.from_dict(data))
+        except Exception as exc:
+            logger.warning(f"[StateTracker] Redis recovery failed for {conversation_id}: {exc}")
+
+        return recovered

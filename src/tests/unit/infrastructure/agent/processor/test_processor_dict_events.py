@@ -20,7 +20,7 @@ class TestProcessorDictEvents:
         )
 
         async def _mock_process_step(session_id, messages):
-            yield {"type": "subagent_run_started", "data": {"run_id": "run-1"}}
+            yield {"type": "subagent_started", "data": {"run_id": "run-1"}}
 
         async def _mock_goal_completion(session_id, messages):
             return GoalCheckResult(achieved=True, source="test")
@@ -39,7 +39,7 @@ class TestProcessorDictEvents:
             event.get("type") if isinstance(event, dict) else event.event_type.value
             for event in events
         ]
-        assert "subagent_run_started" in event_types
+        assert "subagent_started" in event_types
         assert "complete" in event_types
         assert "error" not in event_types
 

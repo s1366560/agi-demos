@@ -7,17 +7,21 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
+import { subagentAPI } from '../services/subagentService';
 export interface BackgroundSubAgent {
   executionId: string;
   subagentName: string;
   task: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'queued' | 'retrying' | 'killed';
   startedAt: number;
   completedAt?: number | undefined;
   summary?: string | undefined;
   error?: string | undefined;
   tokensUsed?: number | undefined;
   executionTimeMs?: number | undefined;
+  progress?: number | undefined;
+  progressMessage?: string | undefined;
+  killReason?: string | undefined;
 }
 
 interface BackgroundState {
@@ -38,6 +42,8 @@ interface BackgroundState {
   clearAll: () => void;
   togglePanel: () => void;
   setPanel: (open: boolean) => void;
+  updateProgress: (executionId: string, progress: number, message?: string) => void;
+  kill: (executionId: string, reason?: string) => void;
 }
 
 export const useBackgroundStore = create<BackgroundState>()(
@@ -128,6 +134,38 @@ export const useBackgroundStore = create<BackgroundState>()(
       setPanel: (open) => {
         set({ panelOpen: open });
       },
+
+      updateProgress: (executionId, progress, message) => {
+        set((state) => {
+          const next = new Map(state.executions);
+          const existing = next.get(executionId);
+          if (existing) {
+            next.set(executionId, {
+              ...existing,
+              progress,
+              progressMessage: message,
+            });
+          }
+          return { executions: next };
+        });
+      },
+
+      kill: (executionId, reason) => {
+        subagentAPI.cancelExecution(executionId, undefined, reason).catch(() => {});
+        set((state) => {
+          const next = new Map(state.executions);
+          const existing = next.get(executionId);
+          if (existing) {
+            next.set(executionId, {
+              ...existing,
+              status: 'killed',
+              completedAt: Date.now(),
+              killReason: reason,
+            });
+          }
+          return { executions: next };
+        });
+      },
     }),
     { name: 'background-store' }
   )
@@ -143,6 +181,7 @@ export const useRunningCount = () =>
   );
 
 export const useBackgroundPanel = () => useBackgroundStore((state) => state.panelOpen);
+export const useBackgroundKill = () => useBackgroundStore((state) => state.kill);
 
 export const useBackgroundActions = () =>
   useBackgroundStore(
@@ -155,5 +194,7 @@ export const useBackgroundActions = () =>
       clearAll: state.clearAll,
       togglePanel: state.togglePanel,
       setPanel: state.setPanel,
+      updateProgress: state.updateProgress,
+      kill: state.kill,
     }))
   );

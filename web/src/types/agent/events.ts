@@ -235,6 +235,9 @@ export type AgentEventType =
   | 'subagent_announce_giveup' // Session announce gave up after retries
   | 'subagent_killed' // Sessionized SubAgent run cancelled
   | 'subagent_steered' // Steering instruction attached to a run
+  | 'subagent_queued' // SubAgent queued waiting for lane semaphore
+  | 'subagent_depth_limited' // SubAgent delegation depth exceeded
+  | 'subagent_session_update' // SubAgent progress/status update
   | 'parallel_started' // Parallel SubAgent group started
   | 'parallel_completed' // Parallel SubAgent group completed
   | 'chain_started' // Chain execution started
@@ -1344,6 +1347,46 @@ export interface SubAgentAnnounceGiveupEventData {
   subagent_name: string;
   attempts: number;
   error: string;
+}
+
+
+export interface SubAgentQueuedEventData {
+  subagent_id: string;
+  subagent_name: string;
+  queue_position: number;
+  reason?: string | undefined;
+}
+
+
+export interface SubAgentKilledEventData {
+  subagent_id: string;
+  subagent_name: string;
+  kill_reason: string;
+}
+
+
+export interface SubAgentSteeredEventData {
+  subagent_id: string;
+  subagent_name: string;
+  instruction: string;
+}
+
+
+export interface SubAgentDepthLimitedEventData {
+  subagent_name: string;
+  current_depth: number;
+  max_depth: number;
+  parent_subagent_name?: string | undefined;
+}
+
+
+export interface SubAgentSessionUpdateEventData {
+  subagent_id: string;
+  subagent_name: string;
+  progress: number;
+  status_message?: string | undefined;
+  tokens_used?: number | undefined;
+  tool_calls_count?: number | undefined;
 }
 
 

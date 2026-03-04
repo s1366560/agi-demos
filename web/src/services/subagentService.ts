@@ -138,6 +138,21 @@ export const subagentAPI = {
       task_description: taskDescription,
     });
   },
+
+  /**
+   * Cancel a running background SubAgent execution.
+   * Sets a Redis cancel signal that the BackgroundExecutor will pick up.
+   */
+  cancelExecution: async (
+    executionId: string,
+    conversationId?: string,
+    reason?: string,
+  ): Promise<{ execution_id: string; cancelled: boolean; message: string }> => {
+    return await api.post(`/agent/subagent/${executionId}/cancel`, {
+      conversation_id: conversationId,
+      reason: reason,
+    });
+  },
 };
 
 export default subagentAPI;

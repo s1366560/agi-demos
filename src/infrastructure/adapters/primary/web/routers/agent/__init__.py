@@ -15,6 +15,7 @@ from . import (
     messages,
     patterns,
     plans,
+    subagent_router,
     templates,
     tools,
 )
@@ -68,6 +69,7 @@ router.include_router(hitl.router, prefix="/hitl")
 router.include_router(events.router)
 router.include_router(templates.router)
 router.include_router(plans.router)
+router.include_router(subagent_router.router)
 
 __all__ = [
     "CapabilityDomainSummary",

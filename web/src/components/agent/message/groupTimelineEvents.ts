@@ -18,6 +18,11 @@ const SUBAGENT_EVENT_TYPES = new Set([
   'subagent_started',
   'subagent_completed',
   'subagent_failed',
+  'subagent_queued',
+  'subagent_killed',
+  'subagent_steered',
+  'subagent_depth_limited',
+  'subagent_session_update',
   'parallel_started',
   'parallel_completed',
   'chain_started',
@@ -139,6 +144,8 @@ function buildSubAgentGroup(
       if (
         t === 'subagent_completed' ||
         t === 'subagent_failed' ||
+        t === 'subagent_killed' ||
+        t === 'subagent_depth_limited' ||
         t === 'parallel_completed' ||
         t === 'chain_completed' ||
         t === 'background_launched'
@@ -260,6 +267,42 @@ function buildSubAgentGroup(
         group.status = 'background';
         group.subagentName = group.subagentName || d.subagentName || '';
         group.task = d.task;
+        break;
+      }
+      case 'subagent_queued': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.status = 'queued';
+        break;
+      }
+      case 'subagent_killed': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.status = 'killed';
+        group.error = d.kill_reason || d.error || 'Killed';
+        break;
+      }
+      case 'subagent_steered': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.task = d.instruction || group.task;
+        break;
+      }
+      case 'subagent_depth_limited': {
+        const d = ev;
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.status = 'depth_limited';
+        group.error = `Depth limit reached: ${String(d.current_depth ?? '?')}/${String(d.max_depth ?? '?')}`;
+        break;
+      }
+      case 'subagent_session_update': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        // Progress updates don't change status — the agent is still running
         break;
       }
     }

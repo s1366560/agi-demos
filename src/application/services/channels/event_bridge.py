@@ -59,8 +59,8 @@ class ChannelEventBridge:
             "artifact_ready",
             "error",
             "subagent_session_spawned",
-            "subagent_run_completed",
-            "subagent_run_failed",
+            "subagent_completed",
+            "subagent_failed",
             "subagent_announce_retry",
             "subagent_announce_giveup",
             "subagent_killed",
@@ -87,8 +87,8 @@ class ChannelEventBridge:
             "artifact_ready": self._handle_artifact_ready,
             "error": self._handle_error,
             "subagent_session_spawned": self._handle_subagent_focus_event,
-            "subagent_run_completed": self._handle_subagent_focus_event,
-            "subagent_run_failed": self._handle_subagent_focus_event,
+            "subagent_completed": self._handle_subagent_focus_event,
+            "subagent_failed": self._handle_subagent_focus_event,
             "subagent_announce_retry": self._handle_subagent_focus_event,
             "subagent_announce_giveup": self._handle_subagent_focus_event,
             "subagent_killed": self._handle_subagent_focus_event,
@@ -278,8 +278,9 @@ class ChannelEventBridge:
                         return
 
             # 2. Try standalone CardKit flow
-            if hasattr(adapter, "send_hitl_card_via_cardkit"):
-                message_id = await adapter.send_hitl_card_via_cardkit(
+            send_via_cardkit = getattr(adapter, "send_hitl_card_via_cardkit", None)
+            if send_via_cardkit is not None:
+                message_id = await send_via_cardkit(
                     chat_id,
                     event_type,
                     request_id,
@@ -633,7 +634,7 @@ class ChannelEventBridge:
                 )
             return
 
-        if event_type == "subagent_run_completed":
+        if event_type == "subagent_completed":
             self._clear_subagent_focus(conversation_id=conversation_id, run_id=run_id)
             completion_text = f"SubAgent `{subagent_name}` completed."
             if isinstance(summary, str) and summary.strip():
@@ -646,7 +647,7 @@ class ChannelEventBridge:
             )
             return
 
-        if event_type in {"subagent_run_failed", "subagent_announce_giveup", "subagent_killed"}:
+        if event_type in {"subagent_failed", "subagent_announce_giveup", "subagent_killed"}:
             self._clear_subagent_focus(conversation_id=conversation_id, run_id=run_id)
             failure_reason = (
                 error.strip()

@@ -31,6 +31,7 @@ from src.domain.events.agent_events import (
     SubAgentCompletedEvent,
     SubAgentDoomLoopEvent,
     SubAgentFailedEvent,
+    SubAgentKilledEvent,
     SubAgentRetryEvent,
     SubAgentStartedEvent,
 )
@@ -182,12 +183,14 @@ class SubAgentProcess:
 
             # Emit subagent_started event (only on first attempt)
             if attempt == 0:
-                yield dict(SubAgentStartedEvent(
-                    subagent_id=self._subagent.id,
-                    subagent_name=self._subagent.display_name,
-                    task=self._context.task_description[:200],
-                    model=current_model,
-                ).to_event_dict())
+                yield dict(
+                    SubAgentStartedEvent(
+                        subagent_id=self._subagent.id,
+                        subagent_name=self._subagent.display_name,
+                        task=self._context.task_description[:200],
+                        model=current_model,
+                    ).to_event_dict()
+                )
 
             success = True
             error_msg = None
@@ -219,8 +222,7 @@ class SubAgentProcess:
                             yield doom_result
                             success = False
                             error_msg = (
-                                "Session-level doom loop: SubAgent produced "
-                                "repetitive output"
+                                "Session-level doom loop: SubAgent produced repetitive output"
                             )
                             attempt_had_doom_loop = True
                             break
@@ -228,6 +230,14 @@ class SubAgentProcess:
                         yield event
 
             except Exception as e:
+                if isinstance(e, asyncio.CancelledError):
+                    yield dict(
+                        SubAgentKilledEvent(
+                            subagent_id=self._subagent.id,
+                            subagent_name=self._subagent.display_name,
+                            kill_reason="Cancelled during execution",
+                        ).to_event_dict()
+                    )
                 logger.error(
                     f"[SubAgentProcess] Error in {self._subagent.name} "
                     f"(attempt {attempt + 1}/{1 + self._max_retries}): {e}",
@@ -237,21 +247,21 @@ class SubAgentProcess:
                 error_msg = str(e)
 
             # Decide whether to retry
-            if not success and self._should_retry(
-                attempt, attempt_had_doom_loop
-            ):
+            if not success and self._should_retry(attempt, attempt_had_doom_loop):
                 next_model = self._get_model_for_attempt(attempt + 1)
-                yield dict(SubAgentRetryEvent(
-                    subagent_id=self._subagent.id,
-                    subagent_name=self._subagent.display_name,
-                    attempt=attempt + 1,
-                    max_retries=self._max_retries,
-                    model=next_model,
-                    reason=error_msg or "Unknown error",
-                ).to_event_dict())
+                yield dict(
+                    SubAgentRetryEvent(
+                        subagent_id=self._subagent.id,
+                        subagent_name=self._subagent.display_name,
+                        attempt=attempt + 1,
+                        max_retries=self._max_retries,
+                        model=next_model,
+                        reason=error_msg or "Unknown error",
+                    ).to_event_dict()
+                )
 
                 # Exponential backoff: 1s, 2s, 4s, capped at 8s
-                backoff = min(2 ** attempt, 8)
+                backoff = min(2**attempt, 8)
                 await asyncio.sleep(backoff)
                 continue
 
@@ -259,9 +269,7 @@ class SubAgentProcess:
             break
 
         # --- Post-loop finalization (runs once) ---
-        async for event in self._finalize_execution(
-            start_time, success, error_msg, last_attempt
-        ):
+        async for event in self._finalize_execution(start_time, success, error_msg, last_attempt):
             yield event
 
     async def _finalize_execution(
@@ -299,24 +307,28 @@ class SubAgentProcess:
 
         # Emit failure event if we exhausted retries and still failed
         if not success:
-            yield dict(SubAgentFailedEvent(
-                subagent_id=self._subagent.id,
-                subagent_name=self._subagent.display_name,
-                error=error_msg or "Unknown error",
-            ).to_event_dict())
+            yield dict(
+                SubAgentFailedEvent(
+                    subagent_id=self._subagent.id,
+                    subagent_name=self._subagent.display_name,
+                    error=error_msg or "Unknown error",
+                ).to_event_dict()
+            )
 
         # Emit subagent_completed event
-        yield dict(SubAgentCompletedEvent(
-            subagent_id=self._subagent.id,
-            subagent_name=self._subagent.display_name,
-            success=success,
-            summary=summary,
-            tool_calls_count=self._tool_calls_count,
-            tokens_used=self._tokens_used,
-            execution_time_ms=execution_time_ms,
-            error=error_msg,
-            final_content=self._final_content,
-        ).to_event_dict())
+        yield dict(
+            SubAgentCompletedEvent(
+                subagent_id=self._subagent.id,
+                subagent_name=self._subagent.display_name,
+                success=success,
+                summary=summary,
+                tool_calls_count=self._tool_calls_count,
+                tokens_used=self._tokens_used,
+                execution_time_ms=execution_time_ms,
+                error=error_msg,
+                final_content=self._final_content,
+            ).to_event_dict()
+        )
 
         logger.info(
             f"[SubAgentProcess] {self._subagent.name} completed: "
@@ -324,9 +336,7 @@ class SubAgentProcess:
             f"time={execution_time_ms}ms, attempts={last_attempt + 1}"
         )
 
-    def _build_processor(
-        self, model_override: str | None = None
-    ) -> Any:
+    def _build_processor(self, model_override: str | None = None) -> Any:
         """Build a SessionProcessor for this SubAgent.
 
         Args:
@@ -383,9 +393,7 @@ class SubAgentProcess:
         idx = (attempt - 1) % len(self._fallback_models)
         return self._fallback_models[idx]
 
-    def _should_retry(
-        self, attempt: int, had_doom_loop: bool
-    ) -> bool:
+    def _should_retry(self, attempt: int, had_doom_loop: bool) -> bool:
         """Determine if the current failure should be retried.
 
         Retries are blocked when:
@@ -405,8 +413,7 @@ class SubAgentProcess:
             return False
         if had_doom_loop:
             logger.info(
-                "[SubAgentProcess] Skipping retry for %s: "
-                "doom loop detected",
+                "[SubAgentProcess] Skipping retry for %s: doom loop detected",
                 self._subagent.name,
             )
             return False
@@ -427,9 +434,7 @@ class SubAgentProcess:
         elif event_type == "subagent.act":
             self._tool_calls_count += 1
 
-    def _check_session_doom_loop(
-        self, event: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    def _check_session_doom_loop(self, event: dict[str, Any]) -> dict[str, Any] | None:
         """Check for session-level doom loop on text_end boundaries.
 
         Returns a doom-loop event dict if intervention is needed,
@@ -443,21 +448,20 @@ class SubAgentProcess:
             self._current_step_text = ""
             return None
 
-        if self._session_doom_detector.should_intervene(
-            "text_output", step_text
-        ):
+        if self._session_doom_detector.should_intervene("text_output", step_text):
             logger.warning(
-                "[SubAgentProcess] Session-level doom loop "
-                "detected in %s: repetitive text output",
+                "[SubAgentProcess] Session-level doom loop detected in %s: repetitive text output",
                 self._subagent.name,
             )
             self._current_step_text = ""
-            return dict(SubAgentDoomLoopEvent(
-                subagent_id=self._subagent.id,
-                subagent_name=self._subagent.display_name,
-                reason="Repetitive text output detected",
-                threshold=self._doom_loop_threshold,
-            ).to_event_dict())
+            return dict(
+                SubAgentDoomLoopEvent(
+                    subagent_id=self._subagent.id,
+                    subagent_name=self._subagent.display_name,
+                    reason="Repetitive text output detected",
+                    threshold=self._doom_loop_threshold,
+                ).to_event_dict()
+            )
 
         self._session_doom_detector.record("text_output", step_text)
         self._current_step_text = ""

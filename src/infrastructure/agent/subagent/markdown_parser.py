@@ -51,6 +51,13 @@ class SubAgentMarkdown:
         temperature: Optional LLM temperature
         color: Optional UI color
         enabled: Whether the agent is enabled
+        max_tokens: Optional maximum tokens for responses
+        max_retries: Optional maximum retry count
+        fallback_models: List of fallback model names
+        allowed_skills: List of allowed skill IDs
+        allowed_mcp_servers: List of allowed MCP server names
+        mode: Agent mode ("subagent" | "primary" | "all")
+        allow_spawn: Whether this agent can spawn sub-agents
     """
 
     frontmatter: dict[str, Any]
@@ -66,6 +73,13 @@ class SubAgentMarkdown:
     temperature: float | None = None
     color: str | None = None
     enabled: bool = True
+    max_tokens: int | None = None
+    max_retries: int | None = None
+    fallback_models: list[str] = field(default_factory=list)
+    allowed_skills: list[str] = field(default_factory=list)
+    allowed_mcp_servers: list[str] = field(default_factory=list)
+    mode: str = "subagent"
+    allow_spawn: bool = False
 
 
 # Regex to match YAML frontmatter: starts with ---, content, ends with ---
@@ -98,30 +112,7 @@ class SubAgentMarkdownParser:
         Raises:
             SubAgentParseError: If parsing fails
         """
-        if not content or not content.strip():
-            raise SubAgentParseError("Empty content", file_path)
-
-        match = _FRONTMATTER_PATTERN.match(content)
-        if not match:
-            raise SubAgentParseError(
-                "Invalid format: missing or malformed YAML frontmatter. "
-                "File must start with '---' followed by YAML and closing '---'",
-                file_path,
-            )
-
-        frontmatter_yaml = match.group(1)
-        markdown_content = match.group(2).strip()
-
-        try:
-            frontmatter = yaml.safe_load(frontmatter_yaml)
-        except yaml.YAMLError as e:
-            raise SubAgentParseError(f"Invalid YAML frontmatter: {e}", file_path) from e
-
-        if not isinstance(frontmatter, dict):
-            raise SubAgentParseError(
-                "YAML frontmatter must be a dictionary/object",
-                file_path,
-            )
+        frontmatter, markdown_content = self._split_frontmatter(content, file_path)
 
         # Validate required fields
         name = frontmatter.get("name")
@@ -135,51 +126,100 @@ class SubAgentMarkdownParser:
         if not description:
             description = frontmatter.get("desc", "") or frontmatter.get("summary", "")
 
-        # Extract tools (list or comma-separated string)
-        tools = self._extract_list(frontmatter, "tools")
-
-        # Extract model
-        model_raw = str(frontmatter.get("model", "inherit")).strip()
-
-        # Extract optional extended fields
-        display_name = frontmatter.get("display_name")
-        keywords = self._extract_list(frontmatter, "keywords")
-        examples = self._extract_list(frontmatter, "examples")
-
-        max_iterations = frontmatter.get("max_iterations")
-        if max_iterations is not None:
-            try:
-                max_iterations = int(max_iterations)
-            except (ValueError, TypeError):
-                max_iterations = None
-
-        temperature = frontmatter.get("temperature")
-        if temperature is not None:
-            try:
-                temperature = float(temperature)
-            except (ValueError, TypeError):
-                temperature = None
-
-        color = frontmatter.get("color")
-        enabled = frontmatter.get("enabled", True)
-        if not isinstance(enabled, bool):
-            enabled = str(enabled).lower() in ("true", "yes", "1")
-
         return SubAgentMarkdown(
             frontmatter=frontmatter,
             content=markdown_content,
             name=str(name),
             description=str(description),
-            tools=tools,
-            model_raw=model_raw,
-            display_name=str(display_name) if display_name else None,
-            keywords=keywords,
-            examples=examples,
-            max_iterations=max_iterations,
-            temperature=temperature,
-            color=str(color) if color else None,
-            enabled=enabled,
+            tools=self._extract_list(frontmatter, "tools"),
+            model_raw=str(frontmatter.get("model", "inherit")).strip(),
+            display_name=self._extract_optional_str(frontmatter, "display_name"),
+            keywords=self._extract_list(frontmatter, "keywords"),
+            examples=self._extract_list(frontmatter, "examples"),
+            max_iterations=self._extract_optional_int(frontmatter, "max_iterations"),
+            temperature=self._extract_optional_float(frontmatter, "temperature"),
+            color=self._extract_optional_str(frontmatter, "color"),
+            enabled=self._extract_bool(frontmatter, "enabled", default=True),
+            max_tokens=self._extract_optional_int(frontmatter, "max_tokens"),
+            max_retries=self._extract_optional_int(frontmatter, "max_retries"),
+            fallback_models=self._extract_list(frontmatter, "fallback_models"),
+            allowed_skills=self._extract_list(frontmatter, "allowed_skills"),
+            allowed_mcp_servers=self._extract_list(frontmatter, "allowed_mcp_servers"),
+            mode=self._extract_constrained_str(
+                frontmatter, "mode", ("subagent", "primary", "all"), default="subagent"
+            ),
+            allow_spawn=self._extract_bool(frontmatter, "allow_spawn", default=False),
         )
+
+    def _split_frontmatter(self, content: str, file_path: str | None) -> tuple[dict[str, Any], str]:
+        """Split raw content into frontmatter dict and markdown body."""
+        if not content or not content.strip():
+            raise SubAgentParseError("Empty content", file_path)
+
+        match = _FRONTMATTER_PATTERN.match(content)
+        if not match:
+            raise SubAgentParseError(
+                "Invalid format: missing or malformed YAML frontmatter. "
+                "File must start with '---' followed by YAML and closing '---'",
+                file_path,
+            )
+
+        try:
+            frontmatter = yaml.safe_load(match.group(1))
+        except yaml.YAMLError as e:
+            raise SubAgentParseError(f"Invalid YAML frontmatter: {e}", file_path) from e
+
+        if not isinstance(frontmatter, dict):
+            raise SubAgentParseError(
+                "YAML frontmatter must be a dictionary/object",
+                file_path,
+            )
+
+        return frontmatter, match.group(2).strip()
+
+    @staticmethod
+    def _extract_optional_int(data: dict[str, Any], key: str) -> int | None:
+        """Extract an optional integer from frontmatter, returning None on failure."""
+        value = data.get(key)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _extract_optional_float(data: dict[str, Any], key: str) -> float | None:
+        """Extract an optional float from frontmatter, returning None on failure."""
+        value = data.get(key)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _extract_optional_str(data: dict[str, Any], key: str) -> str | None:
+        """Extract an optional string from frontmatter."""
+        value = data.get(key)
+        return str(value) if value is not None else None
+
+    @staticmethod
+    def _extract_bool(data: dict[str, Any], key: str, *, default: bool) -> bool:
+        """Extract a boolean from frontmatter with flexible truthy parsing."""
+        value = data.get(key, default)
+        if isinstance(value, bool):
+            return value
+        return str(value).lower() in ("true", "yes", "1")
+
+    @staticmethod
+    def _extract_constrained_str(
+        data: dict[str, Any], key: str, allowed: tuple[str, ...], *, default: str
+    ) -> str:
+        """Extract a string constrained to allowed values."""
+        value = str(data.get(key, default)).strip()
+        return value if value in allowed else default
 
     def parse_file(self, file_path: str) -> SubAgentMarkdown:
         """

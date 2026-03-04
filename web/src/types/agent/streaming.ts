@@ -46,6 +46,11 @@ import type {
   SubAgentStartedEventData,
   SubAgentCompletedEventData,
   SubAgentFailedEventData,
+  SubAgentQueuedEventData,
+  SubAgentKilledEventData,
+  SubAgentSteeredEventData,
+  SubAgentDepthLimitedEventData,
+  SubAgentSessionUpdateEventData,
   ParallelStartedEventData,
   ParallelCompletedEventData,
   ChainStartedEventData,
@@ -156,6 +161,11 @@ export interface AgentStreamHandler {
   onSubAgentStarted?: ((event: AgentEvent<SubAgentStartedEventData>) => void) | undefined;
   onSubAgentCompleted?: ((event: AgentEvent<SubAgentCompletedEventData>) => void) | undefined;
   onSubAgentFailed?: ((event: AgentEvent<SubAgentFailedEventData>) => void) | undefined;
+  onSubAgentQueued?: ((event: AgentEvent<SubAgentQueuedEventData>) => void) | undefined;
+  onSubAgentKilled?: ((event: AgentEvent<SubAgentKilledEventData>) => void) | undefined;
+  onSubAgentSteered?: ((event: AgentEvent<SubAgentSteeredEventData>) => void) | undefined;
+  onSubAgentDepthLimited?: ((event: AgentEvent<SubAgentDepthLimitedEventData>) => void) | undefined;
+  onSubAgentSessionUpdate?: ((event: AgentEvent<SubAgentSessionUpdateEventData>) => void) | undefined;
   onParallelStarted?: ((event: AgentEvent<ParallelStartedEventData>) => void) | undefined;
   onParallelCompleted?: ((event: AgentEvent<ParallelCompletedEventData>) => void) | undefined;
   onChainStarted?: ((event: AgentEvent<ChainStartedEventData>) => void) | undefined;

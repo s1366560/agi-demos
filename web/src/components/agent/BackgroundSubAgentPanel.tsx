@@ -3,13 +3,26 @@
  * Shows running, completed, and failed background tasks with status indicators.
  */
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Drawer } from 'antd';
-import { Rocket, CheckCircle2, XCircle, Loader2, Clock, Zap, Trash2, X } from 'lucide-react';
-
+import { Drawer, Progress } from 'antd';
+import {
+  Rocket,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Clock,
+  Zap,
+  Trash2,
+  X,
+  StopCircle,
+  RefreshCw,
+  AlertTriangle,
+  Skull,
+  Pause
+} from 'lucide-react';
 import {
   useBackgroundExecutions,
   useBackgroundPanel,
@@ -29,10 +42,16 @@ const StatusBadge = memo<{ status: BackgroundSubAgent['status'] }>(({ status }) 
   switch (status) {
     case 'running':
       return <Loader2 size={14} className="text-blue-500 animate-spin" />;
+    case 'queued':
+      return <Pause size={14} className="text-amber-500" />;
+    case 'retrying':
+      return <RefreshCw size={14} className="text-orange-500 animate-spin" />;
     case 'completed':
       return <CheckCircle2 size={14} className="text-emerald-500" />;
     case 'failed':
       return <XCircle size={14} className="text-red-500" />;
+    case 'killed':
+      return <Skull size={14} className="text-red-600" />;
     case 'cancelled':
       return <X size={14} className="text-slate-400" />;
   }
@@ -43,7 +62,10 @@ StatusBadge.displayName = 'StatusBadge';
 const ExecutionItem = memo<{
   execution: BackgroundSubAgent;
   onClear: (id: string) => void;
-}>(({ execution, onClear }) => {
+  onKill: (id: string) => void;
+  isExpanded: boolean;
+  onToggleExpand: (id: string) => void;
+}>(({ execution, onClear, onKill, isExpanded, onToggleExpand }) => {
   const { t } = useTranslation();
 
   const statusBg =
@@ -64,8 +86,9 @@ const ExecutionItem = memo<{
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
               {execution.subagentName}
             </span>
-            {execution.status !== 'running' && (
+            {execution.status !== 'running' ? (
               <button
+                type="button"
                 onClick={() => {
                   onClear(execution.executionId);
                 }}
@@ -73,6 +96,15 @@ const ExecutionItem = memo<{
                 title={t('agent.background.clear', 'Clear')}
               >
                 <Trash2 size={12} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onKill(execution.executionId); }}
+                className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                title={t('agent.background.kill', 'Stop execution')}
+              >
+                <StopCircle size={14} />
               </button>
             )}
           </div>
@@ -96,19 +128,59 @@ const ExecutionItem = memo<{
             )}
           </div>
 
-          {/* Summary or error */}
-          {execution.summary && (
-            <div className="mt-2 p-2 rounded bg-white/60 dark:bg-slate-900/40 border border-slate-200/30 dark:border-slate-700/20">
-              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3">
-                {execution.summary}
-              </p>
+          {execution.status === 'running' && execution.progress != null && (
+            <div className="mt-2">
+              <Progress
+                percent={execution.progress}
+                size="small"
+                strokeColor="#3b82f6"
+                trailColor="rgba(148,163,184,0.2)"
+                showInfo={false}
+                className="!mb-0"
+              />
+              {execution.progressMessage && (
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">{execution.progressMessage}</p>
+              )}
             </div>
           )}
-          {execution.error && (
-            <div className="mt-2 p-2 rounded bg-red-50/60 dark:bg-red-950/20 border border-red-200/30 dark:border-red-800/20">
-              <p className="text-xs text-red-600 dark:text-red-400 line-clamp-3">
-                {execution.error}
-              </p>
+
+          {/* Summary or error */}
+          {(execution.summary || execution.error || execution.killReason) && (
+            <div className="mt-2">
+              {execution.status !== 'running' && (
+                <button
+                  type="button"
+                  onClick={() => onToggleExpand(execution.executionId)}
+                  className="text-[10px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors mb-1"
+                >
+                  {isExpanded ? t('agent.background.hideDetails', 'Hide details') : t('agent.background.showDetails', 'Show details')}
+                </button>
+              )}
+              
+              {(execution.status === 'running' || isExpanded) && (
+                <div className="space-y-1.5">
+                  {execution.summary && (
+                    <div className="p-2 rounded bg-white/60 dark:bg-slate-900/40 border border-slate-200/30 dark:border-slate-700/20">
+                      <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3">
+                        {execution.summary}
+                      </p>
+                    </div>
+                  )}
+                  {execution.error && (
+                    <div className="p-2 rounded bg-red-50/60 dark:bg-red-950/20 border border-red-200/30 dark:border-red-800/20">
+                      <p className="text-xs text-red-600 dark:text-red-400 line-clamp-3">
+                        {execution.error}
+                      </p>
+                    </div>
+                  )}
+                  {execution.killReason && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[10px] text-red-500">
+                      <AlertTriangle size={10} />
+                      <span>{execution.killReason}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -130,11 +202,22 @@ export const BackgroundSubAgentPanel = memo(() => {
 
 BackgroundSubAgentPanel.displayName = 'BackgroundSubAgentPanel';
 
+
+
 const BackgroundSubAgentDrawer = memo(() => {
   const { t } = useTranslation();
   const executions = useBackgroundExecutions();
-  const { setPanel, clear, clearAll } = useBackgroundActions();
+  const { setPanel, clear, clearAll, kill } = useBackgroundActions();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  const toggleExpand = (id: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const sorted = useMemo(
     () => [...executions].sort((a, b) => b.startedAt - a.startedAt),
     [executions]
@@ -165,6 +248,7 @@ const BackgroundSubAgentDrawer = memo(() => {
       extra={
         sorted.length > 0 && (
           <button
+            type="button"
             onClick={clearAll}
             className="text-xs text-slate-400 hover:text-red-500 transition-colors"
           >
@@ -181,7 +265,14 @@ const BackgroundSubAgentDrawer = memo(() => {
       ) : (
         <div className="space-y-3">
           {sorted.map((exec) => (
-            <ExecutionItem key={exec.executionId} execution={exec} onClear={clear} />
+            <ExecutionItem
+              key={exec.executionId}
+              execution={exec}
+              onClear={clear}
+              onKill={kill}
+              isExpanded={expanded.has(exec.executionId)}
+              onToggleExpand={toggleExpand}
+            />
           ))}
         </div>
       )}

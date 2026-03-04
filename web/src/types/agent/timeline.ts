@@ -115,6 +115,9 @@ export type TimelineEventType =
   | 'subagent_announce_giveup'
   | 'subagent_killed'
   | 'subagent_steered'
+  | 'subagent_queued'
+  | 'subagent_depth_limited'
+  | 'subagent_session_update'
   | 'parallel_started'
   | 'parallel_completed'
   | 'chain_started'
@@ -483,6 +486,11 @@ export type TimelineEvent =
   | ChainStepCompletedTimelineEvent
   | ChainCompletedTimelineEvent
   | BackgroundLaunchedTimelineEvent
+  | SubAgentQueuedTimelineEvent
+  | SubAgentKilledTimelineEvent
+  | SubAgentSteeredTimelineEvent
+  | SubAgentDepthLimitedTimelineEvent
+  | SubAgentSessionUpdateTimelineEvent
   // Task timeline events
   | TaskStartTimelineEvent
   | TaskCompleteTimelineEvent
@@ -528,6 +536,47 @@ export interface SubAgentFailedTimelineEvent extends BaseTimelineEvent {
   subagentId: string;
   subagentName?: string | undefined;
   error: string;
+}
+
+export interface SubAgentQueuedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_queued';
+  subagentId: string;
+  subagentName?: string | undefined;
+  queuePosition?: number | undefined;
+  reason?: string | undefined;
+}
+
+export interface SubAgentKilledTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_killed';
+  subagentId: string;
+  subagentName?: string | undefined;
+  kill_reason?: string | undefined;
+  error?: string | undefined;
+}
+
+export interface SubAgentSteeredTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_steered';
+  subagentId: string;
+  subagentName?: string | undefined;
+  instruction?: string | undefined;
+}
+
+export interface SubAgentDepthLimitedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_depth_limited';
+  subagentName?: string | undefined;
+  current_depth?: number | undefined;
+  max_depth?: number | undefined;
+  parentSubagentName?: string | undefined;
+}
+
+export interface SubAgentSessionUpdateTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_session_update';
+  subagentId: string;
+  subagentName?: string | undefined;
+  progress?: number | undefined;
+  statusMessage?: string | undefined;
+  tokensUsed?: number | undefined;
+  toolCallsCount?: number | undefined;
 }
 
 

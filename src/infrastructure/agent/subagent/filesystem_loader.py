@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.subagent_source import SubAgentSource
+from src.infrastructure.agent.subagent.agent_validator import SubAgentValidator
 from src.infrastructure.agent.subagent.filesystem_scanner import (
     FileSystemSubAgentScanner,
     SubAgentFileInfo,
@@ -114,6 +115,7 @@ class FileSystemSubAgentLoader:
         self.project_id = project_id
         self.scanner = scanner or FileSystemSubAgentScanner()
         self.parser = parser or SubAgentMarkdownParser()
+        self.validator = SubAgentValidator()
 
         # Cache
         self._cache: dict[str, LoadedSubAgent] = {}
@@ -166,6 +168,18 @@ class FileSystemSubAgentLoader:
     def _load_agent_file(self, file_info: SubAgentFileInfo) -> LoadedSubAgent | None:
         """Load a single SubAgent from a file."""
         markdown = self.parser.parse_file(str(file_info.file_path))
+
+        result = self.validator.validate(markdown)
+        if not result.valid:
+            logger.warning(
+                "Invalid agent definition %s: %s",
+                file_info.file_path,
+                result.errors,
+            )
+            return None
+        for warning in result.warnings:
+            logger.info("Agent %s: %s", markdown.name, warning)
+
         subagent = self._create_subagent_from_markdown(markdown, file_info)
 
         return LoadedSubAgent(
@@ -218,6 +232,8 @@ class FileSystemSubAgentLoader:
             model=model,
             color=markdown.color or "blue",
             allowed_tools=tools,
+            allowed_skills=self._resolve_allowed_skills(markdown),
+            allowed_mcp_servers=self._resolve_allowed_mcp_servers(markdown),
             max_tokens=max_tokens,
             temperature=temperature,
             max_iterations=max_iterations,
@@ -260,12 +276,10 @@ class FileSystemSubAgentLoader:
         return 0.7
 
     def _resolve_max_tokens(self, markdown: SubAgentMarkdown) -> int:
-        """Resolve max_tokens: explicit frontmatter -> env var default -> 4096.
+        """Resolve max_tokens: explicit frontmatter -> env var default -> 4096."""
+        if markdown.max_tokens is not None:
+            return markdown.max_tokens
 
-        Note: markdown parser does not yet extract max_tokens from frontmatter,
-        so this currently uses env var or hardcoded default.
-        """
-        # Future: if markdown.max_tokens is not None: return markdown.max_tokens
         settings = self._get_settings()
         if settings and settings.agent_subagent_default_max_tokens is not None:
             return settings.agent_subagent_default_max_tokens
@@ -285,9 +299,8 @@ class FileSystemSubAgentLoader:
 
     def _resolve_max_retries(self, markdown: SubAgentMarkdown) -> int:
         """Resolve max_retries: explicit frontmatter -> env var default -> 0."""
-        max_retries_val: int | None = getattr(markdown, "max_retries", None)
-        if max_retries_val is not None:
-            return max_retries_val
+        if markdown.max_retries is not None:
+            return markdown.max_retries
 
         settings = self._get_settings()
         if settings and settings.agent_subagent_default_max_retries is not None:
@@ -297,15 +310,26 @@ class FileSystemSubAgentLoader:
 
     def _resolve_fallback_models(self, markdown: SubAgentMarkdown) -> list[str]:
         """Resolve fallback_models: explicit frontmatter -> env var default -> []."""
-        fm_models: list[str] | None = getattr(markdown, "fallback_models", None)
-        if fm_models:
-            return list(fm_models)
+        if markdown.fallback_models:
+            return list(markdown.fallback_models)
 
         settings = self._get_settings()
         if settings and settings.agent_subagent_default_fallback_models:
             raw = settings.agent_subagent_default_fallback_models
             return [m.strip() for m in raw.split(",") if m.strip()]
 
+        return []
+
+    def _resolve_allowed_skills(self, markdown: SubAgentMarkdown) -> list[str]:
+        """Resolve allowed_skills: explicit frontmatter -> empty (all allowed)."""
+        if markdown.allowed_skills:
+            return list(markdown.allowed_skills)
+        return []
+
+    def _resolve_allowed_mcp_servers(self, markdown: SubAgentMarkdown) -> list[str]:
+        """Resolve allowed_mcp_servers: explicit frontmatter -> empty (all allowed)."""
+        if markdown.allowed_mcp_servers:
+            return list(markdown.allowed_mcp_servers)
         return []
 
     @staticmethod

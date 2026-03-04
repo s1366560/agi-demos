@@ -473,7 +473,7 @@ async def test_subagent_completion_clears_focus_and_replies_in_thread() -> None:
     await bridge.on_agent_event(
         "conv-sub-2",
         {
-            "type": "subagent_run_completed",
+            "type": "subagent_completed",
             "data": {
                 "run_id": "run-sub-2",
                 "conversation_id": "conv-sub-2",

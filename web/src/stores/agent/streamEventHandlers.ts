@@ -32,6 +32,11 @@ import type {
   ReflectionCompleteEvent,
   ThoughtEventData,
   ToolCall,
+  SubAgentQueuedEventData,
+  SubAgentKilledEventData,
+  SubAgentSteeredEventData,
+  SubAgentDepthLimitedEventData,
+  SubAgentSessionUpdateEventData,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 
@@ -1163,6 +1168,59 @@ export function createStreamEventHandlers(
       if (bgStore.executions.has(execId)) {
         bgStore.fail(execId, event.data.error || 'Unknown error');
       }
+    },
+
+    onSubAgentQueued: (event: AgentEvent<SubAgentQueuedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onSubAgentKilled: (event: AgentEvent<SubAgentKilledEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+      // Update background store if this was a background execution
+      const bgStore = useBackgroundStore.getState();
+      const execId = event.data.subagent_id || '';
+      if (bgStore.executions.has(execId)) {
+        bgStore.fail(execId, event.data.kill_reason || 'Killed');
+      }
+    },
+
+    onSubAgentSteered: (event: AgentEvent<SubAgentSteeredEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentState: 'acting',
+      });
+    },
+
+    onSubAgentDepthLimited: (event: AgentEvent<SubAgentDepthLimitedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onSubAgentSessionUpdate: (event: AgentEvent<SubAgentSessionUpdateEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentState: 'acting',
+      });
     },
 
     onParallelStarted: (event) => {

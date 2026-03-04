@@ -21,15 +21,20 @@ import {
   GitBranch,
   Layers,
   Rocket,
+  Pause,
+  Skull,
+  Navigation,
+  ShieldAlert,
+  Info,
 } from 'lucide-react';
 
+import { SubAgentDetailPanel } from './SubAgentDetailPanel';
 import type { TimelineEvent } from '../../../types/agent';
-
 export interface SubAgentGroup {
   kind: 'subagent';
   subagentId: string;
   subagentName: string;
-  status: 'running' | 'success' | 'error' | 'background';
+  status: 'running' | 'success' | 'error' | 'background' | 'queued' | 'killed' | 'steered' | 'depth_limited';
   events: TimelineEvent[];
   startIndex: number;
   confidence?: number | undefined;
@@ -91,6 +96,14 @@ const StatusIcon = memo<{ status: string; size?: number | undefined }>(({ status
       return <XCircle size={size} className="text-red-500" />;
     case 'background':
       return <Rocket size={size} className="text-purple-500" />;
+    case 'queued':
+      return <Pause size={size} className="text-amber-500" />;
+    case 'killed':
+      return <Skull size={size} className="text-red-600" />;
+    case 'steered':
+      return <Navigation size={size} className="text-cyan-500" />;
+    case 'depth_limited':
+      return <ShieldAlert size={size} className="text-orange-500" />;
     default:
       return <Loader2 size={size} className="text-slate-400 animate-spin" />;
   }
@@ -127,8 +140,11 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
             count: info.taskCount,
           })}
         </span>
+        <span className="text-[9px] px-1 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium uppercase tracking-wider">
+          {t('agent.subagent.parallel_badge', 'Parallel')}
+        </span>
       </div>
-      <div className="grid gap-1.5">
+      <div className={`grid gap-1.5 ${info.taskCount <= 3 ? 'grid-cols-' + info.taskCount : ''}`}>
         {info.subtasks.map((task, i) => {
           const result = info.results?.[i];
           return (
@@ -158,6 +174,15 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
           <span>{formatDuration(info.totalTimeMs)}</span>
         </div>
       )}
+      {info.results && (
+        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
+          <span className="flex items-center gap-0.5">
+            <CheckCircle2 size={9} />
+            {info.results.filter(r => r.success).length}/{info.results.length}
+          </span>
+          <span>{t('agent.subagent.parallel_completed', 'completed')}</span>
+        </div>
+      )}
     </div>
   );
 });
@@ -182,10 +207,11 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
       </div>
       <div className="relative pl-4 space-y-1">
         {/* Vertical connector line */}
-        <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-300 dark:bg-slate-600" />
+        <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-amber-300 to-amber-500 dark:from-amber-600 dark:to-amber-400 rounded-full" />
         {info.steps.map((step) => (
           <div key={`chain-step-${step.index}`} className="relative flex items-start gap-2 py-1">
             {/* Step dot */}
+            <span className="text-[9px] font-mono text-slate-400 mr-1 w-3 text-right">{step.index + 1}</span>
             <div className="relative z-10 mt-0.5">
               <StatusIcon status={step.status} size={12} />
             </div>
@@ -211,6 +237,15 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
           <span>{formatDuration(info.totalTimeMs)}</span>
         </div>
       )}
+      {info.totalTimeMs != null && info.steps.length > 0 && (
+        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
+          <span className="flex items-center gap-0.5">
+            <CheckCircle2 size={9} />
+            {info.steps.filter(s => s.status === 'success').length}/{info.steps.length}
+          </span>
+          <span>{t('agent.subagent.chain_completed', 'steps completed')}</span>
+        </div>
+      )}
     </div>
   );
 });
@@ -220,6 +255,7 @@ ChainDetail.displayName = 'ChainDetail';
 // Main component
 export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreaming }) => {
   const [expanded, setExpanded] = useState(true);
+  const [showDetail, setShowDetail] = useState(false);
   const { t } = useTranslation();
 
   const statusBg = useMemo(() => {
@@ -232,6 +268,14 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         return 'bg-red-50/50 dark:bg-red-950/20 border-red-200/60 dark:border-red-800/30';
       case 'background':
         return 'bg-purple-50/50 dark:bg-purple-950/20 border-purple-200/60 dark:border-purple-800/30';
+      case 'queued':
+        return 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/30';
+      case 'killed':
+        return 'bg-red-50/70 dark:bg-red-950/30 border-red-300/60 dark:border-red-700/40';
+      case 'steered':
+        return 'bg-cyan-50/50 dark:bg-cyan-950/20 border-cyan-200/60 dark:border-cyan-800/30';
+      case 'depth_limited':
+        return 'bg-orange-50/50 dark:bg-orange-950/20 border-orange-200/60 dark:border-orange-800/30';
       default:
         return 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700';
     }
@@ -240,6 +284,21 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
   const headerLabel = useMemo(() => {
     if (group.status === 'background') {
       return t('agent.subagent.background', 'Background: {{name}}', {
+        name: group.subagentName,
+      });
+    }
+    if (group.status === 'queued') {
+      return t('agent.subagent.queued', 'Queued: {{name}}', {
+        name: group.subagentName,
+      });
+    }
+    if (group.status === 'killed') {
+      return t('agent.subagent.killed', 'Killed: {{name}}', {
+        name: group.subagentName,
+      });
+    }
+    if (group.status === 'depth_limited') {
+      return t('agent.subagent.depth_limited', 'Depth Limited: {{name}}', {
         name: group.subagentName,
       });
     }
@@ -260,6 +319,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     <div className={`rounded-lg border ${statusBg} transition-colors duration-200`}>
       {/* Header */}
       <button
+        type="button"
         onClick={() => {
           setExpanded(!expanded);
         }}
@@ -280,6 +340,14 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
         {/* Status badges */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowDetail(true); }}
+            className="p-0.5 rounded text-slate-400 hover:text-blue-500 transition-colors"
+            title={t('agent.subagent.viewDetails', 'View details')}
+          >
+            <Info size={12} />
+          </button>
           {group.confidence != null && (
             <span
               className="text-[10px] px-1.5 py-0.5 rounded-full
@@ -352,7 +420,6 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             </div>
           )}
 
-          {/* Streaming indicator */}
           {isStreaming && group.status === 'running' && (
             <div className="flex items-center gap-1.5 text-xs text-blue-500">
               <Loader2 size={12} className="animate-spin" />
@@ -360,6 +427,9 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             </div>
           )}
         </div>
+      )}
+      {showDetail && (
+        <SubAgentDetailPanel group={group} onClose={() => setShowDetail(false)} />
       )}
     </div>
   );

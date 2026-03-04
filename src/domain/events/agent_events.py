@@ -37,11 +37,16 @@ __all__ = [
     "AgentSelectionTraceEvent",
     "AgentSuggestionsEvent",
     "SubAgentCompletedEvent",
+    "SubAgentDepthLimitedEvent",
     "SubAgentDoomLoopEvent",
     "SubAgentFailedEvent",
+    "SubAgentKilledEvent",
+    "SubAgentQueuedEvent",
     "SubAgentRoutedEvent",
+    "SubAgentSessionUpdateEvent",
     "SubAgentSpawningEvent",
     "SubAgentStartedEvent",
+    "SubAgentSteeredEvent",
     "get_frontend_event_types",
 ]
 
@@ -852,8 +857,6 @@ class AgentCanvasUpdatedEvent(AgentDomainEvent):
     block: dict[str, Any] | None = None  # Serialised CanvasBlock (None for delete)
 
 
-
-
 # =========================================================================
 # Agent Routing & Orchestration Events
 # =========================================================================
@@ -872,9 +875,7 @@ class AgentPlanSuggestedEvent(AgentDomainEvent):
 class AgentContextSummaryGeneratedEvent(AgentDomainEvent):
     """Event: Context summary was generated during compression."""
 
-    event_type: AgentEventType = (
-        AgentEventType.CONTEXT_SUMMARY_GENERATED
-    )
+    event_type: AgentEventType = AgentEventType.CONTEXT_SUMMARY_GENERATED
     summary_text: str
     summary_tokens: int
     messages_covered_count: int
@@ -892,12 +893,8 @@ class AgentSelectionTraceEvent(AgentDomainEvent):
     removed_total: int = 0
     domain_lane: str | None = None
     tool_budget: int = 0
-    budget_exceeded_stages: list[str] = Field(
-        default_factory=list
-    )
-    stages: list[dict[str, Any]] = Field(
-        default_factory=list
-    )
+    budget_exceeded_stages: list[str] = Field(default_factory=list)
+    stages: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentPolicyFilteredEvent(AgentDomainEvent):
@@ -910,9 +907,7 @@ class AgentPolicyFilteredEvent(AgentDomainEvent):
     stage_count: int = 0
     domain_lane: str | None = None
     tool_budget: int = 0
-    budget_exceeded_stages: list[str] = Field(
-        default_factory=list
-    )
+    budget_exceeded_stages: list[str] = Field(default_factory=list)
 
 
 class AgentParallelStartedEvent(AgentDomainEvent):
@@ -923,18 +918,14 @@ class AgentParallelStartedEvent(AgentDomainEvent):
     session_id: str | None = None
     route_id: str | None = None
     trace_id: str | None = None
-    subtasks: list[dict[str, Any]] = Field(
-        default_factory=list
-    )
+    subtasks: list[dict[str, Any]] = Field(default_factory=list)
     task_ids: list[str] = Field(default_factory=list)
 
 
 class AgentParallelCompletedEvent(AgentDomainEvent):
     """Event: Parallel subagent execution completed."""
 
-    event_type: AgentEventType = (
-        AgentEventType.PARALLEL_COMPLETED
-    )
+    event_type: AgentEventType = AgentEventType.PARALLEL_COMPLETED
     total_tasks: int
     session_id: str | None = None
     route_id: str | None = None
@@ -942,9 +933,7 @@ class AgentParallelCompletedEvent(AgentDomainEvent):
     completed: int = 0
     all_succeeded: bool = False
     total_tokens: int = 0
-    failed_agents: list[str] = Field(
-        default_factory=list
-    )
+    failed_agents: list[str] = Field(default_factory=list)
     succeeded: int = 0
     failed: int = 0
     results: list[Any] = Field(default_factory=list)
@@ -953,13 +942,12 @@ class AgentParallelCompletedEvent(AgentDomainEvent):
 class AgentBackgroundLaunchedEvent(AgentDomainEvent):
     """Event: Background subagent execution launched."""
 
-    event_type: AgentEventType = (
-        AgentEventType.BACKGROUND_LAUNCHED
-    )
+    event_type: AgentEventType = AgentEventType.BACKGROUND_LAUNCHED
     execution_id: str
     subagent_id: str
     subagent_name: str
     task: str
+
 
 # =========================================================================
 # SubAgent Lifecycle Events (L3 layer formal events)
@@ -1046,6 +1034,58 @@ class SubAgentRetryEvent(AgentDomainEvent):
     max_retries: int
     model: str
     reason: str
+
+
+class SubAgentQueuedEvent(AgentDomainEvent):
+    """Event: SubAgent queued, waiting for capacity."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_QUEUED
+    subagent_id: str
+    subagent_name: str
+    queue_position: int = 0
+    reason: str = ""  # "depth_limit" | "concurrency_limit"
+
+
+class SubAgentKilledEvent(AgentDomainEvent):
+    """Event: SubAgent forcibly terminated."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_KILLED
+    subagent_id: str
+    subagent_name: str
+    kill_reason: str  # "timeout" | "user_cancel" | "parent_cancel" | "orphan_sweep"
+
+
+class SubAgentSteeredEvent(AgentDomainEvent):
+    """Event: SubAgent received steering instruction from parent."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_STEERED
+    subagent_id: str
+    subagent_name: str
+    instruction: str
+
+
+class SubAgentDepthLimitedEvent(AgentDomainEvent):
+    """Event: SubAgent spawn refused due to depth limit."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_DEPTH_LIMITED
+    subagent_name: str
+    current_depth: int
+    max_depth: int
+    parent_subagent_name: str = ""
+
+
+class SubAgentSessionUpdateEvent(AgentDomainEvent):
+    """Event: Progress update from a running SubAgent."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_SESSION_UPDATE
+    subagent_id: str
+    subagent_name: str
+    progress: int = 0  # 0-100
+    status_message: str = ""
+    tokens_used: int = 0
+    tool_calls_count: int = 0
+
+
 # Event Type Utilities
 # =========================================================================
 
@@ -1121,6 +1161,11 @@ def get_event_type_docstring() -> str:
         SubAgentFailedEvent,
         SubAgentDoomLoopEvent,
         SubAgentRetryEvent,
+        SubAgentQueuedEvent,
+        SubAgentKilledEvent,
+        SubAgentSteeredEvent,
+        SubAgentDepthLimitedEvent,
+        SubAgentSessionUpdateEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

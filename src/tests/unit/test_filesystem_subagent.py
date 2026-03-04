@@ -5,6 +5,7 @@ Tests the markdown parser, filesystem scanner, filesystem loader,
 SubAgent source enum, and SubAgentService merge logic.
 """
 
+import logging
 import tempfile
 from pathlib import Path
 
@@ -13,6 +14,9 @@ import pytest
 from src.application.services.subagent_service import SubAgentService
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.subagent_source import SubAgentSource
+from src.infrastructure.agent.subagent.agent_validator import (
+    SubAgentValidator,
+)
 from src.infrastructure.agent.subagent.filesystem_loader import (
     MODEL_MAPPING,
     FileSystemSubAgentLoader,
@@ -21,9 +25,11 @@ from src.infrastructure.agent.subagent.filesystem_scanner import (
     FileSystemSubAgentScanner,
 )
 from src.infrastructure.agent.subagent.markdown_parser import (
+    SubAgentMarkdown,
     SubAgentMarkdownParser,
     SubAgentParseError,
 )
+from src.infrastructure.agent.subagent.override_resolver import AgentOverrideResolver
 
 # =============================================================================
 # SubAgentMarkdownParser Tests
@@ -185,6 +191,196 @@ enabled: {val}
 Content."""
             result = self.parser.parse(content)
             assert result.enabled == expected, f"'{val}' should be {expected}"
+
+
+# =============================================================================
+# SubAgentMarkdownParser New Fields Tests
+# =============================================================================
+
+
+class TestSubAgentMarkdownParserNewFields:
+    """Tests for 7 new fields added to SubAgentMarkdown."""
+
+    def setup_method(self):
+        self.parser = SubAgentMarkdownParser()
+
+    def _make_content(self, **extra_fields: object) -> str:
+        """Build minimal valid agent markdown with optional extra frontmatter fields."""
+        lines = ["---", "name: test-agent", "description: Test agent"]
+        for key, val in extra_fields.items():
+            lines.append(f"{key}: {val}")
+        lines.append("---")
+        lines.append("")
+        lines.append("System prompt.")
+        return "\n".join(lines)
+
+    # -- max_tokens --
+
+    def test_parse_max_tokens(self):
+        """YAML with max_tokens: 4096."""
+        result = self.parser.parse(self._make_content(max_tokens=4096))
+        assert result.max_tokens == 4096
+
+    def test_parse_max_tokens_absent(self):
+        """YAML without max_tokens."""
+        result = self.parser.parse(self._make_content())
+        assert result.max_tokens is None
+
+    def test_parse_max_tokens_invalid_string(self):
+        """YAML with max_tokens: not_a_number."""
+        result = self.parser.parse(self._make_content(max_tokens="not_a_number"))
+        assert result.max_tokens is None
+
+    # -- max_retries --
+
+    def test_parse_max_retries(self):
+        """YAML with max_retries: 3."""
+        result = self.parser.parse(self._make_content(max_retries=3))
+        assert result.max_retries == 3
+
+    def test_parse_max_retries_absent(self):
+        """YAML without max_retries."""
+        result = self.parser.parse(self._make_content())
+        assert result.max_retries is None
+
+    # -- fallback_models --
+
+    def test_parse_fallback_models_list(self):
+        """YAML list of fallback_models."""
+        content = """---
+name: test-agent
+description: Test agent
+fallback_models: ["gpt-4", "deepseek"]
+---
+
+System prompt."""
+        result = self.parser.parse(content)
+        assert result.fallback_models == ["gpt-4", "deepseek"]
+
+    def test_parse_fallback_models_absent(self):
+        """No fallback_models field."""
+        result = self.parser.parse(self._make_content())
+        assert result.fallback_models == []
+
+    def test_parse_fallback_models_comma_string(self):
+        """YAML with fallback_models as comma-separated string."""
+        content = """---
+name: test-agent
+description: Test agent
+fallback_models: gpt-4, deepseek
+---
+
+System prompt."""
+        result = self.parser.parse(content)
+        assert result.fallback_models == ["gpt-4", "deepseek"]
+
+    # -- allowed_skills --
+
+    def test_parse_allowed_skills(self):
+        """YAML list of allowed_skills."""
+        content = """---
+name: test-agent
+description: Test agent
+allowed_skills: ["code-review", "search"]
+---
+
+System prompt."""
+        result = self.parser.parse(content)
+        assert result.allowed_skills == ["code-review", "search"]
+
+    def test_parse_allowed_skills_absent(self):
+        """No allowed_skills field."""
+        result = self.parser.parse(self._make_content())
+        assert result.allowed_skills == []
+
+    # -- allowed_mcp_servers --
+
+    def test_parse_allowed_mcp_servers(self):
+        """YAML list of allowed_mcp_servers."""
+        content = """---
+name: test-agent
+description: Test agent
+allowed_mcp_servers: ["github", "jira"]
+---
+
+System prompt."""
+        result = self.parser.parse(content)
+        assert result.allowed_mcp_servers == ["github", "jira"]
+
+    def test_parse_allowed_mcp_servers_absent(self):
+        """No allowed_mcp_servers field."""
+        result = self.parser.parse(self._make_content())
+        assert result.allowed_mcp_servers == []
+
+    # -- mode --
+
+    def test_parse_mode_subagent(self):
+        """mode: subagent."""
+        result = self.parser.parse(self._make_content(mode="subagent"))
+        assert result.mode == "subagent"
+
+    def test_parse_mode_primary(self):
+        """mode: primary."""
+        result = self.parser.parse(self._make_content(mode="primary"))
+        assert result.mode == "primary"
+
+    def test_parse_mode_all(self):
+        """mode: all."""
+        result = self.parser.parse(self._make_content(mode="all"))
+        assert result.mode == "all"
+
+    def test_parse_mode_invalid_falls_back(self):
+        """mode: invalid falls back to default 'subagent'."""
+        result = self.parser.parse(self._make_content(mode="invalid"))
+        assert result.mode == "subagent"
+
+    def test_parse_mode_absent(self):
+        """No mode field defaults to 'subagent'."""
+        result = self.parser.parse(self._make_content())
+        assert result.mode == "subagent"
+
+    # -- allow_spawn --
+
+    def test_parse_allow_spawn_true(self):
+        """allow_spawn: true."""
+        result = self.parser.parse(self._make_content(allow_spawn="true"))
+        assert result.allow_spawn is True
+
+    def test_parse_allow_spawn_false(self):
+        """allow_spawn: false."""
+        result = self.parser.parse(self._make_content(allow_spawn="false"))
+        assert result.allow_spawn is False
+
+    def test_parse_allow_spawn_absent(self):
+        """No allow_spawn field defaults to False."""
+        result = self.parser.parse(self._make_content())
+        assert result.allow_spawn is False
+
+    # -- all fields together --
+
+    def test_parse_all_new_fields_together(self):
+        """YAML with all 7 new fields."""
+        content = """---
+name: full-agent
+description: Full featured agent
+max_tokens: 8192
+max_retries: 5
+fallback_models: ["gpt-4", "deepseek"]
+allowed_skills: ["code-review"]
+allowed_mcp_servers: ["github"]
+mode: primary
+allow_spawn: true
+---
+
+Full system prompt."""
+        result = self.parser.parse(content)
+        assert result.max_tokens == 8192
+        assert result.max_retries == 5
+        assert result.fallback_models == ["gpt-4", "deepseek"]
+        assert result.allowed_skills == ["code-review"]
+        assert result.allowed_mcp_servers == ["github"]
+        assert result.mode == "primary"
+        assert result.allow_spawn is True
 
 
 # =============================================================================
@@ -750,3 +946,298 @@ class TestRealAgentFiles:
             assert sa.trigger.description
             assert sa.source == SubAgentSource.FILESYSTEM
             assert sa.tenant_id == "test-tenant"
+
+
+# =============================================================================
+# SubAgentValidator Tests
+# =============================================================================
+
+
+class TestSubAgentValidator:
+    """Tests for all 11 validation checks in SubAgentValidator."""
+
+    def setup_method(self):
+        self.validator = SubAgentValidator()
+
+    @staticmethod
+    def _make_markdown(**overrides: object) -> SubAgentMarkdown:
+        """Build a valid SubAgentMarkdown, overriding specific fields."""
+        defaults: dict[str, object] = {
+            "frontmatter": {},
+            "content": "Valid system prompt",
+            "name": "test-agent",
+            "description": "Test description",
+            "tools": [],
+            "model_raw": "sonnet",
+        }
+        defaults.update(overrides)
+        return SubAgentMarkdown(**defaults)  # type: ignore[arg-type]
+
+    # -- identity checks --
+
+    def test_valid_agent_passes(self):
+        """All fields valid, no errors or warnings."""
+        result = self.validator.validate(self._make_markdown())
+        assert result.valid is True
+        assert result.errors == []
+        assert result.warnings == []
+
+    def test_empty_name_error(self):
+        """Empty name must produce an error."""
+        result = self.validator.validate(self._make_markdown(name=""))
+        assert result.valid is False
+        assert any("name must not be empty" in e for e in result.errors)
+
+    def test_long_name_error(self):
+        """Name > 100 characters must produce an error."""
+        result = self.validator.validate(self._make_markdown(name="x" * 101))
+        assert result.valid is False
+        assert any("name must be 1-100 characters" in e for e in result.errors)
+
+    def test_empty_description_warning(self):
+        """Empty description is a warning, not an error."""
+        result = self.validator.validate(self._make_markdown(description=""))
+        assert result.valid is True
+        assert any("description is empty" in w for w in result.warnings)
+
+    # -- safety constraints --
+
+    def test_prompt_exceeds_max_length(self):
+        """Prompt > 50,000 chars must error."""
+        result = self.validator.validate(self._make_markdown(content="x" * 50_001))
+        assert result.valid is False
+        assert any("maximum length" in e for e in result.errors)
+
+    def test_restricted_tool_plugin_manager(self):
+        """plugin_manager is a restricted tool."""
+        result = self.validator.validate(self._make_markdown(tools=["read", "plugin_manager"]))
+        assert result.valid is False
+        assert any("restricted tools" in e for e in result.errors)
+
+    def test_restricted_tool_env_var_set(self):
+        """env_var_set is a restricted tool."""
+        result = self.validator.validate(self._make_markdown(tools=["env_var_set"]))
+        assert result.valid is False
+        assert any("restricted tools" in e for e in result.errors)
+
+    def test_allow_spawn_no_tools_warning(self):
+        """allow_spawn=True with no tools is a warning."""
+        result = self.validator.validate(self._make_markdown(allow_spawn=True, tools=[]))
+        assert result.valid is True
+        assert any("allow_spawn" in w for w in result.warnings)
+
+    def test_unrecognized_model_warning(self):
+        """Unrecognized model produces a warning."""
+        result = self.validator.validate(self._make_markdown(model_raw="unknown-model-xyz"))
+        assert result.valid is True
+        assert any("unrecognized model" in w for w in result.warnings)
+
+    def test_known_model_no_warning(self):
+        """Known model produces no warning."""
+        result = self.validator.validate(self._make_markdown(model_raw="sonnet"))
+        assert result.warnings == []
+
+    # -- numeric range checks --
+
+    def test_temperature_below_range(self):
+        """temperature < 0.0 must error."""
+        result = self.validator.validate(self._make_markdown(temperature=-0.1))
+        assert result.valid is False
+        assert any("temperature" in e for e in result.errors)
+
+    def test_temperature_above_range(self):
+        """temperature > 2.0 must error."""
+        result = self.validator.validate(self._make_markdown(temperature=2.1))
+        assert result.valid is False
+        assert any("temperature" in e for e in result.errors)
+
+    def test_temperature_at_bounds(self):
+        """temperature 0.0 and 2.0 are both valid."""
+        for temp in (0.0, 2.0):
+            result = self.validator.validate(self._make_markdown(temperature=temp))
+            assert result.valid is True, f"temperature={temp} should be valid"
+
+    def test_max_iterations_below_range(self):
+        """max_iterations < 1 must error."""
+        result = self.validator.validate(self._make_markdown(max_iterations=0))
+        assert result.valid is False
+        assert any("max_iterations" in e for e in result.errors)
+
+    def test_max_iterations_above_range(self):
+        """max_iterations > 50 must error."""
+        result = self.validator.validate(self._make_markdown(max_iterations=51))
+        assert result.valid is False
+        assert any("max_iterations" in e for e in result.errors)
+
+    def test_max_iterations_at_bounds(self):
+        """max_iterations 1 and 50 are both valid."""
+        for val in (1, 50):
+            result = self.validator.validate(self._make_markdown(max_iterations=val))
+            assert result.valid is True, f"max_iterations={val} should be valid"
+
+    def test_max_tokens_below_range(self):
+        """max_tokens < 1 must error."""
+        result = self.validator.validate(self._make_markdown(max_tokens=0))
+        assert result.valid is False
+        assert any("max_tokens" in e for e in result.errors)
+
+    def test_max_tokens_above_range(self):
+        """max_tokens > 1,000,000 must error."""
+        result = self.validator.validate(self._make_markdown(max_tokens=1_000_001))
+        assert result.valid is False
+        assert any("max_tokens" in e for e in result.errors)
+
+    def test_max_retries_below_range(self):
+        """max_retries < 0 must error."""
+        result = self.validator.validate(self._make_markdown(max_retries=-1))
+        assert result.valid is False
+        assert any("max_retries" in e for e in result.errors)
+
+    def test_max_retries_above_range(self):
+        """max_retries > 10 must error."""
+        result = self.validator.validate(self._make_markdown(max_retries=11))
+        assert result.valid is False
+        assert any("max_retries" in e for e in result.errors)
+
+    # -- mode validation --
+
+    def test_invalid_mode_error(self):
+        """Direct SubAgentMarkdown with invalid mode must error."""
+        result = self.validator.validate(self._make_markdown(mode="invalid"))
+        assert result.valid is False
+        assert any("mode" in e for e in result.errors)
+
+    # -- compound checks --
+
+    def test_multiple_errors_collected(self):
+        """Multiple errors are all collected."""
+        result = self.validator.validate(
+            self._make_markdown(
+                name="",
+                tools=["plugin_manager"],
+                temperature=-1.0,
+            )
+        )
+        assert result.valid is False
+        assert len(result.errors) >= 3
+
+    def test_errors_and_warnings_mixed(self):
+        """Agent with both errors and warnings."""
+        result = self.validator.validate(
+            self._make_markdown(
+                name="",
+                description="",
+                model_raw="unknown-xyz",
+            )
+        )
+        assert result.valid is False
+        assert len(result.errors) >= 1
+        assert len(result.warnings) >= 1
+
+
+# =============================================================================
+# AgentOverrideResolver Tests
+# =============================================================================
+
+
+class TestAgentOverrideResolver:
+    """Tests for 3-tier SubAgent merge in AgentOverrideResolver."""
+
+    def setup_method(self):
+        self.resolver = AgentOverrideResolver()
+
+    @staticmethod
+    def _make_subagent(name: str, source: SubAgentSource = SubAgentSource.FILESYSTEM) -> SubAgent:
+        """Create a lightweight SubAgent for testing."""
+        return SubAgent(
+            id=f"test-{name}",
+            tenant_id="t1",
+            name=name,
+            display_name=name.title(),
+            system_prompt=f"Prompt for {name}",
+            trigger=AgentTrigger(description=f"Desc for {name}"),
+            source=source,
+        )
+
+    def test_resolve_empty_all_tiers(self):
+        """All empty dicts returns empty."""
+        result = self.resolver.resolve({}, {}, {})
+        assert result == {}
+
+    def test_resolve_global_only(self):
+        """Global has 2 agents, others empty."""
+        g = {
+            "a": self._make_subagent("a"),
+            "b": self._make_subagent("b"),
+        }
+        result = self.resolver.resolve({}, {}, g)
+        assert len(result) == 2
+        assert set(result.keys()) == {"a", "b"}
+
+    def test_resolve_tenant_overrides_global(self):
+        """Same name in global and tenant: tenant wins."""
+        g_agent = self._make_subagent("shared", SubAgentSource.FILESYSTEM)
+        t_agent = self._make_subagent("shared", SubAgentSource.DATABASE)
+        result = self.resolver.resolve({}, {"shared": t_agent}, {"shared": g_agent})
+        assert result["shared"] is t_agent
+
+    def test_resolve_project_overrides_tenant(self):
+        """Same name in tenant and project: project wins."""
+        t_agent = self._make_subagent("shared")
+        p_agent = self._make_subagent("shared", SubAgentSource.DATABASE)
+        result = self.resolver.resolve({"shared": p_agent}, {"shared": t_agent}, {})
+        assert result["shared"] is p_agent
+
+    def test_resolve_project_overrides_all(self):
+        """Same name in all 3 tiers: project wins."""
+        g_agent = self._make_subagent("shared")
+        t_agent = self._make_subagent("shared")
+        p_agent = self._make_subagent("shared")
+        result = self.resolver.resolve(
+            {"shared": p_agent}, {"shared": t_agent}, {"shared": g_agent}
+        )
+        assert result["shared"] is p_agent
+
+    def test_resolve_no_overlap(self):
+        """Different names across tiers are all preserved."""
+        g = {"g-agent": self._make_subagent("g-agent")}
+        t = {"t-agent": self._make_subagent("t-agent")}
+        p = {"p-agent": self._make_subagent("p-agent")}
+        result = self.resolver.resolve(p, t, g)
+        assert set(result.keys()) == {"g-agent", "t-agent", "p-agent"}
+
+    def test_resolve_partial_overlap(self):
+        """Some overlap, some unique: correct merge."""
+        g = {
+            "shared": self._make_subagent("shared"),
+            "g-only": self._make_subagent("g-only"),
+        }
+        t = {
+            "shared": self._make_subagent("shared"),
+            "t-only": self._make_subagent("t-only"),
+        }
+        p_shared = self._make_subagent("shared")
+        p = {"shared": p_shared}
+        result = self.resolver.resolve(p, t, g)
+        assert len(result) == 3
+        assert set(result.keys()) == {"shared", "g-only", "t-only"}
+        assert result["shared"] is p_shared
+
+    def test_log_overrides_called(self, caplog):
+        """Override logging is emitted for agents in multiple tiers."""
+        g = {"shared": self._make_subagent("shared")}
+        t = {"shared": self._make_subagent("shared")}
+        with caplog.at_level(logging.INFO):
+            self.resolver.resolve({}, t, g)
+        assert any("shared" in record.message for record in caplog.records)
+        assert any("tenant" in record.message for record in caplog.records)
+
+    def test_resolve_preserves_agent_identity(self):
+        """Winning SubAgent is the exact instance from the winning tier."""
+        g_agent = self._make_subagent("a")
+        t_agent = self._make_subagent("a")
+        p_agent = self._make_subagent("a")
+        result = self.resolver.resolve({"a": p_agent}, {"a": t_agent}, {"a": g_agent})
+        assert result["a"] is p_agent
+        assert result["a"] is not t_agent
+        assert result["a"] is not g_agent

@@ -291,8 +291,8 @@ class TestBackgroundExecutor:
             await asyncio.sleep(0.3)
 
         event_types = [e["type"] for e in events]
-        assert "background_subagent_started" in event_types
-        assert "background_subagent_completed" in event_types
+        assert "background_launched" in event_types
+        assert "subagent_completed" in event_types
 
     async def test_cancel(self, sample_subagent):
         executor = BackgroundExecutor()

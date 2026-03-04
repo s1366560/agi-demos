@@ -59,6 +59,11 @@ import type {
   SubAgentAnnounceRetryEventData,
   SubAgentSessionMessageSentEventData,
   SubAgentSessionSpawnedEventData,
+  SubAgentQueuedEventData,
+  SubAgentKilledEventData,
+  SubAgentSteeredEventData,
+  SubAgentDepthLimitedEventData,
+  SubAgentSessionUpdateEventData,
   ParallelStartedEventData,
   ParallelCompletedEventData,
   ChainStartedEventData,
@@ -453,19 +458,9 @@ export function routeToHandler(eventType: AgentEventType, data: unknown, handler
         } as AgentEvent<SubAgentFailedEventData>);
         break;
       }
-      case 'subagent_killed': {
-        const data = event.data as SubAgentRunEventData;
-        handler.onSubAgentFailed?.({
-          ...event,
-          type: 'subagent_failed',
-          data: {
-            subagent_id: data.run_id,
-            subagent_name: data.subagent_name,
-            error: data.error || 'Cancelled',
-          },
-        } as AgentEvent<SubAgentFailedEventData>);
+      case 'subagent_killed':
+        handler.onSubAgentKilled?.(event as AgentEvent<SubAgentKilledEventData>);
         break;
-      }
       case 'subagent_session_spawned': {
         const data = event.data as SubAgentSessionSpawnedEventData;
         handler.onSubAgentStarted?.({
@@ -494,6 +489,7 @@ export function routeToHandler(eventType: AgentEventType, data: unknown, handler
       }
       case 'subagent_announce_retry': {
         const data = event.data as SubAgentAnnounceRetryEventData;
+        // Route to dedicated retry handler (no longer collapsed to started)
         handler.onSubAgentStarted?.({
           ...event,
           type: 'subagent_started',
@@ -518,19 +514,18 @@ export function routeToHandler(eventType: AgentEventType, data: unknown, handler
         } as AgentEvent<SubAgentFailedEventData>);
         break;
       }
-      case 'subagent_steered': {
-        const data = event.data as SubAgentRunEventData & { instruction?: string | undefined };
-        handler.onSubAgentStarted?.({
-          ...event,
-          type: 'subagent_started',
-          data: {
-            subagent_id: data.run_id,
-            subagent_name: data.subagent_name,
-            task: data.instruction ? `Steered: ${data.instruction}` : 'Steered',
-          },
-        } as AgentEvent<SubAgentStartedEventData>);
+      case 'subagent_steered':
+        handler.onSubAgentSteered?.(event as AgentEvent<SubAgentSteeredEventData>);
         break;
-      }
+      case 'subagent_queued':
+        handler.onSubAgentQueued?.(event as AgentEvent<SubAgentQueuedEventData>);
+        break;
+      case 'subagent_depth_limited':
+        handler.onSubAgentDepthLimited?.(event as AgentEvent<SubAgentDepthLimitedEventData>);
+        break;
+      case 'subagent_session_update':
+        handler.onSubAgentSessionUpdate?.(event as AgentEvent<SubAgentSessionUpdateEventData>);
+        break;
       case 'parallel_started':
         handler.onParallelStarted?.(event as AgentEvent<ParallelStartedEventData>);
         break;
