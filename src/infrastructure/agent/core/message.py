@@ -131,6 +131,11 @@ class Message:
     content: str = ""
     parts: list[MessagePart] = field(default_factory=list)
 
+    # Multimodal content for vision/image messages (OpenAI format).
+    # When set, to_llm_format() emits this as "content" instead of the
+    # string ``content`` field.
+    multimodal_content: list[dict[str, Any]] | None = None
+
     # For assistant messages
     agent: str | None = None
     parent_id: str | None = None
@@ -214,10 +219,18 @@ class Message:
             Dict with role, content, and optionally tool_calls for LLM.
             For assistant messages with tool calls, includes the tool_calls field
             in OpenAI format.
+            When ``multimodal_content`` is set (e.g. images), it is used as
+            the ``content`` value instead of the plain-text ``content`` field.
         """
+        llm_content: str | list[dict[str, Any]] | None
+        if self.multimodal_content is not None:
+            llm_content = self.multimodal_content
+        else:
+            llm_content = self.content or self.get_full_text() or None
+
         result: dict[str, Any] = {
             "role": self.role.value,
-            "content": self.content or self.get_full_text() or None,
+            "content": llm_content,
         }
 
         # Include tool_calls for assistant messages that have tool parts

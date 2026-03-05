@@ -325,8 +325,11 @@ export interface ProviderConfig {
   reranker_model?: string | undefined;
   config: Record<string, any>;
   is_active: boolean;
+  is_enabled: boolean;
   is_default: boolean;
   api_key_masked: string;
+  allowed_models: string[];
+  blocked_models: string[];
   created_at: string;
   updated_at: string;
   health_status?: ProviderStatus | undefined;
@@ -349,7 +352,10 @@ export interface ProviderCreate {
   reranker_model?: string | undefined;
   config?: Record<string, any> | undefined;
   is_active?: boolean | undefined;
+  is_enabled?: boolean | undefined;
   is_default?: boolean | undefined;
+  allowed_models?: string[] | undefined;
+  blocked_models?: string[] | undefined;
 }
 
 export interface ProviderUpdate {
@@ -364,7 +370,27 @@ export interface ProviderUpdate {
   reranker_model?: string | undefined;
   config?: Record<string, any> | undefined;
   is_active?: boolean | undefined;
+  is_enabled?: boolean | undefined;
   is_default?: boolean | undefined;
+  allowed_models?: string[] | undefined;
+  blocked_models?: string[] | undefined;
+}
+
+export interface ModelCatalogEntry {
+  name: string;
+  provider?: string;
+  family?: string;
+  context_length: number;
+  max_output_tokens: number;
+  input_cost_per_1m: number;
+  output_cost_per_1m: number;
+  capabilities: string[];
+  modalities: string[];
+  variants: string[];
+  supports_streaming: boolean;
+  supports_json_mode: boolean;
+  is_deprecated: boolean;
+  description?: string;
 }
 
 export interface ProviderListResponse {

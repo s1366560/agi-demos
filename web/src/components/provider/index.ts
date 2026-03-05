@@ -6,3 +6,4 @@ export { ProviderUsageStats } from './ProviderUsageStats';
 export { AssignProviderModal } from './AssignProviderModal';
 export { ModelAssignment } from './ModelAssignment';
 export { ProviderSelectorModal } from './ProviderSelectorModal';
+export { ModelCatalogBrowser } from './ModelCatalogBrowser';

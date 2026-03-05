@@ -148,6 +148,9 @@ class ProviderService:
             config=provider.config,
             is_active=provider.is_active,
             is_default=provider.is_default,
+            is_enabled=provider.is_enabled,
+            allowed_models=provider.allowed_models,
+            blocked_models=provider.blocked_models,
             api_key_masked=api_key_masked,
             created_at=provider.created_at,
             updated_at=provider.updated_at,
@@ -288,9 +291,7 @@ class ProviderService:
         """Check providers with non-standard health check patterns."""
         if provider_type == "azure_openai" and not base_url:
             return "unhealthy", "Azure OpenAI requires a custom base URL"
-        check_spec = self._build_special_check_spec(
-            provider_type, base_url, api_key, provider
-        )
+        check_spec = self._build_special_check_spec(provider_type, base_url, api_key, provider)
         if check_spec is None:
             return "degraded", f"Unknown provider type: {provider_type}"
         url, headers = check_spec
@@ -546,7 +547,9 @@ class ProviderService:
         providers = await self.repository.list_all()
         for provider in providers:
             if provider.is_default:
-                await self.repository.update(provider.id, ProviderConfigUpdate(name=None, api_key=None, is_default=False))
+                await self.repository.update(
+                    provider.id, ProviderConfigUpdate(name=None, api_key=None, is_default=False)
+                )
 
     async def clear_all_providers(self) -> int:
         """
@@ -644,7 +647,12 @@ class ProviderService:
             )
         except Exception as e:
             logger.warning(f"Failed to get resilience status for {provider_type}: {e}")
-            return ResilienceStatus(circuit_breaker_state=CircuitBreakerState.CLOSED, failure_count=0, success_count=0, can_execute=True)
+            return ResilienceStatus(
+                circuit_breaker_state=CircuitBreakerState.CLOSED,
+                failure_count=0,
+                success_count=0,
+                can_execute=True,
+            )
 
 
 # Singleton instance for dependency injection

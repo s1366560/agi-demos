@@ -454,7 +454,10 @@ async def get_or_create_tools(
     # 13. Add Session Communication tools (agent-to-agent)
     _add_session_comm_tools(tools, project_id, redis_client)
 
-    # 14. Add Canvas tools (A2UI)
+    # 13b. Add Session Status tool
+    _add_session_status_tool(tools, project_id)
+
+    # 15. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
 
     return tools
@@ -539,8 +542,7 @@ async def _add_skill_loader_tool(
             set_sandbox_id(sandbox_id)
         tools["skill_loader"] = skill_loader_info
         logger.info(
-            f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, "
-            f"agent_mode={agent_mode}"
+            f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
         )
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillLoaderTool: {e}")
@@ -571,6 +573,7 @@ def _add_skill_installer_tools(
         )
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure skill_installer/plugin_manager: {e}")
+
 
 def _add_skill_sync_tool(
     tools: dict[str, Any],
@@ -674,6 +677,7 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
 
+
 def _add_register_mcp_server_tool(
     tools: dict[str, Any],
     tenant_id: str,
@@ -700,6 +704,7 @@ def _add_register_mcp_server_tool(
         logger.info(f"Agent Worker: register_mcp_server configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure register_mcp_server: {e}")
+
 
 def _add_memory_tools(
     tools: dict[str, Any],
@@ -821,9 +826,7 @@ async def _add_sandbox_plugin_tools(
 ) -> None:
     """Load sandbox plugin tool factories and wrap them with dependency management."""
     if sandbox_id is None or sandbox_port is None:
-        logger.debug(
-            "Agent Worker: No sandbox available, skipping sandbox plugin tools"
-        )
+        logger.debug("Agent Worker: No sandbox available, skipping sandbox plugin tools")
         return
 
     try:
@@ -861,8 +864,7 @@ async def _add_sandbox_plugin_tools(
 
         if added_count > 0:
             logger.info(
-                "Agent Worker: Added %d sandbox plugin tools "
-                "for project %s",
+                "Agent Worker: Added %d sandbox plugin tools for project %s",
                 added_count,
                 project_id,
             )
@@ -940,6 +942,7 @@ def _create_tool_execution_router(  # pyright: ignore[reportUnusedFunction]  # P
         host_executor=host_executor,
     )
 
+
 async def _process_sandbox_factory(
     *,
     factory: Any,
@@ -990,8 +993,7 @@ async def _process_sandbox_factory(
         return added
     except Exception:
         logger.warning(
-            "Agent Worker: Failed to build sandbox "
-            "plugin tool from '%s'",
+            "Agent Worker: Failed to build sandbox plugin tool from '%s'",
             plugin_name,
             exc_info=True,
         )
@@ -1020,8 +1022,7 @@ def _build_tool_from_meta(
 
     if tool_name in tools:
         logger.debug(
-            "Agent Worker: Sandbox plugin tool '%s' "
-            "skipped (name conflict)",
+            "Agent Worker: Sandbox plugin tool '%s' skipped (name conflict)",
             tool_name,
         )
         return None
@@ -1056,6 +1057,8 @@ def _build_tool_from_meta(
         dependencies=tool_deps,
         permission=tool_permission,
     )
+
+
 async def _add_plugin_skills(
     skills: list[Any],
     tenant_id: str,
@@ -1365,9 +1368,42 @@ def _add_session_comm_tools(
             project_id,
         )
     except Exception as e:
-        logger.warning(
-            "Agent Worker: Failed to add session comm tools: %s", e
+        logger.warning("Agent Worker: Failed to add session comm tools: %s", e)
+
+
+def _add_session_status_tool(
+    tools: dict[str, Any],
+    project_id: str,
+) -> None:
+    """Configure and register the session_status tool.
+
+    Uses the module-level DI pattern (``configure_session_status``) to inject
+    a ``ConversationRepository``, then adds the session_status tool function
+    to the tool dictionary.
+    """
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as status_session_factory,
         )
+        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+            SqlConversationRepository,
+        )
+        from src.infrastructure.agent.tools.session_status import (
+            configure_session_status,
+            session_status_tool,
+        )
+
+        session = status_session_factory()
+        conversation_repo = SqlConversationRepository(session)
+
+        configure_session_status(conversation_repo=conversation_repo)
+        tools[session_status_tool.name] = session_status_tool
+        logger.info(
+            "Agent Worker: Session status tool added for project %s",
+            project_id,
+        )
+    except Exception as e:
+        logger.warning("Agent Worker: Failed to add session status tool: %s", e)
 
 
 def _add_canvas_tools(tools: dict[str, Any]) -> None:
@@ -1389,6 +1425,7 @@ def _add_canvas_tools(tools: dict[str, Any]) -> None:
         logger.info("Agent Worker: Canvas tools added")
     except Exception as e:
         logger.warning("Agent Worker: Failed to add canvas tools: %s", e)
+
 
 async def _load_project_sandbox_tools(
     project_id: str,

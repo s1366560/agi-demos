@@ -218,10 +218,10 @@ class TestProviderRateLimiter:
         """Default configs are applied."""
         limiter = ProviderRateLimiter()
 
-        openai_config = limiter._get_config(ProviderType.OPENAI)
+        openai_config = limiter.get_config(ProviderType.OPENAI)
         assert openai_config.max_concurrent == 50
 
-        gemini_config = limiter._get_config(ProviderType.GEMINI)
+        gemini_config = limiter.get_config(ProviderType.GEMINI)
         assert gemini_config.max_concurrent == 100
 
 

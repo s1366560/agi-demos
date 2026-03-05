@@ -301,11 +301,11 @@ class CategoryRouter:
         self._provider_configs = provider_configs
         self._available_models = self._collect_available_models(provider_configs)
         self._mappings = (
-            dict(default_mappings) if default_mappings is not None
-            else build_default_mappings()
+            dict(default_mappings) if default_mappings is not None else build_default_mappings()
         )
         if custom_mappings:
             self._mappings.update(custom_mappings)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -416,6 +416,55 @@ class CategoryRouter:
     def mappings(self) -> dict[TaskCategory, CategoryModelConfig]:
         """Current category -> config mappings (read-only copy)."""
         return dict(self._mappings)
+
+    # ------------------------------------------------------------------
+    # Catalog-aware selection
+    # ------------------------------------------------------------------
+
+    def select_model_from_catalog(
+        self,
+        category: TaskCategory,
+        available_providers: list[str] | None = None,
+    ) -> str | None:
+        """Select a model using the catalog for richer metadata.
+
+        Attempts to find the best available model for *category* by
+        consulting the ``ModelCatalogService``.  Returns the bare model
+        name, or ``None`` when the catalog is unavailable or no model
+        matched.
+
+        Falls back to :meth:`route` when the catalog cannot help.
+        """
+        try:
+            from src.infrastructure.llm.model_catalog import (
+                get_model_catalog_service,
+            )
+
+            catalog = get_model_catalog_service()
+        except Exception:
+            return None
+
+        config = self.route(category, available_providers)
+        pool = self._resolve_available_pool(available_providers)
+
+        # Check preferred models against catalog
+        for model_name in config.preferred_models:
+            meta = catalog.get_model(model_name)
+            if meta is None:
+                continue
+            if meta.is_deprecated:
+                continue
+            if model_name in pool:
+                return model_name
+
+        # Try fallback
+        if config.fallback_model:
+            meta = catalog.get_model(config.fallback_model)
+            if meta and not meta.is_deprecated:
+                if config.fallback_model in pool:
+                    return config.fallback_model
+
+        return None
 
     # ------------------------------------------------------------------
     # Internal helpers

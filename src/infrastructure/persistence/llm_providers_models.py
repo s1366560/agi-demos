@@ -7,7 +7,7 @@ These models map to the database tables created in the Alembic migration.
 
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, override
 
 from sqlalchemy import (
     JSON,
@@ -67,6 +67,17 @@ class LLMProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Model filtering
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    allowed_models: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="JSON array of allowed model prefixes"
+    )
+    blocked_models: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="JSON array of blocked model prefixes"
+    )
+
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
@@ -97,6 +108,7 @@ class LLMProvider(Base):
         Index("idx_llm_providers_default", "is_default", postgresql_where=is_default),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<LLMProvider(id={self.id}, name='{self.name}', type='{self.provider_type}')>"
 
@@ -153,6 +165,7 @@ class TenantProviderMapping(Base):
         Index("idx_tenant_mappings_priority", "priority"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<TenantProviderMapping(tenant_id='{self.tenant_id}', provider_id={self.provider_id}, priority={self.priority})>"
 
@@ -194,6 +207,7 @@ class ProviderHealth(Base):
         Index("idx_provider_health_retention", "last_check"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<ProviderHealth(provider_id={self.provider_id}, status='{self.status}', last_check={self.last_check})>"
 
@@ -264,5 +278,6 @@ class LLMUsageLog(Base):
         Index("idx_llm_usage_date", "created_at"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<LLMUsageLog(id={self.id}, operation='{self.operation_type}', tokens={self.total_tokens})>"

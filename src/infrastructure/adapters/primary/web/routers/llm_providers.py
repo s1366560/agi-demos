@@ -259,6 +259,86 @@ async def list_models_for_provider_type(
     }
 
 
+# Model Catalog Endpoints
+
+
+@router.get("/models/catalog")
+async def list_catalog_models(
+    provider: str | None = Query(None, description="Filter by provider name"),
+    include_deprecated: bool = Query(False, description="Include deprecated models"),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    List all models from the model catalog.
+
+    Returns enriched metadata from the embedded model snapshot.
+    """
+    from src.infrastructure.llm.model_catalog import (
+        get_model_catalog_service,
+    )
+
+    catalog = get_model_catalog_service()
+    models = catalog.list_models(
+        provider=provider,
+        include_deprecated=include_deprecated,
+    )
+    return {
+        "total": len(models),
+        "models": [
+            {
+                "name": m.name,
+                "provider": m.provider,
+                "family": m.family,
+                "context_length": m.context_length,
+                "max_output_tokens": m.max_output_tokens,
+                "modalities": m.modalities,
+                "capabilities": [c.value for c in m.capabilities],
+                "supports_streaming": m.supports_streaming,
+                "is_deprecated": m.is_deprecated,
+                "description": m.description,
+            }
+            for m in models
+        ],
+    }
+
+
+@router.get("/models/catalog/search")
+async def search_catalog_models(
+    q: str = Query(..., description="Search query"),
+    provider: str | None = Query(None, description="Filter by provider name"),
+    limit: int = Query(20, ge=1, le=100, description="Max results"),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Search models in the catalog by name, family, or description.
+    """
+    from src.infrastructure.llm.model_catalog import (
+        get_model_catalog_service,
+    )
+
+    catalog = get_model_catalog_service()
+    results = catalog.search_models(query=q, provider=provider, limit=limit)
+    return {
+        "query": q,
+        "total": len(results),
+        "models": [
+            {
+                "name": m.name,
+                "provider": m.provider,
+                "family": m.family,
+                "context_length": m.context_length,
+                "max_output_tokens": m.max_output_tokens,
+                "modalities": m.modalities,
+                "capabilities": [c.value for c in m.capabilities],
+                "supports_streaming": m.supports_streaming,
+                "is_deprecated": m.is_deprecated,
+                "description": m.description,
+            }
+            for m in results
+        ],
+    }
+
+
 @router.get("/{provider_id}", response_model=ProviderConfigResponse)
 async def get_provider(
     provider_id: UUID,
@@ -552,6 +632,7 @@ async def get_system_resilience_status(
         get_health_checker,
         get_provider_rate_limiter,
     )
+    from src.infrastructure.llm.resilience.health_checker import HealthStatus
 
     cb_registry = get_circuit_breaker_registry()
     rate_limiter = get_provider_rate_limiter()
@@ -572,9 +653,9 @@ async def get_system_resilience_status(
             },
             "rate_limiter": rate_stats.get("stats", {}),
             "health": {
-                "status": health_checker._current_status.get(provider_type, "unknown").value  # type: ignore[attr-defined]
-                if hasattr(health_checker._current_status.get(provider_type, "unknown"), "value")
-                else "unknown",
+                "status": health_checker.get_current_status()
+                .get(provider_type, HealthStatus.UNKNOWN)
+                .value
             },
         }
 

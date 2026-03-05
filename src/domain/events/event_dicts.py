@@ -87,7 +87,7 @@ class LLMMessageDict(TypedDict, total=False):
     """
 
     role: str
-    content: str | None
+    content: str | list[dict[str, Any]] | None
     tool_calls: list[dict[str, Any]]
 
 

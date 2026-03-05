@@ -265,6 +265,10 @@ class HealthChecker:
         self._lock = asyncio.Lock()
         self._encryption_service = get_encryption_service()
 
+    def get_current_status(self) -> dict[ProviderType, HealthStatus]:
+        """Public accessor for current provider health statuses."""
+        return self._current_status
+
     def register_provider(
         self,
         provider_type: ProviderType,
@@ -416,7 +420,12 @@ class HealthChecker:
         endpoint = endpoint_factory(provider_config, api_key)
 
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            response = await client.get(endpoint.url, headers={k: v for k, v in endpoint.headers.items() if v is not None} if endpoint.headers else None)
+            response = await client.get(
+                endpoint.url,
+                headers={k: v for k, v in endpoint.headers.items() if v is not None}
+                if endpoint.headers
+                else None,
+            )
             if response.status_code not in endpoint.acceptable_statuses:
                 response.raise_for_status()
 

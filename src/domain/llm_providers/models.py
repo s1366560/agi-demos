@@ -5,7 +5,7 @@ This module contains Pydantic models for LLM provider configuration,
 following Domain-Driven Design principles.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID
@@ -39,23 +39,71 @@ class ModelMetadata(BaseModel):
 
     name: str = Field(..., description="Model identifier (e.g., 'gpt-4-turbo')")
     context_length: int = Field(
-        default=128000, ge=1024, description="Maximum context window size in tokens"
+        default=128000,
+        ge=1024,
+        description="Maximum context window size in tokens",
     )
     max_output_tokens: int = Field(
-        default=4096, ge=1, description="Maximum output tokens per request"
+        default=4096,
+        ge=1,
+        description="Maximum output tokens per request",
     )
     input_cost_per_1m: float | None = Field(
-        None, ge=0, description="Cost per 1M input tokens (USD)"
+        default=None, ge=0, description="Cost per 1M input tokens (USD)"
     )
     output_cost_per_1m: float | None = Field(
-        None, ge=0, description="Cost per 1M output tokens (USD)"
+        default=None, ge=0, description="Cost per 1M output tokens (USD)"
     )
     capabilities: list[ModelCapability] = Field(
         default_factory=list, description="Model capabilities"
     )
     supports_streaming: bool = Field(default=True, description="Whether model supports streaming")
     supports_json_mode: bool = Field(
-        default=False, description="Whether model supports JSON output mode"
+        default=False,
+        description="Whether model supports JSON output mode",
+    )
+
+    # --- New catalog fields (P1-T1) ---
+    provider: str | None = Field(
+        default=None,
+        description="Provider name (e.g., 'openai', 'dashscope')",
+    )
+    modalities: list[str] = Field(
+        default_factory=list,
+        description="Supported modalities (e.g., ['text', 'image'])",
+    )
+    variants: list[str] = Field(
+        default_factory=list,
+        description="Available variant names (e.g., ['latest', '0125'])",
+    )
+    default_variant: str | None = Field(
+        default=None,
+        description="Default variant identifier",
+    )
+    family: str | None = Field(
+        default=None,
+        description="Model family (e.g., 'gpt-4', 'qwen')",
+    )
+    release_date: date | None = Field(default=None, description="Model release date")
+    is_deprecated: bool = Field(default=False, description="Whether model is deprecated")
+    description: str | None = Field(default=None, description="Human-readable model description")
+
+    # --- Registry-compat fields (P1-T4) ---
+    max_input_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description="Provider-enforced max input token cap",
+    )
+    input_budget_ratio: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Safety ratio for practical input budgeting",
+    )
+    chars_per_token: float = Field(
+        default=3.0,
+        gt=0.0,
+        description="Fallback chars/token estimate",
     )
 
     class Config:
@@ -91,6 +139,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="openai",
+        modalities=["text", "image"],
+        family="gpt-4",
+        description="GPT-4 Turbo with vision capabilities",
     ),
     "gpt-4o": ModelMetadata(
         name="gpt-4o",
@@ -104,6 +156,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="openai",
+        modalities=["text", "image"],
+        family="gpt-4o",
+        description="GPT-4o multimodal flagship model",
     ),
     "gpt-4o-mini": ModelMetadata(
         name="gpt-4o-mini",
@@ -117,6 +173,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="openai",
+        modalities=["text", "image"],
+        family="gpt-4o",
+        description="Compact, cost-effective GPT-4o variant",
     ),
     # Gemini models
     "gemini-2.0-flash": ModelMetadata(
@@ -131,6 +191,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="gemini",
+        modalities=["text", "image"],
+        family="gemini-2.0",
+        description="Gemini 2.0 Flash for fast multimodal tasks",
     ),
     "gemini-1.5-pro": ModelMetadata(
         name="gemini-1.5-pro",
@@ -144,6 +208,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="gemini",
+        modalities=["text", "image"],
+        family="gemini-1.5",
+        description="Gemini 1.5 Pro with 2M token context",
     ),
     # Dashscope (Qwen) models
     "qwen-max": ModelMetadata(
@@ -152,8 +220,18 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
         max_output_tokens=8192,
         input_cost_per_1m=2.4,
         output_cost_per_1m=9.6,
-        capabilities=[ModelCapability.CHAT, ModelCapability.FUNCTION_CALLING],
+        capabilities=[
+            ModelCapability.CHAT,
+            ModelCapability.FUNCTION_CALLING,
+        ],
         supports_json_mode=True,
+        provider="dashscope",
+        modalities=["text"],
+        family="qwen",
+        max_input_tokens=30720,
+        input_budget_ratio=0.85,
+        chars_per_token=1.2,
+        description="Qwen Max for complex reasoning",
     ),
     "qwen-plus": ModelMetadata(
         name="qwen-plus",
@@ -161,8 +239,17 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
         max_output_tokens=8192,
         input_cost_per_1m=0.8,
         output_cost_per_1m=2.0,
-        capabilities=[ModelCapability.CHAT, ModelCapability.FUNCTION_CALLING],
+        capabilities=[
+            ModelCapability.CHAT,
+            ModelCapability.FUNCTION_CALLING,
+        ],
         supports_json_mode=True,
+        provider="dashscope",
+        modalities=["text"],
+        family="qwen",
+        input_budget_ratio=0.9,
+        chars_per_token=1.4,
+        description="Qwen Plus balanced performance model",
     ),
     "qwen-turbo": ModelMetadata(
         name="qwen-turbo",
@@ -170,8 +257,17 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
         max_output_tokens=8192,
         input_cost_per_1m=0.3,
         output_cost_per_1m=0.6,
-        capabilities=[ModelCapability.CHAT, ModelCapability.FUNCTION_CALLING],
+        capabilities=[
+            ModelCapability.CHAT,
+            ModelCapability.FUNCTION_CALLING,
+        ],
         supports_json_mode=True,
+        provider="dashscope",
+        modalities=["text"],
+        family="qwen",
+        input_budget_ratio=0.9,
+        chars_per_token=1.4,
+        description="Qwen Turbo fast and cost-effective",
     ),
     # Deepseek models
     "deepseek-chat": ModelMetadata(
@@ -180,8 +276,16 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
         max_output_tokens=8192,
         input_cost_per_1m=0.14,
         output_cost_per_1m=0.28,
-        capabilities=[ModelCapability.CHAT, ModelCapability.FUNCTION_CALLING, ModelCapability.CODE],
+        capabilities=[
+            ModelCapability.CHAT,
+            ModelCapability.FUNCTION_CALLING,
+            ModelCapability.CODE,
+        ],
         supports_json_mode=True,
+        provider="deepseek",
+        modalities=["text"],
+        family="deepseek",
+        description="Deepseek Chat with strong coding ability",
     ),
     "deepseek-reasoner": ModelMetadata(
         name="deepseek-reasoner",
@@ -191,6 +295,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
         output_cost_per_1m=2.19,
         capabilities=[ModelCapability.CHAT, ModelCapability.CODE],
         supports_json_mode=False,
+        provider="deepseek",
+        modalities=["text"],
+        family="deepseek",
+        description="Deepseek Reasoner for advanced reasoning",
     ),
     # Anthropic models
     "claude-3-5-sonnet-20241022": ModelMetadata(
@@ -205,6 +313,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="anthropic",
+        modalities=["text", "image"],
+        family="claude-3.5",
+        description="Claude 3.5 Sonnet balanced intelligence",
     ),
     "claude-3-5-haiku-20241022": ModelMetadata(
         name="claude-3-5-haiku-20241022",
@@ -218,6 +330,10 @@ DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
             ModelCapability.VISION,
         ],
         supports_json_mode=True,
+        provider="anthropic",
+        modalities=["text", "image"],
+        family="claude-3.5",
+        description="Claude 3.5 Haiku fast and compact",
     ),
 }
 
@@ -331,6 +447,18 @@ class ProviderConfigBase(BaseModel):
     )
     is_active: bool = Field(True, description="Whether provider is enabled")
     is_default: bool = Field(False, description="Whether this is the default provider")
+    is_enabled: bool = Field(
+        True,
+        description="Whether this provider config is enabled for model routing",
+    )
+    allowed_models: list[str] = Field(
+        default_factory=list,
+        description="Whitelist of allowed model prefixes (empty = all allowed)",
+    )
+    blocked_models: list[str] = Field(
+        default_factory=list,
+        description="Blacklist of blocked model prefixes (takes precedence)",
+    )
 
     @field_validator("name")
     @classmethod
@@ -379,6 +507,9 @@ class ProviderConfigUpdate(BaseModel):
     config: dict[str, Any] | None = None
     is_active: bool | None = None
     is_default: bool | None = None
+    is_enabled: bool | None = None
+    allowed_models: list[str] | None = None
+    blocked_models: list[str] | None = None
 
     @field_validator("api_key")
     @classmethod
@@ -394,6 +525,37 @@ class ProviderConfig(ProviderConfigBase):
     api_key_encrypted: str = Field(..., description="Encrypted API key")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+
+    def is_model_allowed(self, model_id: str) -> bool:
+        """Check if a model is allowed by whitelist/blacklist rules.
+
+        Rules:
+        - If blocked_models is non-empty and model_id matches any prefix
+          (case-insensitive), the model is blocked.
+        - Blacklist takes precedence over whitelist.
+        - If allowed_models is non-empty, model_id must match at least
+          one prefix (case-insensitive) to be allowed.
+        - If both lists are empty, all models are allowed.
+
+        Args:
+            model_id: The model identifier to check.
+
+        Returns:
+            True if the model is allowed, False otherwise.
+        """
+        model_lower = model_id.lower()
+
+        # Blacklist takes precedence
+        if self.blocked_models:
+            for pattern in self.blocked_models:
+                if model_lower.startswith(pattern.lower()):
+                    return False
+
+        # Whitelist check (empty = all allowed)
+        if self.allowed_models:
+            return any(model_lower.startswith(p.lower()) for p in self.allowed_models)
+
+        return True
 
     class Config:
         from_attributes = True

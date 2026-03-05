@@ -11,6 +11,7 @@ from uuid import UUID
 from src.domain.llm_providers.models import (
     LLMUsageLog,
     LLMUsageLogCreate,
+    ModelMetadata,
     OperationType,
     ProviderConfig,
     ProviderConfigCreate,
@@ -143,3 +144,53 @@ class ProviderRepository(ABC):
         operation_type: OperationType | None = None,
     ) -> list[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
+
+
+class ModelCatalogPort(ABC):
+    """
+    Port for model catalog lookups.
+
+    Provides a read-only interface to query available LLM models
+    and their metadata. Implementations may load from embedded
+    snapshots, remote APIs, or databases.
+    """
+
+    @abstractmethod
+    def get_model(self, model_name: str) -> ModelMetadata | None:
+        """Get metadata for a specific model by exact name."""
+
+    @abstractmethod
+    def search_models(
+        self,
+        query: str,
+        provider: str | None = None,
+        limit: int = 20,
+    ) -> list[ModelMetadata]:
+        """Search models by name substring or keyword.
+
+        Args:
+            query: Search term to match against model names.
+            provider: Optional provider filter.
+            limit: Maximum results to return.
+        """
+
+    @abstractmethod
+    def list_models(
+        self,
+        provider: str | None = None,
+        include_deprecated: bool = False,
+    ) -> list[ModelMetadata]:
+        """List all known models, optionally filtered by provider.
+
+        Args:
+            provider: Optional provider filter.
+            include_deprecated: Whether to include deprecated models.
+        """
+
+    @abstractmethod
+    def get_variants(self, base_model: str) -> list[ModelMetadata]:
+        """Get all variants of a base model.
+
+        Args:
+            base_model: Base model name (e.g., 'gpt-4o').
+        """

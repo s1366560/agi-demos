@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { App } from 'antd';
+import { useShallow } from 'zustand/react/shallow';
+
 import {
   ProviderCard,
   ProviderHealthPanel,
@@ -14,6 +17,7 @@ import {
 import { MaterialIcon } from '../../components/agent/shared/MaterialIcon';
 import { PROVIDERS } from '../../constants/providers';
 import { providerAPI } from '../../services/api';
+import { useProviderStore } from '../../stores/provider';
 import { useTenantStore } from '../../stores/tenant';
 import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory';
 
@@ -42,10 +46,24 @@ type SortOrder = 'asc' | 'desc';
 
 export const ProviderList: React.FC = () => {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
-  const [providers, setProviders] = useState<ProviderConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  
+  const { providers, isLoading, error } = useProviderStore(
+    useShallow((state) => ({
+      providers: state.providers,
+      isLoading: state.loading,
+      error: state.error,
+    }))
+  );
+
+  const { fetchProviders, deleteProvider } = useProviderStore(
+    useShallow((state) => ({
+      fetchProviders: state.fetchProviders,
+      deleteProvider: state.deleteProvider,
+    }))
+  );
+
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -67,22 +85,8 @@ export const ProviderList: React.FC = () => {
   );
 
   const loadProviders = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const params: { provider_type?: string | undefined } = {};
-      if (typeFilter !== 'all') {
-        params.provider_type = typeFilter;
-      }
-      const response = await providerAPI.list(params);
-      setProviders(response);
-    } catch (err) {
-      console.error('Failed to load providers:', err);
-      setError(t('common.error'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [typeFilter, t]);
+    await fetchProviders();
+  }, [fetchProviders]);
 
   const loadSystemStatus = useCallback(async () => {
     try {
@@ -119,7 +123,7 @@ export const ProviderList: React.FC = () => {
       await loadSystemStatus();
     } catch (err) {
       console.error('Failed to reset circuit breaker:', err);
-      alert(t('common.error'));
+      message.error(t('common.error'));
     } finally {
       setResettingCircuitBreaker(null);
     }
@@ -128,12 +132,13 @@ export const ProviderList: React.FC = () => {
   const handleDelete = async (providerId: string) => {
     if (!confirm(t('tenant.providers.deleteConfirm'))) return;
     try {
-      await providerAPI.delete(providerId);
+      await deleteProvider(providerId);
+      message.success(t('tenant.providers.deleteSuccess') || 'Provider deleted');
       await loadProviders();
       await loadSystemStatus();
     } catch (err) {
       console.error('Failed to delete provider:', err);
-      alert(t('common.error'));
+      message.error(t('common.error'));
     }
   };
 

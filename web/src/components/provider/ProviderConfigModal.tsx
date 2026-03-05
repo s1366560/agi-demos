@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
+import { Select } from 'antd';
+import { useShallow } from 'zustand/react/shallow';
+
 import { PROVIDERS } from '../../constants/providers';
 import { providerAPI } from '../../services/api';
+import { useProviderStore } from '../../stores/provider';
 import {
   EmbeddingConfig,
   ProviderConfig,
@@ -64,6 +68,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [showAdvancedEmbedding, setShowAdvancedEmbedding] = useState(false);
   const [showAdvancedLLM, setShowAdvancedLLM] = useState(false);
 
+  const { searchModels, modelSearchResults, fetchModelCatalog } = useProviderStore(
+    useShallow((s) => ({
+      searchModels: s.searchModels,
+      modelSearchResults: s.modelSearchResults,
+      fetchModelCatalog: s.fetchModelCatalog,
+    }))
+  );
+
   const [formData, setFormData] = useState({
     name: '',
     provider_type: 'openai' as ProviderType,
@@ -83,6 +95,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     is_default: false,
     use_custom_base_url: false,
   });
+
+  useEffect(() => {
+    fetchModelCatalog(formData.provider_type);
+  }, [fetchModelCatalog, formData.provider_type]);
 
   const [configJsonStr, setConfigJsonStr] = useState('{}');
 
@@ -250,7 +266,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setFormData((prev) => ({
       ...prev,
       provider_type: type,
-      name: prev.name || providerMeta?.label || '',
+      name: providerMeta?.label || prev.name || '',
       llm_model: models?.chat[0] || '',
       llm_small_model:
         models?.chat.find(
@@ -271,6 +287,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       embedding: false,
       reranker: false,
     });
+    fetchModelCatalog(type);
     setTestResult(null);
   };
 
@@ -392,6 +409,39 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const getLlmOptions = () => {
+    const chatModels = Array.from(new Set([
+      ...availableModels.chat,
+      ...modelSearchResults.filter(m => m.capabilities.includes('chat') && m.provider === formData.provider_type).map(m => m.name)
+    ]));
+    return [
+      ...chatModels.map(m => ({ value: m, label: m })),
+      { value: '__custom__', label: 'Custom model name...' }
+    ];
+  };
+
+  const getEmbeddingOptions = () => {
+    const embedModels = Array.from(new Set([
+      ...availableModels.embedding,
+      ...modelSearchResults.filter(m => m.capabilities.includes('embedding') && m.provider === formData.provider_type).map(m => m.name)
+    ]));
+    return [
+      ...embedModels.map(m => ({ value: m, label: m })),
+      { value: '__custom__', label: 'Custom model name...' }
+    ];
+  };
+
+  const getRerankerOptions = () => {
+    const rerankModels = Array.from(new Set([
+      ...availableModels.rerank,
+      ...modelSearchResults.filter(m => (m.capabilities.includes('reranking') || m.name.includes('rerank')) && m.provider === formData.provider_type).map(m => m.name)
+    ]));
+    return [
+      ...rerankModels.map(m => ({ value: m, label: m })),
+      { value: '__custom__', label: 'Custom model name...' }
+    ];
   };
 
   if (!isOpen) return null;
@@ -685,10 +735,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <select
+                    <Select
+                      showSearch
                       value={formData.llm_model}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                      onChange={(value) => {
                         if (value === '__custom__') {
                           setUseCustomModel({ ...useCustomModel, llm: true });
                           setFormData({ ...formData, llm_model: '' });
@@ -696,21 +746,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           setFormData({ ...formData, llm_model: value });
                         }
                       }}
-                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      onSearch={(val) => { searchModels(val); }}
+                      filterOption={(input, option) =>
+                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={getLlmOptions()}
+                      className="w-full h-[42px] custom-ant-select"
                       disabled={isLoadingModels}
-                    >
-                      {availableModels.chat.length === 0 && !isLoadingModels && (
-                        <option value="" disabled>
-                          No models available
-                        </option>
-                      )}
-                      {availableModels.chat.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom model name...</option>
-                    </select>
+                      placeholder={isLoadingModels ? 'Loading models...' : 'Select a model'}
+                    />
                   )}
                 </div>
 
@@ -746,28 +790,27 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <select
-                      value={formData.llm_small_model}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                    <Select
+                      showSearch
+                      allowClear
+                      value={formData.llm_small_model || undefined}
+                      onChange={(value) => {
                         if (value === '__custom__') {
                           setUseCustomModel({ ...useCustomModel, small: true });
                           setFormData({ ...formData, llm_small_model: '' });
                         } else {
-                          setFormData({ ...formData, llm_small_model: value });
+                          setFormData({ ...formData, llm_small_model: value || '' });
                         }
                       }}
-                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      onSearch={(val) => { searchModels(val); }}
+                      filterOption={(input, option) =>
+                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={getLlmOptions()}
+                      className="w-full h-[42px] custom-ant-select"
                       disabled={isLoadingModels}
-                    >
-                      <option value="">None</option>
-                      {availableModels.chat.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom model name...</option>
-                    </select>
+                      placeholder="Select or enter custom model..."
+                    />
                   )}
                 </div>
 
@@ -970,28 +1013,27 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <select
-                      value={formData.embedding_model}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                    <Select
+                      showSearch
+                      allowClear
+                      value={formData.embedding_model || undefined}
+                      onChange={(value) => {
                         if (value === '__custom__') {
                           setUseCustomModel({ ...useCustomModel, embedding: true });
                           setFormData({ ...formData, embedding_model: '' });
                         } else {
-                          setFormData({ ...formData, embedding_model: value });
+                          setFormData({ ...formData, embedding_model: value || '' });
                         }
                       }}
-                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      onSearch={(val) => { searchModels(val); }}
+                      filterOption={(input, option) =>
+                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={getEmbeddingOptions()}
+                      className="w-full h-[42px] custom-ant-select"
                       disabled={isLoadingModels}
-                    >
-                      <option value="">None</option>
-                      {availableModels.embedding.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom model name...</option>
-                    </select>
+                      placeholder="Select or enter custom model..."
+                    />
                   )}
                 </div>
 
@@ -1138,28 +1180,27 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <select
-                      value={formData.reranker_model}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                    <Select
+                      showSearch
+                      allowClear
+                      value={formData.reranker_model || undefined}
+                      onChange={(value) => {
                         if (value === '__custom__') {
                           setUseCustomModel({ ...useCustomModel, reranker: true });
                           setFormData({ ...formData, reranker_model: '' });
                         } else {
-                          setFormData({ ...formData, reranker_model: value });
+                          setFormData({ ...formData, reranker_model: value || '' });
                         }
                       }}
-                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      onSearch={(val) => { searchModels(val); }}
+                      filterOption={(input, option) =>
+                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={getRerankerOptions()}
+                      className="w-full h-[42px] custom-ant-select"
                       disabled={isLoadingModels}
-                    >
-                      <option value="">None</option>
-                      {availableModels.rerank.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom model name...</option>
-                    </select>
+                      placeholder="Select or enter custom model..."
+                    />
                   )}
                 </div>
               </div>

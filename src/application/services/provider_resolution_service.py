@@ -52,12 +52,15 @@ class ProviderResolutionService:
         self,
         tenant_id: str | None = None,
         operation_type: OperationType = OperationType.LLM,
+        model_id: str | None = None,
     ) -> ProviderConfig:
         """
         Resolve provider for tenant.
 
         Args:
             tenant_id: Optional tenant/group ID
+            operation_type: Type of operation
+            model_id: Optional model ID to check filtering
 
         Returns:
             Provider configuration
@@ -66,14 +69,15 @@ class ProviderResolutionService:
             NoActiveProviderError: If no active provider found
         """
         # Check cache first
-        cache_key = f"provider:{tenant_id or 'default'}:{operation_type.value}"
+        model_key = model_id or "any"
+        cache_key = f"provider:{tenant_id or 'default'}:{operation_type.value}:{model_key}"
         if cache_key in self.cache:
             cached_provider = self.cache[cache_key]
             logger.debug(f"Cache hit for {cache_key}")
             return cast(ProviderConfig, cached_provider)
 
         # Resolve provider (with fallback logic)
-        resolved = await self._resolve_with_fallback(tenant_id, operation_type)
+        resolved = await self._resolve_with_fallback(tenant_id, operation_type, model_id)
         provider = resolved.provider
 
         # Cache the result
@@ -91,12 +95,17 @@ class ProviderResolutionService:
         self,
         tenant_id: str | None,
         operation_type: OperationType,
+        model_id: str | None = None,
     ) -> ResolvedProvider:
         """
         Resolve provider using fallback hierarchy.
 
+        Checks is_enabled and is_model_allowed() at each tier.
+
         Args:
             tenant_id: Optional tenant ID
+            operation_type: Type of operation
+            model_id: Optional model ID for filtering
 
         Returns:
             Resolved provider with resolution source
@@ -110,22 +119,25 @@ class ProviderResolutionService:
         if tenant_id:
             # 1. Try tenant-specific provider
             logger.debug(f"Looking for tenant-specific provider: {tenant_id}")
-            provider = await self.repository.find_tenant_provider(tenant_id, operation_type)
-            if provider:
+            candidate = await self.repository.find_tenant_provider(tenant_id, operation_type)
+            if candidate and self._is_provider_eligible(candidate, model_id):
+                provider = candidate
                 resolution_source = "tenant"
 
         if not provider:
             # 2. Try default provider
             logger.debug("Looking for default provider")
-            provider = await self.repository.find_default_provider()
-            if provider:
+            candidate = await self.repository.find_default_provider()
+            if candidate and self._is_provider_eligible(candidate, model_id):
+                provider = candidate
                 resolution_source = "default"
 
         if not provider:
             # 3. Fallback to first active provider
             logger.debug("Looking for first active provider")
-            provider = await self.repository.find_first_active_provider()
-            if provider:
+            candidate = await self.repository.find_first_active_provider()
+            if candidate and self._is_provider_eligible(candidate, model_id):
+                provider = candidate
                 resolution_source = "fallback"
 
         if not provider:
@@ -137,6 +149,30 @@ class ProviderResolutionService:
             provider=provider,
             resolution_source=resolution_source,
         )
+
+    @staticmethod
+    def _is_provider_eligible(
+        provider: ProviderConfig,
+        model_id: str | None,
+    ) -> bool:
+        """
+        Check if a provider is eligible based on enable flag
+        and model filtering.
+
+        Args:
+            provider: Provider configuration to check
+            model_id: Optional model ID to validate
+
+        Returns:
+            True if provider is eligible
+        """
+        if not provider.is_enabled:
+            logger.debug(f"Provider '{provider.name}' skipped: disabled")
+            return False
+        if model_id and not provider.is_model_allowed(model_id):
+            logger.debug(f"Provider '{provider.name}' skipped: model '{model_id}' not allowed")
+            return False
+        return True
 
     def invalidate_cache(self, tenant_id: str | None = None) -> None:
         """

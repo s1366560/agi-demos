@@ -25,13 +25,22 @@ Example:
         pass
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from src.domain.llm_providers.models import ProviderType
+
+if TYPE_CHECKING:
+    from src.infrastructure.llm.resilience.redis_store import (
+        CircuitBreakerStateStore,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +99,7 @@ class CircuitBreaker:
         self,
         provider_id: str,
         config: CircuitBreakerConfig | None = None,
+        state_store: CircuitBreakerStateStore | None = None,
     ) -> None:
         """
         Initialize circuit breaker for a provider.
@@ -97,9 +107,12 @@ class CircuitBreaker:
         Args:
             provider_id: Unique identifier for the provider
             config: Circuit breaker configuration
+            state_store: Optional pluggable state store for
+                distributed state persistence. None uses inline state.
         """
         self.provider_id = provider_id
         self.config = config or CircuitBreakerConfig()
+        self._state_store = state_store
 
         self._state = CircuitState.CLOSED
         self._failure_count = 0
@@ -209,6 +222,48 @@ class CircuitBreaker:
         async with self._lock:
             self.reset()
 
+    async def sync_from_store(self) -> None:
+        """Load state from the external store if configured.
+
+        Call once after creation to restore persisted state.
+        No-op if no state_store was provided.
+        """
+        if self._state_store is None:
+            return
+        loaded = await self._state_store.load_state(self.provider_id)
+        if loaded is not None:
+            self._state = loaded.state
+            self._failure_count = loaded.failure_count
+            self._success_count = loaded.success_count
+            self._half_open_requests = loaded.half_open_requests
+            self._last_failure_time = loaded.last_failure_time
+            self._last_state_change = loaded.last_state_change
+
+    async def sync_to_store(self) -> None:
+        """Persist current state to the external store if configured.
+
+        Called automatically after state transitions. No-op if no
+        state_store was provided.
+        """
+        if self._state_store is None:
+            return
+        from src.infrastructure.llm.resilience.redis_store import (
+            CircuitBreakerState,
+        )
+
+        state_obj = CircuitBreakerState(
+            state=self._state,
+            failure_count=self._failure_count,
+            success_count=self._success_count,
+            half_open_requests=self._half_open_requests,
+            last_failure_time=self._last_failure_time,
+            last_state_change=self._last_state_change,
+        )
+        await self._state_store.save_state(
+            self.provider_id,
+            state_obj,
+        )
+
     def _check_state_transition(self) -> None:
         """Check if state should transition based on timeouts."""
         if self._state == CircuitState.OPEN:
@@ -285,15 +340,21 @@ class CircuitBreakerRegistry:
     Provides a centralized way to get/create circuit breakers for providers.
     """
 
-    def __init__(self, default_config: CircuitBreakerConfig | None = None) -> None:
+    def __init__(
+        self,
+        default_config: CircuitBreakerConfig | None = None,
+        state_store: CircuitBreakerStateStore | None = None,
+    ) -> None:
         """
         Initialize the registry.
 
         Args:
             default_config: Default configuration for new circuit breakers
+            state_store: Optional state store passed to new breakers
         """
         self._breakers: dict[str, CircuitBreaker] = {}
         self._default_config = default_config or CircuitBreakerConfig()
+        self._state_store = state_store
         self._lock = asyncio.Lock()
 
     def get(
@@ -312,7 +373,7 @@ class CircuitBreakerRegistry:
             CircuitBreaker instance for the provider
         """
         # Handle both ProviderType enum and string
-        if hasattr(provider_type, "value"):
+        if isinstance(provider_type, ProviderType):
             provider_id = provider_type.value
         else:
             provider_id = str(provider_type)
@@ -337,6 +398,7 @@ class CircuitBreakerRegistry:
             self._breakers[provider_id] = CircuitBreaker(
                 provider_id=provider_id,
                 config=config or self._default_config,
+                state_store=self._state_store,
             )
         return self._breakers[provider_id]
 

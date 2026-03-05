@@ -74,7 +74,6 @@ _PROVIDER_PREFIXES: dict[str, str] = {
 }
 
 
-
 class LiteLLMClient(LLMClient):
     """
     LiteLLM-based implementation of LLMClient.
@@ -133,7 +132,6 @@ class LiteLLMClient(LLMClient):
         if self.provider_config.base_url:
             return self.provider_config.base_url
         return None
-
 
     def _configure_litellm(self) -> None:
         """Configure LiteLLM environment variables as fallback.
@@ -227,7 +225,15 @@ class LiteLLMClient(LLMClient):
 
     @staticmethod
     def _estimate_message_chars(messages: list[dict[str, Any]]) -> int:
-        """Estimate message size in characters for conservative fallback budgeting."""
+        """Estimate message size in characters for conservative fallback budgeting.
+
+        For multimodal content arrays, text parts are measured by length and
+        image_url parts are assigned a fixed character budget (~85 tokens).
+        """
+        # Approximate character cost per image (mirrors window_manager convention
+        # of ~85 tokens per image at ~4 chars/token).
+        _IMAGE_CHAR_BUDGET = 340
+
         total_chars = 0
         for msg in messages:
             total_chars += len(str(msg.get("role", "")))
@@ -236,6 +242,19 @@ class LiteLLMClient(LLMClient):
             content = msg.get("content", "")
             if isinstance(content, str):
                 total_chars += len(content)
+            elif isinstance(content, list):
+                # Multimodal content array (OpenAI format)
+                for part in content:
+                    if isinstance(part, dict):
+                        part_type = part.get("type", "")
+                        if part_type == "text":
+                            total_chars += len(str(part.get("text", "")))
+                        elif part_type == "image_url":
+                            total_chars += _IMAGE_CHAR_BUDGET
+                        else:
+                            total_chars += len(str(part))
+                    else:
+                        total_chars += len(str(part))
             else:
                 total_chars += len(str(content))
             tool_calls = msg.get("tool_calls")
@@ -327,14 +346,10 @@ class LiteLLMClient(LLMClient):
             if has_mandatory_skill:
                 # Preserve mandatory-skill block, trim other sections
                 trimmed[0] = dict(trimmed[0])
-                trimmed[0]["content"] = self._trim_system_prompt_preserve_skill(
-                    str(system_content)
-                )
+                trimmed[0]["content"] = self._trim_system_prompt_preserve_skill(str(system_content))
                 token_count = self._estimate_effective_input_tokens(model, trimmed)
                 if token_count <= input_limit:
-                    logger.info(
-                        "Trimmed system prompt while preserving mandatory-skill block"
-                    )
+                    logger.info("Trimmed system prompt while preserving mandatory-skill block")
 
             # Only delete system message if still over limit AND no mandatory skill
             if token_count > input_limit:
@@ -376,7 +391,6 @@ class LiteLLMClient(LLMClient):
         )
         return trimmed
 
-
     @staticmethod
     def _trim_system_prompt_preserve_skill(content: str) -> str:
         """Trim system prompt content while preserving <mandatory-skill> blocks.
@@ -395,7 +409,7 @@ class LiteLLMClient(LLMClient):
 
         # Extract mandatory-skill block
         skill_match = re.search(
-            r'(<mandatory-skill.*?</mandatory-skill>)',
+            r"(<mandatory-skill.*?</mandatory-skill>)",
             content,
             re.DOTALL,
         )
@@ -408,24 +422,25 @@ class LiteLLMClient(LLMClient):
         trimmed = content
         # Remove subagent section
         trimmed = re.sub(
-            r'## Available SubAgents.*?(?=\n## |\n<|\Z)',
-            '',
+            r"## Available SubAgents.*?(?=\n## |\n<|\Z)",
+            "",
             trimmed,
             flags=re.DOTALL,
         )
         # Remove workspace section
         trimmed = re.sub(
-            r'## Workspace Guidelines.*?(?=\n## |\n<|\Z)',
-            '',
+            r"## Workspace Guidelines.*?(?=\n## |\n<|\Z)",
+            "",
             trimmed,
             flags=re.DOTALL,
         )
 
         # Ensure skill block is still present
-        if '<mandatory-skill' not in trimmed:
+        if "<mandatory-skill" not in trimmed:
             trimmed = skill_block + "\n\n" + trimmed
 
         return trimmed.strip()
+
     @staticmethod
     def _is_client_error(e: Exception) -> bool:
         """Check if an exception is a client-side error (400-level).

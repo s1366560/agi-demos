@@ -5,6 +5,7 @@ Implements the ProviderRepository interface using SQLAlchemy.
 Provides all CRUD operations, tenant resolution, and usage tracking.
 """
 
+import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, cast, override
@@ -124,6 +125,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             config=orm.config,
             is_active=orm.is_active,
             is_default=orm.is_default,
+            is_enabled=orm.is_enabled,
+            allowed_models=(json.loads(orm.allowed_models) if orm.allowed_models else []),
+            blocked_models=(json.loads(orm.blocked_models) if orm.blocked_models else []),
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
@@ -162,6 +166,13 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 "config": provider_config,
                 "is_active": config.is_active,
                 "is_default": config.is_default,
+                "is_enabled": config.is_enabled,
+                "allowed_models": (
+                    json.dumps(config.allowed_models) if config.allowed_models else None
+                ),
+                "blocked_models": (
+                    json.dumps(config.blocked_models) if config.blocked_models else None
+                ),
             }
 
             # Use PostgreSQL ON CONFLICT DO NOTHING for atomic upsert
@@ -251,10 +262,18 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             orm.is_active = config.is_active
         if config.is_default is not None:
             orm.is_default = config.is_default
+        if config.is_enabled is not None:
+            orm.is_enabled = config.is_enabled
+        if config.allowed_models is not None:
+            orm.allowed_models = (
+                json.dumps(config.allowed_models) if config.allowed_models else None
+            )
+        if config.blocked_models is not None:
+            orm.blocked_models = (
+                json.dumps(config.blocked_models) if config.blocked_models else None
+            )
 
-    def _apply_api_key_update(
-        self, orm: LLMProviderORM, config: ProviderConfigUpdate
-    ) -> None:
+    def _apply_api_key_update(self, orm: LLMProviderORM, config: ProviderConfigUpdate) -> None:
         """Encrypt and apply API key update if provided."""
         if config.api_key is None:
             return
@@ -330,13 +349,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         )
 
         if config.embedding_config is not None:
-            should_update_config = self._apply_embedding_config_update(
-                orm, config, updated_config
-            )
+            should_update_config = self._apply_embedding_config_update(orm, config, updated_config)
         elif config.embedding_model is not None:
-            should_update_config = self._apply_embedding_model_update(
-                orm, config, updated_config
-            )
+            should_update_config = self._apply_embedding_model_update(orm, config, updated_config)
 
         if should_update_config:
             orm.config = updated_config

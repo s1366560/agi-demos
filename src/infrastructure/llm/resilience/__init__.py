@@ -60,8 +60,16 @@ from src.infrastructure.llm.resilience.rate_limiter import (
     RateLimitConfig,
     RateLimitExceededError,
     RateLimitStats,
+    RedisRateLimitContext,
+    RedisRateLimiter,
     get_provider_rate_limiter,
     reset_rate_limiter,
+)
+from src.infrastructure.llm.resilience.redis_store import (
+    CircuitBreakerState,
+    CircuitBreakerStateStore,
+    InMemoryCircuitBreakerStore,
+    RedisCircuitBreakerStore,
 )
 
 __all__ = [
@@ -71,16 +79,23 @@ __all__ = [
     "CircuitBreaker",
     "CircuitBreakerConfig",
     "CircuitBreakerRegistry",
+    # Redis-backed stores
+    "CircuitBreakerState",
+    "CircuitBreakerStateStore",
     "CircuitState",
     # Health Checker
     "HealthCheckConfig",
     "HealthCheckResult",
     "HealthChecker",
     "HealthStatus",
+    "InMemoryCircuitBreakerStore",
     "ProviderRateLimiter",
     "RateLimitConfig",
     "RateLimitExceededError",
     "RateLimitStats",
+    "RedisCircuitBreakerStore",
+    "RedisRateLimitContext",
+    "RedisRateLimiter",
     "get_circuit_breaker_registry",
     "get_health_checker",
     "get_provider_rate_limiter",

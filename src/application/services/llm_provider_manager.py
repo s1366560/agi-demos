@@ -23,10 +23,14 @@ Example:
     health_status = await manager.health_check_all()
 """
 
+from __future__ import annotations
+
 import logging
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 from src.domain.llm_providers.llm_types import LLMClient, LLMConfig
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.infrastructure.llm.registry import get_provider_adapter_registry
@@ -76,6 +80,7 @@ class LLMProviderManager:
         circuit_breaker_registry: CircuitBreakerRegistry | None = None,
         rate_limiter: ProviderRateLimiter | None = None,
         health_checker: HealthChecker | None = None,
+        redis_client: Redis | None = None,
     ) -> None:
         """
         Initialize the provider manager.
@@ -84,10 +89,15 @@ class LLMProviderManager:
             circuit_breaker_registry: Optional custom circuit breaker registry
             rate_limiter: Optional custom rate limiter
             health_checker: Optional custom health checker
+            redis_client: Optional async Redis client for distributed
+                resilience (circuit breaker state + rate limiting).
+                When None, falls back to in-memory implementations.
         """
         self._registry = get_provider_adapter_registry()
-        self._circuit_breakers = circuit_breaker_registry or get_circuit_breaker_registry()
-        self._rate_limiter = rate_limiter or get_provider_rate_limiter()
+        self._circuit_breakers = circuit_breaker_registry or self._build_circuit_breaker_registry(
+            redis_client
+        )
+        self._rate_limiter = rate_limiter or self._build_rate_limiter(redis_client)
         self._health_checker = health_checker or get_health_checker()
 
         # Provider configurations (loaded from database or settings)
@@ -129,6 +139,67 @@ class LLMProviderManager:
                 ProviderType.ANTHROPIC,
             ],
         }
+
+    @staticmethod
+    def _build_circuit_breaker_registry(
+        redis_client: Redis | None,
+    ) -> CircuitBreakerRegistry:
+        """Build a CircuitBreakerRegistry with optional Redis store.
+
+        When *redis_client* is provided, a
+        ``RedisCircuitBreakerStore`` is created and passed to the
+        registry so that circuit breaker state is persisted in Redis
+        across restarts.  When ``None``, the plain in-memory registry
+        is returned.
+        """
+        if redis_client is not None:
+            try:
+                from src.infrastructure.llm.resilience.redis_store import (
+                    RedisCircuitBreakerStore,
+                )
+
+                store = RedisCircuitBreakerStore(
+                    redis_client=redis_client,
+                )
+                logger.info(
+                    "Using Redis-backed circuit breaker store",
+                )
+                return CircuitBreakerRegistry(state_store=store)
+            except Exception:
+                logger.warning(
+                    "Failed to create Redis circuit breaker store, falling back to in-memory",
+                    exc_info=True,
+                )
+        return get_circuit_breaker_registry()
+
+    @staticmethod
+    def _build_rate_limiter(
+        redis_client: Redis | None,
+    ) -> ProviderRateLimiter:
+        """Build a rate limiter with optional Redis backing.
+
+        Returns a ``RedisRateLimiter`` (which wraps a local
+        ``ProviderRateLimiter``) when *redis_client* is provided,
+        otherwise returns the global in-memory limiter.
+        """
+        if redis_client is not None:
+            try:
+                from src.infrastructure.llm.resilience.rate_limiter import (
+                    RedisRateLimiter,
+                )
+
+                logger.info(
+                    "Using Redis-backed rate limiter",
+                )
+                return RedisRateLimiter(  # type: ignore[return-value]
+                    redis_client=redis_client,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to create Redis rate limiter, falling back to in-memory",
+                    exc_info=True,
+                )
+        return get_provider_rate_limiter()
 
     def register_provider(
         self,
@@ -333,7 +404,9 @@ class LLMProviderManager:
                 continue
 
             # Check cached health status
-            status = self._health_checker._current_status.get(provider_type, HealthStatus.UNKNOWN)
+            status = self._health_checker.get_current_status().get(
+                provider_type, HealthStatus.UNKNOWN
+            )
             if status in (HealthStatus.HEALTHY, HealthStatus.DEGRADED):
                 healthy.append(provider_type)
 
@@ -372,7 +445,7 @@ class LLMProviderManager:
         for provider_type in self._provider_configs.keys():
             rate_stats = self._rate_limiter.get_stats(provider_type)
             circuit_breaker = self._circuit_breakers.get(provider_type)
-            health_status = self._health_checker._current_status.get(
+            health_status = self._health_checker.get_current_status().get(
                 provider_type, HealthStatus.UNKNOWN
             )
 

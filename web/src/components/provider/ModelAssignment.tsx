@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
+import { App } from 'antd';
+
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, TenantProviderMapping } from '../../types/memory';
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
@@ -30,7 +32,10 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [targetType, setTargetType] = useState<'llm' | 'embedding' | 'rerank'>('llm');
 
+  const { message } = App.useApp();
+
   const loadAssignments = useCallback(async () => {
+    setIsLoading(true);
     setIsLoading(true);
     setError(null);
     try {
@@ -58,7 +63,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       loadAssignments();
     } catch (err) {
       console.error('Failed to unassign provider:', err);
-      alert(err instanceof Error ? err.message : 'Failed to unassign provider');
+      message.error(err instanceof Error ? err.message : 'Failed to unassign provider');
     }
   };
 

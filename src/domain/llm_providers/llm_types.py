@@ -37,10 +37,14 @@ class MessageRole(str, Enum):
 
 @dataclass
 class Message:
-    """Chat message for LLM interactions."""
+    """Chat message for LLM interactions.
+
+    ``content`` can be a plain string for text-only messages or a list of
+    content parts (OpenAI multimodal format) for vision / audio inputs.
+    """
 
     role: str  # "system", "user", "assistant"
-    content: str
+    content: str | list[dict[str, Any]]
 
     @classmethod
     def system(cls, content: str) -> "Message":
@@ -53,9 +57,29 @@ class Message:
         return cls(role=MessageRole.USER.value, content=content)
 
     @classmethod
+    def user_multimodal(cls, content: list[dict[str, Any]]) -> "Message":
+        """Create a user message with multimodal content (images, etc.)."""
+        return cls(role=MessageRole.USER.value, content=content)
+
+    @classmethod
     def assistant(cls, content: str) -> "Message":
         """Create an assistant message."""
         return cls(role=MessageRole.ASSISTANT.value, content=content)
+
+    @property
+    def text(self) -> str:
+        """Extract plain text from content.
+
+        For string content returns the string directly.
+        For multimodal content concatenates all text parts.
+        """
+        if isinstance(self.content, str):
+            return self.content
+        parts: list[str] = []
+        for part in self.content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                parts.append(str(part.get("text", "")))
+        return "\n".join(parts)
 
 
 @dataclass
@@ -86,7 +110,6 @@ class LLMConfig:
 
 class RateLimitError(Exception):
     """Exception raised when LLM rate limit is exceeded."""
-
 
 
 class LLMClient(ABC):
@@ -232,7 +255,7 @@ class LLMClient(ABC):
         if isinstance(response, dict):
             content = response.get("content", "")
         else:
-            content = str(response)  # type: ignore[unreachable]
+            content = str(response)
 
         return ChatResponse(content=content)
 
