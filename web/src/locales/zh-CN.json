@@ -170,7 +170,8 @@
     "mcpServers": "MCP",
     "pool": "智能体池",
     "channels": "渠道集成",
-    "more": "更多"
+    "more": "更多",
+    "cronJobs": "定时任务"
   },
   "user": {
     "profile": "个人资料",

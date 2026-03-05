@@ -10,6 +10,7 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
+from src.application.services.cron_service import CronJobService
 from src.application.services.memory_service import MemoryService
 from src.application.services.project_service import ProjectService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
@@ -48,6 +49,7 @@ from src.configuration.config import get_settings
 from src.configuration.containers import (
     AgentContainer,
     AuthContainer,
+    CronContainer,
     InfraContainer,
     MemoryContainer,
     ProjectContainer,
@@ -139,6 +141,7 @@ class DIContainer:
         self._auth = AuthContainer(db=db)
         self._memory = MemoryContainer(db=db, graph_service=graph_service)
         self._task = TaskContainer(db=db)
+        self._cron = CronContainer(db=db)
         self._project = ProjectContainer(
             db=db,
             user_repository_factory=self._auth.user_repository,
@@ -261,6 +264,10 @@ class DIContainer:
     def update_task_use_case(self) -> UpdateTaskUseCase:
         return self._task.update_task_use_case()
 
+    # === Cron Container delegates ===
+
+    def cron_job_service(self) -> CronJobService:
+        return self._cron.cron_job_service()
     # === Project Container delegates ===
 
     def project_repository(self) -> ProjectRepository:

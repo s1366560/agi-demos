@@ -1575,6 +1575,86 @@ class AuditLog(IdGeneratorMixin, Base):
     __table_args__ = (Index("ix_audit_logs_tenant_action", "tenant_id", "action"),)
 
 
+class CronJobModel(Base):
+    __tablename__ = "cron_jobs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    delete_after_run: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    schedule_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    schedule_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    payload_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    delivery_type: Mapped[str] = mapped_column(String(50), nullable=False, default="none")
+    delivery_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    conversation_mode: Mapped[str] = mapped_column(String(50), default="reuse")
+    conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    timezone: Mapped[str] = mapped_column(String(100), default="UTC")
+    stagger_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3)
+
+    state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    created_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    runs: Mapped[list["CronJobRunModel"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_cron_jobs_project_enabled", "project_id", "enabled"),
+    )
+
+
+class CronJobRunModel(Base):
+    __tablename__ = "cron_job_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(
+        String, ForeignKey("cron_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    trigger_type: Mapped[str] = mapped_column(String(50), default="scheduled")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    job: Mapped["CronJobModel"] = relationship(back_populates="runs")
+
+    __table_args__ = (
+        Index("ix_cron_job_runs_job_status", "job_id", "status"),
+        Index("ix_cron_job_runs_project_started", "project_id", "started_at"),
+    )
+
 # Runtime import to register ChannelConfigModel on Base.metadata so that
 # SQLAlchemy can resolve the string reference in Project.channel_configs.
 # This must come after Base and all models above are defined to avoid

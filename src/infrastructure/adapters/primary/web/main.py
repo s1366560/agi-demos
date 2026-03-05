@@ -35,6 +35,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     background_tasks,
     billing,
     channels,
+    cron,
     data_export,
     enhanced_search,
     episodes,
@@ -162,7 +163,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         app.state.channel_manager = channel_manager
         logger.info("Channel connection manager initialized")
 
+    # Initialize APScheduler for cron jobs
+    try:
+        from src.infrastructure.scheduler.scheduler_service import (
+            start_scheduler,
+            sync_all_jobs,
+        )
+
+        _ = await start_scheduler()
+        await sync_all_jobs()
+        logger.info("Cron job scheduler initialized")
+    except Exception:
+        logger.exception("Failed to start cron scheduler -- cron jobs disabled")
+
     yield
+
+    # Stop cron job scheduler
+    try:
+        from src.infrastructure.scheduler.scheduler_service import stop_scheduler
+
+        await stop_scheduler()
+    except Exception:
+        logger.exception("Error stopping cron scheduler")
 
     # Stop sandbox idle reaper
     await shutdown_sandbox_idle_reaper()
@@ -183,7 +205,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     await shutdown_graph_service(graph_service)
 
 
-def create_app() -> FastAPI:
+def create_app() -> FastAPI:  # noqa: PLR0915
     app = FastAPI(
         title="MemStack API",
         description="""
@@ -308,7 +330,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     configure_exception_handlers(app)
 
     @app.get("/health")
-    async def health_check() -> dict[str, Any]:
+    async def health_check() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok", "version": "0.2.0"}
 
     # Serve static files (MCP Apps sandbox proxy, etc.)
@@ -336,6 +358,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(data_export.router)
     app.include_router(maintenance.router)
     app.include_router(tasks.router)
+    app.include_router(cron.router)
     app.include_router(ai_tools.router)
     app.include_router(background_tasks.router)
     app.include_router(billing.router)

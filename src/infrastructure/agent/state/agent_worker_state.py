@@ -457,6 +457,9 @@ async def get_or_create_tools(
     # 13b. Add Session Status tool
     _add_session_status_tool(tools, project_id)
 
+    # 14. Add Cron job management tool
+    _add_cron_tool(tools, project_id)
+
     # 15. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
 
@@ -770,7 +773,7 @@ async def _add_plugin_tools(
 ) -> None:
     """Load plugin runtime and add plugin-provided tools."""
     from src.infrastructure.agent.core.plugin_tool_adapter import (
-        adapt_plugin_tool,  # pyright: ignore[reportMissingImports]
+        adapt_plugin_tool,
     )
 
     # Ensure plugin runtime is loaded before building plugin-provided tools.
@@ -925,7 +928,7 @@ def _create_tool_execution_router(  # pyright: ignore[reportUnusedFunction]  # P
     """
     from src.infrastructure.agent.core.host_tool_executor import HostToolExecutor
     from src.infrastructure.agent.core.sandbox_tool_executor import (
-        SandboxToolExecutor,  # pyright: ignore[reportMissingImports]
+        SandboxToolExecutor,
     )
     from src.infrastructure.agent.core.tool_execution_router import (
         ToolExecutionRouter,
@@ -1404,6 +1407,48 @@ def _add_session_status_tool(
         )
     except Exception as e:
         logger.warning("Agent Worker: Failed to add session status tool: %s", e)
+
+
+def _add_cron_tool(
+    tools: dict[str, Any],
+    project_id: str,
+) -> None:
+    """Configure and register the cron job management tool.
+
+    Uses the module-level DI pattern (``configure_cron_tool``) to inject
+    a ``CronJobService``, then adds the cron tool function to the tool
+    dictionary.
+    """
+    try:
+        from src.application.services.cron_service import CronJobService
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as cron_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+            SqlCronJobRepository,
+            SqlCronJobRunRepository,
+        )
+        from src.infrastructure.agent.tools.cron_tool import (
+            configure_cron_tool,
+            cron_tool,
+        )
+
+        session = cron_session_factory()
+        cron_job_repo = SqlCronJobRepository(session)
+        cron_job_run_repo = SqlCronJobRunRepository(session)
+        cron_service = CronJobService(
+            cron_job_repo=cron_job_repo,
+            cron_job_run_repo=cron_job_run_repo,
+        )
+
+        configure_cron_tool(cron_job_service=cron_service)
+        tools[cron_tool.name] = cron_tool
+        logger.info(
+            "Agent Worker: Cron tool added for project %s",
+            project_id,
+        )
+    except Exception as e:
+        logger.warning("Agent Worker: Failed to add cron tool: %s", e)
 
 
 def _add_canvas_tools(tools: dict[str, Any]) -> None:

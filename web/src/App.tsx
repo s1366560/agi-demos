@@ -131,9 +131,10 @@ const EntitiesList = lazy(() =>
   }))
 );
 const CommunitiesList = lazy(() =>
-  import('./pages/project/CommunitiesList').then((m) => ({
-    default: m.CommunitiesList,
-  }))
+    import('./pages/project/CommunitiesList').then(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      (m) => ({ default: m.CommunitiesList })
+    )
 );
 const EnhancedSearch = lazy(() =>
   import('./pages/project/EnhancedSearch').then((m) => ({
@@ -145,6 +146,7 @@ const Maintenance = lazy(() =>
     default: m.Maintenance,
   }))
 );
+const CronJobs = lazy(() => import('./pages/project/CronJobs').then((m) => ({ default: m.CronJobs })) as Promise<{ default: React.ComponentType }>);
 const Team = lazy(() => import('./pages/project/Team').then((m) => ({ default: m.Team })));
 const ProjectSettings = lazy(() =>
   import('./pages/project/Settings').then((m) => ({
@@ -632,6 +634,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <Maintenance />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="cron-jobs"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <CronJobs />
                   </Suspense>
                 }
               />

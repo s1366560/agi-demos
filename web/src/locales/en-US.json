@@ -170,7 +170,8 @@
     "mcpServers": "MCP",
     "pool": "Agent Pool",
     "channels": "Channels",
-    "more": "More"
+    "more": "More",
+    "cronJobs": "Scheduled Tasks"
   },
   "user": {
     "profile": "Profile",
