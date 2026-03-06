@@ -1428,6 +1428,9 @@ def _add_cron_tool(
             SqlCronJobRepository,
             SqlCronJobRunRepository,
         )
+        from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
+            SqlProjectRepository,
+        )
         from src.infrastructure.agent.tools.cron_tool import (
             configure_cron_tool,
             cron_tool,
@@ -1441,7 +1444,10 @@ def _add_cron_tool(
             cron_job_run_repo=cron_job_run_repo,
         )
 
-        configure_cron_tool(cron_job_service=cron_service)
+        configure_cron_tool(
+            cron_job_service=cron_service,
+            project_repo=SqlProjectRepository(session),
+        )
         tools[cron_tool.name] = cron_tool
         logger.info(
             "Agent Worker: Cron tool added for project %s",

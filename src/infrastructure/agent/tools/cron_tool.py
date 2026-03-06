@@ -26,6 +26,7 @@ from src.application.services.cron_service import CronJobService
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
 from src.domain.model.cron.value_objects import ConversationMode
+from src.domain.ports.repositories import ProjectRepository
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -38,18 +39,23 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _cron_job_service: CronJobService | None = None
+_project_repo: ProjectRepository | None = None
 
 
 def configure_cron_tool(
     cron_job_service: CronJobService,
+    project_repo: ProjectRepository | None = None,
 ) -> None:
-    """Inject the ``CronJobService`` at agent startup.
+    """Inject the ``CronJobService`` (and optionally a ``ProjectRepository``) at agent startup.
 
     Args:
         cron_job_service: A fully constructed ``CronJobService``.
+        project_repo: Optional project repo for resolving ``tenant_id``.
     """
-    global _cron_job_service
+    global _cron_job_service, _project_repo
     _cron_job_service = cron_job_service
+    if project_repo is not None:
+        _project_repo = project_repo
 
 
 def _service() -> CronJobService:
@@ -182,7 +188,7 @@ async def _handle_list(
     )
 
 
-async def _handle_add(  # noqa: PLR0911
+async def _handle_add(  # noqa: PLR0911, C901, PLR0912
     ctx: ToolContext,
     *,
     job: dict[str, Any] | None,
@@ -264,9 +270,22 @@ async def _handle_add(  # noqa: PLR0911
         conv_mode = ConversationMode.REUSE
 
     svc = _service()
+
+    # Resolve tenant_id from project
+    tenant_id = ""
+    if _project_repo is not None:
+        project = await _project_repo.find_by_id(project_id)
+        if project is not None:
+            tenant_id = project.tenant_id
+    if not tenant_id:
+        return ToolResult(
+            output=_json({"error": "Cannot resolve tenant_id for project"}),
+            is_error=True,
+        )
+
     created = await svc.create_job(
         project_id=project_id,
-        tenant_id="",  # Resolved by caller or set later
+        tenant_id=tenant_id,
         name=name,
         schedule=schedule,
         payload=payload,
