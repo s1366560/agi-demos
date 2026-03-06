@@ -49,6 +49,8 @@ _PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("LMSTUDIO_BASE_URL", "lmstudio"),
 ]
 
+_LOCAL_FALLBACK_PROVIDER = "ollama"
+
 
 def _auto_detect_provider() -> str:
     """Auto-detect provider name from available environment API keys."""
@@ -162,17 +164,29 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
     if not provider_name:
         provider_name = _auto_detect_provider()
 
-    provider_type = PROVIDER_TYPE_MAP.get(provider_name)
+    resolved_provider_name = provider_name
+    provider_type = PROVIDER_TYPE_MAP.get(resolved_provider_name)
     if provider_type is None:
         logger.warning(
             f"Unknown provider type '{provider_name}'. "
-            f"Supported types: {list(PROVIDER_TYPE_MAP.keys())}"
+            f"Supported types: {list(PROVIDER_TYPE_MAP.keys())}. "
+            f"Falling back to local provider '{_LOCAL_FALLBACK_PROVIDER}'."
         )
-        return False
+        resolved_provider_name = _LOCAL_FALLBACK_PROVIDER
 
-    provider_config = _build_provider_config(provider_name)
+    provider_config = _build_provider_config(resolved_provider_name)
+    if provider_config is None and resolved_provider_name != _LOCAL_FALLBACK_PROVIDER:
+        logger.warning(
+            f"Could not build provider config for '{resolved_provider_name}': API key not found. "
+            f"Falling back to local provider '{_LOCAL_FALLBACK_PROVIDER}'."
+        )
+        provider_config = _build_provider_config(_LOCAL_FALLBACK_PROVIDER)
+
     if provider_config is None:
-        logger.warning(f"Could not build provider config for '{provider_name}': API key not found")
+        logger.warning(
+            f"Could not build provider config for '{resolved_provider_name}' "
+            f"or fallback '{_LOCAL_FALLBACK_PROVIDER}'."
+        )
         return False
 
     return await _create_and_verify_provider(provider_service, provider_config)
