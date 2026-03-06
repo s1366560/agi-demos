@@ -562,11 +562,9 @@ VALID_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs"]
     name="cron",
     description=(
         "Manage scheduled/cron jobs for the current project. "
-        "Actions: status (overview), list (all jobs), add (create), "
-        "update (modify), remove (delete), run (manual trigger), "
-        "runs (execution history). "
-        "Schedule types: 'at' (one-shot), 'every' (interval), 'cron' (expression). "
-        "Payload types: 'system_event' (inject text), 'agent_turn' (run agent)."
+        "Actions: status (overview), list (all jobs), add (create new job), "
+        "update (modify existing job), remove (delete job), "
+        "run (manual trigger), runs (execution history)."
     ),
     parameters={
         "type": "object",
@@ -574,36 +572,165 @@ VALID_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs"]
             "action": {
                 "type": "string",
                 "enum": VALID_ACTIONS,
-                "description": ("Action to perform: status, list, add, update, remove, run, runs."),
+                "description": "Action to perform.",
             },
             "job_id": {
                 "type": "string",
-                "description": ("Target job ID. Required for: update, remove, run, runs."),
+                "description": "Target job ID. Required for: update, remove, run, runs.",
             },
             "job": {
                 "type": "object",
-                "description": (
-                    "Job definition for 'add'. Must include: name, schedule "
-                    "(object with kind + config), payload (object with kind + "
-                    "config). Optional: description, enabled, delete_after_run, "
-                    "delivery, conversation_mode, conversation_id, timezone, "
-                    "stagger_seconds, timeout_seconds, max_retries."
-                ),
+                "description": "Job definition for 'add' action.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable job name (required).",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional longer description of the job.",
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether the job is enabled. Default: true.",
+                    },
+                    "delete_after_run": {
+                        "type": "boolean",
+                        "description": (
+                            "Delete the job after first successful run. Default: false."
+                        ),
+                    },
+                    "schedule": {
+                        "type": "object",
+                        "description": "When the job fires (required).",
+                        "properties": {
+                            "kind": {
+                                "type": "string",
+                                "enum": ["at", "every", "cron"],
+                                "description": (
+                                    "Schedule type. "
+                                    "'at': one-shot at ISO-8601 timestamp. "
+                                    "'every': recurring interval. "
+                                    "'cron': cron expression."
+                                ),
+                            },
+                            "config": {
+                                "type": "object",
+                                "description": (
+                                    "Type-specific config. "
+                                    "at: {run_at: '<ISO-8601>'}. "
+                                    "every: {interval_seconds: int, "
+                                    "anchor_at?: '<ISO-8601>'}. "
+                                    "cron: {expr: '*/5 * * * *', "
+                                    "timezone?: 'Asia/Shanghai'}."
+                                ),
+                            },
+                        },
+                        "required": ["kind", "config"],
+                    },
+                    "payload": {
+                        "type": "object",
+                        "description": "What the job does when it fires (required).",
+                        "properties": {
+                            "kind": {
+                                "type": "string",
+                                "enum": ["system_event", "agent_turn"],
+                                "description": (
+                                    "Payload type. "
+                                    "'system_event': inject text as system event. "
+                                    "'agent_turn': run an agent turn with a message."
+                                ),
+                            },
+                            "config": {
+                                "type": "object",
+                                "description": (
+                                    "Type-specific config. "
+                                    "system_event: {content: 'text to inject'}. "
+                                    "agent_turn: {message: 'prompt for agent', "
+                                    "model?: 'model-name', "
+                                    "timeout_seconds?: 300}."
+                                ),
+                            },
+                        },
+                        "required": ["kind", "config"],
+                    },
+                    "delivery": {
+                        "type": "object",
+                        "description": "How the result is delivered. Default: none.",
+                        "properties": {
+                            "kind": {
+                                "type": "string",
+                                "enum": ["none", "announce", "webhook"],
+                                "description": (
+                                    "Delivery type. "
+                                    "'none': fire-and-forget. "
+                                    "'announce': post result to conversation. "
+                                    "'webhook': POST to external URL."
+                                ),
+                            },
+                            "config": {
+                                "type": "object",
+                                "description": (
+                                    "Type-specific config. "
+                                    "none: {} (empty). "
+                                    "announce: {conversation_id: 'id'}. "
+                                    "webhook: {url: 'https://...', "
+                                    "headers?: {}, secret?: 'hmac-key'}."
+                                ),
+                            },
+                        },
+                        "required": ["kind"],
+                    },
+                    "conversation_mode": {
+                        "type": "string",
+                        "enum": ["reuse", "fresh"],
+                        "description": (
+                            "'reuse': reuse existing conversation. "
+                            "'fresh': create new conversation each run. "
+                            "Default: 'reuse'."
+                        ),
+                    },
+                    "conversation_id": {
+                        "type": "string",
+                        "description": (
+                            "Conversation to reuse (when conversation_mode is 'reuse')."
+                        ),
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "description": "IANA timezone (e.g. 'Asia/Shanghai'). Default: 'UTC'.",
+                    },
+                    "stagger_seconds": {
+                        "type": "integer",
+                        "description": "Deterministic per-job offset in seconds. Default: 0.",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Max execution time per run in seconds. Default: 300.",
+                    },
+                    "max_retries": {
+                        "type": "integer",
+                        "description": (
+                            "Max consecutive failures before disabling. Default: 3."
+                        ),
+                    },
+                },
+                "required": ["name", "schedule", "payload"],
             },
             "patch": {
                 "type": "object",
                 "description": (
-                    "Partial update object for 'update'. Only include fields "
-                    "to change. Same shape as 'job' fields."
+                    "Partial update for 'update' action. "
+                    "Include only fields to change. Same shape as 'job' properties."
                 ),
             },
             "include_disabled": {
                 "type": "boolean",
-                "description": ("Include disabled jobs in 'status' and 'list'. Default: false."),
+                "description": "Include disabled jobs in 'status'/'list'. Default: false.",
             },
             "conversation_id": {
                 "type": "string",
-                "description": ("Override conversation ID for 'run' action."),
+                "description": "Override conversation ID for 'run' action.",
             },
         },
         "required": ["action"],
