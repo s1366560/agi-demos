@@ -252,7 +252,8 @@ export function initializeBuiltinMigrations(): void {
   ]);
 
   // Work plan event migrations
-  registerMigrations('work_plan', [
+  // Legacy work_plan events are still migrated even if not present in generated event types.
+  registerMigrations('work_plan' as AgentEventType, [
     {
       from: '1.0',
       to: '1.1',

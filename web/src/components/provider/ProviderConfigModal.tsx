@@ -31,6 +31,45 @@ const providerTypeRequiresApiKey = (type: ProviderType) =>
   !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
 type Step = 'provider' | 'credentials' | 'models' | 'review';
+type ProviderModels = { chat: string[]; embedding: string[]; rerank: string[] };
+
+const PROVIDER_MODEL_PARENT: Partial<Record<ProviderType, ProviderType>> = {
+  dashscope_coding: 'dashscope',
+  dashscope_embedding: 'dashscope',
+  dashscope_reranker: 'dashscope',
+  kimi_coding: 'kimi',
+  kimi_embedding: 'kimi',
+  kimi_reranker: 'kimi',
+  minimax_coding: 'minimax',
+  minimax_embedding: 'minimax',
+  minimax_reranker: 'minimax',
+  zai_coding: 'zai',
+  zai_embedding: 'zai',
+  zai_reranker: 'zai',
+};
+
+const resolveCatalogProviderType = (providerType: ProviderType): ProviderType =>
+  PROVIDER_MODEL_PARENT[providerType] ?? providerType;
+
+const resolvePrimaryLlmModel = (models?: ProviderModels | null): string =>
+  models?.chat[0] || models?.embedding[0] || models?.rerank[0] || '';
+
+const getLlmCandidates = (models?: ProviderModels | null): string[] =>
+  models?.chat.length ? models.chat : [...(models?.embedding || []), ...(models?.rerank || [])];
+
+const resolveSmallLlmModel = (models?: ProviderModels | null, primaryModel = ''): string => {
+  const chatModels = getLlmCandidates(models);
+  const keywords = ['mini', 'small', 'flash', 'haiku', 'turbo', 'nano', 'lite'];
+  const keywordMatch = chatModels.find(
+    (m) => m !== primaryModel && keywords.some((keyword) => m.toLowerCase().includes(keyword))
+  );
+  if (keywordMatch) return keywordMatch;
+
+  const fallbackChat = chatModels.find((m) => m !== primaryModel);
+  if (fallbackChat) return fallbackChat;
+
+  return primaryModel;
+};
 
 const resolveEmbeddingConfig = (provider: ProviderConfig): EmbeddingConfig | undefined => {
   if (provider.embedding_config) {
@@ -97,7 +136,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   });
 
   useEffect(() => {
-    fetchModelCatalog(formData.provider_type);
+    fetchModelCatalog(resolveCatalogProviderType(formData.provider_type));
   }, [fetchModelCatalog, formData.provider_type]);
 
   const [configJsonStr, setConfigJsonStr] = useState('{}');
@@ -148,11 +187,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       // Fetch models for the provider
       fetchModels(provider.provider_type).then((models) => {
         if (!models) return;
+        const llmCandidates = getLlmCandidates(models);
 
         // Check if models are custom (not in fetched list)
-        const llmIsCustom = !models.chat.includes(provider.llm_model);
+        const llmIsCustom = !llmCandidates.includes(provider.llm_model);
         const smallIsCustom =
-          !!provider.llm_small_model && !models.chat.includes(provider.llm_small_model);
+          !!provider.llm_small_model && !llmCandidates.includes(provider.llm_small_model);
         const embeddingModel = embeddingConfig?.model || provider.embedding_model || '';
         const embeddingIsCustom = !!embeddingModel && !models.embedding.includes(embeddingModel);
         const rerankerIsCustom =
@@ -224,20 +264,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
       // Fetch models for default provider
       fetchModels(defaultProvider).then((models) => {
-        if (models && models.chat.length > 0) {
+        if (models) {
+          const primaryModel = resolvePrimaryLlmModel(models);
           setFormData((prev) => ({
             ...prev,
-            llm_model: models.chat[0] ?? '',
-            llm_small_model:
-              models.chat.find(
-                (m) =>
-                  m.includes('mini') ||
-                  m.includes('small') ||
-                  m.includes('flash') ||
-                  m.includes('haiku')
-              ) ||
-              models.chat[1] ||
-              '',
+            llm_model: primaryModel,
+            llm_small_model: resolveSmallLlmModel(models, primaryModel),
             embedding_model: models.embedding[0] || '',
             reranker_model: models.rerank[0] || '',
           }));
@@ -262,19 +294,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
     // Fetch models first
     const models = await fetchModels(type);
+    const primaryModel = resolvePrimaryLlmModel(models);
 
     setFormData((prev) => ({
       ...prev,
       provider_type: type,
       name: providerMeta?.label || prev.name || '',
-      llm_model: models?.chat[0] || '',
-      llm_small_model:
-        models?.chat.find(
-          (m) =>
-            m.includes('mini') || m.includes('small') || m.includes('flash') || m.includes('haiku')
-        ) ||
-        models?.chat[1] ||
-        '',
+      llm_model: primaryModel,
+      llm_small_model: resolveSmallLlmModel(models, primaryModel),
       embedding_model: models?.embedding[0] || '',
       embedding_dimensions: '1536', // Default, user can change
       reranker_model: models?.rerank[0] || '',
@@ -287,7 +314,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       embedding: false,
       reranker: false,
     });
-    fetchModelCatalog(type);
+    fetchModelCatalog(resolveCatalogProviderType(type));
     setTestResult(null);
   };
 
@@ -412,9 +439,24 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   };
 
   const getLlmOptions = () => {
+    const catalogProvider = resolveCatalogProviderType(formData.provider_type);
+    const fallbackLlmModels =
+      availableModels.chat.length > 0
+        ? availableModels.chat
+        : [...availableModels.embedding, ...availableModels.rerank];
     const chatModels = Array.from(new Set([
-      ...availableModels.chat,
-      ...modelSearchResults.filter(m => m.capabilities.includes('chat') && m.provider === formData.provider_type).map(m => m.name)
+      ...fallbackLlmModels,
+      ...modelSearchResults
+        .filter(
+          (m) =>
+            m.provider === catalogProvider &&
+            (m.capabilities.includes('chat') ||
+              (availableModels.chat.length === 0 &&
+                (m.capabilities.includes('embedding') ||
+                  m.capabilities.includes('rerank') ||
+                  m.capabilities.includes('reranking'))))
+        )
+        .map((m) => m.name),
     ]));
     return [
       ...chatModels.map(m => ({ value: m, label: m })),
@@ -423,9 +465,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   };
 
   const getEmbeddingOptions = () => {
+    const catalogProvider = resolveCatalogProviderType(formData.provider_type);
     const embedModels = Array.from(new Set([
       ...availableModels.embedding,
-      ...modelSearchResults.filter(m => m.capabilities.includes('embedding') && m.provider === formData.provider_type).map(m => m.name)
+      ...modelSearchResults
+        .filter((m) => m.capabilities.includes('embedding') && m.provider === catalogProvider)
+        .map((m) => m.name)
     ]));
     return [
       ...embedModels.map(m => ({ value: m, label: m })),
@@ -434,9 +479,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   };
 
   const getRerankerOptions = () => {
+    const catalogProvider = resolveCatalogProviderType(formData.provider_type);
     const rerankModels = Array.from(new Set([
       ...availableModels.rerank,
-      ...modelSearchResults.filter(m => (m.capabilities.includes('reranking') || m.name.includes('rerank')) && m.provider === formData.provider_type).map(m => m.name)
+      ...modelSearchResults
+        .filter(
+          (m) =>
+            (m.capabilities.includes('reranking') || m.name.includes('rerank')) &&
+            m.provider === catalogProvider
+        )
+        .map((m) => m.name)
     ]));
     return [
       ...rerankModels.map(m => ({ value: m, label: m })),
@@ -723,9 +775,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         type="button"
                         onClick={() => {
                           setUseCustomModel({ ...useCustomModel, llm: false });
+                          const primaryModel = resolvePrimaryLlmModel(availableModels);
                           setFormData({
                             ...formData,
-                            llm_model: availableModels.chat[0] || '',
+                            llm_model: primaryModel,
                           });
                         }}
                         className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
@@ -778,9 +831,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         type="button"
                         onClick={() => {
                           setUseCustomModel({ ...useCustomModel, small: false });
+                          const primaryModel =
+                            formData.llm_model || resolvePrimaryLlmModel(availableModels);
                           setFormData({
                             ...formData,
-                            llm_small_model: availableModels.chat[0] || '',
+                            llm_small_model: resolveSmallLlmModel(availableModels, primaryModel),
                           });
                         }}
                         className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"

@@ -144,9 +144,11 @@ export const CronJobs: React.FC = () => {
       key: 'schedule',
       render: (_: unknown, record: CronJobResponse) => {
         const { kind, config } = record.schedule;
-        if (kind === 'cron') return <Tag color="blue">Cron: {config.expression}</Tag>;
+        const scheduleConfig = config as { expression?: string; target_time?: string };
+        if (kind === 'cron')
+          return <Tag color="blue">Cron: {scheduleConfig.expression ?? '-'}</Tag>;
         if (kind === 'every') return <Tag color="purple">Every</Tag>;
-        return <Tag color="cyan">At: {config.target_time}</Tag>;
+        return <Tag color="cyan">At: {scheduleConfig.target_time ?? '-'}</Tag>;
       },
     },
     {
@@ -264,7 +266,7 @@ export const CronJobs: React.FC = () => {
         onClose={() => {
           setFormOpen(false);
         }}
-        onSubmit={(values) => { void handleFormSubmit(values); }}
+        onSubmit={handleFormSubmit}
         initialData={editingJob}
         isSubmitting={submitting}
       />

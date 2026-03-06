@@ -261,8 +261,8 @@ export type AgentEventType =
   | 'mcp_app_registered' // New MCP App auto-detected
   // Memory events (auto-recall / auto-capture)
   | 'memory_recalled' // Memories recalled for context injection
-  | 'memory_captured';
- // New memories captured from conversation
+  | 'memory_captured' // New memories captured from conversation
+  | 'canvas_updated'; // Canvas block created/updated/deleted by agent (A2UI)
 
 /**
  * Base SSE event from agent
@@ -1451,4 +1451,29 @@ export interface BackgroundLaunchedEventData {
   execution_id: string;
   subagent_name: string;
   task: string;
+}
+
+
+/**
+ * Canvas block data shape from backend CanvasBlock.to_dict()
+ */
+export interface CanvasBlockData {
+  id: string;
+  block_type: 'code' | 'table' | 'chart' | 'form' | 'image' | 'markdown' | 'widget';
+  title: string;
+  content: string;
+  metadata: Record<string, string>;
+  version: number;
+}
+
+/**
+ * Canvas updated event data (A2UI integration)
+ *
+ * Emitted by canvas_create / canvas_update / canvas_delete tools.
+ */
+export interface CanvasUpdatedEventData {
+  conversation_id: string;
+  block_id: string;
+  action: 'created' | 'updated' | 'deleted';
+  block: CanvasBlockData | null;
 }

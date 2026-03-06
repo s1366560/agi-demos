@@ -267,7 +267,13 @@ export interface UserProject {
 export type ProviderType =
   | 'openai'
   | 'dashscope'
+  | 'dashscope_coding'
+  | 'dashscope_embedding'
+  | 'dashscope_reranker'
   | 'kimi'
+  | 'kimi_coding'
+  | 'kimi_embedding'
+  | 'kimi_reranker'
   | 'gemini'
   | 'anthropic'
   | 'groq'
@@ -278,7 +284,13 @@ export type ProviderType =
   | 'vertex'
   | 'deepseek'
   | 'minimax'
+  | 'minimax_coding'
+  | 'minimax_embedding'
+  | 'minimax_reranker'
   | 'zai'
+  | 'zai_coding'
+  | 'zai_embedding'
+  | 'zai_reranker'
   | 'ollama'
   | 'lmstudio';
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';

@@ -17,7 +17,13 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'gemini', label: 'Google Gemini' },
   { value: 'dashscope', label: 'Alibaba Dashscope' },
+  { value: 'dashscope_coding', label: 'Dashscope Coding' },
+  { value: 'dashscope_embedding', label: 'Dashscope Embedding' },
+  { value: 'dashscope_reranker', label: 'Dashscope Reranker' },
   { value: 'kimi', label: 'Moonshot Kimi' },
+  { value: 'kimi_coding', label: 'Kimi Coding' },
+  { value: 'kimi_embedding', label: 'Kimi Embedding' },
+  { value: 'kimi_reranker', label: 'Kimi Reranker' },
   { value: 'groq', label: 'Groq' },
   { value: 'azure_openai', label: 'Azure OpenAI' },
   { value: 'cohere', label: 'Cohere' },
@@ -26,7 +32,13 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'vertex', label: 'Google Vertex AI' },
   { value: 'deepseek', label: 'Deepseek' },
   { value: 'minimax', label: 'MiniMax' },
+  { value: 'minimax_coding', label: 'MiniMax Coding' },
+  { value: 'minimax_embedding', label: 'MiniMax Embedding' },
+  { value: 'minimax_reranker', label: 'MiniMax Reranker' },
   { value: 'zai', label: 'ZhipuAI (智普AI)' },
+  { value: 'zai_coding', label: 'Z.AI Coding' },
+  { value: 'zai_embedding', label: 'Z.AI Embedding' },
+  { value: 'zai_reranker', label: 'Z.AI Reranker' },
   { value: 'ollama', label: 'Ollama (Local)' },
   { value: 'lmstudio', label: 'LM Studio (Local)' },
 ];
@@ -36,7 +48,8 @@ const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
 const providerTypeRequiresApiKey = (type: ProviderType) =>
   !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
-const DEFAULT_MODELS: Record<
+const DEFAULT_MODELS: Partial<
+  Record<
   ProviderType,
   {
     llm: string;
@@ -44,6 +57,7 @@ const DEFAULT_MODELS: Record<
     embedding?: string | undefined;
     reranker?: string | undefined;
   }
+>
 > = {
   openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
   anthropic: { llm: 'claude-sonnet-4-20250514', small: 'claude-3-5-haiku-20241022' },
@@ -54,9 +68,41 @@ const DEFAULT_MODELS: Record<
     embedding: 'text-embedding-v3',
     reranker: 'qwen-turbo',
   },
+  dashscope_coding: {
+    llm: 'qwen3-coder-plus',
+    small: 'qwen3-coder-flash',
+  },
+  dashscope_embedding: {
+    llm: 'text-embedding-v3',
+    small: 'text-embedding-v3',
+    embedding: 'text-embedding-v3',
+    reranker: 'qwen-turbo',
+  },
+  dashscope_reranker: {
+    llm: 'qwen-turbo',
+    small: 'qwen-turbo',
+    embedding: 'text-embedding-v3',
+    reranker: 'qwen-turbo',
+  },
   kimi: {
     llm: 'moonshot-v1-8k',
     small: 'moonshot-v1-8k',
+    embedding: 'kimi-embedding-1',
+    reranker: 'kimi-rerank-1',
+  },
+  kimi_coding: {
+    llm: 'kimi-k2-thinking',
+    small: 'k2p5',
+  },
+  kimi_embedding: {
+    llm: 'kimi-embedding-1',
+    small: 'kimi-embedding-1',
+    embedding: 'kimi-embedding-1',
+    reranker: 'kimi-rerank-1',
+  },
+  kimi_reranker: {
+    llm: 'kimi-rerank-1',
+    small: 'kimi-rerank-1',
     embedding: 'kimi-embedding-1',
     reranker: 'kimi-rerank-1',
   },
@@ -82,8 +128,40 @@ const DEFAULT_MODELS: Record<
     embedding: 'embo-01',
     reranker: 'abab6.5-chat',
   },
+  minimax_coding: {
+    llm: 'MiniMax-M2.5',
+    small: 'MiniMax-M2.5-highspeed',
+  },
+  minimax_embedding: {
+    llm: 'embo-01',
+    small: 'embo-01',
+    embedding: 'embo-01',
+    reranker: 'abab6.5-chat',
+  },
+  minimax_reranker: {
+    llm: 'abab6.5-chat',
+    small: 'abab6.5-chat',
+    embedding: 'embo-01',
+    reranker: 'abab6.5-chat',
+  },
   zai: {
     llm: 'glm-4-plus',
+    small: 'glm-4-flash',
+    embedding: 'embedding-3',
+    reranker: 'glm-4-flash',
+  },
+  zai_coding: {
+    llm: 'glm-5',
+    small: 'glm-4.7-flash',
+  },
+  zai_embedding: {
+    llm: 'embedding-3',
+    small: 'embedding-3',
+    embedding: 'embedding-3',
+    reranker: 'glm-4-flash',
+  },
+  zai_reranker: {
+    llm: 'glm-4-flash',
     small: 'glm-4-flash',
     embedding: 'embedding-3',
     reranker: 'glm-4-flash',
