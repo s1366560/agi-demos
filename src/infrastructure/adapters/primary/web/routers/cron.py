@@ -114,6 +114,19 @@ async def create_cron_job(
         created_by=current_user.id,
     )
     await db.commit()
+    # Best-effort APScheduler registration
+    if job.enabled:
+        try:
+            from src.infrastructure.scheduler.scheduler_service import register_job
+
+            await register_job(
+                job_id=job.id,
+                schedule_type=job.schedule.kind.value,
+                schedule_config=job.schedule.config,
+                timezone=job.timezone,
+            )
+        except Exception:
+            logger.debug("Scheduler not available -- skipping registration for %s", job.id)
     return cron_job_to_response(job)
 
 
@@ -169,6 +182,23 @@ async def update_cron_job(
         max_retries=body.max_retries,
     )
     await db.commit()
+    # Best-effort APScheduler re-registration
+    try:
+        if job.enabled:
+            from src.infrastructure.scheduler.scheduler_service import register_job
+
+            await register_job(
+                job_id=job.id,
+                schedule_type=job.schedule.kind.value,
+                schedule_config=job.schedule.config,
+                timezone=job.timezone,
+            )
+        else:
+            from src.infrastructure.scheduler.scheduler_service import unregister_job
+
+            await unregister_job(job.id)
+    except Exception:
+        logger.debug("Scheduler not available -- skipping re-registration for %s", job.id)
     return cron_job_to_response(job)
 
 
@@ -188,6 +218,13 @@ async def delete_cron_job(
 
     await svc.delete_job(job_id)
     await db.commit()
+    # Best-effort APScheduler unregistration
+    try:
+        from src.infrastructure.scheduler.scheduler_service import unregister_job
+
+        await unregister_job(job_id)
+    except Exception:
+        logger.debug("Scheduler not available -- skipping unregistration for %s", job_id)
 
 
 @router.post("/{job_id}/toggle", response_model=CronJobResponse)
@@ -207,6 +244,23 @@ async def toggle_cron_job(
 
     job = await svc.toggle_job(job_id, enabled=enabled)
     await db.commit()
+    # Best-effort APScheduler toggle
+    try:
+        if enabled:
+            from src.infrastructure.scheduler.scheduler_service import register_job
+
+            await register_job(
+                job_id=job.id,
+                schedule_type=job.schedule.kind.value,
+                schedule_config=job.schedule.config,
+                timezone=job.timezone,
+            )
+        else:
+            from src.infrastructure.scheduler.scheduler_service import unregister_job
+
+            await unregister_job(job.id)
+    except Exception:
+        logger.debug("Scheduler not available -- skipping toggle for %s", job.id)
     return cron_job_to_response(job)
 
 

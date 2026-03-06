@@ -1415,39 +1415,19 @@ def _add_cron_tool(
 ) -> None:
     """Configure and register the cron job management tool.
 
-    Uses the module-level DI pattern (``configure_cron_tool``) to inject
-    a ``CronJobService``, then adds the cron tool function to the tool
-    dictionary.
+    Uses the session-factory DI pattern: each tool invocation creates its
+    own DB session, builds repos/service, does work, commits, and closes.
     """
     try:
-        from src.application.services.cron_service import CronJobService
         from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory as cron_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
-            SqlCronJobRepository,
-            SqlCronJobRunRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
-            SqlProjectRepository,
+            async_session_factory,
         )
         from src.infrastructure.agent.tools.cron_tool import (
             configure_cron_tool,
             cron_tool,
         )
 
-        session = cron_session_factory()
-        cron_job_repo = SqlCronJobRepository(session)
-        cron_job_run_repo = SqlCronJobRunRepository(session)
-        cron_service = CronJobService(
-            cron_job_repo=cron_job_repo,
-            cron_job_run_repo=cron_job_run_repo,
-        )
-
-        configure_cron_tool(
-            cron_job_service=cron_service,
-            project_repo=SqlProjectRepository(session),
-        )
+        configure_cron_tool(session_factory=async_session_factory)
         tools[cron_tool.name] = cron_tool
         logger.info(
             "Agent Worker: Cron tool added for project %s",

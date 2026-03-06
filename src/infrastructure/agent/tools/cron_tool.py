@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from src.application.schemas.cron import (
@@ -26,7 +27,6 @@ from src.application.services.cron_service import CronJobService
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
 from src.domain.model.cron.value_objects import ConversationMode
-from src.domain.ports.repositories import ProjectRepository
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -38,31 +38,43 @@ logger = logging.getLogger(__name__)
 # Module-level DI state
 # ---------------------------------------------------------------------------
 
-_cron_job_service: CronJobService | None = None
-_project_repo: ProjectRepository | None = None
+_cron_session_factory: Callable[..., Any] | None = None
 
 
 def configure_cron_tool(
-    cron_job_service: CronJobService,
-    project_repo: ProjectRepository | None = None,
+    session_factory: Callable[..., Any],
 ) -> None:
-    """Inject the ``CronJobService`` (and optionally a ``ProjectRepository``) at agent startup.
+    """Inject the DB session factory at agent startup.
+
+    Each tool invocation creates its own session, builds repos/service,
+    performs work, commits, and closes -- matching the todowrite pattern.
 
     Args:
-        cron_job_service: A fully constructed ``CronJobService``.
-        project_repo: Optional project repo for resolving ``tenant_id``.
+        session_factory: An ``async_session_factory`` callable that returns
+            an async context manager yielding ``AsyncSession``.
     """
-    global _cron_job_service, _project_repo
-    _cron_job_service = cron_job_service
-    if project_repo is not None:
-        _project_repo = project_repo
+    global _cron_session_factory
+    _cron_session_factory = session_factory
 
 
-def _service() -> CronJobService:
-    """Return the configured service or raise."""
-    if _cron_job_service is None:
+def _get_session_factory() -> Callable[..., Any]:
+    """Return the configured session factory or raise."""
+    if _cron_session_factory is None:
         raise RuntimeError("cron tool not configured -- call configure_cron_tool() first")
-    return _cron_job_service
+    return _cron_session_factory
+
+
+def _build_service(session: Any) -> CronJobService:
+    """Build a ``CronJobService`` from a live DB session."""
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+        SqlCronJobRepository,
+        SqlCronJobRunRepository,
+    )
+
+    return CronJobService(
+        cron_job_repo=SqlCronJobRepository(session),
+        cron_job_run_repo=SqlCronJobRunRepository(session),
+    )
 
 
 def _json(data: Any) -> str:
@@ -122,6 +134,49 @@ def _run_summary(run: CronJobRun) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Scheduler registration helper (best-effort, non-fatal)
+# ---------------------------------------------------------------------------
+
+
+async def _try_register_job(job: CronJob) -> None:
+    """Register a cron job with APScheduler (best-effort)."""
+    try:
+        from src.infrastructure.scheduler.scheduler_service import (
+            register_job,
+        )
+
+        if job.enabled:
+            await register_job(
+                job_id=job.id,
+                schedule_type=job.schedule.kind.value,
+                schedule_config=job.schedule.config,
+                timezone=job.timezone,
+            )
+    except Exception:
+        logger.warning(
+            "Failed to register job %s with scheduler (non-fatal)",
+            job.id,
+            exc_info=True,
+        )
+
+
+async def _try_unregister_job(job_id: str) -> None:
+    """Unregister a cron job from APScheduler (best-effort)."""
+    try:
+        from src.infrastructure.scheduler.scheduler_service import (
+            unregister_job,
+        )
+
+        await unregister_job(job_id)
+    except Exception:
+        logger.warning(
+            "Failed to unregister job %s from scheduler (non-fatal)",
+            job_id,
+            exc_info=True,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Action handlers
 # ---------------------------------------------------------------------------
 
@@ -139,13 +194,18 @@ async def _handle_status(
             is_error=True,
         )
 
-    svc = _service()
-    total = await svc.count_jobs(project_id, include_disabled=True)
-    enabled = await svc.count_jobs(project_id, include_disabled=False)
-    disabled = total - enabled
-
-    jobs = await svc.list_jobs(project_id, include_disabled=include_disabled, limit=20)
-    summaries = [_job_summary(j) for j in jobs]
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
+        total = await svc.count_jobs(project_id, include_disabled=True)
+        enabled = await svc.count_jobs(project_id, include_disabled=False)
+        disabled = total - enabled
+        jobs = await svc.list_jobs(
+            project_id,
+            include_disabled=include_disabled,
+            limit=20,
+        )
+        summaries = [_job_summary(j) for j in jobs]
 
     return ToolResult(
         output=_json(
@@ -173,9 +233,18 @@ async def _handle_list(
             is_error=True,
         )
 
-    svc = _service()
-    jobs = await svc.list_jobs(project_id, include_disabled=include_disabled, limit=50)
-    total = await svc.count_jobs(project_id, include_disabled=include_disabled)
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
+        jobs = await svc.list_jobs(
+            project_id,
+            include_disabled=include_disabled,
+            limit=50,
+        )
+        total = await svc.count_jobs(
+            project_id,
+            include_disabled=include_disabled,
+        )
 
     return ToolResult(
         output=_json(
@@ -188,7 +257,7 @@ async def _handle_list(
     )
 
 
-async def _handle_add(  # noqa: PLR0911, C901, PLR0912
+async def _handle_add(  # noqa: PLR0911
     ctx: ToolContext,
     *,
     job: dict[str, Any] | None,
@@ -269,38 +338,46 @@ async def _handle_add(  # noqa: PLR0911, C901, PLR0912
     except ValueError:
         conv_mode = ConversationMode.REUSE
 
-    svc = _service()
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
 
-    # Resolve tenant_id from project
-    tenant_id = ""
-    if _project_repo is not None:
-        project = await _project_repo.find_by_id(project_id)
-        if project is not None:
-            tenant_id = project.tenant_id
-    if not tenant_id:
-        return ToolResult(
-            output=_json({"error": "Cannot resolve tenant_id for project"}),
-            is_error=True,
+        # Resolve tenant_id from project
+        from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
+            SqlProjectRepository,
         )
 
-    created = await svc.create_job(
-        project_id=project_id,
-        tenant_id=tenant_id,
-        name=name,
-        schedule=schedule,
-        payload=payload,
-        description=job.get("description"),
-        enabled=job.get("enabled", True),
-        delete_after_run=job.get("delete_after_run", False),
-        delivery=delivery,
-        conversation_mode=conv_mode,
-        conversation_id=job.get("conversation_id"),
-        timezone=job.get("timezone", "UTC"),
-        stagger_seconds=job.get("stagger_seconds", 0),
-        timeout_seconds=job.get("timeout_seconds", 300),
-        max_retries=job.get("max_retries", 3),
-        created_by=ctx.user_id,
-    )
+        project_repo = SqlProjectRepository(session)
+        project = await project_repo.find_by_id(project_id)
+        tenant_id = project.tenant_id if project else ""
+        if not tenant_id:
+            return ToolResult(
+                output=_json({"error": "Cannot resolve tenant_id for project"}),
+                is_error=True,
+            )
+
+        created = await svc.create_job(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            name=name,
+            schedule=schedule,
+            payload=payload,
+            description=job.get("description"),
+            enabled=job.get("enabled", True),
+            delete_after_run=job.get("delete_after_run", False),
+            delivery=delivery,
+            conversation_mode=conv_mode,
+            conversation_id=job.get("conversation_id"),
+            timezone=job.get("timezone", "UTC"),
+            stagger_seconds=job.get("stagger_seconds", 0),
+            timeout_seconds=job.get("timeout_seconds", 300),
+            max_retries=job.get("max_retries", 3),
+            created_by=ctx.user_id,
+        )
+        await session.commit()
+
+    # Register with APScheduler (after commit, outside session context)
+    await _try_register_job(created)
 
     return ToolResult(
         output=_json(
@@ -345,14 +422,23 @@ async def _handle_update(
         else:
             updates[key] = value
 
-    svc = _service()
-    try:
-        updated = await svc.update_job(job_id, **updates)
-    except ValueError as exc:
-        return ToolResult(
-            output=_json({"error": str(exc)}),
-            is_error=True,
-        )
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
+        try:
+            updated = await svc.update_job(job_id, **updates)
+        except ValueError as exc:
+            return ToolResult(
+                output=_json({"error": str(exc)}),
+                is_error=True,
+            )
+        await session.commit()
+
+    # Re-register with APScheduler to pick up new schedule/enabled state
+    if updated.enabled:
+        await _try_register_job(updated)
+    else:
+        await _try_unregister_job(updated.id)
 
     return ToolResult(
         output=_json(
@@ -377,13 +463,19 @@ async def _handle_remove(
             is_error=True,
         )
 
-    svc = _service()
-    deleted = await svc.delete_job(job_id)
-    if not deleted:
-        return ToolResult(
-            output=_json({"error": f"CronJob {job_id} not found"}),
-            is_error=True,
-        )
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
+        deleted = await svc.delete_job(job_id)
+        if not deleted:
+            return ToolResult(
+                output=_json({"error": f"CronJob {job_id} not found"}),
+                is_error=True,
+            )
+        await session.commit()
+
+    # Unregister from APScheduler
+    await _try_unregister_job(job_id)
 
     return ToolResult(
         output=_json({"deleted": True, "job_id": job_id}),
@@ -404,14 +496,20 @@ async def _handle_run(
             is_error=True,
         )
 
-    svc = _service()
-    try:
-        run = await svc.trigger_manual_run(job_id, conversation_id=conversation_id)
-    except ValueError as exc:
-        return ToolResult(
-            output=_json({"error": str(exc)}),
-            is_error=True,
-        )
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
+        try:
+            run = await svc.trigger_manual_run(
+                job_id,
+                conversation_id=conversation_id,
+            )
+        except ValueError as exc:
+            return ToolResult(
+                output=_json({"error": str(exc)}),
+                is_error=True,
+            )
+        await session.commit()
 
     return ToolResult(
         output=_json(
@@ -436,9 +534,11 @@ async def _handle_runs(
             is_error=True,
         )
 
-    svc = _service()
-    runs = await svc.list_runs(job_id, limit=20)
-    total = await svc.count_runs(job_id)
+    factory = _get_session_factory()
+    async with factory() as session:
+        svc = _build_service(session)
+        runs = await svc.list_runs(job_id, limit=20)
+        total = await svc.count_runs(job_id)
 
     return ToolResult(
         output=_json(
@@ -525,16 +625,26 @@ async def cron_tool(  # noqa: PLR0911
     if action not in VALID_ACTIONS:
         return ToolResult(
             output=_json(
-                {"error": f"Invalid action '{action}'. Must be one of: {', '.join(VALID_ACTIONS)}"}
+                {
+                    "error": (
+                        f"Invalid action '{action}'. Must be one of: {', '.join(VALID_ACTIONS)}"
+                    )
+                }
             ),
             is_error=True,
         )
 
     try:
         if action == "status":
-            return await _handle_status(ctx, include_disabled=include_disabled)
+            return await _handle_status(
+                ctx,
+                include_disabled=include_disabled,
+            )
         elif action == "list":
-            return await _handle_list(ctx, include_disabled=include_disabled)
+            return await _handle_list(
+                ctx,
+                include_disabled=include_disabled,
+            )
         elif action == "add":
             return await _handle_add(ctx, job=job)
         elif action == "update":
@@ -542,7 +652,11 @@ async def cron_tool(  # noqa: PLR0911
         elif action == "remove":
             return await _handle_remove(ctx, job_id=job_id)
         elif action == "run":
-            return await _handle_run(ctx, job_id=job_id, conversation_id=conversation_id)
+            return await _handle_run(
+                ctx,
+                job_id=job_id,
+                conversation_id=conversation_id,
+            )
         elif action == "runs":
             return await _handle_runs(ctx, job_id=job_id)
         else:
