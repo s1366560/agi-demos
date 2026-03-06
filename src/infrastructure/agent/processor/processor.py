@@ -73,6 +73,7 @@ from ..retry import RetryPolicy
 from .artifact_handler import ArtifactHandler, strip_artifact_binary_data
 from .goal_evaluator import GoalEvaluator
 from .hitl_tool_handler import (
+    handle_a2ui_action_tool,
     handle_clarification_tool,
     handle_decision_tool,
     handle_env_var_tool,
@@ -111,6 +112,7 @@ class ProcessorState(str, Enum):
     WAITING_CLARIFICATION = "waiting_clarification"  # Waiting for user clarification
     WAITING_DECISION = "waiting_decision"  # Waiting for user decision
     WAITING_ENV_VAR = "waiting_env_var"  # Waiting for user to provide env vars
+    WAITING_A2UI_ACTION = "waiting_a2ui_action"  # Waiting for user A2UI surface interaction
     RETRYING = "retrying"
     COMPLETED = "completed"
     ERROR = "error"
@@ -1489,6 +1491,7 @@ class SessionProcessor:
             "ask_clarification": "_handle_clarification_tool",
             "request_decision": "_handle_decision_tool",
             "request_env_var": "_handle_env_var_tool",
+            "canvas_create_interactive": "_handle_a2ui_action_tool",
         }
         return _hitl_map.get(tool_name)
 
@@ -1836,6 +1839,13 @@ class SessionProcessor:
         else:
             result = await tool_def.execute(**arguments)
         end_time = time.time()
+
+        # Consume pending events from ToolContext (@tool_define tools).
+        # Without this, events emitted via ctx.emit() (e.g. canvas_updated)
+        # are lost when _runtime_ctx goes out of scope.
+        if _runtime_ctx is not None:
+            for _pending_evt in _runtime_ctx.consume_pending_events():
+                yield _pending_evt
 
         # Classify result format
         if isinstance(result, ToolResult):
@@ -2836,6 +2846,27 @@ class SessionProcessor:
             arguments=arguments,
             tool_part=tool_part,
             langfuse_context=self._langfuse_context,
+        ):
+            yield event
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_a2ui_action_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle A2UI interactive tool -- delegates to hitl_tool_handler."""
+        self._state = ProcessorState.WAITING_A2UI_ACTION
+        coordinator = self._get_hitl_coordinator()
+        async for event in handle_a2ui_action_tool(
+            coordinator=coordinator,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
         ):
             yield event
         self._state = ProcessorState.OBSERVING

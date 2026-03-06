@@ -841,6 +841,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'thought_delta':
     case 'mcp_app_result':
     case 'mcp_app_registered':
+    case 'canvas_updated':
       return null;
 
     default:

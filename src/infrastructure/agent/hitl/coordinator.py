@@ -28,6 +28,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_reposito
     SqlHITLRequestRepository,
 )
 from src.infrastructure.agent.hitl.hitl_strategies import (
+    A2UIActionStrategy,
     ClarificationStrategy,
     DecisionStrategy,
     EnvVarStrategy,
@@ -52,6 +53,7 @@ class HITLCoordinator:
         HITLType.DECISION: DecisionStrategy(),
         HITLType.ENV_VAR: EnvVarStrategy(),
         HITLType.PERMISSION: PermissionStrategy(),
+        HITLType.A2UI_ACTION: A2UIActionStrategy(),
     }
 
     def __init__(
@@ -275,6 +277,7 @@ def _type_default(hitl_type: HITLType) -> Any:
         HITLType.DECISION: "",
         HITLType.ENV_VAR: {},
         HITLType.PERMISSION: False,
+        HITLType.A2UI_ACTION: {"action_name": "", "cancelled": True},
     }
     return defaults.get(hitl_type, "")
 
@@ -294,6 +297,7 @@ async def _persist_hitl_request(
         "clarification": HITLRequestType.CLARIFICATION,
         "decision": HITLRequestType.DECISION,
         "env_var": HITLRequestType.ENV_VAR,
+        "a2ui_action": HITLRequestType.A2UI_ACTION,
     }
     request_type = type_mapping.get(hitl_type.value, HITLRequestType.CLARIFICATION)
 

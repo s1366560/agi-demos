@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from src.domain.model.agent.hitl_types import (
+    A2UIActionRequestData,
     ClarificationOption,
     ClarificationType,
     DecisionOption,
@@ -354,3 +355,65 @@ class PermissionStrategy(HITLTypeStrategy):
                 "allow_always",
             )
         return False
+
+
+class A2UIActionStrategy(HITLTypeStrategy):
+    """Strategy for A2UI interactive surface action requests.
+
+    When the agent renders an interactive A2UI surface and needs to wait
+    for the user to interact (click a button, submit a form, etc.).
+    """
+
+    @property
+    def hitl_type(self) -> HITLType:
+        return HITLType.A2UI_ACTION
+
+    def generate_request_id(self) -> str:
+        return f"a2ui_{uuid.uuid4().hex[:8]}"
+
+    def create_request(
+        self,
+        conversation_id: str,
+        request_data: dict[str, Any],
+        **kwargs: Any,
+    ) -> HITLRequest:
+        """Create an HITL request for an A2UI interactive surface.
+
+        request_data should contain:
+          - block_id: Canvas block ID housing the A2UI surface
+          - title: Human-readable surface title
+          - components: JSONL component definitions (for persistence/debug)
+          - context: Arbitrary metadata
+        """
+        return HITLRequest(
+            request_id=self.generate_request_id(),
+            hitl_type=HITLType.A2UI_ACTION,
+            conversation_id=conversation_id,
+            timeout_seconds=kwargs.get("timeout_seconds", 300.0),
+            tenant_id=kwargs.get("tenant_id"),
+            project_id=kwargs.get("project_id"),
+            message_id=kwargs.get("message_id"),
+            a2ui_data=A2UIActionRequestData(
+                title=request_data.get("title", "A2UI interaction required"),
+                block_id=request_data.get("block_id", ""),
+                context=request_data.get("context", {}),
+            ),
+        )
+
+    def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+        """Extract the action details from the frontend response.
+
+        Expected shape from A2UISurfaceRenderer:
+          {"action_name": str, "source_component_id": str, "context": dict}
+        """
+        if isinstance(response_data, dict):
+            return {
+                "action_name": response_data.get("action_name", ""),
+                "source_component_id": response_data.get("source_component_id", ""),
+                "context": response_data.get("context", {}),
+            }
+        return {"action_name": "", "source_component_id": "", "context": {}}
+
+    def get_default_response(self, request: HITLRequest) -> Any:
+        """Default response when the A2UI surface times out or is cancelled."""
+        return {"action_name": "", "cancelled": True}

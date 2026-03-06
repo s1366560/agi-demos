@@ -75,6 +75,8 @@ import type {
   TaskUpdatedEventData,
   TaskStartEventData,
   TaskCompleteEventData,
+  CanvasUpdatedEventData,
+  A2UIActionAskedEventData,
   MemoryRecalledEventData,
   MemoryCapturedEventData,
   ExecutionPathDecidedEventData,
@@ -594,6 +596,14 @@ export function routeToHandler(eventType: AgentEventType, data: unknown, handler
         break;
       case 'memory_captured':
         handler.onMemoryCaptured?.(event as AgentEvent<MemoryCapturedEventData>);
+        break;
+      // Canvas events (A2UI deep integration)
+      case 'canvas_updated':
+        handler.onCanvasUpdated?.(event as AgentEvent<CanvasUpdatedEventData>);
+        break;
+      // A2UI interactive action events
+      case 'a2ui_action_asked':
+        handler.onA2UIActionAsked?.(event as AgentEvent<A2UIActionAskedEventData>);
         break;
     }
 }

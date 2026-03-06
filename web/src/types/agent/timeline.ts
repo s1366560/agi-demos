@@ -130,7 +130,9 @@ export type TimelineEventType =
   | 'task_complete'
   // Memory event types
   | 'memory_recalled'
-  | 'memory_captured';
+  | 'memory_captured'
+  // Canvas events
+  | 'canvas_updated';
 
 
 /**
@@ -433,6 +435,19 @@ export interface PermissionGrantedTimelineEvent extends BaseTimelineEvent {
   granted: boolean;
 }
 
+export interface CanvasUpdatedTimelineEvent extends BaseTimelineEvent {
+  type: 'canvas_updated';
+  action: string;
+  block_id: string;
+  block?: {
+    id: string;
+    block_type: string;
+    title: string;
+    content: string;
+    metadata?: Record<string, unknown>;
+  } | null;
+}
+
 
 /**
  * Union type for all timeline events
@@ -496,7 +511,9 @@ export type TimelineEvent =
   | TaskCompleteTimelineEvent
   // Memory events
   | MemoryRecalledTimelineEvent
-  | MemoryCapturedTimelineEvent;
+  | MemoryCapturedTimelineEvent
+  // Canvas events
+  | CanvasUpdatedTimelineEvent;
 
 
 // ============================================

@@ -209,7 +209,8 @@ class ToolPipeline:
         result = await self._hooks.run_after(tool.name, result, ctx)
 
         # Step 8 ---- Collect side-effect events from context -------------
-        for event in ctx.consume_pending_events():
+        pending = ctx.consume_pending_events()
+        for event in pending:
             if isinstance(event, ToolEvent):
                 yield event
             else:

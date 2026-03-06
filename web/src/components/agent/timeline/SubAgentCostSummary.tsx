@@ -1,5 +1,7 @@
 import { memo, useState, useCallback, useMemo } from "react";
+
 import { useTranslation } from "react-i18next";
+
 import {
 	ChevronDown,
 	ChevronRight,
@@ -12,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { formatDuration, formatTokens } from "./subagentUtils";
+
 import type { SubAgentGroup } from "./SubAgentTimeline";
 
 interface SubAgentCostSummaryProps {

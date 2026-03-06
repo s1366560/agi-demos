@@ -12,7 +12,7 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-export type CanvasContentType = 'code' | 'markdown' | 'preview' | 'data' | 'mcp-app';
+export type CanvasContentType = 'code' | 'markdown' | 'preview' | 'data' | 'mcp-app' | 'a2ui-surface';
 
 export interface CanvasTab {
   id: string;
@@ -50,6 +50,12 @@ export interface CanvasTab {
   mcpServerName?: string | undefined;
   /** Whether this tab is pinned (survives close, shown in dock) */
   pinned?: boolean | undefined;
+  /** A2UI surface ID (when type is 'a2ui-surface') */
+  a2uiSurfaceId?: string | undefined;
+  /** A2UI JSONL messages (when type is 'a2ui-surface') */
+  a2uiMessages?: string | undefined;
+  /** A2UI HITL request ID from server (when type is 'a2ui-surface', interactive) */
+  a2uiHitlRequestId?: string | undefined;
 }
 
 const MAX_HISTORY = 50;
@@ -235,7 +241,8 @@ export const useCanvasStore = create<CanvasState>()(
             id: t.id,
             title: t.title,
             type: t.type,
-            // MCP app HTML is large and non-serializable; skip it, re-fetch on demand
+            // MCP app HTML is large and re-fetched on demand.
+            // Keep A2UI messages so existing A2UI tabs still render after refresh.
             content: t.type === 'mcp-app' ? '' : t.content,
             mimeType: t.mimeType,
             language: t.language,
@@ -256,6 +263,10 @@ export const useCanvasStore = create<CanvasState>()(
             mcpProjectId: t.mcpProjectId,
             mcpServerName: t.mcpServerName,
             mcpAppUiMetadata: t.mcpAppUiMetadata,
+            // Persist A2UI metadata/message payload for refresh recovery
+            a2uiSurfaceId: t.a2uiSurfaceId,
+            a2uiMessages: t.a2uiMessages,
+            a2uiHitlRequestId: t.a2uiHitlRequestId,
             // Persist pinned state
             pinned: t.pinned,
           })),

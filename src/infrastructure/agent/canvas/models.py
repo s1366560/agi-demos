@@ -22,6 +22,7 @@ class CanvasBlockType(str, Enum):
     IMAGE = "image"
     MARKDOWN = "markdown"
     WIDGET = "widget"
+    A2UI_SURFACE = "a2ui_surface"
 
 
 @dataclass(frozen=True)

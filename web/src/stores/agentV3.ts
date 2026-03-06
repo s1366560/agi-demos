@@ -49,10 +49,21 @@ import {
   mergeHITLResponseEvents,
   timelineToMessages,
 } from './agent/timelineUtils';
+import { replayCanvasEventsFromTimeline } from './agent/canvasReplay';
+import { useCanvasStore } from './canvasStore';
+import { useLayoutModeStore } from './layoutMode';
 
 // Re-export types for external consumers
 export type { AdditionalAgentHandlers, AgentV3State } from './agent/types';
 import type { AgentV3State } from './agent/types';
+
+function resetCanvasForConversationScope(): void {
+  useCanvasStore.getState().reset();
+  const layoutStore = useLayoutModeStore.getState();
+  if (layoutStore.mode === 'canvas') {
+    layoutStore.setMode('chat');
+  }
+}
 
 
 export const useAgentV3Store = create<AgentV3State>()(
@@ -314,6 +325,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           // CRITICAL: Clear delta buffers when switching conversations
           // Prevents stale streaming content from previous conversation
           clearAllDeltaBuffers();
+          resetCanvasForConversationScope();
 
           // Reset context status for the new conversation (async import for browser compatibility)
           import('../stores/contextStore')
@@ -409,6 +421,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 doomLoopDetected: newState.doomLoopDetected,
                 pinnedEventIds: new Set(),
               });
+              replayCanvasEventsFromTimeline(sortedTimeline);
               return;
             }
           }
@@ -558,6 +571,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               project_id: projectId,
               title: 'New Conversation',
             });
+            resetCanvasForConversationScope();
 
             // Create fresh state for new conversation
             const newConvState = createDefaultConversationState();
@@ -853,6 +867,11 @@ export const useAgentV3Store = create<AgentV3State>()(
             // Persist to IndexedDB
             saveConversationState(conversationId, newConvState).catch(console.error);
 
+            // Replay canvas_updated events to rebuild canvas tabs from server history.
+            // This supplements the Zustand persist (localStorage) approach so that
+            // canvas state is also recoverable from the backend event store.
+            replayCanvasEventsFromTimeline(mergedTimeline);
+
             // DEBUG: Log execution status for recovery debugging
             logger.debug(`[AgentV3] execStatus for ${conversationId}:`, {
               execStatus,
@@ -1014,6 +1033,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               });
               conversationId = newConv.id;
               isNewConversation = true;
+              resetCanvasForConversationScope();
 
               // Create fresh state for new conversation
               const newConvState = createDefaultConversationState();

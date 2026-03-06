@@ -116,6 +116,7 @@ def get_message_router() -> MessageRouter:
     global _message_router
     if _message_router is None:
         from src.infrastructure.adapters.primary.web.websocket.handlers import (
+            A2UIActionRespondHandler,
             ClarificationRespondHandler,
             DecisionRespondHandler,
             EnvVarRespondHandler,
@@ -161,6 +162,7 @@ def get_message_router() -> MessageRouter:
                 DecisionRespondHandler(),
                 EnvVarRespondHandler(),
                 PermissionRespondHandler(),
+                A2UIActionRespondHandler(),
             ]
         )
         logger.info(

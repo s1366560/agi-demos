@@ -2,6 +2,7 @@
 
 from src.domain.model.agent.hitl.hitl_types import (
     HITL_RESPONSE_SIGNAL,
+    A2UIActionRequestData,
     ClarificationOption,
     ClarificationRequestData,
     ClarificationResponse,
@@ -34,6 +35,7 @@ from src.domain.model.agent.hitl.hitl_types import (
 
 __all__ = [
     "HITL_RESPONSE_SIGNAL",
+    "A2UIActionRequestData",
     "ClarificationOption",
     "ClarificationRequestData",
     "ClarificationResponse",

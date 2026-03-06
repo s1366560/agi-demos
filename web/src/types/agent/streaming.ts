@@ -68,6 +68,8 @@ import type {
   TaskCompleteEventData,
   MemoryRecalledEventData,
   MemoryCapturedEventData,
+  CanvasUpdatedEventData,
+  A2UIActionAskedEventData,
   CompleteEventData,
   ErrorEventData,
   RetryEventData,
@@ -186,6 +188,10 @@ export interface AgentStreamHandler {
   // MCP App handlers
   onMCPAppResult?: ((event: AgentEvent) => void) | undefined;
   onMCPAppRegistered?: ((event: AgentEvent) => void) | undefined;
+  // Canvas handlers (A2UI deep integration)
+  onCanvasUpdated?: ((event: AgentEvent<CanvasUpdatedEventData>) => void) | undefined;
+  // A2UI interactive action handlers
+  onA2UIActionAsked?: ((event: AgentEvent<A2UIActionAskedEventData>) => void) | undefined;
   // Memory handlers (auto-recall / auto-capture)
   onMemoryRecalled?: ((event: AgentEvent<MemoryRecalledEventData>) => void) | undefined;
   onMemoryCaptured?: ((event: AgentEvent<MemoryCapturedEventData>) => void) | undefined;

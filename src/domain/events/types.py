@@ -224,6 +224,8 @@ class AgentEventType(str, Enum):
     # Canvas events (A2UI dynamic UI blocks)
     # =========================================================================
     CANVAS_UPDATED = "canvas_updated"
+    A2UI_ACTION_ASKED = "a2ui_action_asked"
+    A2UI_ACTION_ANSWERED = "a2ui_action_answered"
 
     # =========================================================================
     # Agent routing & orchestration events
@@ -269,6 +271,7 @@ HITL_EVENT_TYPES: set[AgentEventType] = {
     AgentEventType.ENV_VAR_REQUESTED,
     AgentEventType.PERMISSION_ASKED,
     AgentEventType.ELICITATION_ASKED,
+    AgentEventType.A2UI_ACTION_ASKED,
 }
 
 # Event categories mapping
@@ -298,6 +301,8 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.PERMISSION_REPLIED: EventCategory.HITL,
     AgentEventType.ELICITATION_ASKED: EventCategory.HITL,
     AgentEventType.ELICITATION_ANSWERED: EventCategory.HITL,
+    AgentEventType.A2UI_ACTION_ASKED: EventCategory.HITL,
+    AgentEventType.A2UI_ACTION_ANSWERED: EventCategory.HITL,
     # Sandbox events
     AgentEventType.SANDBOX_CREATED: EventCategory.SANDBOX,
     AgentEventType.SANDBOX_TERMINATED: EventCategory.SANDBOX,

@@ -56,6 +56,8 @@ _DISPLAYABLE_EVENTS = {
     # Agent emits both permission_replied and permission_granted
     "permission_replied",
     "permission_granted",
+    # Canvas events (A2UI persistence)
+    "canvas_updated",
 }
 
 _SKIP_EVENT_SENTINEL = object()
@@ -385,6 +387,15 @@ def _build_permission_replied(data: dict[str, Any], **_kwargs: Any) -> dict[str,
     return {"requestId": data.get("request_id", ""), "granted": data.get("granted", False)}
 
 
+def _build_canvas_updated(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    """Build a canvas_updated timeline item from persisted event data."""
+    return {
+        "action": data.get("action", ""),
+        "block_id": data.get("block_id", ""),
+        "block": data.get("block"),
+    }
+
+
 # Dispatch dict: event_type -> builder function
 _EVENT_BUILDERS: dict[str, Any] = {
     "user_message": _build_user_message,
@@ -408,6 +419,7 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "permission_asked": _build_permission_asked,
     "permission_granted": _build_permission_replied,
     "permission_replied": _build_permission_replied,
+    "canvas_updated": _build_canvas_updated,
 }
 
 

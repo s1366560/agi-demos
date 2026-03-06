@@ -18,6 +18,8 @@ from src.domain.events.types import AgentEventType, get_frontend_event_types
 
 # Re-export for backward compatibility
 __all__ = [
+    "AgentA2UIActionAnsweredEvent",
+    "AgentA2UIActionAskedEvent",
     "AgentArtifactCloseEvent",
     "AgentArtifactOpenEvent",
     "AgentArtifactUpdateEvent",
@@ -855,6 +857,28 @@ class AgentCanvasUpdatedEvent(AgentDomainEvent):
     block_id: str
     action: str  # "created", "updated", "deleted"
     block: dict[str, Any] | None = None  # Serialised CanvasBlock (None for delete)
+
+
+class AgentA2UIActionAskedEvent(AgentDomainEvent):
+    """Event: An A2UI interactive surface is presented, waiting for user action."""
+
+    event_type: AgentEventType = AgentEventType.A2UI_ACTION_ASKED
+    request_id: str
+    conversation_id: str
+    block_id: str
+    title: str = ""
+    timeout_seconds: float = 300.0
+    surface_data: dict[str, Any] | None = None
+
+
+class AgentA2UIActionAnsweredEvent(AgentDomainEvent):
+    """Event: User interacted with an A2UI surface."""
+
+    event_type: AgentEventType = AgentEventType.A2UI_ACTION_ANSWERED
+    request_id: str
+    action_name: str = ""
+    source_component_id: str = ""
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 # =========================================================================

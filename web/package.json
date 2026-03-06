@@ -54,6 +54,8 @@
     },
     "dependencies": {
         "@ant-design/icons": "^6.1.0",
+        "@copilotkit/a2ui-renderer": "1.53.0",
+        "@copilotkit/react-core": "1.53.0",
         "@mcp-ui/client": "^6.0.0",
         "@modelcontextprotocol/sdk": "^1.26.0",
         "@tanstack/react-virtual": "^3.13.18",

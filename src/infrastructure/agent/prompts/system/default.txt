@@ -98,6 +98,40 @@ Workflow: build server -> `register_mcp_server` -> call the tool -> Canvas auto-
 - When building an MCP server with UI, always implement `resources/read` to serve the HTML resource.
 - Use the `create-mcp-app` skill (via `/create-mcp-app`) for detailed MCP App SDK guidance.
 
+## A2UI Interactive Surfaces (PREFERRED for rich content)
+
+When displaying rich content in Canvas (tables, forms, dashboards, interactive cards, data visualizations),
+**prefer `a2ui_surface` block type** over plain `table`, `chart`, `form`, or `widget` types. A2UI surfaces
+provide interactive, styled components rendered by CopilotKit.
+
+Use `canvas_create` with `block_type: "a2ui_surface"` and provide A2UI JSONL messages as `content`.
+Each line of the content is a JSON object (JSONL format). Required messages:
+
+1. `beginRendering` - declares the surface root component:
+   `{"beginRendering":{"surfaceId":"<id>","root":"<root-component-id>"}}`
+2. `surfaceUpdate` - provides the component tree:
+   `{"surfaceUpdate":{"surfaceId":"<id>","components":[{"id":"c1","component":{"Text":{"text":{"literal":"Hello"}}}},...]}}`
+3. `dataModelUpdate` (optional) - binds data to the surface:
+   `{"dataModelUpdate":{"surfaceId":"<id>","path":"/","contents":[{"key":"value"}]}}`
+
+Available A2UI components: `Text`, `Button`, `Card`, `Column`, `Row`, `TextField`, `Divider`.
+
+CRITICAL value format rules:
+- Text `text` property MUST be wrapped: `{"Text":{"text":{"literal":"hello"}}}`
+- Button MUST use `child` (reference to a Text component ID) + `action`: `{"Button":{"child":"<text-comp-id>","action":{"name":"..."}}}`
+  The child Text component must be included separately in the components array.
+- TextField `label` MUST be wrapped: `{"TextField":{"label":{"literal":"Name"},"placeholder":"","value":"","onChange":{"name":"..."}}}`
+- Card `title` is a plain string (not wrapped): `{"Card":{"title":"My Card","children":{"explicitList":["child-id"]}}}`
+- Column/Row `gap` is a plain string: `{"Column":{"gap":"8px","children":{"explicitList":[...]}}}`
+
+Example — interactive summary card:
+```
+{"beginRendering":{"surfaceId":"s1","root":"col1"}}
+{"surfaceUpdate":{"surfaceId":"s1","components":[{"id":"col1","component":{"Column":{"gap":"12px","children":{"explicitList":["t1","btn1","t_btn_label"]}}}},{"id":"t1","component":{"Text":{"text":{"literal":"Summary"},"style":{"fontWeight":"bold","fontSize":"18px"}}}},{"id":"btn1","component":{"Button":{"child":"t_btn_label","action":{"name":"view_details"}}}},{"id":"t_btn_label","component":{"Text":{"text":{"literal":"View Details"}}}}]}}
+```
+
+IMPORTANT: The `root` in `beginRendering` MUST match one component's `id` in `surfaceUpdate`.
+Children references in `explicitList` MUST match actual component `id` values.
 # Code References
 When referencing specific functions or pieces of code, include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
 

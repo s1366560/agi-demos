@@ -334,6 +334,39 @@ class PermissionRespondHandler(WebSocketMessageHandler):
             logger.error(f"[WS HITL] Error handling permission response: {e}", exc_info=True)
             await context.send_error(f"Failed to process permission response: {e!s}")
 
+class A2UIActionRespondHandler(WebSocketMessageHandler):
+    """Handle A2UI action response via WebSocket using Redis Streams."""
+
+    @property
+    def message_type(self) -> str:
+        return "a2ui_action_respond"
+
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
+        """Handle A2UI action response."""
+        request_id = message.get("request_id")
+        action_name = message.get("action_name")
+        source_component_id = message.get("source_component_id", "")
+        action_context = message.get("context", {})
+
+        if not request_id or action_name is None:
+            await context.send_error("Missing required fields: request_id, action_name")
+            return
+
+        try:
+            await _handle_hitl_response(
+                context=context,
+                request_id=request_id,
+                hitl_type="a2ui_action",
+                response_data={
+                    "action_name": action_name,
+                    "source_component_id": source_component_id,
+                    "context": action_context,
+                },
+                ack_type="a2ui_action_response_ack",
+            )
+        except Exception as e:
+            logger.error(f"[WS HITL] Error handling A2UI action response: {e}", exc_info=True)
+            await context.send_error(f"Failed to process A2UI action response: {e!s}")
 
 # =============================================================================
 # Stream Bridge Helper

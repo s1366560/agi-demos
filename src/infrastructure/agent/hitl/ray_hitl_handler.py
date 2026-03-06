@@ -19,6 +19,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_reposito
     SqlHITLRequestRepository,
 )
 from src.infrastructure.agent.hitl.hitl_strategies import (
+    A2UIActionStrategy,
     ClarificationStrategy,
     DecisionStrategy,
     EnvVarStrategy,
@@ -38,6 +39,7 @@ class RayHITLHandler:
         HITLType.DECISION: DecisionStrategy(),
         HITLType.ENV_VAR: EnvVarStrategy(),
         HITLType.PERMISSION: PermissionStrategy(),
+        HITLType.A2UI_ACTION: A2UIActionStrategy(),
     }
 
     def __init__(
@@ -332,6 +334,7 @@ async def _persist_hitl_request(
         "clarification": HITLRequestType.CLARIFICATION,
         "decision": HITLRequestType.DECISION,
         "env_var": HITLRequestType.ENV_VAR,
+        "a2ui_action": HITLRequestType.A2UI_ACTION,
     }
     request_type = type_mapping.get(hitl_type.value, HITLRequestType.CLARIFICATION)
 
@@ -377,6 +380,7 @@ async def _emit_hitl_sse_event(
         "decision": "decision_asked",
         "env_var": "env_var_requested",
         "permission": "permission_asked",
+        "a2ui_action": "a2ui_action_asked",
     }
     event_type = event_type_mapping.get(hitl_type.value, "clarification_asked")
 

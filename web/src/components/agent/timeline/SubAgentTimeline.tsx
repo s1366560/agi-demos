@@ -16,7 +16,6 @@ import { memo, useState, useMemo, useCallback } from "react";
 
 import { useTranslation } from "react-i18next";
 
-import { useAgentV3Store } from "../../../stores/agentV3";
 
 import { Steps } from "antd";
 import {
@@ -38,8 +37,10 @@ import {
 	Info,
 } from "lucide-react";
 
-import { SubAgentDetailPanel } from "./SubAgentDetailPanel";
+import { useAgentV3Store } from "../../../stores/agentV3";
+
 import { SubAgentActions } from "./SubAgentActions";
+import { SubAgentDetailPanel } from "./SubAgentDetailPanel";
 import {
 	formatDuration,
 	formatTokens,

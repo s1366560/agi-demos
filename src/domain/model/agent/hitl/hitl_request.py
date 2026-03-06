@@ -18,6 +18,7 @@ class HITLRequestType(str, Enum):
     CLARIFICATION = "clarification"
     DECISION = "decision"
     ENV_VAR = "env_var"
+    A2UI_ACTION = "a2ui_action"
 
 
 class HITLRequestStatus(str, Enum):

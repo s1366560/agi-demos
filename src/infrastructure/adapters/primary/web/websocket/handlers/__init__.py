@@ -18,6 +18,7 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     StopSessionHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.handlers.hitl_handler import (
+    A2UIActionRespondHandler,
     ClarificationRespondHandler,
     DecisionRespondHandler,
     EnvVarRespondHandler,
@@ -45,6 +46,7 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_han
 
 __all__ = [
     # HITL
+    "A2UIActionRespondHandler",
     "ClarificationRespondHandler",
     "DecisionRespondHandler",
     "EnvVarRespondHandler",

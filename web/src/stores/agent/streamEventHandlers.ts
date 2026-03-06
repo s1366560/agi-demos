@@ -14,6 +14,8 @@ import { useContextStore } from '../contextStore';
 import { useUnifiedHITLStore } from '../hitlStore.unified';
 import { useLayoutModeStore } from '../layoutMode';
 
+import { mergeA2UIMessageStream } from './a2uiMessages';
+
 import type { DeltaBufferState } from './deltaBuffers';
 import type { AdditionalAgentHandlers } from './types';
 import type {
@@ -21,6 +23,8 @@ import type {
   AgentEvent,
   AgentStreamHandler,
   ClarificationAskedEventData,
+  CanvasUpdatedEventData,
+  A2UIActionAskedEventData,
   CompleteEventData,
   DecisionAskedEventData,
   EnvVarRequestedEventData,
@@ -1462,6 +1466,149 @@ export function createStreamEventHandlers(
           status: 'discovered',
           has_resource: false,
         });
+      });
+    },
+
+    // Canvas handlers (A2UI deep integration)
+    onCanvasUpdated: (event: AgentEvent<CanvasUpdatedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+
+      const data = event.data;
+      const canvasStore = useCanvasStore.getState();
+      const layoutStore = useLayoutModeStore.getState();
+
+      if (data.action === 'created' && data.block) {
+        // Map backend CanvasBlock type to frontend CanvasContentType
+        const typeMap: Record<string, 'code' | 'markdown' | 'preview' | 'data' | 'a2ui-surface'> = {
+          code: 'code',
+          markdown: 'markdown',
+          image: 'preview',
+          table: 'data',
+          chart: 'data',
+          form: 'data',
+          widget: 'preview',
+          a2ui_surface: 'a2ui-surface',
+        };
+        const tabType = typeMap[data.block.block_type] ?? 'code';
+
+        canvasStore.openTab({
+          id: data.block.id,
+          title: data.block.title,
+          type: tabType,
+          content: data.block.content,
+          language: data.block.metadata?.language,
+          mimeType: data.block.metadata?.mime_type,
+          ...(tabType === 'a2ui-surface'
+            ? {
+                a2uiSurfaceId:
+                  typeof data.block.metadata?.surface_id === 'string'
+                    ? data.block.metadata.surface_id
+                    : data.block.id,
+                a2uiMessages: data.block.content,
+              }
+            : {}),
+        });
+
+        // Auto-switch to canvas layout
+        if (layoutStore.mode !== 'canvas') {
+          layoutStore.setMode('canvas');
+        }
+      } else if (data.action === 'updated' && data.block) {
+        const existingTab = canvasStore.tabs.find((t) => t.id === data.block_id);
+        if (existingTab) {
+          if (existingTab.type === 'a2ui-surface') {
+            const mergedA2UI = mergeA2UIMessageStream(
+              existingTab.a2uiMessages ?? existingTab.content,
+              data.block.content,
+            );
+            canvasStore.updateContent(data.block_id, mergedA2UI);
+            canvasStore.updateTab(data.block_id, {
+              a2uiMessages: mergedA2UI,
+              a2uiSurfaceId:
+                (typeof data.block.metadata?.surface_id === 'string'
+                  ? data.block.metadata.surface_id
+                  : undefined) ??
+                existingTab.a2uiSurfaceId ??
+                data.block.id,
+            });
+          } else {
+            canvasStore.updateContent(data.block_id, data.block.content);
+          }
+          // Also update title if changed
+          if (existingTab.title !== data.block.title) {
+            canvasStore.updateTab(data.block_id, { title: data.block.title });
+          }
+        } else {
+          // Tab not open yet — open it
+          const typeMap: Record<string, 'code' | 'markdown' | 'preview' | 'data' | 'a2ui-surface'> = {
+            code: 'code',
+            markdown: 'markdown',
+            image: 'preview',
+            table: 'data',
+            chart: 'data',
+            form: 'data',
+            widget: 'preview',
+            a2ui_surface: 'a2ui-surface',
+          };
+          const fallbackTabType = typeMap[data.block.block_type] ?? 'code';
+          canvasStore.openTab({
+            id: data.block.id,
+            title: data.block.title,
+            type: fallbackTabType,
+            content: data.block.content,
+            language: data.block.metadata?.language,
+            mimeType: data.block.metadata?.mime_type,
+            ...(fallbackTabType === 'a2ui-surface'
+              ? {
+                  a2uiSurfaceId:
+                    typeof data.block.metadata?.surface_id === 'string'
+                      ? data.block.metadata.surface_id
+                      : data.block.id,
+                  a2uiMessages: data.block.content,
+                }
+              : {}),
+          });
+        }
+
+        if (layoutStore.mode !== 'canvas') {
+          layoutStore.setMode('canvas');
+        }
+      } else if (data.action === 'deleted') {
+        canvasStore.closeTab(data.block_id, true);
+
+        // If no more tabs, switch back to chat mode
+        if (useCanvasStore.getState().tabs.length === 0) {
+          layoutStore.setMode('chat');
+        }
+      }
+
+      // Add to timeline
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    // A2UI interactive action handler
+    onA2UIActionAsked: (event: AgentEvent<A2UIActionAskedEventData>) => {
+      const blockId = event.data?.block_id;
+      const requestId = event.data?.request_id;
+      if (!blockId || !requestId) return;
+
+      // Store the server-assigned request_id into the canvas tab so the
+      // A2UISurfaceRenderer can use it when dispatching user actions back.
+      const canvasStore = useCanvasStore.getState();
+      canvasStore.updateTab(blockId, { a2uiHitlRequestId: requestId });
+
+      // Add to timeline
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
       });
     },
 

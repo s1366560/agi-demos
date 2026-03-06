@@ -262,7 +262,8 @@ export type AgentEventType =
   // Memory events (auto-recall / auto-capture)
   | 'memory_recalled' // Memories recalled for context injection
   | 'memory_captured' // New memories captured from conversation
-  | 'canvas_updated'; // Canvas block created/updated/deleted by agent (A2UI)
+  | 'canvas_updated' // Canvas block created/updated/deleted by agent (A2UI)
+  | 'a2ui_action_asked'; // A2UI interactive surface waiting for user action (HITL)
 
 /**
  * Base SSE event from agent
@@ -1459,7 +1460,7 @@ export interface BackgroundLaunchedEventData {
  */
 export interface CanvasBlockData {
   id: string;
-  block_type: 'code' | 'table' | 'chart' | 'form' | 'image' | 'markdown' | 'widget';
+  block_type: 'code' | 'table' | 'chart' | 'form' | 'image' | 'markdown' | 'widget' | 'a2ui_surface';
   title: string;
   content: string;
   metadata: Record<string, string>;
@@ -1476,4 +1477,21 @@ export interface CanvasUpdatedEventData {
   block_id: string;
   action: 'created' | 'updated' | 'deleted';
   block: CanvasBlockData | null;
+}
+
+
+
+/**
+ * A2UI action asked event data (HITL: agent paused waiting for user interaction)
+ *
+ * Emitted by canvas_create_interactive tool when the agent renders an interactive
+ * A2UI surface and waits for the user to interact with it.
+ */
+export interface A2UIActionAskedEventData {
+  request_id: string;
+  conversation_id: string;
+  block_id: string;
+  title?: string | undefined;
+  timeout_seconds?: number | undefined;
+  surface_data?: Record<string, unknown> | undefined;
 }

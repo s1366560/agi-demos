@@ -19,11 +19,11 @@ from src.infrastructure.agent.canvas.models import (
     CanvasState,
 )
 from src.infrastructure.agent.canvas.tools import (
-    _get_manager,
     canvas_create,
     canvas_delete,
     canvas_update,
     configure_canvas,
+    get_canvas_manager,
 )
 from src.infrastructure.agent.tools.context import ToolContext
 
@@ -59,7 +59,7 @@ class TestCanvasBlockType:
     """Test CanvasBlockType enum."""
 
     def test_all_values(self) -> None:
-        expected = {"code", "table", "chart", "form", "image", "markdown", "widget"}
+        expected = {"code", "table", "chart", "form", "image", "markdown", "widget", "a2ui_surface"}
         assert {t.value for t in CanvasBlockType} == expected
 
     def test_str_enum(self) -> None:
@@ -311,16 +311,16 @@ class TestCanvasEvents:
         block = CanvasBlock(id="b-1", block_type=CanvasBlockType.CODE, title="T")
         event = build_canvas_event_dict("conv-1", "b-1", "created", block)
         assert event["type"] == "canvas_updated"
-        assert event["conversation_id"] == "conv-1"
-        assert event["block_id"] == "b-1"
-        assert event["action"] == "created"
-        assert event["block"]["id"] == "b-1"
+        assert event["data"]["conversation_id"] == "conv-1"
+        assert event["data"]["block_id"] == "b-1"
+        assert event["data"]["action"] == "created"
+        assert event["data"]["block"]["id"] == "b-1"
 
     def test_build_canvas_event_dict_deleted(self) -> None:
         event = build_canvas_event_dict("conv-1", "b-1", "deleted", None)
         assert event["type"] == "canvas_updated"
-        assert event["block"] is None
-        assert event["action"] == "deleted"
+        assert event["data"]["block"] is None
+        assert event["data"]["action"] == "deleted"
 
     def test_domain_event_class(self) -> None:
         evt = AgentCanvasUpdatedEvent(
@@ -369,14 +369,14 @@ class TestCanvasTools:
     def test_configure_and_get_manager(self) -> None:
         mgr = CanvasManager()
         configure_canvas(mgr)
-        assert _get_manager() is mgr
+        assert get_canvas_manager() is mgr
         # Reset to avoid pollution
         configure_canvas(None)  # reset global
 
     def test_get_manager_unconfigured(self) -> None:
         configure_canvas(None)  # reset global
         with pytest.raises(RuntimeError, match="Canvas not configured"):
-            _get_manager()
+            get_canvas_manager()
 
     async def test_canvas_create_success(self, ctx: ToolContext) -> None:
         mgr = CanvasManager()
@@ -396,7 +396,7 @@ class TestCanvasTools:
         events = ctx.consume_pending_events()
         assert len(events) == 1
         assert events[0]["type"] == "canvas_updated"
-        assert events[0]["action"] == "created"
+        assert events[0]["data"]["action"] == "created"
 
         configure_canvas(None)  # reset global
 
@@ -431,7 +431,7 @@ class TestCanvasTools:
 
         events = ctx.consume_pending_events()
         assert len(events) == 1
-        assert events[0]["action"] == "updated"
+        assert events[0]["data"]["action"] == "updated"
 
         configure_canvas(None)  # reset global
 
@@ -462,8 +462,8 @@ class TestCanvasTools:
 
         events = ctx.consume_pending_events()
         assert len(events) == 1
-        assert events[0]["action"] == "deleted"
-        assert events[0]["block"] is None
+        assert events[0]["data"]["action"] == "deleted"
+        assert events[0]["data"]["block"] is None
 
         configure_canvas(None)  # reset global
 
@@ -493,7 +493,7 @@ class TestCanvasTools:
 
         # Verify metadata in emitted event
         events = ctx.consume_pending_events()
-        event_block = events[0]["block"]
+        event_block = events[0]["data"]["block"]
         assert event_block["metadata"] == {"language": "python"}
 
         configure_canvas(None)  # reset global

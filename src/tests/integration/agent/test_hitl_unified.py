@@ -271,6 +271,7 @@ class TestHITLEndToEndFlow:
             create_permission_request,
         )
         from src.infrastructure.agent.hitl.hitl_strategies import (
+            A2UIActionStrategy,
             ClarificationStrategy,
             DecisionStrategy,
             EnvVarStrategy,
@@ -291,8 +292,15 @@ class TestHITLEndToEndFlow:
             HITLType.DECISION: DecisionStrategy,
             HITLType.ENV_VAR: EnvVarStrategy,
             HITLType.PERMISSION: PermissionStrategy,
+            HITLType.A2UI_ACTION: A2UIActionStrategy,
         }
 
+        # Types that have convenience factory functions (A2UI_ACTION uses strategy-only pattern)
+        factory_types = set(factory_map.keys())
+        strategy_only_types = {HITLType.A2UI_ACTION}
+
         for hitl_type in HITLType:
-            assert hitl_type in factory_map, f"Missing factory for {hitl_type}"
+            assert hitl_type in factory_types or hitl_type in strategy_only_types, (
+                f"Missing factory for {hitl_type}"
+            )
             assert hitl_type in strategy_map, f"Missing strategy for {hitl_type}"

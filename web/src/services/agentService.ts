@@ -426,6 +426,30 @@ class AgentServiceImpl implements AgentService {
     return restApi.respondToPermissionHttp(requestId, granted);
   }
 
+  respondToA2UIAction(
+    requestId: string,
+    actionName: string,
+    sourceComponentId: string,
+    context: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.isConnected()) {
+      this.send({
+        type: 'a2ui_action_respond',
+        request_id: requestId,
+        action_name: actionName,
+        source_component_id: sourceComponentId,
+        context,
+      });
+      return Promise.resolve();
+    }
+    return restApi.respondToA2UIActionHttp(
+      requestId,
+      actionName,
+      sourceComponentId,
+      context,
+    );
+  }
+
   stopChat(conversationId: string): boolean {
     const sent = this.send({
       type: 'stop_session',

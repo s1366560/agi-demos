@@ -195,7 +195,7 @@ async def respond_to_hitl(
 
     try:
         # Validate HITL type
-        valid_types = ["clarification", "decision", "env_var", "permission"]
+        valid_types = ["clarification", "decision", "env_var", "permission", "a2ui_action"]
         if request.hitl_type not in valid_types:
             raise HTTPException(
                 status_code=400,

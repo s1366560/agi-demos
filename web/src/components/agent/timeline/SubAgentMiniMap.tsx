@@ -1,10 +1,12 @@
 import { type FC, useState } from 'react';
+
 import { useTranslation } from 'react-i18next';
 
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 
-import type { SubAgentSummary } from '../message/groupTimelineEvents';
 import { formatDuration } from './subagentUtils';
+
+import type { SubAgentSummary } from '../message/groupTimelineEvents';
 
 export interface SubAgentMiniMapProps {
   summaries: SubAgentSummary[];
@@ -34,7 +36,7 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
       <button
         type="button"
         className="flex w-full cursor-pointer items-center justify-between border-b border-gray-100 p-2 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => { setIsExpanded(!isExpanded); }}
       >
         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
           {t('agent.subagent.minimap_title', 'SubAgent Timeline')}
@@ -54,7 +56,7 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
               type="button"
               key={`${summary.startIndex}-${summary.subagentId}`}
               className="group flex w-full cursor-pointer items-center justify-between rounded p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50"
-              onClick={() => onScrollTo(summary.startIndex)}
+              onClick={() => { onScrollTo(summary.startIndex); }}
             >
               <div className="flex items-center gap-2 overflow-hidden">
                 <div 

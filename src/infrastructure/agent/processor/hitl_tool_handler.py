@@ -18,6 +18,9 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from src.domain.events.agent_events import (
+    AgentA2UIActionAnsweredEvent,
+    AgentA2UIActionAskedEvent,
+    AgentCanvasUpdatedEvent,
     AgentClarificationAnsweredEvent,
     AgentClarificationAskedEvent,
     AgentDecisionAnsweredEvent,
@@ -465,3 +468,181 @@ async def _save_env_vars(
         await db_session.commit()
 
     return saved_variables
+
+
+def _repair_jsonl(raw: str) -> str:
+    """Validate and repair LLM-generated JSONL -- fix missing closing brackets.
+
+    LLMs sometimes emit malformed JSON with missing closing braces/brackets.
+    This tries common suffixes to repair each line.
+    """
+    import json as _json
+
+    # Common suffixes LLMs forget: closing braces, brackets, or combos
+    _suffixes = [
+        "}", "}}", "}}}", "}}}}",
+        "]}", "]}}", "]}}}",
+        "]}]", "]}}]",
+        "]", "]]",
+        "}]", "}}]", "}}}]",
+        "}}]}}", "]}}]}}",
+    ]
+
+    repaired_lines: list[str] = []
+    for line in raw.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            _json.loads(stripped)
+            repaired_lines.append(stripped)
+        except _json.JSONDecodeError:
+            fixed = False
+            for suffix in _suffixes:
+                try:
+                    _json.loads(stripped + suffix)
+                    repaired_lines.append(stripped + suffix)
+                    fixed = True
+                    break
+                except _json.JSONDecodeError:
+                    continue
+            if not fixed:
+                repaired_lines.append(stripped)  # pass through as-is
+    return "\n".join(repaired_lines)
+
+
+async def handle_a2ui_action_tool(
+    coordinator: HITLCoordinator,
+    call_id: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+    tool_part: ToolPart,
+) -> AsyncIterator[AgentDomainEvent]:
+    """Handle A2UI interactive surface tool via HITLCoordinator (Future-based).
+
+    Renders an A2UI surface and pauses the agent until the user interacts
+    with it (button click, form submission, etc.).  The user action is
+    returned as a dict with action_name, source_component_id, and context.
+    """
+    try:
+        title = arguments.get("title", "")
+        components = arguments.get("components", "")
+        # Repair LLM-generated JSONL with missing closing braces
+        if isinstance(components, str) and components.strip():
+            components = _repair_jsonl(components)
+        block_id = arguments.get("block_id", "")
+        context = _ensure_dict(arguments.get("context", {}))
+        timeout = arguments.get("timeout", 300.0)
+
+        request_data = {
+            "block_id": block_id,
+            "title": title,
+            "components": components,
+            "context": context,
+        }
+
+        request_id = await coordinator.prepare_request(
+            HITLType.A2UI_ACTION,
+            request_data,
+            timeout,
+        )
+
+        # Create a canvas block so the frontend renders the A2UI surface tab
+        effective_block_id = block_id
+        try:
+            from src.infrastructure.agent.canvas.tools import get_canvas_manager
+
+            canvas_mgr = get_canvas_manager()
+            block = canvas_mgr.create_block(
+                conversation_id=coordinator.conversation_id,
+                block_type="a2ui_surface",
+                title=title,
+                content=components,
+                metadata={"surface_id": block_id or request_id},
+            )
+            yield AgentCanvasUpdatedEvent(
+                conversation_id=coordinator.conversation_id,
+                block_id=block.id,
+                action="created",
+                block=block.to_dict(),
+            )
+            effective_block_id = block.id
+        except Exception:
+            logger.warning(
+                "Could not create canvas block for A2UI interactive surface",
+                exc_info=True,
+            )
+
+        yield AgentA2UIActionAskedEvent(
+            request_id=request_id,
+            conversation_id=coordinator.conversation_id,
+            block_id=effective_block_id,
+            title=title,
+            timeout_seconds=timeout,
+            surface_data=request_data,
+        )
+
+        start_time = time.time()
+        answer = await coordinator.wait_for_response(
+            request_id,
+            HITLType.A2UI_ACTION,
+            timeout,
+        )
+        end_time = time.time()
+
+        # Extract action fields from the response
+        answer_dict = answer if isinstance(answer, dict) else {}
+        action_name = answer_dict.get("action_name", "")
+        source_component_id = answer_dict.get("source_component_id", "")
+        action_context = _ensure_dict(answer_dict.get("context", {}))
+
+        yield AgentA2UIActionAnsweredEvent(
+            request_id=request_id,
+            action_name=action_name,
+            source_component_id=source_component_id,
+            context=action_context,
+        )
+
+        tool_part.status = ToolState.COMPLETED
+        result = {
+            "action_name": action_name,
+            "source_component_id": source_component_id,
+            "context": action_context,
+            "cancelled": answer_dict.get("cancelled", False),
+            "block_id": effective_block_id,
+        }
+        tool_part.output = json.dumps(result)
+        tool_part.end_time = end_time
+
+        yield AgentObserveEvent(
+            tool_name=tool_name,
+            result=result,
+            duration_ms=int((end_time - start_time) * 1000),
+            call_id=call_id,
+            tool_execution_id=tool_part.tool_execution_id,
+        )
+
+    except TimeoutError:
+        tool_part.status = ToolState.ERROR
+        tool_part.error = "A2UI action request timed out"
+        tool_part.end_time = time.time()
+
+        yield AgentObserveEvent(
+            tool_name=tool_name,
+            error="A2UI action request timed out",
+            call_id=call_id,
+            tool_execution_id=tool_part.tool_execution_id,
+        )
+
+    except Exception as e:
+        logger.error(f"A2UI action tool error: {e}", exc_info=True)
+        tool_part.status = ToolState.ERROR
+        tool_part.error = str(e)
+        tool_part.end_time = time.time()
+
+        yield AgentObserveEvent(
+            tool_name=tool_name,
+            error=str(e),
+            call_id=call_id,
+            tool_execution_id=tool_part.tool_execution_id,
+        )

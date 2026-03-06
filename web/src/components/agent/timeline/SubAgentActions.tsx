@@ -43,7 +43,7 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
         </button>
         <button
           type="button"
-          onClick={() => setShowRedirect(!showRedirect)}
+          onClick={() => { setShowRedirect(!showRedirect); }}
           className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
           title={t('agent.subagent.action_redirect')}
         >
@@ -56,7 +56,7 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
           <input
             type="text"
             value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
+            onChange={(e) => { setInstruction(e.target.value); }}
             onKeyDown={(e) => e.key === 'Enter' && handleRedirect()}
             placeholder={t('agent.subagent.redirect_placeholder')}
             className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"

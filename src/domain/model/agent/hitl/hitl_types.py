@@ -30,6 +30,7 @@ class HITLType(str, Enum):
     DECISION = "decision"
     ENV_VAR = "env_var"
     PERMISSION = "permission"
+    A2UI_ACTION = "a2ui_action"
 
 
 class HITLStatus(str, Enum):
@@ -283,6 +284,27 @@ class PermissionRequestData:
         }
 
 
+@dataclass
+class A2UIActionRequestData:
+    """Data for an A2UI interactive surface action request.
+
+    When the agent renders an interactive A2UI surface and waits for
+    user interaction (button clicks, form submissions, etc.).
+    """
+
+    title: str = "A2UI interaction required"
+    block_id: str = ""
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "question": self.title,
+            "title": self.title,
+            "block_id": self.block_id,
+            "context": self.context,
+        }
+
+
 # =============================================================================
 # Unified HITL Request
 # =============================================================================
@@ -302,6 +324,7 @@ class HITLRequest:
     decision_data: DecisionRequestData | None = None
     env_var_data: EnvVarRequestData | None = None
     permission_data: PermissionRequestData | None = None
+    a2ui_data: A2UIActionRequestData | None = None
 
     # Common fields
     status: HITLStatus = HITLStatus.PENDING
@@ -337,6 +360,8 @@ class HITLRequest:
                 self.permission_data.description
                 or f"Allow {self.permission_data.tool_name} to {self.permission_data.action}?"
             )
+        if self.a2ui_data:
+            return self.a2ui_data.title
         return ""
 
     @property
@@ -350,6 +375,8 @@ class HITLRequest:
             return self.env_var_data.to_dict()
         if self.permission_data:
             return self.permission_data.to_dict()
+        if self.a2ui_data:
+            return self.a2ui_data.to_dict()
         return {}
 
     def to_dict(self) -> dict[str, Any]:

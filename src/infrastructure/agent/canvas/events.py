@@ -39,8 +39,10 @@ def build_canvas_event_dict(
     """
     return {
         "type": AgentEventType.CANVAS_UPDATED.value,
-        "conversation_id": conversation_id,
-        "block_id": block_id,
-        "action": action,
-        "block": block.to_dict() if block is not None else None,
+        "data": {
+            "conversation_id": conversation_id,
+            "block_id": block_id,
+            "action": action,
+            "block": block.to_dict() if block is not None else None,
+        },
     }

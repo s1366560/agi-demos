@@ -314,5 +314,22 @@ export const restApi = {
       hitl_type: 'permission',
       response_data: { granted, action: granted ? 'allow' : 'deny' },
     });
-  }
+  },
+
+  async respondToA2UIActionHttp(
+    requestId: string,
+    actionName: string,
+    sourceComponentId: string,
+    context: Record<string, unknown>,
+  ): Promise<void> {
+    await api.post<{ status: string }>('/agent/hitl/respond', {
+      request_id: requestId,
+      hitl_type: 'a2ui_action',
+      response_data: {
+        action_name: actionName,
+        source_component_id: sourceComponentId,
+        context,
+      },
+    });
+  },
 };

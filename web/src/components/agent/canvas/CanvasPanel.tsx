@@ -62,6 +62,9 @@ import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlug
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { SelectionToolbar } from './SelectionToolbar';
+import { A2UISurfaceRenderer } from './A2UISurfaceRenderer';
+import { Table as AntTable } from 'antd';
+import { useSyntaxHighlighter } from './useSyntaxHighlighter';
 
 const typeIcon = (type: CanvasContentType, size = 14) => {
   switch (type) {
@@ -75,6 +78,8 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
       return <Table size={size} />;
     case 'mcp-app':
       return <AppWindow size={size} />;
+    case 'a2ui-surface':
+      return <Sparkles size={size} />;
   }
 };
 
@@ -86,6 +91,25 @@ const isSafePreviewUrl = (src: string): boolean => {
   const lower = src.toLowerCase();
   if (lower.startsWith('data:application/pdf')) return true;
   if (lower.startsWith('data:')) return false;
+  try {
+    const url = new URL(src, window.location.origin);
+    return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'blob:';
+  } catch {
+    return false;
+  }
+};
+
+const isSafeMediaUrl = (src: string, mimeType: string): boolean => {
+  if (!src) return false;
+  const lowerSrc = src.toLowerCase();
+
+  if (lowerSrc.startsWith('data:')) {
+    if (mimeType.startsWith('image/')) return lowerSrc.startsWith('data:image/');
+    if (mimeType.startsWith('video/')) return lowerSrc.startsWith('data:video/');
+    if (mimeType.startsWith('audio/')) return lowerSrc.startsWith('data:audio/');
+    return false;
+  }
+
   try {
     const url = new URL(src, window.location.origin);
     return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'blob:';
@@ -396,24 +420,34 @@ const getOfficeFileType = (mime: string, filename: string): 'docx' | 'xlsx' | 'p
 
 /** Download fallback UI for unsupported Office formats */
 const OfficeDownloadFallback = memo<{ src: string; title: string; message: string }>(
-  ({ src, title, message }) => (
-    <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-      <div className="flex flex-col items-center gap-4 p-8 text-center">
-        <FileText size={48} className="text-slate-300 dark:text-slate-600" />
-        <div className="text-sm text-slate-500 dark:text-slate-400">{title}</div>
-        <div className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">{message}</div>
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          <Download size={14} />
-          Download File
-        </a>
+  ({ src, title, message }) => {
+    if (!isSafePreviewUrl(src)) {
+      return (
+        <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+          <div className="text-sm text-slate-500 dark:text-slate-400">Invalid file URL</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="flex flex-col items-center gap-4 p-8 text-center">
+          <FileText size={48} className="text-slate-300 dark:text-slate-600" />
+          <div className="text-sm text-slate-500 dark:text-slate-400">{title}</div>
+          <div className="text-xs text-slate-400 dark:text-slate-500 max-w-xs">{message}</div>
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <Download size={14} />
+            Download File
+          </a>
+        </div>
       </div>
-    </div>
-  )
+    );
+  }
 );
 OfficeDownloadFallback.displayName = 'OfficeDownloadFallback';
 
@@ -597,6 +631,440 @@ CanvasOfficePreview.displayName = 'CanvasOfficePreview';
 
 // Content area for a single non-mcp-app tab
 // MCP app tabs are rendered separately in CanvasPanel for multi-instance isolation.
+function inferMimeFromContent(src: string): string {
+  if (!src) return '';
+  const lower = src.toLowerCase();
+  // data URI
+  if (lower.startsWith('data:image/')) return (lower.split(';')[0] ?? '').replace('data:', '');
+  if (lower.startsWith('data:video/')) return (lower.split(';')[0] ?? '').replace('data:', '');
+  if (lower.startsWith('data:audio/')) return (lower.split(';')[0] ?? '').replace('data:', '');
+  // URL extension detection
+  try {
+    const pathname = new URL(src, 'http://dummy').pathname.toLowerCase();
+    if (/\.(png|jpg|jpeg|gif|webp|svg|ico|bmp|avif)$/.test(pathname)) return 'image/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'png');
+    if (/\.(mp4|webm|ogg|mov)$/.test(pathname)) return 'video/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'mp4');
+    if (/\.(mp3|wav|flac|aac|m4a)$/.test(pathname)) return 'audio/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'mpeg');
+  } catch { /* not a URL */ }
+  return '';
+}
+
+type JsonRecord = Record<string, unknown>;
+
+interface ImagePreviewPayload {
+  src: string;
+  mimeType?: string | undefined;
+}
+
+interface CanvasChartDataset {
+  label: string;
+  values: number[];
+  color: string;
+}
+
+interface CanvasChartModel {
+  labels: string[];
+  datasets: CanvasChartDataset[];
+}
+
+interface CanvasFormOption {
+  label: string;
+  value: string;
+}
+
+type CanvasFormFieldType = 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'date';
+
+interface CanvasFormField {
+  name: string;
+  label: string;
+  type: CanvasFormFieldType;
+  required: boolean;
+  placeholder?: string | undefined;
+  value?: string | number | boolean | undefined;
+  options: CanvasFormOption[];
+}
+
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+}
+
+function parseJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function toStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const result = value
+    .map((item) => asString(item))
+    .filter((item): item is string => typeof item === 'string');
+  return result.length > 0 ? result : null;
+}
+
+function toNumberArray(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const numbers = value.map((item) => {
+    if (typeof item === 'number' && Number.isFinite(item)) return item;
+    if (typeof item === 'string') {
+      const parsed = Number(item);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  });
+  if (numbers.every((item) => item === null)) return null;
+  return numbers.map((item) => item ?? 0);
+}
+
+function resolveImagePayload(content: string): ImagePreviewPayload | null {
+  const parsed = parseJsonContent(content);
+  if (!isJsonRecord(parsed)) return null;
+
+  const nestedImage = isJsonRecord(parsed.image) ? parsed.image : null;
+  const nestedData = isJsonRecord(parsed.data) ? parsed.data : null;
+
+  const src =
+    asString(parsed.url) ??
+    asString(parsed.src) ??
+    asString(parsed.image_url) ??
+    asString(parsed.imageUrl) ??
+    (nestedImage ? asString(nestedImage.url) ?? asString(nestedImage.src) : null) ??
+    (nestedData ? asString(nestedData.url) ?? asString(nestedData.src) : null);
+
+  if (!src) return null;
+
+  const mimeType =
+    asString(parsed.mime_type) ??
+    asString(parsed.mimeType) ??
+    (nestedImage
+      ? asString(nestedImage.mime_type) ??
+        asString(nestedImage.mimeType)
+      : null) ??
+    undefined;
+
+  return { src, mimeType };
+}
+
+function parseChartModel(parsed: unknown): CanvasChartModel | null {
+  if (!isJsonRecord(parsed)) return null;
+
+  const dataNode = isJsonRecord(parsed.data) ? parsed.data : parsed;
+  const datasetsNode = Array.isArray(dataNode.datasets)
+    ? dataNode.datasets
+    : Array.isArray(parsed.series)
+      ? parsed.series
+      : null;
+
+  if (!datasetsNode || datasetsNode.length === 0) return null;
+
+  const datasetCandidates = datasetsNode
+    .map((entry, index) => {
+      if (!isJsonRecord(entry)) return null;
+      const values =
+        toNumberArray(entry.data) ?? toNumberArray(entry.values) ?? toNumberArray(entry.y) ?? null;
+      if (!values) return null;
+      return {
+        label: asString(entry.label) ?? asString(entry.name) ?? `Series ${index + 1}`,
+        values,
+        color:
+          asString(entry.backgroundColor) ??
+          asString(entry.borderColor) ??
+          asString(entry.color) ??
+          CHART_COLORS[index % CHART_COLORS.length] ??
+          '#3b82f6',
+      } satisfies CanvasChartDataset;
+    })
+    .filter((entry): entry is CanvasChartDataset => entry !== null);
+
+  if (datasetCandidates.length === 0) return null;
+
+  const maxPoints = Math.max(...datasetCandidates.map((dataset) => dataset.values.length));
+  if (maxPoints <= 0) return null;
+
+  const explicitLabels =
+    toStringArray(dataNode.labels) ??
+    toStringArray(parsed.labels) ??
+    toStringArray(dataNode.categories) ??
+    toStringArray(parsed.categories);
+  const labels =
+    explicitLabels && explicitLabels.length > 0
+      ? explicitLabels
+      : Array.from({ length: maxPoints }, (_, index) => String(index + 1));
+
+  const normalizedDatasets = datasetCandidates.map((dataset) => ({
+    ...dataset,
+    values: labels.map((_, index) => {
+      const value = dataset.values[index];
+      return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    }),
+  }));
+
+  return { labels, datasets: normalizedDatasets };
+}
+
+function normalizeFieldType(rawType: unknown, hasOptions: boolean): CanvasFormFieldType {
+  const normalized = (asString(rawType) ?? '').toLowerCase();
+  if (normalized === 'textarea' || normalized === 'multiline' || normalized === 'text_area') {
+    return 'textarea';
+  }
+  if (normalized === 'number' || normalized === 'integer' || normalized === 'float') {
+    return 'number';
+  }
+  if (normalized === 'checkbox' || normalized === 'boolean' || normalized === 'switch') {
+    return 'checkbox';
+  }
+  if (normalized === 'date' || normalized === 'datetime' || normalized === 'date-time') {
+    return 'date';
+  }
+  if (normalized === 'select' || normalized === 'enum' || hasOptions) {
+    return 'select';
+  }
+  return 'text';
+}
+
+function parseFieldOptions(raw: unknown): CanvasFormOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (isJsonRecord(item)) {
+        const value = asString(item.value) ?? asString(item.id);
+        if (!value) return null;
+        return {
+          value,
+          label: asString(item.label) ?? asString(item.name) ?? value,
+        } satisfies CanvasFormOption;
+      }
+      const value = asString(item);
+      return value ? ({ value, label: value } satisfies CanvasFormOption) : null;
+    })
+    .filter((item): item is CanvasFormOption => item !== null);
+}
+
+function parseFormField(entry: unknown, index: number): CanvasFormField | null {
+  if (!isJsonRecord(entry)) return null;
+
+  const options = parseFieldOptions(entry.options ?? entry.choices ?? entry.enum);
+  const type = normalizeFieldType(entry.type, options.length > 0);
+  const name = asString(entry.name) ?? asString(entry.key) ?? `field_${index + 1}`;
+  const label = asString(entry.label) ?? asString(entry.title) ?? name;
+  const placeholder = asString(entry.placeholder) ?? undefined;
+  const required = entry.required === true;
+
+  let value: string | number | boolean | undefined;
+  if (typeof entry.value === 'string' || typeof entry.value === 'number' || typeof entry.value === 'boolean') {
+    value = entry.value;
+  } else if (
+    typeof entry.default === 'string' ||
+    typeof entry.default === 'number' ||
+    typeof entry.default === 'boolean'
+  ) {
+    value = entry.default;
+  }
+
+  return {
+    name,
+    label,
+    type,
+    required,
+    placeholder,
+    value,
+    options,
+  };
+}
+
+function parseFormFields(parsed: unknown): CanvasFormField[] | null {
+  if (!isJsonRecord(parsed)) return null;
+
+  if (Array.isArray(parsed.fields)) {
+    const fields = parsed.fields
+      .map((entry, index) => parseFormField(entry, index))
+      .filter((entry): entry is CanvasFormField => entry !== null);
+    return fields.length > 0 ? fields : null;
+  }
+
+  if ((asString(parsed.type) ?? '').toLowerCase() === 'object' && isJsonRecord(parsed.properties)) {
+    const requiredSet = new Set(
+      Array.isArray(parsed.required)
+        ? parsed.required
+            .map((value) => asString(value))
+            .filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+
+    const fields = Object.entries(parsed.properties)
+      .map(([name, schema]): CanvasFormField | null => {
+        if (!isJsonRecord(schema)) return null;
+        const options = parseFieldOptions(schema.enum);
+        const type = normalizeFieldType(schema.type, options.length > 0);
+        const label = asString(schema.title) ?? asString(schema.label) ?? name;
+        return {
+          name,
+          label,
+          type,
+          required: requiredSet.has(name),
+          placeholder: asString(schema.placeholder) ?? undefined,
+          value:
+            typeof schema.default === 'string' ||
+            typeof schema.default === 'number' ||
+            typeof schema.default === 'boolean'
+              ? schema.default
+              : undefined,
+          options,
+        };
+      })
+      .filter((entry): entry is CanvasFormField => entry !== null);
+
+    return fields.length > 0 ? fields : null;
+  }
+
+  return null;
+}
+
+const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
+  const maxValue = Math.max(
+    1,
+    ...model.datasets.flatMap((dataset) => dataset.values).map((value) => Math.max(0, value)),
+  );
+
+  return (
+    <div className="h-full overflow-auto rounded-b-lg bg-white dark:bg-slate-900 p-4">
+      <div className="h-64 overflow-x-auto">
+        <div className="h-full inline-flex items-end gap-4 min-w-full pb-10">
+          {model.labels.map((label, index) => (
+            <div key={`${label}-${index}`} className="flex flex-col items-center gap-2 min-w-[52px]">
+              <div className="h-48 flex items-end gap-1">
+                {model.datasets.map((dataset) => {
+                  const value = Math.max(0, dataset.values[index] ?? 0);
+                  const height = `${Math.max(4, (value / maxValue) * 100)}%`;
+                  return (
+                    <div
+                      key={`${dataset.label}-${label}-${index}`}
+                      className="w-3 rounded-t transition-opacity hover:opacity-80"
+                      style={{ height, backgroundColor: dataset.color }}
+                      title={`${dataset.label}: ${String(value)}`}
+                    />
+                  );
+                })}
+              </div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 text-center max-w-[56px] truncate">
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {model.datasets.map((dataset) => (
+          <div key={dataset.label} className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: dataset.color }} />
+            <span>{dataset.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+CanvasChartPreview.displayName = 'CanvasChartPreview';
+
+const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => (
+  <div className="h-full overflow-auto rounded-b-lg bg-white dark:bg-slate-900 p-4">
+    <div className="max-w-2xl space-y-4">
+      {fields.map((field) => {
+        const commonClasses =
+          'mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
+        const label = (
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            {field.label}
+            {field.required ? <span className="ml-1 text-red-500">*</span> : null}
+          </label>
+        );
+
+        if (field.type === 'checkbox') {
+          return (
+            <div key={field.name} className="space-y-1">
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input type="checkbox" checked={Boolean(field.value)} disabled />
+                <span>
+                  {field.label}
+                  {field.required ? <span className="ml-1 text-red-500">*</span> : null}
+                </span>
+              </label>
+            </div>
+          );
+        }
+
+        if (field.type === 'select') {
+          const selectedValue =
+            typeof field.value === 'string' || typeof field.value === 'number'
+              ? String(field.value)
+              : '';
+          return (
+            <div key={field.name}>
+              {label}
+              <select className={commonClasses} value={selectedValue} disabled>
+                <option value="">{field.placeholder ?? 'Select an option'}</option>
+                {field.options.map((option) => (
+                  <option key={`${field.name}-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        }
+
+        if (field.type === 'textarea') {
+          return (
+            <div key={field.name}>
+              {label}
+              <textarea
+                className={commonClasses}
+                rows={4}
+                value={typeof field.value === 'string' ? field.value : ''}
+                placeholder={field.placeholder}
+                disabled
+                readOnly
+              />
+            </div>
+          );
+        }
+
+        const inputType = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
+        const inputValue =
+          typeof field.value === 'string' || typeof field.value === 'number'
+            ? String(field.value)
+            : '';
+        return (
+          <div key={field.name}>
+            {label}
+            <input
+              type={inputType}
+              className={commonClasses}
+              value={inputValue}
+              placeholder={field.placeholder}
+              disabled
+              readOnly
+            />
+          </div>
+        );
+      })}
+      <p className="pt-1 text-xs text-slate-400 dark:text-slate-500">Read-only form preview</p>
+    </div>
+  </div>
+));
+CanvasFormPreview.displayName = 'CanvasFormPreview';
+
 const CanvasContent = memo<{
   tab: CanvasTab;
   editMode: boolean;
@@ -605,6 +1073,8 @@ const CanvasContent = memo<{
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(
     tab.type === 'markdown' ? tab.content : undefined
   );
+  const highlighter = useSyntaxHighlighter();
+
   if (editMode && (tab.type === 'code' || tab.type === 'markdown' || tab.type === 'data')) {
     const bgClass =
       tab.type === 'code'
@@ -628,9 +1098,20 @@ const CanvasContent = memo<{
     case 'code':
       return (
         <div className="h-full overflow-auto bg-slate-900 rounded-b-lg">
-          <pre className="p-4 text-sm font-mono text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
-            <code>{tab.content}</code>
-          </pre>
+          {highlighter && tab.language ? (
+            <highlighter.SyntaxHighlighter
+              style={highlighter.theme}
+              language={tab.language}
+              PreTag="div"
+              customStyle={{ margin: 0, padding: '1rem', borderRadius: 0, fontSize: '0.875rem', lineHeight: 1.625 }}
+            >
+              {tab.content}
+            </highlighter.SyntaxHighlighter>
+          ) : (
+            <pre className="p-4 text-sm font-mono text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
+              <code>{tab.content}</code>
+            </pre>
+          )}
         </div>
       );
     case 'markdown':
@@ -648,17 +1129,40 @@ const CanvasContent = memo<{
         </div>
       );
     case 'preview': {
-      const mime = tab.mimeType?.toLowerCase() || '';
-      const previewSrc = tab.artifactUrl || tab.content;
+      const imagePayload = resolveImagePayload(tab.content);
+      const mime = (tab.mimeType ?? imagePayload?.mimeType ?? '').toLowerCase();
+      const previewSrc = tab.artifactUrl || imagePayload?.src || tab.content;
+      const previewUrl = isSafePreviewUrl(previewSrc) ? previewSrc : undefined;
+
+      // Auto-detect image when mimeType is missing
+      const inferredMime = mime || inferMimeFromContent(previewSrc);
 
       // Media files: image, video, audio, SVG
-      if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) {
-        return <CanvasMediaPreview src={previewSrc} mimeType={mime} title={tab.title} />;
+      if (inferredMime.startsWith('image/') || inferredMime.startsWith('video/') || inferredMime.startsWith('audio/')) {
+        if (!isSafeMediaUrl(previewSrc, inferredMime)) {
+          return (
+            <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-b-lg">
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Invalid media URL
+              </div>
+            </div>
+          );
+        }
+        return <CanvasMediaPreview src={previewSrc} mimeType={inferredMime} title={tab.title} />;
       }
 
       // Office files: Word, Excel, PowerPoint
       if (isOfficeMimeType(mime) || isOfficeExtension(tab.title)) {
-        return <CanvasOfficePreview src={previewSrc} title={tab.title} mimeType={mime} />;
+        if (!previewUrl) {
+          return (
+            <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-b-lg">
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Invalid file URL
+              </div>
+            </div>
+          );
+        }
+        return <CanvasOfficePreview src={previewUrl} title={tab.title} mimeType={mime} />;
       }
 
       // PDF and HTML: existing behavior
@@ -666,19 +1170,61 @@ const CanvasContent = memo<{
         <IsolatedPreviewFrame
           content={tab.content}
           title={tab.title}
-          srcUrl={tab.artifactUrl}
+          srcUrl={tab.artifactUrl ?? previewUrl}
           pdfVerified={tab.pdfVerified}
         />
       );
     }
-    case 'data':
+    case 'data': {
+      const parsed = parseJsonContent(tab.content);
+
+      const chartModel = parseChartModel(parsed);
+      if (chartModel) {
+        return <CanvasChartPreview model={chartModel} />;
+      }
+
+      const formFields = parseFormFields(parsed);
+      if (formFields) {
+        return <CanvasFormPreview fields={formFields} />;
+      }
+
+      // If array of objects -> render as Ant Design Table
+      if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null) {
+        const columns = Object.keys(parsed[0] as Record<string, unknown>).map((key) => ({
+          title: key,
+          dataIndex: key,
+          key,
+          render: (value: unknown) => {
+            if (value === null || value === undefined) return '-';
+            if (typeof value === 'object') return JSON.stringify(value);
+            return String(value);
+          },
+        }));
+        return (
+          <div className="h-full overflow-auto bg-white dark:bg-slate-900 rounded-b-lg p-2">
+            <AntTable
+              dataSource={(parsed as Record<string, unknown>[]).map((row, i) => ({ ...row, key: i }))}
+              columns={columns}
+              size="small"
+              pagination={parsed.length > 50 ? { pageSize: 50 } : false}
+              scroll={{ x: 'max-content' }}
+            />
+          </div>
+        );
+      }
+
+      // Otherwise, pretty-print JSON or show raw
+      const displayContent = parsed !== null ? JSON.stringify(parsed, null, 2) : tab.content;
       return (
         <div className="h-full overflow-auto p-4 bg-white dark:bg-slate-900 rounded-b-lg">
           <pre className="text-sm font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-            {tab.content}
+            {displayContent}
           </pre>
         </div>
       );
+    }
+    case 'a2ui-surface':
+      return <A2UISurfaceRenderer surfaceId={tab.a2uiSurfaceId ?? tab.id} messages={tab.a2uiMessages ?? tab.content} />;
     case 'mcp-app':
       // MCP app tabs are rendered by CanvasPanel directly (multi-instance)
       return null;
