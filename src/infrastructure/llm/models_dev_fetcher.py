@@ -88,7 +88,10 @@ def fetch_models_dev(
     import urllib.request
 
     logger.info("Fetching models.dev data from %s", url)
-    with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+    req = urllib.request.Request(  # noqa: S310
+        url, headers={"User-Agent": "MemStack-ModelCatalog/1.0"}
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -151,7 +154,7 @@ def generate_snapshot(
 
     snapshot: dict[str, Any] = {
         "_meta": {
-            "version": "2.0.0",
+            "version": "3.0.0",
             "source": "models.dev",
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "description": "Model catalog snapshot generated from models.dev API",
@@ -176,7 +179,7 @@ def generate_snapshot(
 # ---------------------------------------------------------------------------
 
 
-def _convert_single_model(
+def _convert_single_model(  # noqa: PLR0915
     model_id: str,
     data: dict[str, Any],
     codebase_provider: str,
@@ -245,6 +248,48 @@ def _convert_single_model(
     open_weights = bool(data.get("open_weights", False))
     knowledge_cutoff = data.get("knowledge")
 
+    # --- B1.2: Extended parameter support inference ---
+    # Infer supports_response_format from structured_output or tool_call
+    supports_response_format = supports_structured_output or supports_tool_call
+
+    # Infer supports_seed: OpenAI and Deepseek support it
+    _seed_providers = {"openai", "deepseek"}
+    supports_seed = codebase_provider in _seed_providers
+
+    # supports_stop: most models support it; reasoning-only models may not
+    supports_stop = True
+
+    # supports_frequency_penalty / supports_presence_penalty:
+    # Most providers support them. Some reasoning models do not.
+    _no_penalty_providers = {"anthropic"}
+    supports_frequency_penalty = codebase_provider not in _no_penalty_providers
+    supports_presence_penalty = codebase_provider not in _no_penalty_providers
+
+    # supports_top_p: generally always supported if temperature is supported
+    supports_top_p = supports_temperature
+
+    # Reasoning models typically don't support penalty/seed/top_p params
+    if reasoning_flag and not supports_temperature:
+        supports_frequency_penalty = False
+        supports_presence_penalty = False
+        supports_top_p = False
+        supports_seed = False
+        supports_stop = False
+
+    # Temperature range per provider
+    temperature_range: list[float] | None = None
+    if supports_temperature:
+        if codebase_provider in {"gemini"}:
+            temperature_range = [0.0, 2.0]
+        elif codebase_provider in {"anthropic"}:
+            temperature_range = [0.0, 1.0]
+        else:
+            temperature_range = [0.0, 2.0]  # OpenAI-compatible default
+
+    top_p_range: list[float] | None = None
+    if supports_top_p:
+        top_p_range = [0.0, 1.0]
+
     return ModelMetadata(
         name=name,
         context_length=context_length,
@@ -274,6 +319,15 @@ def _convert_single_model(
         reasoning_cost_per_1m=cost.get("reasoning"),
         knowledge_cutoff=knowledge_cutoff,
         open_weights=open_weights,
+        # B1.1 extended parameter support fields
+        supports_response_format=supports_response_format,
+        supports_seed=supports_seed,
+        supports_stop=supports_stop,
+        supports_frequency_penalty=supports_frequency_penalty,
+        supports_presence_penalty=supports_presence_penalty,
+        supports_top_p=supports_top_p,
+        temperature_range=temperature_range,
+        top_p_range=top_p_range,
     )
 
 
@@ -297,7 +351,7 @@ def _derive_capabilities(data: dict[str, Any]) -> list[ModelCapability]:
     return caps
 
 
-def _metadata_to_dict(meta: ModelMetadata) -> dict[str, Any]:  # noqa: C901, PLR0912
+def _metadata_to_dict(meta: ModelMetadata) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915
     """Serialize ``ModelMetadata`` to a JSON-compatible dict.
 
     Only includes non-default fields to keep the snapshot compact.
@@ -360,6 +414,38 @@ def _metadata_to_dict(meta: ModelMetadata) -> dict[str, Any]:  # noqa: C901, PLR
     if meta.open_weights:
         d["open_weights"] = True
 
+    # B1.1 extended parameter support fields (only non-default values)
+    if meta.default_temperature is not None:
+        d["default_temperature"] = meta.default_temperature
+    if meta.default_top_p is not None:
+        d["default_top_p"] = meta.default_top_p
+    if meta.default_frequency_penalty is not None:
+        d["default_frequency_penalty"] = meta.default_frequency_penalty
+    if meta.default_presence_penalty is not None:
+        d["default_presence_penalty"] = meta.default_presence_penalty
+    if meta.default_seed is not None:
+        d["default_seed"] = meta.default_seed
+    if meta.default_stop is not None:
+        d["default_stop"] = meta.default_stop
+    if meta.supports_response_format:
+        d["supports_response_format"] = True
+    if meta.supports_seed:
+        d["supports_seed"] = True
+    if not meta.supports_stop:
+        d["supports_stop"] = False
+    if not meta.supports_frequency_penalty:
+        d["supports_frequency_penalty"] = False
+    if not meta.supports_presence_penalty:
+        d["supports_presence_penalty"] = False
+    if not meta.supports_top_p:
+        d["supports_top_p"] = False
+    if meta.temperature_range is not None:
+        d["temperature_range"] = meta.temperature_range
+    if meta.top_p_range is not None:
+        d["top_p_range"] = meta.top_p_range
+    if meta.supported_params is not None:
+        d["supported_params"] = meta.supported_params
+
     return d
 
 
@@ -368,9 +454,49 @@ def _metadata_to_dict(meta: ModelMetadata) -> dict[str, Any]:  # noqa: C901, PLR
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Fetch models.dev data and regenerate models_snapshot.json"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force regeneration even if snapshot is recent",
+    )
+    parser.add_argument(
+        "--local",
+        type=str,
+        default=None,
+        help="Read from local JSON file instead of fetching from API",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output path for the snapshot (default: alongside this module)",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    raw = fetch_models_dev()
+    # Check staleness unless --force
+    if not args.force and _SNAPSHOT_PATH.exists():
+        import os
+
+        mtime = datetime.fromtimestamp(
+            os.path.getmtime(_SNAPSHOT_PATH), tz=UTC
+        )
+        age_days = (datetime.now(UTC) - mtime).days
+        if age_days < 7:
+            print(
+                f"Snapshot is {age_days} days old (< 7 days). "
+                f"Use --force to regenerate anyway."
+            )
+            raise SystemExit(0)
+
+    raw = fetch_models_dev(local_path=args.local)
     models = convert_to_model_metadata(raw)
-    path = generate_snapshot(models)
+    output_path = Path(args.output) if args.output else None
+    path = generate_snapshot(models, output_path=output_path)
     print(f"Generated snapshot with {len(models)} models at {path}")

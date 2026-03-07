@@ -669,6 +669,7 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as todo_session_factory,
         )
+        from src.infrastructure.agent.tools.define import get_registered_tools
         from src.infrastructure.agent.tools.todo_tools import (
             configure_todoread,
             configure_todowrite,
@@ -676,6 +677,9 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
 
         configure_todoread(session_factory=todo_session_factory)
         configure_todowrite(session_factory=todo_session_factory)
+        registry = get_registered_tools()
+        tools["todoread"] = registry["todoread"]
+        tools["todowrite"] = registry["todowrite"]
         logger.info(f"Agent Worker: Todo tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
@@ -691,11 +695,12 @@ def _add_register_mcp_server_tool(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
         )
+        from src.infrastructure.agent.tools.define import get_registered_tools
         from src.infrastructure.agent.tools.register_mcp_server import (
             configure_register_mcp_server_tool,
         )
 
-        sandbox_id_for_tools = _find_sandbox_id(tools)
+        sandbox_id_for_tools = _find_sandbox_id(tools, project_id=project_id)
 
         configure_register_mcp_server_tool(
             session_factory=app_session_factory,
@@ -704,6 +709,8 @@ def _add_register_mcp_server_tool(
             sandbox_adapter=_mcp_sandbox_adapter,
             sandbox_id=sandbox_id_for_tools,
         )
+        registry = get_registered_tools()
+        tools["register_mcp_server"] = registry["register_mcp_server"]
         logger.info(f"Agent Worker: register_mcp_server configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure register_mcp_server: {e}")
@@ -1120,11 +1127,43 @@ async def _add_plugin_skills(
     return merged
 
 
-def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
-    """Find sandbox_id from loaded sandbox tools."""
+def _find_sandbox_id(
+    tools: dict[str, Any],
+    *,
+    project_id: str | None = None,
+) -> str | None:
+    """Find sandbox_id from loaded tools or active sandbox state."""
     for tool in tools.values():
-        if hasattr(tool, "sandbox_id") and tool.sandbox_id:
-            return cast(str | None, tool.sandbox_id)
+        sandbox_id = cast(str | None, getattr(tool, "sandbox_id", None)) or cast(
+            str | None,
+            getattr(tool, "_sandbox_id", None),
+        )
+        if sandbox_id:
+            return sandbox_id
+
+    if project_id and _mcp_sandbox_adapter is not None:
+        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        candidates: list[tuple[str, Any]] = [
+            (cast(str, sid), instance)
+            for sid, instance in active.items()
+            if getattr(instance, "project_id", None) == project_id
+        ]
+        if candidates:
+            # Prefer healthy/usable sandbox instances and fall back deterministically.
+            def _candidate_rank(item: tuple[str, Any]) -> tuple[int, int, float, str]:
+                sid, instance = item
+                status = getattr(instance, "status", None)
+                status_value = getattr(status, "value", status)
+                running_score = 1 if str(status_value).lower() == "running" else 0
+                connected_score = 1 if getattr(instance, "mcp_client", None) is not None else 0
+                created_at = getattr(instance, "created_at", None)
+                created_at_score = (
+                    float(created_at.timestamp()) if hasattr(created_at, "timestamp") else 0.0
+                )
+                return (running_score, connected_score, created_at_score, sid)
+
+            best_sid, _ = max(candidates, key=_candidate_rank)
+            return best_sid
     return None
 
 
@@ -1469,6 +1508,7 @@ def _add_canvas_tools(tools: dict[str, Any]) -> None:
         logger.info("Agent Worker: Canvas tools added (incl. interactive)")
     except Exception as e:
         logger.warning("Agent Worker: Failed to add canvas tools: %s", e)
+
 
 async def _load_project_sandbox_tools(
     project_id: str,

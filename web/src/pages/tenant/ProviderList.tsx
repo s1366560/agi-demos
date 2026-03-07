@@ -60,7 +60,7 @@ export const ProviderList: React.FC = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const currentTenant = useTenantStore((state) => state.currentTenant);
-  
+
   const { providers, isLoading, error } = useProviderStore(
     useShallow((state) => ({
       providers: state.providers,

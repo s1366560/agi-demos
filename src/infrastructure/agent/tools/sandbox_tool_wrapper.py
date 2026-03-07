@@ -24,7 +24,6 @@ from src.infrastructure.agent.tools.mcp_errors import (
 logger = logging.getLogger(__name__)
 
 
-
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
     """Convert MCP input_schema to agent tool JSON Schema format.
 
@@ -72,9 +71,7 @@ def _extract_error_msg(result: dict[str, Any]) -> str:
         error_msg = ""
 
     if not error_msg:
-        error_msg = (
-            f"Tool execution failed (no details provided). Raw result: {result}"
-        )
+        error_msg = f"Tool execution failed (no details provided). Raw result: {result}"
 
     return str(error_msg)
 
@@ -96,10 +93,7 @@ def _extract_ok_output(result: dict[str, Any]) -> str:
         mime_type = artifact.get("mime_type", "unknown")
         size = artifact.get("size", 0)
         category = artifact.get("category", "file")
-        return (
-            f"Exported artifact: {filename} "
-            f"({mime_type}, {size} bytes, category: {category})"
-        )
+        return f"Exported artifact: {filename} ({mime_type}, {size} bytes, category: {category})"
 
     if content_list and len(content_list) > 0:
         return str(content_list[0].get("text", ""))
@@ -134,9 +128,7 @@ async def _execute_with_retry(
     last_error: MCPToolError | None = None
     tool_timeout = kwargs.get("timeout")
     configured_timeout_s: float | None = (
-        float(tool_timeout)
-        if tool_timeout and isinstance(tool_timeout, (int, float))
-        else None
+        float(tool_timeout) if tool_timeout and isinstance(tool_timeout, (int, float)) else None
     )
 
     for attempt in range(retry_config.max_retries + 1):
@@ -147,7 +139,10 @@ async def _execute_with_retry(
                 call_kwargs["timeout"] = configured_timeout_s + 30.0
 
             result = await sandbox_port.call_tool(
-                sandbox_id, tool_name, kwargs, **call_kwargs,
+                sandbox_id,
+                tool_name,
+                kwargs,
+                **call_kwargs,
             )
             elapsed_ms = int((_time.time() - start_time) * 1000)
 
@@ -167,10 +162,7 @@ async def _execute_with_retry(
                 mcp_err.retry_count = attempt
                 last_error = mcp_err
 
-                if (
-                    mcp_err.is_retryable
-                    and attempt < retry_config.max_retries
-                ):
+                if mcp_err.is_retryable and attempt < retry_config.max_retries:
                     await asyncio.sleep(retry_config.get_delay(attempt))
                     continue
                 break
@@ -193,17 +185,12 @@ async def _execute_with_retry(
             )
             mcp_err.retry_count = attempt
 
-            if (
-                mcp_err.is_retryable
-                and attempt < retry_config.max_retries
-            ):
+            if mcp_err.is_retryable and attempt < retry_config.max_retries:
                 await asyncio.sleep(retry_config.get_delay(attempt))
                 last_error = mcp_err
                 continue
 
-            raise RuntimeError(
-                f"Tool execution failed: {mcp_err.get_user_message()}"
-            ) from exc
+            raise RuntimeError(f"Tool execution failed: {mcp_err.get_user_message()}") from exc
 
     if last_error:
         raise RuntimeError(
@@ -262,7 +249,7 @@ def create_sandbox_mcp_tool(
         except RuntimeError as exc:
             return ToolResult(output=str(exc), is_error=True)
 
-    return ToolInfo(
+    info = ToolInfo(
         name=tool_name,
         description=description,
         parameters=parameters,
@@ -271,3 +258,7 @@ def create_sandbox_mcp_tool(
         category="mcp",
         tags=frozenset({"mcp", "sandbox"}),
     )
+    # Expose sandbox identity for downstream helpers (e.g. register_mcp_server wiring).
+    info.sandbox_id = sandbox_id
+    info._sandbox_id = sandbox_id
+    return info

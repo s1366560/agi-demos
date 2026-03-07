@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-
 # ---------------------------------------------------------------------------
 # @tool_define version of TodoReadTool
 # ---------------------------------------------------------------------------
@@ -89,11 +88,11 @@ async def todoread_tool(
         SqlAgentTaskRepository,
     )
 
-    session_id = ctx.session_id
+    conversation_id = ctx.conversation_id or ctx.session_id
 
     async with _todoread_session_factory() as session:
         repo = SqlAgentTaskRepository(session)
-        tasks = await repo.find_by_conversation(session_id, status=status)
+        tasks = await repo.find_by_conversation(conversation_id, status=status)
         await session.commit()
 
     # Sort: priority (high first), then order_index
@@ -106,14 +105,15 @@ async def todoread_tool(
     )
 
     result = {
-        "session_id": session_id,
+        "session_id": ctx.session_id,
+        "conversation_id": conversation_id,
         "total_count": len(tasks),
         "todos": [t.to_dict() for t in tasks],
     }
     logger.info(
         "todoread: returning %d tasks for %s",
         len(tasks),
-        session_id,
+        conversation_id,
     )
     return ToolResult(output=json.dumps(result, indent=2))
 
@@ -139,7 +139,7 @@ def configure_todowrite(
 async def _todowrite_handle_update(
     repo: Any,
     session: Any,
-    session_id: str,
+    conversation_id: str,
     todo_id: str | None,
     todos: list[dict[str, Any]],
     ctx: ToolContext,
@@ -147,6 +147,15 @@ async def _todowrite_handle_update(
     """Handle the 'update' action for a single task."""
     if not todo_id:
         return {"success": False, "error": "todo_id required for update"}
+
+    existing_task = await repo.find_by_id(todo_id)
+    if not existing_task or existing_task.conversation_id != conversation_id:
+        return {
+            "success": False,
+            "action": "update",
+            "todo_id": todo_id,
+            "message": f"Task {todo_id} not found in current conversation",
+        }
 
     updates: dict[str, Any] = {}
     if todos and len(todos) > 0:
@@ -158,7 +167,7 @@ async def _todowrite_handle_update(
         await ctx.emit(
             {
                 "type": "task_updated",
-                "conversation_id": session_id,
+                "conversation_id": conversation_id,
                 "task_id": todo_id,
                 "status": updated.status.value,
                 "content": updated.content,
@@ -181,7 +190,7 @@ async def _todowrite_handle_update(
 async def _todowrite_replace(
     repo: Any,
     session: Any,
-    session_id: str,
+    conversation_id: str,
     todos: list[dict[str, Any]],
     ctx: ToolContext,
 ) -> dict[str, Any]:
@@ -190,7 +199,7 @@ async def _todowrite_replace(
     for i, td in enumerate(todos):
         task = AgentTask(
             id=str(uuid.uuid4()),
-            conversation_id=session_id,
+            conversation_id=conversation_id,
             content=td.get("content", ""),
             status=TaskStatus(td.get("status", "pending")),
             priority=TaskPriority(td.get("priority", "medium")),
@@ -199,18 +208,18 @@ async def _todowrite_replace(
         if task.validate():
             task_items.append(task)
 
-    await repo.save_all(session_id, task_items)
+    await repo.save_all(conversation_id, task_items)
     await session.commit()
     logger.info(
         "[TodoWrite] replace: committed %d tasks for conversation=%s",
         len(task_items),
-        session_id,
+        conversation_id,
     )
 
     await ctx.emit(
         {
             "type": "task_list_updated",
-            "conversation_id": session_id,
+            "conversation_id": conversation_id,
             "tasks": [t.to_dict() for t in task_items],
         }
     )
@@ -225,18 +234,18 @@ async def _todowrite_replace(
 async def _todowrite_add(
     repo: Any,
     session: Any,
-    session_id: str,
+    conversation_id: str,
     todos: list[dict[str, Any]],
     ctx: ToolContext,
 ) -> dict[str, Any]:
     """Handle the 'add' action: append new tasks."""
-    existing = await repo.find_by_conversation(session_id)
+    existing = await repo.find_by_conversation(conversation_id)
     next_order = max((t.order_index for t in existing), default=-1) + 1
     added = []
     for i, td in enumerate(todos):
         task = AgentTask(
             id=str(uuid.uuid4()),
-            conversation_id=session_id,
+            conversation_id=conversation_id,
             content=td.get("content", ""),
             status=TaskStatus(td.get("status", "pending")),
             priority=TaskPriority(td.get("priority", "medium")),
@@ -247,11 +256,11 @@ async def _todowrite_add(
             added.append(task)
     await session.commit()
 
-    all_tasks = await repo.find_by_conversation(session_id)
+    all_tasks = await repo.find_by_conversation(conversation_id)
     await ctx.emit(
         {
             "type": "task_list_updated",
-            "conversation_id": session_id,
+            "conversation_id": conversation_id,
             "tasks": [t.to_dict() for t in all_tasks],
         }
     )
@@ -280,17 +289,12 @@ async def _todowrite_add(
         "properties": {
             "action": {
                 "type": "string",
-                "description": (
-                    "replace (replace entire list), "
-                    "add (append), update (modify one)"
-                ),
+                "description": ("replace (replace entire list), add (append), update (modify one)"),
                 "enum": ["replace", "add", "update"],
             },
             "todos": {
                 "type": "array",
-                "description": (
-                    "List of task items (IDs are auto-generated by backend)"
-                ),
+                "description": ("List of task items (IDs are auto-generated by backend)"),
                 "items": {
                     "type": "object",
                     "properties": {
@@ -300,10 +304,7 @@ async def _todowrite_add(
                         },
                         "status": {
                             "type": "string",
-                            "description": (
-                                "pending, in_progress, completed, "
-                                "failed, cancelled"
-                            ),
+                            "description": ("pending, in_progress, completed, failed, cancelled"),
                         },
                         "priority": {
                             "type": "string",
@@ -347,7 +348,7 @@ async def todowrite_tool(
         SqlAgentTaskRepository,
     )
 
-    session_id = ctx.session_id
+    conversation_id = ctx.conversation_id or ctx.session_id
     todos_list = todos or []
     result: dict[str, Any] = {}
 
@@ -356,24 +357,34 @@ async def todowrite_tool(
 
         if action == "replace":
             result = await _todowrite_replace(
-                repo, session, session_id, todos_list, ctx,
+                repo,
+                session,
+                conversation_id,
+                todos_list,
+                ctx,
             )
         elif action == "add":
             result = await _todowrite_add(
-                repo, session, session_id, todos_list, ctx,
+                repo,
+                session,
+                conversation_id,
+                todos_list,
+                ctx,
             )
         elif action == "update":
             result = await _todowrite_handle_update(
-                repo, session, session_id, todo_id, todos_list, ctx,
+                repo,
+                session,
+                conversation_id,
+                todo_id,
+                todos_list,
+                ctx,
             )
 
-    logger.info("todowrite: %s completed for %s", action, session_id)
+    logger.info("todowrite: %s completed for %s", action, conversation_id)
     return ToolResult(output=json.dumps(result, indent=2))
 
 
 # =============================================================================
 # TODOWRITE TOOL
 # =============================================================================
-
-
-

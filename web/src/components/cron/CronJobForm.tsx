@@ -57,9 +57,12 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
   }, [open, initialData, form]);
 
   const handleSubmit = () => {
-    form.validateFields()
+    form
+      .validateFields()
       .then((values: CronJobCreate | CronJobUpdate) => {
-        void onSubmit(values).then(() => { form.resetFields(); });
+        void onSubmit(values).then(() => {
+          form.resetFields();
+        });
       })
       .catch((_err: unknown) => {
         console.error('Validation failed:', _err);
@@ -75,7 +78,13 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
       extra={
         <Space>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" onClick={() => { handleSubmit(); }} loading={isSubmitting}>
+          <Button
+            type="primary"
+            onClick={() => {
+              handleSubmit();
+            }}
+            loading={isSubmitting}
+          >
             {initialData ? 'Save Changes' : 'Create Task'}
           </Button>
         </Space>

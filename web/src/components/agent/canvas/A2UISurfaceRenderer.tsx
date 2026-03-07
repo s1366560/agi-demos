@@ -56,13 +56,7 @@ interface ParsedSurfaceResult {
   resolvedSurfaceId?: string | undefined;
 }
 
-type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 type EnvelopeRecord = Record<string, unknown>;
 const FORBIDDEN_DATA_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -132,7 +126,9 @@ function normalizeComponentEntry(rawEntry: unknown): EnvelopeRecord | null {
   }
 
   if (componentName === 'Text') {
-    const normalizedText = normalizeStringValue(normalizedPayload.text ?? normalizedPayload.literal);
+    const normalizedText = normalizeStringValue(
+      normalizedPayload.text ?? normalizedPayload.literal
+    );
     if (normalizedText) {
       normalizedPayload.text = normalizedText;
       delete normalizedPayload.literal;
@@ -145,7 +141,11 @@ function normalizeComponentEntry(rawEntry: unknown): EnvelopeRecord | null {
       normalizedPayload.action = { name: actionRaw };
     } else {
       const actionObj = normalizeEnvelopePayload(actionRaw);
-      if (actionObj && typeof actionObj.actionId === 'string' && typeof actionObj.name !== 'string') {
+      if (
+        actionObj &&
+        typeof actionObj.actionId === 'string' &&
+        typeof actionObj.name !== 'string'
+      ) {
         normalizedPayload.action = { ...actionObj, name: actionObj.actionId };
       }
     }
@@ -158,7 +158,7 @@ function normalizeComponentEntry(rawEntry: unknown): EnvelopeRecord | null {
       if (ctx !== undefined && ctx !== null && !Array.isArray(ctx)) {
         if (typeof ctx === 'object') {
           actionForCtx.context = Object.entries(ctx as Record<string, unknown>).map(
-            ([key, val]) => ({ key, value: { literalString: String(val ?? '') } }),
+            ([key, val]) => ({ key, value: { literalString: String(val ?? '') } })
           );
         } else {
           delete actionForCtx.context;
@@ -186,7 +186,7 @@ function normalizeComponentEntry(rawEntry: unknown): EnvelopeRecord | null {
 }
 
 function normalizeViewerComponents(
-  components: A2UIViewerProps['components'],
+  components: A2UIViewerProps['components']
 ): A2UIViewerProps['components'] {
   if (!Array.isArray(components)) return components;
   const normalized: EnvelopeRecord[] = [];
@@ -371,14 +371,12 @@ function repairMalformedSurfaceUpdateJson(input: string): string {
   // Pattern 1: {""} (empty string key with no value) should be {} (empty object).
   // Pattern 2: {"} (lone orphan quote in object) should be {} (empty object).
   // Also handles whitespace variants like {" "} or {""  } etc.
-  const cleaned = input
-    .replace(/\{\s*"\s*"\s*\}/g, '{}')
-    .replace(/\{\s*"\s*\}/g, '{}');
+  const cleaned = input.replace(/\{\s*"\s*"\s*\}/g, '{}').replace(/\{\s*"\s*\}/g, '{}');
 
   // Depth-aware repair: remove any '}' that would drive depth negative or
   // any '}' / ']' that would prematurely close a container.
   let result = '';
-  let depth = 0;       // tracks { } nesting
+  let depth = 0; // tracks { } nesting
   let bracketDepth = 0; // tracks [ ] nesting
   let inString = false;
   let escaped = false;
@@ -471,7 +469,7 @@ function extractBracketSection(
   input: string,
   startIndex: number,
   openChar: '[' | '{',
-  closeChar: ']' | '}',
+  closeChar: ']' | '}'
 ): string | null {
   if (startIndex < 0 || startIndex >= input.length || input[startIndex] !== openChar) return null;
   let depth = 0;
@@ -602,8 +600,7 @@ function salvageSurfaceUpdateEnvelope(line: string): EnvelopeRecord | null {
   if (parsedComponents.length === 0) return null;
 
   const surfaceIdMatch =
-    line.match(/"surfaceId"\s*:\s*"([^"]+)"/) ??
-    line.match(/"surface_id"\s*:\s*"([^"]+)"/);
+    line.match(/"surfaceId"\s*:\s*"([^"]+)"/) ?? line.match(/"surface_id"\s*:\s*"([^"]+)"/);
   const surfaceId = surfaceIdMatch?.[1];
   return surfaceId
     ? { surfaceUpdate: { surfaceId, components: parsedComponents } }
@@ -622,9 +619,7 @@ function extractEnvelopeList(raw: string): unknown[] {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('```')) continue;
     // Pre-repair orphan quotes in empty objects before any parsing path
-    const preRepaired = trimmed
-      .replace(/\{\s*"\s*"\s*\}/g, '{}')
-      .replace(/\{\s*"\s*\}/g, '{}');
+    const preRepaired = trimmed.replace(/\{\s*"\s*"\s*\}/g, '{}').replace(/\{\s*"\s*\}/g, '{}');
     const parsedLine = parseJsonRelaxed(preRepaired);
     if (parsedLine !== PARSE_FAILED) {
       lineParsed.push(...normalizeEnvelopes(parsedLine));
@@ -661,7 +656,7 @@ function hasParsedComponents(parsed: ParsedSurface): boolean {
 }
 
 function inferRootFromComponents(
-  components: A2UIViewerProps['components'],
+  components: A2UIViewerProps['components']
 ): { root: string; components: A2UIViewerProps['components'] } | null {
   if (!Array.isArray(components) || components.length === 0) return null;
 
@@ -675,11 +670,16 @@ function inferRootFromComponents(
     componentIds.push(id);
 
     const componentPayload = entryRecord.component;
-    if (!componentPayload || typeof componentPayload !== 'object' || Array.isArray(componentPayload)) {
+    if (
+      !componentPayload ||
+      typeof componentPayload !== 'object' ||
+      Array.isArray(componentPayload)
+    ) {
       continue;
     }
     for (const componentDef of Object.values(componentPayload as Record<string, unknown>)) {
-      if (!componentDef || typeof componentDef !== 'object' || Array.isArray(componentDef)) continue;
+      if (!componentDef || typeof componentDef !== 'object' || Array.isArray(componentDef))
+        continue;
       const componentProps = componentDef as Record<string, unknown>;
       if (typeof componentProps.child === 'string') {
         referencedIds.add(componentProps.child);
@@ -744,47 +744,51 @@ function getEnvelopeSurfaceId(rawEnvelope: unknown): string | null {
   const envelope = normalizeEnvelopePayload(rawEnvelope);
   if (!envelope) return null;
 
-  const typedPayload = typeof envelope.type === 'string'
-    ? normalizeEnvelopePayload(envelope.payload)
-    : null;
-  const begin = normalizeEnvelopePayload(envelope.beginRendering)
-    ?? normalizeEnvelopePayload(envelope.begin_rendering)
-    ?? ((envelope.type === 'beginRendering' || envelope.type === 'begin_rendering')
+  const typedPayload =
+    typeof envelope.type === 'string' ? normalizeEnvelopePayload(envelope.payload) : null;
+  const begin =
+    normalizeEnvelopePayload(envelope.beginRendering) ??
+    normalizeEnvelopePayload(envelope.begin_rendering) ??
+    (envelope.type === 'beginRendering' || envelope.type === 'begin_rendering'
       ? typedPayload
       : null);
-  const update = normalizeEnvelopePayload(envelope.surfaceUpdate)
-    ?? normalizeEnvelopePayload(envelope.surface_update)
-    ?? ((envelope.type === 'surfaceUpdate' || envelope.type === 'surface_update')
-      ? typedPayload
-      : null);
-  const dataUpdate = normalizeEnvelopePayload(envelope.dataModelUpdate)
-    ?? normalizeEnvelopePayload(envelope.data_model_update)
-    ?? ((envelope.type === 'dataModelUpdate' || envelope.type === 'data_model_update')
+  const update =
+    normalizeEnvelopePayload(envelope.surfaceUpdate) ??
+    normalizeEnvelopePayload(envelope.surface_update) ??
+    (envelope.type === 'surfaceUpdate' || envelope.type === 'surface_update' ? typedPayload : null);
+  const dataUpdate =
+    normalizeEnvelopePayload(envelope.dataModelUpdate) ??
+    normalizeEnvelopePayload(envelope.data_model_update) ??
+    (envelope.type === 'dataModelUpdate' || envelope.type === 'data_model_update'
       ? typedPayload
       : null);
   return getSurfaceId(begin) ?? getSurfaceId(update) ?? getSurfaceId(dataUpdate);
 }
 
-function consumeEnvelope(result: ParsedSurface, rawEnvelope: unknown, targetSurfaceId?: string): void {
+function consumeEnvelope(
+  result: ParsedSurface,
+  rawEnvelope: unknown,
+  targetSurfaceId?: string
+): void {
   const envelope = normalizeEnvelopePayload(rawEnvelope);
   if (!envelope) return;
 
-  const typedPayload = typeof envelope.type === 'string'
-    ? normalizeEnvelopePayload(envelope.payload)
-    : null;
-  const begin = normalizeEnvelopePayload(envelope.beginRendering)
-    ?? normalizeEnvelopePayload(envelope.begin_rendering)
-    ?? ((envelope.type === 'beginRendering' || envelope.type === 'begin_rendering')
+  const typedPayload =
+    typeof envelope.type === 'string' ? normalizeEnvelopePayload(envelope.payload) : null;
+  const begin =
+    normalizeEnvelopePayload(envelope.beginRendering) ??
+    normalizeEnvelopePayload(envelope.begin_rendering) ??
+    (envelope.type === 'beginRendering' || envelope.type === 'begin_rendering'
       ? typedPayload
       : null);
-  const update = normalizeEnvelopePayload(envelope.surfaceUpdate)
-    ?? normalizeEnvelopePayload(envelope.surface_update)
-    ?? ((envelope.type === 'surfaceUpdate' || envelope.type === 'surface_update')
-      ? typedPayload
-      : null);
-  const dataUpdate = normalizeEnvelopePayload(envelope.dataModelUpdate)
-    ?? normalizeEnvelopePayload(envelope.data_model_update)
-    ?? ((envelope.type === 'dataModelUpdate' || envelope.type === 'data_model_update')
+  const update =
+    normalizeEnvelopePayload(envelope.surfaceUpdate) ??
+    normalizeEnvelopePayload(envelope.surface_update) ??
+    (envelope.type === 'surfaceUpdate' || envelope.type === 'surface_update' ? typedPayload : null);
+  const dataUpdate =
+    normalizeEnvelopePayload(envelope.dataModelUpdate) ??
+    normalizeEnvelopePayload(envelope.data_model_update) ??
+    (envelope.type === 'dataModelUpdate' || envelope.type === 'data_model_update'
       ? typedPayload
       : null);
   const envelopeSurfaceId = getSurfaceId(begin) ?? getSurfaceId(update) ?? getSurfaceId(dataUpdate);
@@ -804,12 +808,17 @@ function consumeEnvelope(result: ParsedSurface, rawEnvelope: unknown, targetSurf
   }
 
   if (update) {
-    const components = normalizeViewerComponents(update.components as A2UIViewerProps['components']);
+    const components = normalizeViewerComponents(
+      update.components as A2UIViewerProps['components']
+    );
     result.components = components;
   } else if (
-    (Array.isArray(envelope.components) || (envelope.components && typeof envelope.components === 'object'))
+    Array.isArray(envelope.components) ||
+    (envelope.components && typeof envelope.components === 'object')
   ) {
-    result.components = normalizeViewerComponents(envelope.components as A2UIViewerProps['components']);
+    result.components = normalizeViewerComponents(
+      envelope.components as A2UIViewerProps['components']
+    );
   }
 
   if (!dataUpdate) return;
@@ -853,7 +862,10 @@ function parseA2UIMessages(jsonl: string, targetSurfaceId?: string): ParsedSurfa
   }
 
   const envelopes = extractEnvelopeList(jsonl);
-  const parsedForTarget = ensureViewerSafeSurface(parseWithTarget(envelopes, targetSurfaceId), jsonl);
+  const parsedForTarget = ensureViewerSafeSurface(
+    parseWithTarget(envelopes, targetSurfaceId),
+    jsonl
+  );
   if (!targetSurfaceId || (parsedForTarget.root && hasParsedComponents(parsedForTarget))) {
     return {
       parsed: parsedForTarget,
@@ -871,7 +883,7 @@ function parseA2UIMessages(jsonl: string, targetSurfaceId?: string): ParsedSurfa
     if (fallbackSurfaceId && fallbackSurfaceId !== targetSurfaceId) {
       const fallbackParsed = ensureViewerSafeSurface(
         parseWithTarget(envelopes, fallbackSurfaceId),
-        jsonl,
+        jsonl
       );
       if (fallbackParsed.root && hasParsedComponents(fallbackParsed)) {
         return {
@@ -1002,7 +1014,7 @@ export interface A2UISurfaceRendererProps {
 export const A2UISurfaceRenderer = memo<A2UISurfaceRendererProps>(({ surfaceId, messages }) => {
   const { parsed, resolvedSurfaceId } = useMemo(
     () => parseA2UIMessages(messages, surfaceId),
-    [messages, surfaceId],
+    [messages, surfaceId]
   );
   const effectiveSurfaceId = resolvedSurfaceId ?? surfaceId;
   const hasComponents = useMemo(() => {
@@ -1043,20 +1055,21 @@ export const A2UISurfaceRenderer = memo<A2UISurfaceRendererProps>(({ surfaceId, 
       // Use the server-assigned HITL request_id if available (enables the
       // HITL coordinator Future to resolve). Fall back to a client-generated
       // sequential ID for non-interactive surfaces.
-      const requestId =
-        hitlRequestId ?? `a2ui_${effectiveSurfaceId}_${String(seqRef.current)}`;
+      const requestId = hitlRequestId ?? `a2ui_${effectiveSurfaceId}_${String(seqRef.current)}`;
       agentService
         .respondToA2UIAction(
           requestId,
-          action.actionName || ((action as Record<string, unknown>).actionId as string) || 'unknown',
+          action.actionName ||
+            ((action as Record<string, unknown>).actionId as string) ||
+            'unknown',
           action.sourceComponentId,
-          action.context,
+          action.context
         )
         .catch((err: unknown) => {
           console.error('[A2UI] Failed to dispatch action:', err);
         });
     },
-    [conversationId, effectiveSurfaceId, hitlRequestId],
+    [conversationId, effectiveSurfaceId, hitlRequestId]
   );
 
   // Guard: need at least a root and components to render

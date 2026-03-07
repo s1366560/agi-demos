@@ -199,10 +199,13 @@ class SubAgentProcess:
             try:
                 # Run the independent ReAct loop
                 session_id = f"subagent-{self._subagent.id}-{int(time.time())}"
+                conversation_id = str(
+                    self._context.metadata.get("conversation_id") or f"subagent-{self._subagent.id}"
+                )
 
                 run_ctx = RunContext(
                     abort_signal=self._abort_signal,
-                    conversation_id=f"subagent-{self._subagent.id}",
+                    conversation_id=conversation_id,
                     trace_id=session_id,
                 )
 

@@ -133,6 +133,76 @@ async def list_provider_types(
     return [t.value for t in ProviderType]
 
 
+# Model Catalog Endpoints (MUST be before /models/{provider_type}
+# to avoid the path parameter catching 'catalog' as a provider_type)
+
+
+@router.get("/models/catalog")
+async def list_catalog_models(
+    provider: str | None = Query(None, description="Filter by provider name"),
+    include_deprecated: bool = Query(False, description="Include deprecated models"),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    List all models from the model catalog.
+
+    Returns enriched metadata from the embedded model snapshot.
+    """
+    from src.infrastructure.llm.model_catalog import (
+        get_model_catalog_service,
+    )
+
+    catalog = get_model_catalog_service()
+    models = catalog.list_models(
+        provider=provider,
+        include_deprecated=include_deprecated,
+    )
+    # Exclude internal-only fields from API response
+    exclude_fields = {"input_budget_ratio", "chars_per_token", "interleaved"}
+    return {
+        "total": len(models),
+        "models": [
+            {
+                k: (v.isoformat() if hasattr(v, "isoformat") else v)
+                for k, v in m.model_dump().items()
+                if k not in exclude_fields
+            }
+            for m in models
+        ],
+    }
+
+
+@router.get("/models/catalog/search")
+async def search_catalog_models(
+    q: str = Query(..., description="Search query"),
+    provider: str | None = Query(None, description="Filter by provider name"),
+    limit: int = Query(20, ge=1, le=100, description="Max results"),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Search models in the catalog by name, family, or description.
+    """
+    from src.infrastructure.llm.model_catalog import (
+        get_model_catalog_service,
+    )
+
+    catalog = get_model_catalog_service()
+    results = catalog.search_models(query=q, provider=provider, limit=limit)
+    exclude_fields = {"input_budget_ratio", "chars_per_token", "interleaved"}
+    return {
+        "query": q,
+        "total": len(results),
+        "models": [
+            {
+                k: (v.isoformat() if hasattr(v, "isoformat") else v)
+                for k, v in m.model_dump().items()
+                if k not in exclude_fields
+            }
+            for m in results
+        ],
+    }
+
+
 @router.get("/models/{provider_type}")
 async def list_models_for_provider_type(
     provider_type: str,
@@ -259,74 +329,6 @@ async def list_models_for_provider_type(
     }
 
 
-# Model Catalog Endpoints
-
-
-@router.get("/models/catalog")
-async def list_catalog_models(
-    provider: str | None = Query(None, description="Filter by provider name"),
-    include_deprecated: bool = Query(False, description="Include deprecated models"),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    """
-    List all models from the model catalog.
-
-    Returns enriched metadata from the embedded model snapshot.
-    """
-    from src.infrastructure.llm.model_catalog import (
-        get_model_catalog_service,
-    )
-
-    catalog = get_model_catalog_service()
-    models = catalog.list_models(
-        provider=provider,
-        include_deprecated=include_deprecated,
-    )
-    # Exclude internal-only fields from API response
-    exclude_fields = {'input_budget_ratio', 'chars_per_token', 'interleaved'}
-    return {
-        "total": len(models),
-        "models": [
-            {
-                k: (v.isoformat() if hasattr(v, 'isoformat') else v)
-                for k, v in m.model_dump().items()
-                if k not in exclude_fields
-            }
-            for m in models
-        ],
-    }
-
-
-@router.get("/models/catalog/search")
-async def search_catalog_models(
-    q: str = Query(..., description="Search query"),
-    provider: str | None = Query(None, description="Filter by provider name"),
-    limit: int = Query(20, ge=1, le=100, description="Max results"),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    """
-    Search models in the catalog by name, family, or description.
-    """
-    from src.infrastructure.llm.model_catalog import (
-        get_model_catalog_service,
-    )
-
-    catalog = get_model_catalog_service()
-    results = catalog.search_models(query=q, provider=provider, limit=limit)
-    exclude_fields = {'input_budget_ratio', 'chars_per_token', 'interleaved'}
-    return {
-        "query": q,
-        "total": len(results),
-        "models": [
-            {
-                k: (v.isoformat() if hasattr(v, 'isoformat') else v)
-                for k, v in m.model_dump().items()
-                if k not in exclude_fields
-            }
-            for m in results
-        ],
-    }
-
 @router.get("/env-detection")
 async def detect_env_providers(
     current_user: User = Depends(require_admin),
@@ -354,7 +356,6 @@ async def detect_env_providers(
             for name, config in detected.items()
         },
     }
-
 
 
 @router.get("/{provider_id}", response_model=ProviderConfigResponse)

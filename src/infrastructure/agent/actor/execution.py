@@ -75,6 +75,7 @@ async def _run_session_lifecycle(project_id: str) -> None:
             project_id,
         )
 
+
 # Flush accumulated events to DB every N seconds during streaming,
 # so they survive service restarts.
 _PERSIST_INTERVAL_SECONDS = 30
@@ -409,6 +410,11 @@ async def execute_project_chat(
     last_time_us, last_counter = await _get_last_db_event_time(request.conversation_id)
     time_gen = EventTimeGenerator(last_time_us, last_counter)
 
+    # Extract LLM overrides from app_model_context (F1.4)
+    llm_overrides: dict[str, Any] | None = None
+    if request.app_model_context:
+        llm_overrides = request.app_model_context.get("llm_overrides")
+
     try:
         redis_client = await _get_redis_client()
 
@@ -426,6 +432,7 @@ async def execute_project_chat(
             forced_skill_name=request.forced_skill_name,
             context_summary_data=request.context_summary_data,
             plan_mode=request.plan_mode,
+            llm_overrides=llm_overrides,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -479,9 +486,7 @@ async def execute_project_chat(
         _record_chat_metrics(agent.config.project_id, execution_time_ms, ss.is_error)
 
         # Fire-and-forget: session lifecycle maintenance
-        _task = asyncio.create_task(
-            _run_session_lifecycle(agent.config.project_id)
-        )
+        _task = asyncio.create_task(_run_session_lifecycle(agent.config.project_id))
         _background_tasks.add(_task)
         _task.add_done_callback(_background_tasks.discard)
 

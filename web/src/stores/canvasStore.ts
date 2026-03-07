@@ -12,7 +12,13 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-export type CanvasContentType = 'code' | 'markdown' | 'preview' | 'data' | 'mcp-app' | 'a2ui-surface';
+export type CanvasContentType =
+  | 'code'
+  | 'markdown'
+  | 'preview'
+  | 'data'
+  | 'mcp-app'
+  | 'a2ui-surface';
 
 export interface CanvasTab {
   id: string;

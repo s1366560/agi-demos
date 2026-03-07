@@ -4,12 +4,14 @@ Centralizes known model constraints (max output tokens, context window)
 so that all components (LLM client, agent, compression engine) share a
 single source of truth.
 
-Override mechanism: ProviderConfig.config JSONB can store custom limits
-under the keys ``max_output_tokens``, ``context_window``, and ``max_input_tokens``, which take
-precedence over the static tables below.
+Resolution order:
+  1. ``ProviderConfig.config`` JSONB overrides (per-tenant DB)
+  2. ``ModelCatalogService`` (models_snapshot.json from models.dev)
+  3. Static fallback dicts below (only for models absent from the catalog)
 
-Since P1-T5 the registry delegates to ``ModelCatalogService`` for richer
-metadata lookups while retaining the static dicts as a fast fallback.
+The static dicts are intentionally minimal — they cover only models that
+are NOT present in the models.dev catalog snapshot (e.g. deepseek-coder,
+glm-4, moonshot-v1-*). All other models are served by the catalog.
 """
 
 from __future__ import annotations
@@ -35,21 +37,14 @@ class ModelLimits:
 
 # Known max output token limits per model family.
 _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
-    # Qwen / Dashscope
-    "qwen-max": 8192,
-    "qwen-plus": 8192,
-    "qwen-turbo": 8192,
+    # Qwen / Dashscope (not in models.dev catalog)
     "qwen-long": 8192,
-    "qwen-vl-max": 8192,
-    "qwen-vl-plus": 8192,
-    # Deepseek
-    "deepseek-chat": 8192,
+    # Deepseek (not in models.dev catalog)
     "deepseek-coder": 8192,
-    "deepseek-reasoner": 8192,
-    # ZhipuAI
+    # ZhipuAI (not in models.dev catalog)
     "glm-4": 4096,
     "glm-4-flash": 4096,
-    # Kimi / Moonshot
+    # Kimi / Moonshot (not in models.dev catalog)
     "moonshot-v1-8k": 8192,
     "moonshot-v1-32k": 8192,
     "moonshot-v1-128k": 8192,
@@ -57,46 +52,23 @@ _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
 
 # Known max INPUT token limits for models where provider-enforced input caps
 # are stricter than generic context_window-output calculations.
-_MODEL_MAX_INPUT_TOKENS: dict[str, int] = {
-    # Qwen / Dashscope
-    "qwen-max": 30_720,
-    "qwen-vl-max": 30_720,
-    "qwen-vl-plus": 30_720,
-}
+# Note: All models that were here (qwen-max, qwen-vl-max, qwen-vl-plus) are
+# now served by the ModelCatalog snapshot. Dict retained for non-catalog models.
+_MODEL_MAX_INPUT_TOKENS: dict[str, int] = {}
 
 # Known context window sizes (total input + output) per model.
 _MODEL_CONTEXT_WINDOW: dict[str, int] = {
-    # Qwen / Dashscope
-    "qwen-max": 32768,
-    "qwen-plus": 131072,
-    "qwen-turbo": 131072,
+    # Qwen / Dashscope (not in models.dev catalog)
     "qwen-long": 1_000_000,
-    "qwen-vl-max": 32768,
-    "qwen-vl-plus": 32768,
-    # Deepseek
-    "deepseek-chat": 65536,
+    # Deepseek (not in models.dev catalog)
     "deepseek-coder": 65536,
-    "deepseek-reasoner": 65536,
-    # ZhipuAI
+    # ZhipuAI (not in models.dev catalog)
     "glm-4": 128_000,
     "glm-4-flash": 128_000,
-    # Kimi / Moonshot
+    # Kimi / Moonshot (not in models.dev catalog)
     "moonshot-v1-8k": 8192,
     "moonshot-v1-32k": 32768,
     "moonshot-v1-128k": 131072,
-    # OpenAI
-    "gpt-4o": 128_000,
-    "gpt-4o-mini": 128_000,
-    "gpt-4-turbo": 128_000,
-    "gpt-4": 8192,
-    # Anthropic
-    "claude-3-5-sonnet-20241022": 200_000,
-    "claude-3-5-haiku-20241022": 200_000,
-    "claude-3-opus-20240229": 200_000,
-    # Gemini
-    "gemini-1.5-pro": 2_097_152,
-    "gemini-1.5-flash": 1_048_576,
-    "gemini-2.0-flash": 1_048_576,
 }
 
 _DEFAULT_CONTEXT_WINDOW = 128_000
@@ -106,23 +78,15 @@ _DEFAULT_CHARS_PER_TOKEN = 3.0
 # Safety ratio for practical input budgeting. This intentionally leaves headroom
 # for tokenizer/provider counting differences and hidden system overhead.
 _MODEL_INPUT_BUDGET_RATIO: dict[str, float] = {
-    "qwen-max": 0.85,
-    "qwen-plus": 0.9,
-    "qwen-turbo": 0.9,
+    # Qwen / Dashscope (not in models.dev catalog)
     "qwen-long": 0.9,
-    "qwen-vl-max": 0.85,
-    "qwen-vl-plus": 0.85,
 }
 
 # Fallback chars/token estimates for conservative char-based budgeting.
 # Lower means stricter budgets.
 _MODEL_CHARS_PER_TOKEN: dict[str, float] = {
-    "qwen-max": 1.2,
-    "qwen-plus": 1.4,
-    "qwen-turbo": 1.4,
+    # Qwen / Dashscope (not in models.dev catalog)
     "qwen-long": 1.6,
-    "qwen-vl-max": 1.2,
-    "qwen-vl-plus": 1.2,
 }
 
 

@@ -1,5 +1,3 @@
-
-
 // ============================================
 // Workflow Pattern Types (T074, T085)
 // ============================================
@@ -15,7 +13,6 @@ export interface PatternStep {
   similarity_threshold: number;
   tool_parameters?: Record<string, unknown> | undefined;
 }
-
 
 /**
  * Workflow pattern for learned workflows (FR-019, FR-020)
@@ -36,7 +33,6 @@ export interface WorkflowPattern {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Workflow patterns list response
  */
@@ -47,7 +43,6 @@ export interface PatternsListResponse {
   page_size: number;
 }
 
-
 /**
  * Reset patterns response
  */
@@ -55,7 +50,6 @@ export interface ResetPatternsResponse {
   deleted_count: number;
   tenant_id: string;
 }
-
 
 // ============================================
 // Tool Composition Types (T108, T115)
@@ -72,7 +66,6 @@ export interface ToolCompositionTemplate {
   condition?: string | undefined; // For conditional compositions
   fallback_alternatives: string[];
 }
-
 
 /**
  * Tool composition (T108)
@@ -94,7 +87,6 @@ export interface ToolComposition {
   updated_at: string;
 }
 
-
 /**
  * Tool compositions list response (T114)
  */
@@ -102,7 +94,6 @@ export interface ToolCompositionsListResponse {
   compositions: ToolComposition[];
   total: number;
 }
-
 
 // ============================================
 // Plan Mode Types (Plan Document System)
@@ -113,12 +104,10 @@ export interface ToolCompositionsListResponse {
  */
 export type PlanDocumentStatus = 'draft' | 'reviewing' | 'approved' | 'archived';
 
-
 /**
  * Agent mode for plan mode switching
  */
 export type AgentMode = 'build' | 'plan' | 'explore';
-
 
 /**
  * Plan document
@@ -135,7 +124,6 @@ export interface PlanDocument {
   updated_at: string;
 }
 
-
 /**
  * Plan mode status response
  */
@@ -146,7 +134,6 @@ export interface PlanModeStatus {
   plan: PlanDocument | null;
 }
 
-
 /**
  * Enter plan mode request
  */
@@ -155,7 +142,6 @@ export interface EnterPlanModeRequest {
   title: string;
   description?: string | undefined;
 }
-
 
 /**
  * Exit plan mode request
@@ -166,7 +152,6 @@ export interface ExitPlanModeRequest {
   approve?: boolean | undefined;
   summary?: string | undefined;
 }
-
 
 /**
  * Update plan request
@@ -184,7 +169,6 @@ export interface UpdatePlanRequest {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Plan Mode SSE event data types
  */
@@ -194,7 +178,6 @@ export interface PlanModeEnterEventData {
   plan_title: string;
 }
 
-
 export interface PlanModeExitEventData {
   conversation_id: string;
   plan_id: string;
@@ -202,20 +185,17 @@ export interface PlanModeExitEventData {
   approved: boolean;
 }
 
-
 export interface PlanCreatedEventData {
   plan_id: string;
   title: string;
   conversation_id: string;
 }
 
-
 export interface PlanUpdatedEventData {
   plan_id: string;
   content: string;
   version: number;
 }
-
 
 // ===========================================================================
 // Plan Mode Types
@@ -232,7 +212,6 @@ export type ExecutionStepStatus =
   | 'skipped'
   | 'cancelled';
 
-
 /**
  * Execution plan status
  */
@@ -245,7 +224,6 @@ export type ExecutionPlanStatus =
   | 'failed'
   | 'cancelled';
 
-
 /**
  * Reflection assessment
  */
@@ -256,12 +234,10 @@ export type ReflectionAssessment =
   | 'complete'
   | 'failed';
 
-
 /**
  * Adjustment type for plan steps
  */
 export type AdjustmentType = 'modify' | 'retry' | 'skip' | 'add_before' | 'add_after' | 'replace';
-
 
 /**
  * Single execution step in a plan
@@ -279,7 +255,6 @@ export interface ExecutionStep {
   completed_at?: string | undefined;
 }
 
-
 /**
  * Step adjustment for reflection
  */
@@ -291,7 +266,6 @@ export interface StepAdjustment {
   new_tool_name?: string | undefined;
   new_step?: ExecutionStep | undefined;
 }
-
 
 /**
  * Reflection result from plan execution
@@ -308,7 +282,6 @@ export interface ReflectionResult {
   is_terminal: boolean;
 }
 
-
 /**
  * Plan snapshot for rollback functionality
  */
@@ -321,7 +294,6 @@ export interface StepState {
   completed_at?: string | undefined;
   tool_input: Record<string, unknown>;
 }
-
 
 /**
  * Plan snapshot for rollback
@@ -336,7 +308,6 @@ export interface PlanSnapshot {
   snapshot_type: string;
   created_at: string;
 }
-
 
 /**
  * Execution plan for Plan Mode

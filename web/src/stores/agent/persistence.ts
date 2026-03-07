@@ -61,11 +61,7 @@ export function evictStaleConversationStates(
   let evicted = 0;
 
   // Walk LRU list from oldest (front) to newest
-  for (
-    let i = 0;
-    i < conversationAccessOrder.length && evicted < evictCount;
-    i++
-  ) {
+  for (let i = 0; i < conversationAccessOrder.length && evicted < evictCount; i++) {
     const id = conversationAccessOrder[i];
     if (!id || id === activeId) continue;
     const convState = newStates.get(id);
@@ -87,10 +83,7 @@ export function evictStaleConversationStates(
 /**
  * Schedule a debounced save for a conversation
  */
-export function scheduleSave(
-  conversationId: string,
-  state: ConversationState
-): void {
+export function scheduleSave(conversationId: string, state: ConversationState): void {
   // Clear existing timer
   const existingTimer = pendingSaves.get(conversationId);
   if (existingTimer) {
@@ -124,15 +117,9 @@ export async function flushPendingSaves(): Promise<void> {
   const state = useAgentV3Store.getState();
   const savePromises: Promise<void>[] = [];
 
-  state.conversationStates.forEach(
-    (convState: ConversationState, conversationId: string) => {
-      savePromises.push(
-        saveConversationState(conversationId, convState).catch(
-          console.error
-        )
-      );
-    }
-  );
+  state.conversationStates.forEach((convState: ConversationState, conversationId: string) => {
+    savePromises.push(saveConversationState(conversationId, convState).catch(console.error));
+  });
 
   await Promise.all(savePromises);
 }

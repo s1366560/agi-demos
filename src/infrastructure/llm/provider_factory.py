@@ -85,8 +85,11 @@ class AIServiceFactory:
             Configured ``LiteLLMClient`` instance.
         """
         from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
+        from src.infrastructure.llm.model_catalog import get_model_catalog_service
 
-        return create_litellm_client(provider_config, cache=cache)
+        return create_litellm_client(
+            provider_config, cache=cache, catalog=get_model_catalog_service()
+        )
 
     @staticmethod
     def create_unified_llm_client(
@@ -100,8 +103,11 @@ class AIServiceFactory:
         """
         from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
         from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
+        from src.infrastructure.llm.model_catalog import get_model_catalog_service
 
-        litellm_client = create_litellm_client(provider_config)
+        litellm_client = create_litellm_client(
+            provider_config, catalog=get_model_catalog_service()
+        )
         return UnifiedLLMClient(litellm_client=litellm_client, temperature=temperature)
 
     # ------------------------------------------------------------------
@@ -186,6 +192,7 @@ class AIServiceFactory:
         """
         from src.infrastructure.llm.category_router import CategoryRouter
         from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
+        from src.infrastructure.llm.model_catalog import get_model_catalog_service
 
         router = CategoryRouter()
         routed = router.route(task_description=task_description)
@@ -208,7 +215,9 @@ class AIServiceFactory:
                 embedding_model=provider_config.embedding_model,
                 rerank_model=provider_config.rerank_model,
             )
-        return create_litellm_client(provider_config, cache=cache)
+        return create_litellm_client(
+            provider_config, cache=cache, catalog=get_model_catalog_service()
+        )
 
 # Module-level convenience ------------------------------------------------
 

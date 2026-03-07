@@ -6,7 +6,6 @@
  * persisted `canvas_updated` events from the conversation timeline.
  */
 
-
 import { useCanvasStore } from '../canvasStore';
 import { useLayoutModeStore } from '../layoutMode';
 
@@ -65,13 +64,15 @@ function replayCanvasEvent(event: CanvasUpdatedTimelineEvent): void {
       if (existingTab.type === 'a2ui-surface') {
         const mergedA2UI = mergeA2UIMessageStream(
           existingTab.a2uiMessages ?? existingTab.content,
-          block.content,
+          block.content
         );
         canvasStore.updateContent(blockId, mergedA2UI);
         canvasStore.updateTab(blockId, {
           a2uiMessages: mergedA2UI,
           a2uiSurfaceId:
-            (typeof block.metadata?.surface_id === 'string' ? block.metadata.surface_id : undefined) ??
+            (typeof block.metadata?.surface_id === 'string'
+              ? block.metadata.surface_id
+              : undefined) ??
             existingTab.a2uiSurfaceId ??
             block.id,
         });
@@ -119,7 +120,7 @@ function replayCanvasEvent(event: CanvasUpdatedTimelineEvent): void {
  */
 export function replayCanvasEventsFromTimeline(timeline: readonly TimelineEvent[]): void {
   const canvasEvents = timeline.filter(
-    (e): e is CanvasUpdatedTimelineEvent => e.type === 'canvas_updated',
+    (e): e is CanvasUpdatedTimelineEvent => e.type === 'canvas_updated'
   );
   if (canvasEvents.length === 0) return;
 

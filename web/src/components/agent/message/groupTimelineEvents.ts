@@ -374,7 +374,10 @@ export interface SubAgentSummary {
 
 export function getSubAgentSummaries(items: GroupedItem[]): SubAgentSummary[] {
   return items
-    .filter((item): item is { kind: 'subagent'; group: SubAgentGroup; startIndex: number } => item.kind === 'subagent')
+    .filter(
+      (item): item is { kind: 'subagent'; group: SubAgentGroup; startIndex: number } =>
+        item.kind === 'subagent'
+    )
     .map((item) => {
       const summary: SubAgentSummary = {
         subagentId: item.group.subagentId,

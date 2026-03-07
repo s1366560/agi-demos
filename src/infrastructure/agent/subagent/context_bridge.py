@@ -68,6 +68,7 @@ class ContextBridge:
         main_token_budget: int = 200000,
         project_id: str = "",
         tenant_id: str = "",
+        conversation_id: str = "",
         memory_context: str = "",
     ) -> SubAgentContext:
         """Build a condensed context package for a SubAgent.
@@ -79,6 +80,7 @@ class ContextBridge:
             main_token_budget: The main agent's total token budget.
             project_id: Project ID for scoping.
             tenant_id: Tenant ID for scoping.
+            conversation_id: Parent conversation ID for shared persistence scope.
             memory_context: Pre-formatted memory snippet from MemoryAccessor.
 
         Returns:
@@ -87,15 +89,19 @@ class ContextBridge:
         condensed = self._condense_context(conversation_context)
         token_budget = int(main_token_budget * self._budget_ratio)
 
+        metadata: dict[str, Any] = {
+            "project_id": project_id,
+            "tenant_id": tenant_id,
+        }
+        if conversation_id:
+            metadata["conversation_id"] = conversation_id
+
         return SubAgentContext(
             task_description=user_message,
             system_prompt=subagent_system_prompt,
             context_messages=condensed,
             token_budget=token_budget,
-            metadata={
-                "project_id": project_id,
-                "tenant_id": tenant_id,
-            },
+            metadata=metadata,
             memory_context=memory_context,
         )
 

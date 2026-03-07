@@ -34,11 +34,16 @@ import {
   Workflow,
 } from 'lucide-react';
 
+import { useAgentV3Store } from '@/stores/agentV3';
+
 import type { MentionItem } from '@/services/mentionService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
+import { useActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
+
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
+import { LlmOverridePopover } from './chat/LlmOverridePopover';
 import { MentionPopover } from './chat/MentionPopover';
 import { PromptTemplateLibrary } from './chat/PromptTemplateLibrary';
 import { VoiceWaveform } from './chat/VoiceWaveform';
@@ -138,6 +143,10 @@ export const InputBar = memo<InputBarProps>(
     const slashDropdownRef = useRef<SlashCommandDropdownHandle>(null);
     const dragCounter = useRef(0);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+    const activeConversationId = useAgentV3Store((state) => state.activeConversationId);
+
+    const capabilities = useActiveModelCapabilities();
 
     const { attachments, addFiles, removeAttachment, retryAttachment, clearAll } = useFileUpload({
       projectId,
@@ -511,14 +520,14 @@ export const InputBar = memo<InputBarProps>(
           }
         }
 
-        if (files.length > 0) {
+        if (files.length > 0 && capabilities.supportsAttachment) {
           e.preventDefault();
           const dt = new DataTransfer();
           files.forEach((f) => dt.items.add(f));
           addFiles(dt.files);
         }
       },
-      [disabled, addFiles]
+      [disabled, addFiles, capabilities.supportsAttachment]
     );
 
     // --- Drag-and-drop on the entire input card ---
@@ -527,11 +536,11 @@ export const InputBar = memo<InputBarProps>(
         e.preventDefault();
         e.stopPropagation();
         dragCounter.current += 1;
-        if (!disabled && e.dataTransfer.types.includes('Files')) {
+        if (!disabled && capabilities.supportsAttachment && e.dataTransfer.types.includes('Files')) {
           setIsDragging(true);
         }
       },
-      [disabled]
+      [disabled, capabilities.supportsAttachment]
     );
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -555,11 +564,11 @@ export const InputBar = memo<InputBarProps>(
         e.stopPropagation();
         dragCounter.current = 0;
         setIsDragging(false);
-        if (!disabled && e.dataTransfer.files.length > 0) {
+        if (!disabled && capabilities.supportsAttachment && e.dataTransfer.files.length > 0) {
           addFiles(e.dataTransfer.files);
         }
       },
-      [disabled, addFiles]
+      [disabled, addFiles, capabilities.supportsAttachment]
     );
 
     const handleFileInputChange = useCallback(
@@ -597,7 +606,7 @@ export const InputBar = memo<InputBarProps>(
           multiple
           onChange={handleFileInputChange}
           className="hidden"
-          disabled={disabled}
+          disabled={disabled || !capabilities.supportsAttachment}
         />
 
         {/* Main input card */}
@@ -761,17 +770,25 @@ export const InputBar = memo<InputBarProps>(
           <div className="flex-shrink-0 px-3 pt-2 pb-2.5 flex items-center gap-1">
             {/* Left Actions */}
             <div className="flex items-center">
-              <LazyTooltip title={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}>
+              <LazyTooltip
+                title={
+                  capabilities.supportsAttachment
+                    ? t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')
+                    : t('agent.inputBar.attachNotSupported', 'Current model does not support file attachments')
+                }
+              >
                 <LazyButton
                   type="text"
                   size="small"
                   icon={<Paperclip size={18} />}
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={!capabilities.supportsAttachment}
                   className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
                     rounded-lg h-8 w-8 flex items-center justify-center
                     ${attachments.length > 0 ? 'text-primary' : ''}
+                    ${!capabilities.supportsAttachment ? 'opacity-40 cursor-not-allowed' : ''}
                   `}
                 />
               </LazyTooltip>
@@ -821,6 +838,12 @@ export const InputBar = memo<InputBarProps>(
                   <VoiceWaveform active={isListening} />
                 </>
               )}
+
+              <LlmOverridePopover
+                conversationId={activeConversationId}
+                disabled={!!(isStreaming || disabled)}
+                capabilities={capabilities}
+              />
 
               <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1.5" />
 

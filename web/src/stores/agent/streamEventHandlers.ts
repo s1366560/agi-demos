@@ -985,7 +985,7 @@ export function createStreamEventHandlers(
 
       const convState = getConversationState(handlerConversationId);
 
-      // Append the batch event to timeline  
+      // Append the batch event to timeline
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
       // Also add individual artifact_created timeline entries for each artifact in the batch
@@ -1521,7 +1521,7 @@ export function createStreamEventHandlers(
           if (existingTab.type === 'a2ui-surface') {
             const mergedA2UI = mergeA2UIMessageStream(
               existingTab.a2uiMessages ?? existingTab.content,
-              data.block.content,
+              data.block.content
             );
             canvasStore.updateContent(data.block_id, mergedA2UI);
             canvasStore.updateTab(data.block_id, {
@@ -1542,16 +1542,17 @@ export function createStreamEventHandlers(
           }
         } else {
           // Tab not open yet — open it
-          const typeMap: Record<string, 'code' | 'markdown' | 'preview' | 'data' | 'a2ui-surface'> = {
-            code: 'code',
-            markdown: 'markdown',
-            image: 'preview',
-            table: 'data',
-            chart: 'data',
-            form: 'data',
-            widget: 'preview',
-            a2ui_surface: 'a2ui-surface',
-          };
+          const typeMap: Record<string, 'code' | 'markdown' | 'preview' | 'data' | 'a2ui-surface'> =
+            {
+              code: 'code',
+              markdown: 'markdown',
+              image: 'preview',
+              table: 'data',
+              chart: 'data',
+              form: 'data',
+              widget: 'preview',
+              a2ui_surface: 'a2ui-surface',
+            };
           const fallbackTabType = typeMap[data.block.block_type] ?? 'code';
           canvasStore.openTab({
             id: data.block.id,

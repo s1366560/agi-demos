@@ -17,12 +17,10 @@ import type { PlanStatus } from './core';
  */
 export type HITLRequestType = 'clarification' | 'decision' | 'env_var';
 
-
 /**
  * HITL request status
  */
 export type HITLRequestStatus = 'pending' | 'answered' | 'timeout' | 'cancelled';
-
 
 /**
  * Pending HITL request from backend
@@ -41,7 +39,6 @@ export interface PendingHITLRequest {
   expires_at: string;
 }
 
-
 /**
  * Response for pending HITL requests query
  */
@@ -49,7 +46,6 @@ export interface PendingHITLResponse {
   requests: PendingHITLRequest[];
   total: number;
 }
-
 
 /**
  * Plan step in a work plan
@@ -63,7 +59,6 @@ export interface PlanStep {
   expected_output: string;
   dependencies: number[];
 }
-
 
 /**
  * Work plan for multi-level thinking
@@ -81,7 +76,6 @@ export interface WorkPlan {
   updated_at?: string | undefined;
 }
 
-
 // =============================================================================
 // Agent Task System (DB-persistent, SSE-streamed)
 // =============================================================================
@@ -89,7 +83,6 @@ export interface WorkPlan {
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
 export type TaskPriority = 'high' | 'medium' | 'low';
-
 
 export interface AgentTask {
   id: string;

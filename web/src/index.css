@@ -1910,8 +1910,13 @@ img[loading='lazy'] {
 
 /* SubAgent card animations */
 @keyframes subagent-border-pulse {
-  0%, 100% { border-left-color: rgb(59 130 246); }
-  50% { border-left-color: rgb(147 197 253); }
+  0%,
+  100% {
+    border-left-color: rgb(59 130 246);
+  }
+  50% {
+    border-left-color: rgb(147 197 253);
+  }
 }
 
 .animate-subagent-pulse {
@@ -1919,8 +1924,14 @@ img[loading='lazy'] {
 }
 
 @keyframes status-pill-in {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .animate-status-pill-in {
@@ -1965,7 +1976,8 @@ img[loading='lazy'] {
   line-height: 1.25;
 }
 
-.a2ui-surface-theme :where(
+.a2ui-surface-theme
+  :where(
     .a2ui-textfield input,
     .a2ui-textfield textarea,
     .a2ui-multiplechoice select,
@@ -1978,7 +1990,10 @@ img[loading='lazy'] {
   min-height: 2.5rem;
   padding: 0.55rem 0.75rem;
   line-height: 1.4;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .a2ui-surface-theme .a2ui-textfield textarea {
@@ -1990,7 +2005,8 @@ img[loading='lazy'] {
   color: #94a3b8;
 }
 
-.a2ui-surface-theme :where(
+.a2ui-surface-theme
+  :where(
     .a2ui-textfield input,
     .a2ui-textfield textarea,
     .a2ui-multiplechoice select,
@@ -2008,7 +2024,10 @@ img[loading='lazy'] {
   background: linear-gradient(135deg, #1e3fae 0%, #3b5fc9 100%);
   color: #fff;
   box-shadow: 0 8px 18px -10px rgba(30, 63, 174, 0.45);
-  transition: transform 0.16s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
 }
 
 .a2ui-surface-theme .a2ui-button > button:hover {
@@ -2052,7 +2071,12 @@ img[loading='lazy'] {
 
 .dark
   .a2ui-surface-theme
-  :where(.a2ui-textfield input, .a2ui-textfield textarea, .a2ui-multiplechoice select, .a2ui-datetime-input input) {
+  :where(
+    .a2ui-textfield input,
+    .a2ui-textfield textarea,
+    .a2ui-multiplechoice select,
+    .a2ui-datetime-input input
+  ) {
   border-color: #475569;
   background: #0f172a;
   color: #e2e8f0;
@@ -2064,7 +2088,12 @@ img[loading='lazy'] {
 
 .dark
   .a2ui-surface-theme
-  :where(.a2ui-textfield input, .a2ui-textfield textarea, .a2ui-multiplechoice select, .a2ui-datetime-input input):focus-visible {
+  :where(
+    .a2ui-textfield input,
+    .a2ui-textfield textarea,
+    .a2ui-multiplechoice select,
+    .a2ui-datetime-input input
+  ):focus-visible {
   border-color: #818cf8;
   box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.28);
 }
@@ -2076,7 +2105,8 @@ img[loading='lazy'] {
 }
 
 @media (forced-colors: active) {
-  .a2ui-surface-theme :where(
+  .a2ui-surface-theme
+    :where(
       .a2ui-textfield input,
       .a2ui-textfield textarea,
       .a2ui-multiplechoice select,

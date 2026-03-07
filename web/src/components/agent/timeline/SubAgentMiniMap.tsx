@@ -36,7 +36,9 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
       <button
         type="button"
         className="flex w-full cursor-pointer items-center justify-between border-b border-gray-100 p-2 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50"
-        onClick={() => { setIsExpanded(!isExpanded); }}
+        onClick={() => {
+          setIsExpanded(!isExpanded);
+        }}
       >
         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
           {t('agent.subagent.minimap_title', 'SubAgent Timeline')}
@@ -56,11 +58,13 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
               type="button"
               key={`${summary.startIndex}-${summary.subagentId}`}
               className="group flex w-full cursor-pointer items-center justify-between rounded p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50"
-              onClick={() => { onScrollTo(summary.startIndex); }}
+              onClick={() => {
+                onScrollTo(summary.startIndex);
+              }}
             >
               <div className="flex items-center gap-2 overflow-hidden">
-                <div 
-                  className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASSES[summary.status] || 'bg-gray-400'}`} 
+                <div
+                  className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASSES[summary.status] || 'bg-gray-400'}`}
                   title={summary.status}
                 />
                 <span className="truncate font-medium text-gray-700 dark:text-gray-300">
@@ -75,7 +79,10 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
                 ) : (
                   <span>{summary.status}</span>
                 )}
-                <ArrowRight size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+                <ArrowRight
+                  size={12}
+                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                />
               </div>
             </button>
           ))}

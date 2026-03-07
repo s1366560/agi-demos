@@ -76,9 +76,7 @@ describe('Agent Store - Title Generated Event Handling (agentV3)', () => {
       // Assert
       const state = useAgentStore.getState();
       // Derive current conversation from active ID
-      const currentConv = state.conversations.find(
-        (c) => c.id === state.activeConversationId
-      );
+      const currentConv = state.conversations.find((c) => c.id === state.activeConversationId);
       expect(currentConv?.title).toBe('Generated Title from LLM');
       expect(state.conversations[0].title).toBe('Generated Title from LLM');
     });
@@ -134,9 +132,7 @@ describe('Agent Store - Title Generated Event Handling (agentV3)', () => {
 
       // Assert
       const state = useAgentStore.getState();
-      const activeConv = state.conversations.find(
-        (c) => c.id === state.activeConversationId
-      );
+      const activeConv = state.conversations.find((c) => c.id === state.activeConversationId);
       expect(activeConv?.title).toBe('Current Conversation'); // Unchanged
       expect(state.conversations[0].title).toBe('Background Generated Title'); // Updated
       expect(state.conversations[1].title).toBe('Current Conversation'); // Unchanged
@@ -184,9 +180,7 @@ describe('Agent Store - Title Generated Event Handling (agentV3)', () => {
 
       // Assert - No changes
       const state = useAgentStore.getState();
-      const activeConv = state.conversations.find(
-        (c) => c.id === state.activeConversationId
-      );
+      const activeConv = state.conversations.find((c) => c.id === state.activeConversationId);
       expect(activeConv?.title).toBe('New Conversation');
       expect(state.conversations[0].title).toBe('New Conversation');
     });
@@ -233,9 +227,7 @@ describe('Agent Store - Title Generated Event Handling (agentV3)', () => {
 
       // Assert
       const state = useAgentStore.getState();
-      const activeConv = state.conversations.find(
-        (c) => c.id === state.activeConversationId
-      );
+      const activeConv = state.conversations.find((c) => c.id === state.activeConversationId);
       expect(activeConv?.title).toBe('AI Generated Title');
       // Other fields should remain unchanged
       expect(activeConv?.id).toBe('conv-1');
@@ -311,18 +303,14 @@ describe('Agent Store - Title Generated Event Handling (agentV3)', () => {
         const { conversations } = useAgentStore.getState();
 
         const updatedList = conversations.map((c) =>
-          c.id === titleEvent.data.conversation_id
-            ? { ...c, title: titleEvent.data.title }
-            : c
+          c.id === titleEvent.data.conversation_id ? { ...c, title: titleEvent.data.title } : c
         );
         useAgentStore.setState({ conversations: updatedList });
       });
 
       // Assert
       const state = useAgentStore.getState();
-      const activeConv = state.conversations.find(
-        (c) => c.id === state.activeConversationId
-      );
+      const activeConv = state.conversations.find((c) => c.id === state.activeConversationId);
       expect(activeConv?.title).toBe('Hello Conversation');
       expect(state.timeline.some((e) => e.type === 'user_message')).toBe(true);
     });
@@ -333,9 +321,7 @@ describe('Agent Store - Title Generated Event Handling (agentV3)', () => {
       const state = useAgentStore.getState();
 
       // Verify the method does NOT exist on the agentV3 store
-      expect(
-        'generateConversationTitle' in state
-      ).toBe(false);
+      expect('generateConversationTitle' in state).toBe(false);
     });
   });
 });

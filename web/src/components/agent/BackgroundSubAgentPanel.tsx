@@ -21,7 +21,7 @@ import {
   RefreshCw,
   AlertTriangle,
   Skull,
-  Pause
+  Pause,
 } from 'lucide-react';
 
 import {
@@ -101,7 +101,10 @@ const ExecutionItem = memo<{
             ) : (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onKill(execution.executionId); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onKill(execution.executionId);
+                }}
                 className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                 title={t('agent.background.kill', 'Stop execution')}
               >
@@ -140,7 +143,9 @@ const ExecutionItem = memo<{
                 className="!mb-0"
               />
               {execution.progressMessage && (
-                <p className="text-[10px] text-slate-400 mt-0.5 truncate">{execution.progressMessage}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                  {execution.progressMessage}
+                </p>
               )}
             </div>
           )}
@@ -151,13 +156,17 @@ const ExecutionItem = memo<{
               {execution.status !== 'running' && (
                 <button
                   type="button"
-                  onClick={() => { onToggleExpand(execution.executionId); }}
+                  onClick={() => {
+                    onToggleExpand(execution.executionId);
+                  }}
                   className="text-[10px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors mb-1"
                 >
-                  {isExpanded ? t('agent.background.hideDetails', 'Hide details') : t('agent.background.showDetails', 'Show details')}
+                  {isExpanded
+                    ? t('agent.background.hideDetails', 'Hide details')
+                    : t('agent.background.showDetails', 'Show details')}
                 </button>
               )}
-              
+
               {(execution.status === 'running' || isExpanded) && (
                 <div className="space-y-1.5">
                   {execution.summary && (
@@ -203,8 +212,6 @@ export const BackgroundSubAgentPanel = memo(() => {
 
 BackgroundSubAgentPanel.displayName = 'BackgroundSubAgentPanel';
 
-
-
 const BackgroundSubAgentDrawer = memo(() => {
   const { t } = useTranslation();
   const executions = useBackgroundExecutions();
@@ -212,7 +219,7 @@ const BackgroundSubAgentDrawer = memo(() => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggleExpand = (id: string) => {
-    setExpanded(prev => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);

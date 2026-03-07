@@ -382,17 +382,13 @@ export function apiToUnifiedRequest(
       hitlType === 'decision'
         ? {
             question: apiRequest.question,
-            decisionType:
-              (apiRequest.metadata?.decision_type as DecisionType) ||
-              'single_choice',
+            decisionType: (apiRequest.metadata?.decision_type as DecisionType) || 'single_choice',
             options: (apiRequest.options as DecisionOption[]) || [],
             allowCustom: (apiRequest.metadata?.allow_custom as boolean) ?? false,
             context: apiRequest.context || {},
             selectionMode:
-              (apiRequest.metadata?.selection_mode as 'single' | 'multiple') ||
-              'single',
-            maxSelections:
-              (apiRequest.metadata?.max_selections as number) || undefined,
+              (apiRequest.metadata?.selection_mode as 'single' | 'multiple') || 'single',
+            maxSelections: (apiRequest.metadata?.max_selections as number) || undefined,
           }
         : undefined,
     envVarData:

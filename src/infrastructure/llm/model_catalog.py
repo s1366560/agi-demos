@@ -1,21 +1,24 @@
 """Model catalog service with embedded snapshot.
 
-Loads model metadata from an embedded JSON snapshot file and merges
-with ``DEFAULT_MODEL_METADATA`` from the domain layer.  Implements
+Loads model metadata from an embedded JSON snapshot file generated
+from the models.dev API via ``models_dev_fetcher.py``.  Implements
 ``ModelCatalogPort`` for read-only model lookups.
 
-Since v2.0.0 the snapshot is generated from the models.dev API via
-``models_dev_fetcher.py``.  The ``refresh()`` method can optionally
-re-fetch from the remote API and regenerate the local snapshot.
+When a model is not found in the snapshot, a conservative
+``FALLBACK_MODEL_METADATA`` is returned instead of ``None`` (via
+the ``get_model_or_fallback`` helper).
+
+Since v3.0.0 the snapshot is the sole authoritative source.
 """
 
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, override
 
 from src.domain.llm_providers.models import (
-    DEFAULT_MODEL_METADATA,
+    FALLBACK_MODEL_METADATA,
     ModelMetadata,
 )
 from src.domain.llm_providers.repositories import ModelCatalogPort
@@ -23,14 +26,13 @@ from src.domain.llm_providers.repositories import ModelCatalogPort
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_PATH = Path(__file__).parent / "models_snapshot.json"
-
+_STALENESS_THRESHOLD_DAYS = 30
 
 class ModelCatalogService(ModelCatalogPort):
     """In-memory model catalog backed by an embedded JSON snapshot.
 
-    On first access the catalog loads from ``models_snapshot.json``
-    and merges with ``DEFAULT_MODEL_METADATA``.  The snapshot takes
-    precedence over domain defaults for overlapping model names.
+    On first access the catalog loads from ``models_snapshot.json``.
+    The snapshot is the sole data source (since v3.0.0).
 
     Thread-safety: the catalog is loaded once and thereafter read-only.
     """
@@ -187,6 +189,40 @@ class ModelCatalogService(ModelCatalogPort):
             return self._models.get(bare)
         return None
 
+    def get_model_or_fallback(self, model_name: str) -> ModelMetadata:
+        """Return model metadata, falling back to conservative defaults.
+
+        Unlike ``get_model`` which returns ``None`` for unknown models,
+        this method always returns a ``ModelMetadata`` instance.  For
+        unknown models it returns a copy of ``FALLBACK_MODEL_METADATA``
+        with the ``name`` field set to *model_name*.
+        """
+        self._ensure_loaded()
+        meta = self._models.get(model_name)
+        if meta is not None:
+            return meta
+        # Strip provider prefix and retry
+        if "/" in model_name:
+            bare = model_name.split("/", 1)[-1]
+            meta = self._models.get(bare)
+            if meta is not None:
+                return meta
+        # Conservative fallback
+        return ModelMetadata(
+            name=model_name,
+            context_length=FALLBACK_MODEL_METADATA.context_length,
+            max_output_tokens=FALLBACK_MODEL_METADATA.max_output_tokens,
+            input_cost_per_1m=FALLBACK_MODEL_METADATA.input_cost_per_1m,
+            output_cost_per_1m=FALLBACK_MODEL_METADATA.output_cost_per_1m,
+            capabilities=list(FALLBACK_MODEL_METADATA.capabilities),
+            supports_streaming=FALLBACK_MODEL_METADATA.supports_streaming,
+            supports_json_mode=FALLBACK_MODEL_METADATA.supports_json_mode,
+            provider=FALLBACK_MODEL_METADATA.provider,
+            modalities=list(FALLBACK_MODEL_METADATA.modalities),
+            description=(
+                f"Unknown model '{model_name}' with conservative defaults"
+            ),
+        )
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -199,12 +235,8 @@ class ModelCatalogService(ModelCatalogPort):
         self._loaded = True
 
     def _load(self) -> None:
-        """Load snapshot JSON and merge with domain defaults."""
-        # Start with domain defaults
-        for name, meta in DEFAULT_MODEL_METADATA.items():
-            self._models[name] = meta
-
-        # Overlay snapshot data (takes precedence)
+        """Load snapshot JSON into the in-memory catalog."""
+        # Snapshot is the sole data source (since v3.0.0)
         if self._snapshot_path.exists():
             try:
                 raw = json.loads(self._snapshot_path.read_text("utf-8"))
@@ -216,15 +248,43 @@ class ModelCatalogService(ModelCatalogPort):
                     len(models_raw),
                     self._snapshot_path.name,
                 )
+                self._check_staleness(raw)
             except Exception:
                 logger.exception(
-                    "Failed to load model snapshot from %s; falling back to domain defaults",
+                    "Failed to load model snapshot from %s",
                     self._snapshot_path,
                 )
         else:
             logger.warning(
-                "Model snapshot not found at %s; using domain defaults only",
+                "Model snapshot not found at %s; catalog will be empty",
                 self._snapshot_path,
+            )
+
+    def _check_staleness(self, raw: dict[str, Any]) -> None:
+        """Log a warning when the snapshot is older than the threshold."""
+        meta = raw.get("_meta", {})
+        generated_at_str = meta.get("generated_at")
+        if not generated_at_str:
+            return
+        try:
+            generated_at = datetime.fromisoformat(
+                generated_at_str.replace("Z", "+00:00")
+            )
+            age_days = (
+                datetime.now(UTC) - generated_at
+            ).days
+            if age_days > _STALENESS_THRESHOLD_DAYS:
+                logger.warning(
+                    "Model snapshot is %d days old (generated %s). "
+                    "Run 'python -m src.infrastructure.llm"
+                    ".models_dev_fetcher --force' to refresh.",
+                    age_days,
+                    generated_at_str,
+                )
+        except (ValueError, TypeError):
+            logger.debug(
+                "Could not parse snapshot generated_at: %s",
+                generated_at_str,
             )
 
     @staticmethod

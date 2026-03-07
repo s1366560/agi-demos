@@ -18,12 +18,10 @@ import type {
  */
 export type ToolExecutionStatus = 'running' | 'success' | 'failed';
 
-
 /**
  * Timeline step status
  */
 export type TimelineStepStatus = 'pending' | 'running' | 'completed' | 'failed';
-
 
 /**
  * Tool execution record for timeline
@@ -41,7 +39,6 @@ export interface ToolExecution {
   stepNumber?: number | undefined;
 }
 
-
 /**
  * Timeline step for execution visualization
  */
@@ -55,7 +52,6 @@ export interface TimelineStep {
   thoughts: string[];
   toolExecutions: ToolExecution[];
 }
-
 
 // ============================================
 // Timeline Event Types (Unified Event Stream)
@@ -134,7 +130,6 @@ export type TimelineEventType =
   // Canvas events
   | 'canvas_updated';
 
-
 /**
  * Base timeline event (all events share these fields)
  */
@@ -147,7 +142,6 @@ export interface BaseTimelineEvent {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * User message event
  */
@@ -156,7 +150,6 @@ export interface UserMessageEvent extends BaseTimelineEvent {
   content: string;
   role: 'user';
 }
-
 
 /**
  * Assistant message event
@@ -168,7 +161,6 @@ export interface AssistantMessageEvent extends BaseTimelineEvent {
   artifacts?: ArtifactReference[] | undefined;
 }
 
-
 /**
  * Thought event (agent reasoning)
  */
@@ -176,7 +168,6 @@ export interface ThoughtEvent extends BaseTimelineEvent {
   type: 'thought';
   content: string;
 }
-
 
 /**
  * Act event (tool call)
@@ -194,7 +185,6 @@ export interface ActEvent extends BaseTimelineEvent {
       }
     | undefined;
 }
-
 
 /**
  * Observe event (tool result)
@@ -215,7 +205,6 @@ export interface ObserveEvent extends BaseTimelineEvent {
     | undefined;
 }
 
-
 /**
  * Work plan event
  */
@@ -229,7 +218,6 @@ export interface WorkPlanTimelineEvent extends BaseTimelineEvent {
   status: string;
 }
 
-
 /**
  * Task start event (timeline marker when agent begins a task)
  */
@@ -240,7 +228,6 @@ export interface TaskStartTimelineEvent extends BaseTimelineEvent {
   orderIndex: number;
   totalTasks: number;
 }
-
 
 /**
  * Task complete event (timeline marker when agent finishes a task)
@@ -253,7 +240,6 @@ export interface TaskCompleteTimelineEvent extends BaseTimelineEvent {
   totalTasks: number;
 }
 
-
 // ============================================
 // Memory Timeline Event Interfaces
 // ============================================
@@ -265,13 +251,11 @@ export interface MemoryRecalledTimelineEvent extends BaseTimelineEvent {
   searchMs: number;
 }
 
-
 export interface MemoryCapturedTimelineEvent extends BaseTimelineEvent {
   type: 'memory_captured';
   capturedCount: number;
   categories: string[];
 }
-
 
 /**
  * Text delta event (typewriter effect - incremental text)
@@ -281,14 +265,12 @@ export interface TextDeltaEvent extends BaseTimelineEvent {
   content: string;
 }
 
-
 /**
  * Text start event (typewriter effect - marks beginning)
  */
 export interface TextStartEvent extends BaseTimelineEvent {
   type: 'text_start';
 }
-
 
 /**
  * Text end event (typewriter effect - marks completion)
@@ -297,7 +279,6 @@ export interface TextEndEvent extends BaseTimelineEvent {
   type: 'text_end';
   fullText?: string | undefined;
 }
-
 
 // ============================================
 // Human-in-the-Loop Timeline Event Types
@@ -318,7 +299,6 @@ export interface ClarificationAskedTimelineEvent extends BaseTimelineEvent {
   answer?: string | undefined;
 }
 
-
 /**
  * Clarification answered event (user responded to clarification)
  */
@@ -327,7 +307,6 @@ export interface ClarificationAnsweredTimelineEvent extends BaseTimelineEvent {
   requestId: string;
   answer: string;
 }
-
 
 /**
  * Decision asked event (agent asks user for decision)
@@ -347,7 +326,6 @@ export interface DecisionAskedTimelineEvent extends BaseTimelineEvent {
   decision?: string | undefined;
 }
 
-
 /**
  * Decision answered event (user made a decision)
  */
@@ -356,7 +334,6 @@ export interface DecisionAnsweredTimelineEvent extends BaseTimelineEvent {
   requestId: string;
   decision: string;
 }
-
 
 /**
  * Environment variable requested event (agent requests env vars from user)
@@ -372,7 +349,6 @@ export interface EnvVarRequestedTimelineEvent extends BaseTimelineEvent {
   providedVariables?: string[] | undefined;
 }
 
-
 /**
  * Environment variable provided event (user provided env vars)
  */
@@ -382,7 +358,6 @@ export interface EnvVarProvidedTimelineEvent extends BaseTimelineEvent {
   toolName: string;
   variableNames: string[];
 }
-
 
 /**
  * Permission asked event (agent requests permission from user)
@@ -399,7 +374,6 @@ export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
   granted?: boolean | undefined;
 }
 
-
 /**
  * Permission requested event (DB format - same as permission_asked)
  */
@@ -415,7 +389,6 @@ export interface PermissionRequestedTimelineEvent extends BaseTimelineEvent {
   granted?: boolean | undefined;
 }
 
-
 /**
  * Permission replied event (user granted or denied permission)
  */
@@ -424,7 +397,6 @@ export interface PermissionRepliedTimelineEvent extends BaseTimelineEvent {
   requestId: string;
   granted: boolean;
 }
-
 
 /**
  * Permission granted event (DB format - same as permission_replied)
@@ -447,7 +419,6 @@ export interface CanvasUpdatedTimelineEvent extends BaseTimelineEvent {
     metadata?: Record<string, unknown>;
   } | null;
 }
-
 
 /**
  * Union type for all timeline events
@@ -515,7 +486,6 @@ export type TimelineEvent =
   // Canvas events
   | CanvasUpdatedTimelineEvent;
 
-
 // ============================================
 // SubAgent Timeline Event Interfaces (L3 layer)
 // ============================================
@@ -528,14 +498,12 @@ export interface SubAgentRoutedTimelineEvent extends BaseTimelineEvent {
   reason: string;
 }
 
-
 export interface SubAgentStartedTimelineEvent extends BaseTimelineEvent {
   type: 'subagent_started';
   subagentId: string;
   subagentName: string;
   task: string;
 }
-
 
 export interface SubAgentCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'subagent_completed';
@@ -546,7 +514,6 @@ export interface SubAgentCompletedTimelineEvent extends BaseTimelineEvent {
   executionTimeMs: number;
   success?: boolean | undefined;
 }
-
 
 export interface SubAgentFailedTimelineEvent extends BaseTimelineEvent {
   type: 'subagent_failed';
@@ -596,13 +563,11 @@ export interface SubAgentSessionUpdateTimelineEvent extends BaseTimelineEvent {
   toolCallsCount?: number | undefined;
 }
 
-
 export interface ParallelStartedTimelineEvent extends BaseTimelineEvent {
   type: 'parallel_started';
   taskCount: number;
   subtasks: Array<{ subagent_name: string; task: string }>;
 }
-
 
 export interface ParallelCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'parallel_completed';
@@ -610,13 +575,11 @@ export interface ParallelCompletedTimelineEvent extends BaseTimelineEvent {
   totalTimeMs: number;
 }
 
-
 export interface ChainStartedTimelineEvent extends BaseTimelineEvent {
   type: 'chain_started';
   stepCount: number;
   chainName: string;
 }
-
 
 export interface ChainStepStartedTimelineEvent extends BaseTimelineEvent {
   type: 'chain_step_started';
@@ -625,14 +588,12 @@ export interface ChainStepStartedTimelineEvent extends BaseTimelineEvent {
   subagentName: string;
 }
 
-
 export interface ChainStepCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'chain_step_completed';
   stepIndex: number;
   summary: string;
   success?: boolean | undefined;
 }
-
 
 export interface ChainCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'chain_completed';
@@ -641,14 +602,12 @@ export interface ChainCompletedTimelineEvent extends BaseTimelineEvent {
   success?: boolean | undefined;
 }
 
-
 export interface BackgroundLaunchedTimelineEvent extends BaseTimelineEvent {
   type: 'background_launched';
   executionId: string;
   subagentName: string;
   task: string;
 }
-
 
 /**
  * Timeline response from API (unified event stream)
@@ -658,7 +617,6 @@ export interface TimelineResponse {
   timeline: TimelineEvent[];
   total: number;
 }
-
 
 /**
  * Desktop started timeline event
@@ -672,7 +630,6 @@ export interface DesktopStartedEvent extends BaseTimelineEvent {
   port: number;
 }
 
-
 /**
  * Desktop stopped timeline event
  */
@@ -680,7 +637,6 @@ export interface DesktopStoppedEvent extends BaseTimelineEvent {
   type: 'desktop_stopped';
   sandboxId: string;
 }
-
 
 /**
  * Desktop status timeline event
@@ -695,7 +651,6 @@ export interface DesktopStatusEvent extends BaseTimelineEvent {
   port: number;
 }
 
-
 /**
  * Terminal started timeline event
  */
@@ -707,7 +662,6 @@ export interface TerminalStartedEvent extends BaseTimelineEvent {
   sessionId: string;
 }
 
-
 /**
  * Terminal stopped timeline event
  */
@@ -716,7 +670,6 @@ export interface TerminalStoppedEvent extends BaseTimelineEvent {
   sandboxId: string;
   sessionId?: string | undefined;
 }
-
 
 /**
  * Terminal status timeline event
@@ -730,7 +683,6 @@ export interface TerminalStatusEvent extends BaseTimelineEvent {
   sessionId?: string | undefined;
 }
 
-
 /**
  * Screenshot update timeline event
  */
@@ -739,7 +691,6 @@ export interface ScreenshotUpdateEvent extends BaseTimelineEvent {
   sandboxId: string;
   imageUrl: string;
 }
-
 
 /**
  * Sandbox created timeline event
@@ -753,7 +704,6 @@ export interface SandboxCreatedEvent extends BaseTimelineEvent {
   websocketUrl?: string | undefined;
 }
 
-
 /**
  * Sandbox terminated timeline event
  */
@@ -761,7 +711,6 @@ export interface SandboxTerminatedEvent extends BaseTimelineEvent {
   type: 'sandbox_terminated';
   sandboxId: string;
 }
-
 
 /**
  * Sandbox status timeline event
@@ -771,7 +720,6 @@ export interface SandboxStatusEvent extends BaseTimelineEvent {
   sandboxId: string;
   status: string;
 }
-
 
 /**
  * Artifact created timeline event
@@ -791,7 +739,6 @@ export interface ArtifactCreatedEvent extends BaseTimelineEvent {
   sourcePath?: string | undefined;
 }
 
-
 /**
  * Artifact ready timeline event
  */
@@ -810,7 +757,6 @@ export interface ArtifactReadyEvent extends BaseTimelineEvent {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Artifact error timeline event
  */
@@ -822,7 +768,6 @@ export interface ArtifactErrorEvent extends BaseTimelineEvent {
   filename: string;
   error: string;
 }
-
 
 /**
  * Artifacts batch timeline event

@@ -3,12 +3,7 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
 import { agentService } from '../services/agentService';
-import {
-  Message,
-  AgentStreamHandler,
-  TimelineEvent,
-  UserMessageEvent,
-} from '../types/agent';
+import { Message, AgentStreamHandler, TimelineEvent, UserMessageEvent } from '../types/agent';
 import {
   type ConversationState,
   type HITLSummary,
@@ -53,6 +48,8 @@ import {
 import { useCanvasStore } from './canvasStore';
 import { useLayoutModeStore } from './layoutMode';
 
+import type { LLMConfigOverrides } from '../types/memory';
+
 // Re-export types for external consumers
 export type { AdditionalAgentHandlers, AgentV3State } from './agent/types';
 import type { AgentV3State } from './agent/types';
@@ -64,7 +61,6 @@ function resetCanvasForConversationScope(): void {
     layoutStore.setMode('chat');
   }
 }
-
 
 export const useAgentV3Store = create<AgentV3State>()(
   devtools(
@@ -227,6 +223,28 @@ export const useAgentV3Store = create<AgentV3State>()(
           const fullState = get().conversationStates.get(conversationId);
           if (fullState) {
             scheduleSave(conversationId, fullState);
+          }
+        },
+
+        /**
+         * Set LLM parameter overrides for a conversation.
+         * Stored inside appModelContext.llm_overrides so it flows via the existing
+         * app_model_context WebSocket field to the backend.
+         */
+        setLlmOverrides: (conversationId: string, overrides: LLMConfigOverrides | null) => {
+          const { updateConversationState, conversationStates } = get();
+          const convState = conversationStates.get(conversationId);
+          const currentCtx = convState?.appModelContext ?? {};
+          if (overrides) {
+            updateConversationState(conversationId, {
+              appModelContext: { ...currentCtx, llm_overrides: overrides },
+            });
+          } else {
+            // Remove llm_overrides key
+            const { llm_overrides: _, ...rest } = currentCtx;
+            updateConversationState(conversationId, {
+              appModelContext: Object.keys(rest).length > 0 ? rest : null,
+            });
           }
         },
 
@@ -1395,5 +1413,4 @@ export const useAgentV3Store = create<AgentV3State>()(
 initTabSync();
 
 // Selector for messages (backward compatible with timeline-based rendering)
-export const useMessages = () =>
-  useAgentV3Store((state) => state.messages);
+export const useMessages = () => useAgentV3Store((state) => state.messages);

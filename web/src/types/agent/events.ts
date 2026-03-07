@@ -13,14 +13,12 @@ export interface TaskListUpdatedEventData {
   tasks: AgentTask[];
 }
 
-
 export interface TaskUpdatedEventData {
   conversation_id: string;
   task_id: string;
   status: string;
   content?: string | undefined;
 }
-
 
 export interface TaskStartEventData {
   task_id: string;
@@ -29,14 +27,12 @@ export interface TaskStartEventData {
   total_tasks: number;
 }
 
-
 export interface TaskCompleteEventData {
   task_id: string;
   status: string;
   order_index: number;
   total_tasks: number;
 }
-
 
 export interface ExecutionPathDecidedEventData {
   route_id?: string | undefined;
@@ -48,7 +44,6 @@ export interface ExecutionPathDecidedEventData {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 export interface SelectionTraceStageData {
   stage: string;
   before_count: number;
@@ -57,7 +52,6 @@ export interface SelectionTraceStageData {
   duration_ms: number;
   explain?: Record<string, unknown> | undefined;
 }
-
 
 export interface SelectionTraceEventData {
   route_id?: string | undefined;
@@ -71,7 +65,6 @@ export interface SelectionTraceEventData {
   stages: SelectionTraceStageData[];
 }
 
-
 export interface PolicyFilteredEventData {
   route_id?: string | undefined;
   trace_id?: string | undefined;
@@ -82,9 +75,7 @@ export interface PolicyFilteredEventData {
   budget_exceeded_stages?: string[] | undefined;
 }
 
-
 export type ToolsetRefreshStatus = 'success' | 'failed' | 'skipped' | 'deferred' | 'not_applicable';
-
 
 export interface ToolsetChangedEventData {
   source: string;
@@ -102,9 +93,7 @@ export interface ToolsetChangedEventData {
   refreshed_tool_count?: number | undefined;
 }
 
-
 export type ExecutionNarrativeStage = 'routing' | 'selection' | 'policy' | 'toolset';
-
 
 export interface ExecutionNarrativeEntry {
   id: string;
@@ -116,7 +105,6 @@ export interface ExecutionNarrativeEntry {
   domain_lane?: string | null | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
-
 
 /**
  * SSE event types from agent (extended for multi-level thinking and typewriter effect)
@@ -273,7 +261,6 @@ export interface AgentEvent<T = Record<string, unknown>> {
   data: T;
 }
 
-
 /**
  * Message event data
  */
@@ -285,7 +272,6 @@ export interface MessageEventData {
   artifacts?: ArtifactReference[] | undefined;
 }
 
-
 /**
  * Thought event data (extended with thought level)
  */
@@ -294,7 +280,6 @@ export interface ThoughtEventData {
   thought_level?: ThoughtLevel | undefined;
   step_number?: number | undefined;
 }
-
 
 /**
  * Work plan event data
@@ -314,7 +299,6 @@ export interface WorkPlanEventData {
   thought_level: ThoughtLevel;
 }
 
-
 /**
  * Act event data (tool execution)
  */
@@ -326,7 +310,6 @@ export interface ActEventData {
   tool_execution_id?: string | undefined; // Backend field name for act/observe matching
 }
 
-
 /**
  * Act delta event data (streaming tool call arguments)
  */
@@ -337,7 +320,6 @@ export interface ActDeltaEventData {
   accumulated_arguments: string;
   status: 'preparing';
 }
-
 
 /**
  * Observe event data (tool result)
@@ -351,7 +333,6 @@ export interface ObserveEventData {
   result?: unknown;
 }
 
-
 /**
  * Complete event data (final response)
  */
@@ -364,7 +345,6 @@ export interface CompleteEventData {
   artifacts?: ArtifactReference[] | undefined;
 }
 
-
 /**
  * Error event data
  */
@@ -374,7 +354,6 @@ export interface ErrorEventData {
   code?: string | undefined;
 }
 
-
 /**
  * Retry event data (sent when LLM is retrying after a transient error)
  */
@@ -383,7 +362,6 @@ export interface RetryEventData {
   delay_ms: number;
   message: string;
 }
-
 
 /**
  * Title generated event data
@@ -396,12 +374,10 @@ export interface TitleGeneratedEventData {
   generated_by?: string | undefined;
 }
 
-
 /**
  * Clarification type
  */
 export type ClarificationType = 'scope' | 'approach' | 'prerequisite' | 'priority' | 'custom';
-
 
 /**
  * Clarification option
@@ -412,7 +388,6 @@ export interface ClarificationOption {
   description?: string | undefined;
   recommended?: boolean | undefined;
 }
-
 
 /**
  * Clarification asked event data
@@ -426,7 +401,6 @@ export interface ClarificationAskedEventData {
   context: Record<string, unknown>;
 }
 
-
 /**
  * Clarification answered event data
  */
@@ -435,12 +409,10 @@ export interface ClarificationAnsweredEventData {
   answer: string;
 }
 
-
 /**
  * Decision type
  */
 export type DecisionType = 'branch' | 'method' | 'confirmation' | 'risk' | 'custom';
-
 
 /**
  * Decision option
@@ -454,7 +426,6 @@ export interface DecisionOption {
   estimated_cost?: string | undefined;
   risks?: string[] | undefined;
 }
-
 
 /**
  * Decision asked event data
@@ -471,7 +442,6 @@ export interface DecisionAskedEventData {
   max_selections?: number | undefined;
 }
 
-
 /**
  * Decision answered event data
  */
@@ -480,12 +450,10 @@ export interface DecisionAnsweredEventData {
   decision: string;
 }
 
-
 /**
  * Environment variable input type
  */
 export type EnvVarInputType = 'text' | 'password' | 'textarea';
-
 
 /**
  * Environment variable field definition
@@ -500,7 +468,6 @@ export interface EnvVarField {
   placeholder?: string | undefined;
 }
 
-
 /**
  * Environment variable requested event data
  */
@@ -512,7 +479,6 @@ export interface EnvVarRequestedEventData {
   context?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Environment variable provided event data
  */
@@ -521,7 +487,6 @@ export interface EnvVarProvidedEventData {
   tool_name: string;
   saved_variables: string[];
 }
-
 
 /**
  * Doom loop detected event data
@@ -538,7 +503,6 @@ export interface DoomLoopDetectedEventData {
   context?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Doom loop intervened event data
  */
@@ -546,7 +510,6 @@ export interface DoomLoopIntervenedEventData {
   request_id: string;
   action: string;
 }
-
 
 /**
  * Permission asked event data
@@ -560,7 +523,6 @@ export interface PermissionAskedEventData {
   context?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Permission replied event data
  */
@@ -570,7 +532,6 @@ export interface PermissionRepliedEventData {
   granted: boolean;
   remember?: boolean | undefined;
 }
-
 
 /**
  * Cost update event data
@@ -587,7 +548,6 @@ export interface CostUpdateEventData {
   cumulative_cost_usd?: number | undefined;
 }
 
-
 /**
  * Plan status changed event data
  */
@@ -598,7 +558,6 @@ export interface PlanStatusChangedEventData {
   reason?: string | undefined;
 }
 
-
 /**
  * Plan step ready event data
  */
@@ -608,7 +567,6 @@ export interface PlanStepReadyEventData {
   step_number: number;
   description: string;
 }
-
 
 /**
  * Plan step complete event data
@@ -622,7 +580,6 @@ export interface PlanStepCompleteEventData {
   error?: string | undefined;
 }
 
-
 /**
  * Plan step skipped event data
  */
@@ -633,7 +590,6 @@ export interface PlanStepSkippedEventData {
   reason: string;
 }
 
-
 /**
  * Plan snapshot created event data
  */
@@ -643,7 +599,6 @@ export interface PlanSnapshotCreatedEventData {
   step_number: number;
   reason: string;
 }
-
 
 /**
  * Plan rollback event data
@@ -656,7 +611,6 @@ export interface PlanRollbackEventData {
   reason: string;
 }
 
-
 /**
  * Adjustment applied event data
  */
@@ -666,7 +620,6 @@ export interface AdjustmentAppliedEventData {
   description: string;
   affected_steps: number[];
 }
-
 
 /**
  * Sandbox event data (unified for all sandbox events)
@@ -684,7 +637,6 @@ export interface SandboxEventData {
   timestamp: string;
 }
 
-
 /**
  * Thought delta event data (streaming thought)
  */
@@ -694,7 +646,6 @@ export interface ThoughtDeltaEventData {
   step_number?: number | undefined;
 }
 
-
 /**
  * Text delta event data (typewriter effect)
  */
@@ -702,14 +653,12 @@ export interface TextDeltaEventData {
   delta: string;
 }
 
-
 /**
  * Text end event data (typewriter effect)
  */
 export interface TextEndEventData {
   full_text?: string | undefined;
 }
-
 
 /**
  * Memory recalled event data (auto-recall)
@@ -725,7 +674,6 @@ export interface MemoryRecalledEventData {
   search_ms: number;
 }
 
-
 /**
  * Memory captured event data (auto-capture)
  */
@@ -733,7 +681,6 @@ export interface MemoryCapturedEventData {
   captured_count: number;
   categories: string[];
 }
-
 
 /**
  * Pattern match SSE event data (T079)
@@ -744,7 +691,6 @@ export interface PatternMatchEventData {
   query: string;
 }
 
-
 // ============================================
 // Skill Execution Event Types (L2 Direct Execution)
 // ============================================
@@ -753,7 +699,6 @@ export interface PatternMatchEventData {
  * Skill execution mode
  */
 export type SkillExecutionMode = 'direct' | 'prompt';
-
 
 /**
  * Skill matched event data
@@ -766,7 +711,6 @@ export interface SkillMatchedEventData {
   execution_mode: SkillExecutionMode;
 }
 
-
 /**
  * Skill execution start event data
  */
@@ -776,7 +720,6 @@ export interface SkillExecutionStartEventData {
   tools: string[];
   total_steps: number;
 }
-
 
 /**
  * Skill tool start event data
@@ -790,7 +733,6 @@ export interface SkillToolStartEventData {
   total_steps: number;
   status: 'running';
 }
-
 
 /**
  * Skill tool result event data
@@ -807,7 +749,6 @@ export interface SkillToolResultEventData {
   status: 'completed' | 'error';
 }
 
-
 /**
  * Skill tool execution for UI state
  */
@@ -820,7 +761,6 @@ export interface SkillToolExecution {
   duration_ms?: number | undefined;
   step_index: number;
 }
-
 
 /**
  * Skill execution complete event data
@@ -835,7 +775,6 @@ export interface SkillExecutionCompleteEventData {
   error?: string | undefined;
 }
 
-
 /**
  * Skill fallback event data
  */
@@ -844,7 +783,6 @@ export interface SkillFallbackEventData {
   reason: 'execution_failed' | 'execution_error';
   error?: string | undefined;
 }
-
 
 /**
  * Context compressed event data
@@ -868,7 +806,6 @@ export interface ContextCompressedEventData {
   compression_history_summary: Record<string, unknown>;
 }
 
-
 /**
  * Context status event data
  * Periodic context health report emitted at start of each step
@@ -881,7 +818,6 @@ export interface ContextStatusEventData {
   token_distribution: Record<string, number>;
   compression_history_summary: Record<string, unknown>;
 }
-
 
 /**
  * Skill execution state for UI
@@ -903,7 +839,6 @@ export interface SkillExecutionState {
   completed_at?: string | undefined;
 }
 
-
 /**
  * Desktop started event data
  */
@@ -915,7 +850,6 @@ export interface DesktopStartedEventData {
   port: number;
 }
 
-
 /**
  * Desktop stopped event data
  */
@@ -923,14 +857,12 @@ export interface DesktopStoppedEventData {
   sandbox_id: string;
 }
 
-
 /**
  * Desktop status event data
  */
 export interface DesktopStatusEventData extends DesktopStatus {
   sandbox_id: string;
 }
-
 
 /**
  * Terminal started event data
@@ -942,7 +874,6 @@ export interface TerminalStartedEventData {
   sessionId: string;
 }
 
-
 /**
  * Terminal stopped event data
  */
@@ -951,14 +882,12 @@ export interface TerminalStoppedEventData {
   sessionId?: string | undefined;
 }
 
-
 /**
  * Terminal status event data
  */
 export interface TerminalStatusEventData extends TerminalStatus {
   sandbox_id: string;
 }
-
 
 /**
  * Screenshot update event data
@@ -968,7 +897,6 @@ export interface ScreenshotUpdateEventData {
   imageUrl: string;
   timestamp: number;
 }
-
 
 /**
  * Sandbox created event data
@@ -981,14 +909,12 @@ export interface SandboxCreatedEventData {
   websocket_url?: string | undefined;
 }
 
-
 /**
  * Sandbox terminated event data
  */
 export interface SandboxTerminatedEventData {
   sandbox_id: string;
 }
-
 
 /**
  * Sandbox status event data
@@ -997,7 +923,6 @@ export interface SandboxStatusEventData {
   sandbox_id: string;
   status: string;
 }
-
 
 /**
  * Artifact created event data
@@ -1016,7 +941,6 @@ export interface ArtifactCreatedEventData {
   source_path?: string | undefined;
 }
 
-
 /**
  * Artifact ready event data
  */
@@ -1034,7 +958,6 @@ export interface ArtifactReadyEventData {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Artifact error event data
  */
@@ -1045,7 +968,6 @@ export interface ArtifactErrorEventData {
   filename: string;
   error: string;
 }
-
 
 /**
  * Artifact info for batch events
@@ -1062,7 +984,6 @@ export interface ArtifactInfo {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Artifacts batch event data
  */
@@ -1073,14 +994,12 @@ export interface ArtifactsBatchEventData {
   source_tool?: string | undefined;
 }
 
-
 /**
  * Suggestions event data - follow-up suggestions from the agent
  */
 export interface SuggestionsEventData {
   suggestions: string[];
 }
-
 
 /**
  * Artifact open event data - agent opens content in canvas
@@ -1093,7 +1012,6 @@ export interface ArtifactOpenEventData {
   language?: string | undefined;
 }
 
-
 /**
  * Artifact update event data - agent updates canvas content
  */
@@ -1103,14 +1021,12 @@ export interface ArtifactUpdateEventData {
   append: boolean;
 }
 
-
 /**
  * Artifact close event data - agent closes canvas tab
  */
 export interface ArtifactCloseEventData {
   artifact_id: string;
 }
-
 
 // ===========================================================================
 // Plan Mode SSE Event Types
@@ -1129,7 +1045,6 @@ export interface PlanExecutionStartEvent {
   timestamp: string;
 }
 
-
 /**
  * Plan execution complete event
  */
@@ -1143,7 +1058,6 @@ export interface PlanExecutionCompleteEvent {
   };
   timestamp: string;
 }
-
 
 /**
  * Plan step ready event
@@ -1160,7 +1074,6 @@ export interface PlanStepReadyEvent {
   timestamp: string;
 }
 
-
 /**
  * Plan step complete event
  */
@@ -1175,7 +1088,6 @@ export interface PlanStepCompleteEvent {
   timestamp: string;
 }
 
-
 /**
  * Plan step skipped event
  */
@@ -1188,7 +1100,6 @@ export interface PlanStepSkippedEvent {
   };
   timestamp: string;
 }
-
 
 /**
  * Plan snapshot created event
@@ -1204,7 +1115,6 @@ export interface PlanSnapshotCreatedEvent {
   timestamp: string;
 }
 
-
 /**
  * Plan rollback event
  */
@@ -1217,7 +1127,6 @@ export interface PlanRollbackEvent {
   };
   timestamp: string;
 }
-
 
 /**
  * Reflection complete event
@@ -1234,7 +1143,6 @@ export interface ReflectionCompleteEvent {
   timestamp: string;
 }
 
-
 /**
  * Adjustment applied event
  */
@@ -1247,7 +1155,6 @@ export interface AdjustmentAppliedEvent {
   };
   timestamp: string;
 }
-
 
 /**
  * Union type for all Plan Mode events
@@ -1263,7 +1170,6 @@ export type PlanModeEvent =
   | ReflectionCompleteEvent
   | AdjustmentAppliedEvent;
 
-
 // ============================================
 // SubAgent Event Data Types (L3 layer)
 // ============================================
@@ -1278,13 +1184,11 @@ export interface SubAgentRoutedEventData {
   reason?: string | undefined;
 }
 
-
 export interface SubAgentStartedEventData {
   subagent_id: string;
   subagent_name: string;
   task: string;
 }
-
 
 export interface SubAgentCompletedEventData {
   subagent_id: string;
@@ -1295,13 +1199,11 @@ export interface SubAgentCompletedEventData {
   success: boolean;
 }
 
-
 export interface SubAgentFailedEventData {
   subagent_id: string;
   subagent_name: string;
   error: string;
 }
-
 
 export interface SubAgentRunEventData {
   run_id: string;
@@ -1316,13 +1218,11 @@ export interface SubAgentRunEventData {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 export interface SubAgentSessionSpawnedEventData {
   conversation_id: string;
   run_id: string;
   subagent_name: string;
 }
-
 
 export interface SubAgentSessionMessageSentEventData {
   conversation_id: string;
@@ -1330,7 +1230,6 @@ export interface SubAgentSessionMessageSentEventData {
   run_id: string;
   subagent_name: string;
 }
-
 
 export interface SubAgentAnnounceRetryEventData {
   conversation_id: string;
@@ -1341,7 +1240,6 @@ export interface SubAgentAnnounceRetryEventData {
   next_delay_ms: number;
 }
 
-
 export interface SubAgentAnnounceGiveupEventData {
   conversation_id: string;
   run_id: string;
@@ -1350,7 +1248,6 @@ export interface SubAgentAnnounceGiveupEventData {
   error: string;
 }
 
-
 export interface SubAgentQueuedEventData {
   subagent_id: string;
   subagent_name: string;
@@ -1358,13 +1255,11 @@ export interface SubAgentQueuedEventData {
   reason?: string | undefined;
 }
 
-
 export interface SubAgentKilledEventData {
   subagent_id: string;
   subagent_name: string;
   kill_reason: string;
 }
-
 
 export interface SubAgentSteeredEventData {
   subagent_id: string;
@@ -1372,14 +1267,12 @@ export interface SubAgentSteeredEventData {
   instruction: string;
 }
 
-
 export interface SubAgentDepthLimitedEventData {
   subagent_name: string;
   current_depth: number;
   max_depth: number;
   parent_subagent_name?: string | undefined;
 }
-
 
 export interface SubAgentSessionUpdateEventData {
   subagent_id: string;
@@ -1390,7 +1283,6 @@ export interface SubAgentSessionUpdateEventData {
   tool_calls_count?: number | undefined;
 }
 
-
 export interface ParallelStartedEventData {
   route_id?: string | undefined;
   trace_id?: string | undefined;
@@ -1398,7 +1290,6 @@ export interface ParallelStartedEventData {
   task_count: number;
   subtasks: Array<{ subagent_name: string; task: string }>;
 }
-
 
 export interface ParallelCompletedEventData {
   route_id?: string | undefined;
@@ -1408,7 +1299,6 @@ export interface ParallelCompletedEventData {
   total_time_ms?: number | undefined;
 }
 
-
 export interface ChainStartedEventData {
   route_id?: string | undefined;
   trace_id?: string | undefined;
@@ -1416,7 +1306,6 @@ export interface ChainStartedEventData {
   step_count: number;
   chain_name?: string | undefined;
 }
-
 
 export interface ChainStepStartedEventData {
   route_id?: string | undefined;
@@ -1427,7 +1316,6 @@ export interface ChainStepStartedEventData {
   subagent_name: string;
 }
 
-
 export interface ChainStepCompletedEventData {
   route_id?: string | undefined;
   trace_id?: string | undefined;
@@ -1436,7 +1324,6 @@ export interface ChainStepCompletedEventData {
   summary: string;
   success: boolean;
 }
-
 
 export interface ChainCompletedEventData {
   route_id?: string | undefined;
@@ -1447,20 +1334,26 @@ export interface ChainCompletedEventData {
   success: boolean;
 }
 
-
 export interface BackgroundLaunchedEventData {
   execution_id: string;
   subagent_name: string;
   task: string;
 }
 
-
 /**
  * Canvas block data shape from backend CanvasBlock.to_dict()
  */
 export interface CanvasBlockData {
   id: string;
-  block_type: 'code' | 'table' | 'chart' | 'form' | 'image' | 'markdown' | 'widget' | 'a2ui_surface';
+  block_type:
+    | 'code'
+    | 'table'
+    | 'chart'
+    | 'form'
+    | 'image'
+    | 'markdown'
+    | 'widget'
+    | 'a2ui_surface';
   title: string;
   content: string;
   metadata: Record<string, string>;
@@ -1478,8 +1371,6 @@ export interface CanvasUpdatedEventData {
   action: 'created' | 'updated' | 'deleted';
   block: CanvasBlockData | null;
 }
-
-
 
 /**
  * A2UI action asked event data (HITL: agent paused waiting for user interaction)

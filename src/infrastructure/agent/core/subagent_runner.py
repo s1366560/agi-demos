@@ -199,6 +199,7 @@ class SubAgentSessionRunner:
             main_token_budget=context_limit,
             project_id=project_id,
             tenant_id=tenant_id,
+            conversation_id=conversation_id,
             memory_context=memory_context,
         )
 
@@ -305,6 +306,7 @@ class SubAgentSessionRunner:
             main_token_budget=context_limit,
             project_id=project_id,
             tenant_id=tenant_id,
+            conversation_id=conversation_id or "",
             abort_signal=abort_signal,
             factory=self.deps.factory,
         ):
@@ -410,6 +412,7 @@ class SubAgentSessionRunner:
             main_token_budget=context_limit,
             project_id=project_id,
             tenant_id=tenant_id,
+            conversation_id=conversation_id or "",
             abort_signal=abort_signal,
             factory=self.deps.factory,
         ):

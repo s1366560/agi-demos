@@ -15,7 +15,7 @@ describe('SubAgentDetailPanel', () => {
     modelName: 'gpt-4',
     events: [
       { id: 'e1', type: 'agent_start', timestamp: 1000 },
-      { id: 'e2', type: 'tool_call', timestamp: 2000 }
+      { id: 'e2', type: 'tool_call', timestamp: 2000 },
     ],
   };
 
@@ -29,7 +29,7 @@ describe('SubAgentDetailPanel', () => {
     // Renders name and truncated ID
     expect(screen.getByText('TestAgent')).toBeInTheDocument();
     expect(screen.getByText('sub-1234...')).toBeInTheDocument();
-    
+
     // Renders model name
     expect(screen.getByText('gpt-4')).toBeInTheDocument();
 
@@ -45,25 +45,29 @@ describe('SubAgentDetailPanel', () => {
 
   it('calls onClose when close button is clicked', () => {
     render(<SubAgentDetailPanel group={mockGroup} onClose={mockOnClose} />);
-    
+
     const closeButton = screen.getByRole('button');
     fireEvent.click(closeButton);
-    
+
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
   it('renders error section when error is present', () => {
     const errorGroup = { ...mockGroup, error: 'Execution failed', status: 'error' };
     render(<SubAgentDetailPanel group={errorGroup} onClose={mockOnClose} />);
-    
+
     expect(screen.getByText('agent.subagent.detail.error_title')).toBeInTheDocument();
     expect(screen.getByText('Execution failed')).toBeInTheDocument();
   });
 
   it('renders summary section when summary is present', () => {
-    const summaryGroup = { ...mockGroup, summary: 'Task completed successfully', status: 'success' };
+    const summaryGroup = {
+      ...mockGroup,
+      summary: 'Task completed successfully',
+      status: 'success',
+    };
     render(<SubAgentDetailPanel group={summaryGroup} onClose={mockOnClose} />);
-    
+
     expect(screen.getByText('agent.subagent.detail.summary_title')).toBeInTheDocument();
     expect(screen.getByText('Task completed successfully')).toBeInTheDocument();
   });
@@ -73,10 +77,10 @@ describe('SubAgentDetailPanel', () => {
       subagentId: 'sub-987654321',
       subagentName: 'EmptyAgent',
       status: 'queued',
-      events: []
+      events: [],
     };
     render(<SubAgentDetailPanel group={emptyGroup} onClose={mockOnClose} />);
-    
+
     expect(screen.getByText('EmptyAgent')).toBeInTheDocument();
     expect(screen.queryByText('parallel')).not.toBeInTheDocument();
     expect(screen.queryByText('1.5s')).not.toBeInTheDocument();

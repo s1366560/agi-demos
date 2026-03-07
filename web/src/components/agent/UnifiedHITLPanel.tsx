@@ -398,7 +398,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
         >
           <Space direction="vertical" className="w-full" size="middle">
             {data?.options.map((option, idx) => (
-            <Radio key={option.id || `option-${idx}`} value={option.id} className="w-full">
+              <Radio key={option.id || `option-${idx}`} value={option.id} className="w-full">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
                     <Text strong>{option.label}</Text>
@@ -452,12 +452,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
           />
         </div>
       ) : (
-        <Alert
-          message="暂无可选选项"
-          description="当前没有可供选择的选项"
-          type="info"
-          showIcon
-        />
+        <Alert message="暂无可选选项" description="当前没有可供选择的选项" type="info" showIcon />
       )}
 
       <Divider />
@@ -562,9 +557,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
               key={option.id || `option-${idx}`}
               option={option}
               selected={
-                isMultiSelect
-                  ? selectedMultiple.includes(option.id)
-                  : selectedOption === option.id
+                isMultiSelect ? selectedMultiple.includes(option.id) : selectedOption === option.id
               }
               isMultiSelect={isMultiSelect}
               onSelect={() => {
@@ -586,10 +579,8 @@ const DecisionContent: React.FC<HITLContentProps> = ({
                 p-4 rounded-lg border-2 cursor-pointer transition-all
                 ${
                   selectedOption === 'custom'
-                    ? 'border-primary-500 bg-primary-50'
-                      + ' dark:bg-primary-900/20'
-                    : 'border-slate-200 dark:border-slate-700'
-                      + ' hover:border-primary-300'
+                    ? 'border-primary-500 bg-primary-50' + ' dark:bg-primary-900/20'
+                    : 'border-slate-200 dark:border-slate-700' + ' hover:border-primary-300'
                 }
               `}
             >
@@ -673,18 +664,13 @@ const DecisionOptionCard: React.FC<{
         ${
           selected
             ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-            : 'border-slate-200 dark:border-slate-700'
-              + ' hover:border-primary-300'
+            : 'border-slate-200 dark:border-slate-700' + ' hover:border-primary-300'
         }
       `}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-1">
-          {isMultiSelect ? (
-            <Checkbox checked={selected} />
-          ) : (
-            <Radio checked={selected} />
-          )}
+          {isMultiSelect ? <Checkbox checked={selected} /> : <Radio checked={selected} />}
           <Text strong className="text-base">
             {option.label}
           </Text>
@@ -697,11 +683,7 @@ const DecisionOptionCard: React.FC<{
       </div>
 
       {option.description && (
-        <Paragraph
-          className={
-            'text-sm text-slate-600 dark:text-slate-400 mb-3 ml-6'
-          }
-        >
+        <Paragraph className={'text-sm text-slate-600 dark:text-slate-400 mb-3 ml-6'}>
           {option.description}
         </Paragraph>
       )}
@@ -709,21 +691,13 @@ const DecisionOptionCard: React.FC<{
       {(option.estimatedTime || option.estimatedCost) && (
         <div className="flex gap-4 ml-6 mb-2">
           {option.estimatedTime && (
-            <div
-              className={
-                'flex items-center gap-1 text-xs text-slate-500'
-              }
-            >
+            <div className={'flex items-center gap-1 text-xs text-slate-500'}>
               <ClockCircleOutlined />
               <span>{option.estimatedTime}</span>
             </div>
           )}
           {option.estimatedCost && (
-            <div
-              className={
-                'flex items-center gap-1 text-xs text-slate-500'
-              }
-            >
+            <div className={'flex items-center gap-1 text-xs text-slate-500'}>
               <span>$</span>
               <span>{option.estimatedCost}</span>
             </div>

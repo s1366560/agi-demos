@@ -8,7 +8,6 @@ import type { SkillResponse } from './execution';
  */
 export type ConfigType = 'default' | 'custom';
 
-
 /**
  * Tenant agent configuration (FR-021, FR-022)
  *
@@ -35,7 +34,6 @@ export interface TenantAgentConfig {
   updated_at: string;
 }
 
-
 /**
  * Update tenant agent configuration request (T089)
  *
@@ -52,7 +50,6 @@ export interface UpdateTenantAgentConfigRequest {
   enabled_tools?: string[] | undefined;
   disabled_tools?: string[] | undefined;
 }
-
 
 /**
  * Tenant agent configuration service interface (T089, T103)
@@ -80,7 +77,6 @@ export interface TenantAgentConfigService {
   canModifyConfig(tenantId: string): Promise<boolean>;
 }
 
-
 // ============================================
 // MCP (Model Context Protocol) Types
 // ============================================
@@ -89,7 +85,6 @@ export interface TenantAgentConfigService {
  * MCP server transport types
  */
 export type MCPServerType = 'stdio' | 'sse' | 'http' | 'websocket';
-
 
 /**
  * MCP tool information discovered from server
@@ -100,7 +95,6 @@ export interface MCPToolInfo {
   input_schema?: Record<string, unknown> | undefined;
   is_error?: boolean | undefined;
 }
-
 
 /**
  * MCP server response from API
@@ -123,7 +117,6 @@ export interface MCPServerResponse {
   updated_at: string;
 }
 
-
 /**
  * MCP server create request
  */
@@ -136,7 +129,6 @@ export interface MCPServerCreate {
   project_id: string;
 }
 
-
 /**
  * MCP server update request
  */
@@ -148,7 +140,6 @@ export interface MCPServerUpdate {
   enabled?: boolean | undefined;
 }
 
-
 /**
  * MCP servers list response
  */
@@ -156,7 +147,6 @@ export interface MCPServersListResponse {
   servers: MCPServerResponse[];
   total: number;
 }
-
 
 /**
  * MCP server sync response (after discovering tools)
@@ -166,7 +156,6 @@ export interface MCPServerSyncResponse {
   tools_count: number;
   message: string;
 }
-
 
 /**
  * MCP server test connection response
@@ -180,7 +169,6 @@ export interface MCPServerTestResponse {
   errors?: string[] | undefined;
 }
 
-
 /**
  * MCP tool call request
  */
@@ -189,7 +177,6 @@ export interface MCPToolCallRequest {
   tool_name: string;
   arguments: Record<string, unknown>;
 }
-
 
 /**
  * MCP tool call response
@@ -201,7 +188,6 @@ export interface MCPToolCallResponse {
   execution_time_ms: number;
 }
 
-
 /**
  * Transport config for stdio type
  */
@@ -211,7 +197,6 @@ export interface StdioTransportConfig {
   env?: Record<string, string> | undefined;
 }
 
-
 /**
  * Transport config for HTTP/SSE type
  */
@@ -220,14 +205,12 @@ export interface HttpTransportConfig {
   headers?: Record<string, string> | undefined;
 }
 
-
 /**
  * Transport config for WebSocket type
  */
 export interface WebSocketTransportConfig {
   url: string;
 }
-
 
 // ============================================
 // Sandbox Types (Desktop and Terminal)
@@ -254,7 +237,6 @@ export interface DesktopStatus {
   encoding?: string | undefined;
 }
 
-
 /**
  * Terminal status for web terminal sessions
  */
@@ -265,7 +247,6 @@ export interface TerminalStatus {
   pid?: number | null | undefined;
   sessionId?: string | null | undefined;
 }
-
 
 // ============================================
 // Artifact Types (Rich Output Display)
@@ -284,12 +265,10 @@ export type ArtifactCategory =
   | 'archive'
   | 'other';
 
-
 /**
  * Artifact status
  */
 export type ArtifactStatus = 'pending' | 'uploading' | 'ready' | 'error' | 'deleted';
-
 
 /**
  * Artifact information for rich output display
@@ -320,7 +299,6 @@ export interface Artifact {
   createdAt: string;
 }
 
-
 // ============================================
 // Lifecycle State Types (Agent Lifecycle Monitoring)
 // ============================================
@@ -335,7 +313,6 @@ export type LifecycleState =
   | 'paused'
   | 'shutting_down'
   | 'error';
-
 
 /**
  * Lifecycle state data from WebSocket
@@ -361,7 +338,6 @@ export interface LifecycleStateData {
   errorMessage?: string | undefined;
 }
 
-
 /**
  * Sandbox status types
  */
@@ -373,7 +349,6 @@ export type SandboxStatus =
   | 'stopped'
   | 'terminated'
   | 'error';
-
 
 /**
  * Sandbox state data from WebSocket
@@ -407,7 +382,6 @@ export interface SandboxStateData {
   errorMessage?: string | undefined;
 }
 
-
 /**
  * Lifecycle status for UI display
  */
@@ -417,7 +391,6 @@ export interface LifecycleStatus {
   icon: string;
   description: string;
 }
-
 
 // === Command Types (Slash Command System) ===
 
@@ -429,7 +402,6 @@ export interface CommandArgInfo {
   choices: string[] | null;
 }
 
-
 export interface CommandInfo {
   name: string;
   description: string;
@@ -439,12 +411,10 @@ export interface CommandInfo {
   args: CommandArgInfo[];
 }
 
-
 export interface CommandsListResponse {
   commands: CommandInfo[];
   total: number;
 }
-
 
 export type SlashItem =
   | { kind: 'command'; data: CommandInfo }

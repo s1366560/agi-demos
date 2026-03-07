@@ -3,7 +3,6 @@
 TDD: Tests written first (RED phase).
 """
 
-
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.mcp_errors import RetryConfig
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import (
@@ -214,6 +213,25 @@ class TestSandboxMCPToolAttributes:
         )
 
         assert tool.description == "Execute bash commands"
+
+    def test_tool_exposes_sandbox_id(self):
+        """ToolInfo should expose sandbox_id for downstream sandbox resolution."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="sandbox-123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        assert getattr(tool, "sandbox_id", None) == "sandbox-123"
 
 
 class TestSandboxMCPToolParameters:

@@ -148,6 +148,72 @@ class ModelMetadata(BaseModel):
         description="Whether model weights are publicly available",
     )
 
+    # --- Extended parameter support fields (B1.1) ---
+    default_temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0,
+        description="Provider-recommended default temperature for this model",
+    )
+    default_top_p: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Provider-recommended default top_p for this model",
+    )
+    default_frequency_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0,
+        description="Provider-recommended default frequency_penalty",
+    )
+    default_presence_penalty: float | None = Field(
+        default=None, ge=-2.0, le=2.0,
+        description="Provider-recommended default presence_penalty",
+    )
+    default_seed: int | None = Field(
+        default=None,
+        description="Provider-recommended default seed value",
+    )
+    default_stop: list[str] | None = Field(
+        default=None,
+        description="Provider-recommended default stop sequences",
+    )
+    supports_response_format: bool = Field(
+        default=False,
+        description="Whether model supports response_format parameter",
+    )
+    supports_seed: bool = Field(
+        default=False,
+        description="Whether model supports deterministic seed parameter",
+    )
+    supports_stop: bool = Field(
+        default=True,
+        description="Whether model supports custom stop sequences",
+    )
+    supports_frequency_penalty: bool = Field(
+        default=True,
+        description="Whether model supports frequency_penalty parameter",
+    )
+    supports_presence_penalty: bool = Field(
+        default=True,
+        description="Whether model supports presence_penalty parameter",
+    )
+    supports_top_p: bool = Field(
+        default=True,
+        description="Whether model supports top_p parameter",
+    )
+    temperature_range: list[float] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=2,
+        description="Allowed [min, max] temperature range for this model",
+    )
+    top_p_range: list[float] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=2,
+        description="Allowed [min, max] top_p range for this model",
+    )
+    supported_params: list[str] | None = Field(
+        default=None,
+        description="Exhaustive list of supported OpenAI params for this model",
+    )
+
     class Config:
         use_enum_values = True
 
@@ -166,249 +232,52 @@ class ProviderModelsConfig(BaseModel):
     reranker: ModelMetadata | None = Field(None, description="Reranker model metadata")
 
 
-# Default model metadata for common providers (used as fallback)
-DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
-    # OpenAI models
-    "gpt-4-turbo": ModelMetadata(
-        name="gpt-4-turbo",
-        context_length=128000,
-        max_output_tokens=4096,
-        input_cost_per_1m=10.0,
-        output_cost_per_1m=30.0,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="openai",
-        modalities=["text", "image"],
-        family="gpt-4",
-        description="GPT-4 Turbo with vision capabilities",
-    ),
-    "gpt-4o": ModelMetadata(
-        name="gpt-4o",
-        context_length=128000,
-        max_output_tokens=16384,
-        input_cost_per_1m=2.5,
-        output_cost_per_1m=10.0,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="openai",
-        modalities=["text", "image"],
-        family="gpt-4o",
-        description="GPT-4o multimodal flagship model",
-    ),
-    "gpt-4o-mini": ModelMetadata(
-        name="gpt-4o-mini",
-        context_length=128000,
-        max_output_tokens=16384,
-        input_cost_per_1m=0.15,
-        output_cost_per_1m=0.6,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="openai",
-        modalities=["text", "image"],
-        family="gpt-4o",
-        description="Compact, cost-effective GPT-4o variant",
-    ),
-    # Gemini models
-    "gemini-2.0-flash": ModelMetadata(
-        name="gemini-2.0-flash",
-        context_length=1048576,
-        max_output_tokens=8192,
-        input_cost_per_1m=0.075,
-        output_cost_per_1m=0.3,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="gemini",
-        modalities=["text", "image"],
-        family="gemini-2.0",
-        description="Gemini 2.0 Flash for fast multimodal tasks",
-    ),
-    "gemini-1.5-pro": ModelMetadata(
-        name="gemini-1.5-pro",
-        context_length=2097152,
-        max_output_tokens=8192,
-        input_cost_per_1m=1.25,
-        output_cost_per_1m=5.0,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="gemini",
-        modalities=["text", "image"],
-        family="gemini-1.5",
-        description="Gemini 1.5 Pro with 2M token context",
-    ),
-    # Dashscope (Qwen) models
-    "qwen-max": ModelMetadata(
-        name="qwen-max",
-        context_length=32000,
-        max_output_tokens=8192,
-        input_cost_per_1m=2.4,
-        output_cost_per_1m=9.6,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-        ],
-        supports_json_mode=True,
-        provider="dashscope",
-        modalities=["text"],
-        family="qwen",
-        max_input_tokens=30720,
-        input_budget_ratio=0.85,
-        chars_per_token=1.2,
-        description="Qwen Max for complex reasoning",
-    ),
-    "qwen-plus": ModelMetadata(
-        name="qwen-plus",
-        context_length=131072,
-        max_output_tokens=8192,
-        input_cost_per_1m=0.8,
-        output_cost_per_1m=2.0,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-        ],
-        supports_json_mode=True,
-        provider="dashscope",
-        modalities=["text"],
-        family="qwen",
-        input_budget_ratio=0.9,
-        chars_per_token=1.4,
-        description="Qwen Plus balanced performance model",
-    ),
-    "qwen-turbo": ModelMetadata(
-        name="qwen-turbo",
-        context_length=131072,
-        max_output_tokens=8192,
-        input_cost_per_1m=0.3,
-        output_cost_per_1m=0.6,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-        ],
-        supports_json_mode=True,
-        provider="dashscope",
-        modalities=["text"],
-        family="qwen",
-        input_budget_ratio=0.9,
-        chars_per_token=1.4,
-        description="Qwen Turbo fast and cost-effective",
-    ),
-    # Deepseek models
-    "deepseek-chat": ModelMetadata(
-        name="deepseek-chat",
-        context_length=64000,
-        max_output_tokens=8192,
-        input_cost_per_1m=0.14,
-        output_cost_per_1m=0.28,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.CODE,
-        ],
-        supports_json_mode=True,
-        provider="deepseek",
-        modalities=["text"],
-        family="deepseek",
-        description="Deepseek Chat with strong coding ability",
-    ),
-    "deepseek-reasoner": ModelMetadata(
-        name="deepseek-reasoner",
-        context_length=64000,
-        max_output_tokens=8192,
-        input_cost_per_1m=0.55,
-        output_cost_per_1m=2.19,
-        capabilities=[ModelCapability.CHAT, ModelCapability.CODE],
-        supports_json_mode=False,
-        provider="deepseek",
-        modalities=["text"],
-        family="deepseek",
-        description="Deepseek Reasoner for advanced reasoning",
-    ),
-    # Anthropic models
-    "claude-3-5-sonnet-20241022": ModelMetadata(
-        name="claude-3-5-sonnet-20241022",
-        context_length=200000,
-        max_output_tokens=8192,
-        input_cost_per_1m=3.0,
-        output_cost_per_1m=15.0,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="anthropic",
-        modalities=["text", "image"],
-        family="claude-3.5",
-        description="Claude 3.5 Sonnet balanced intelligence",
-    ),
-    "claude-3-5-haiku-20241022": ModelMetadata(
-        name="claude-3-5-haiku-20241022",
-        context_length=200000,
-        max_output_tokens=8192,
-        input_cost_per_1m=0.8,
-        output_cost_per_1m=4.0,
-        capabilities=[
-            ModelCapability.CHAT,
-            ModelCapability.FUNCTION_CALLING,
-            ModelCapability.VISION,
-        ],
-        supports_json_mode=True,
-        provider="anthropic",
-        modalities=["text", "image"],
-        family="claude-3.5",
-        description="Claude 3.5 Haiku fast and compact",
-    ),
-}
+# Conservative fallback metadata for unknown models.
+# The authoritative model catalog is loaded from models_snapshot.json
+# (generated via models_dev_fetcher.py).  This fallback is used ONLY
+# when a model is not found in the snapshot.
+FALLBACK_MODEL_METADATA = ModelMetadata(
+    name="unknown",
+    context_length=128000,
+    max_output_tokens=4096,
+    input_cost_per_1m=None,
+    output_cost_per_1m=None,
+    capabilities=[ModelCapability.CHAT],
+    supports_streaming=True,
+    supports_json_mode=False,
+    provider=None,
+    modalities=["text"],
+    description="Unknown model with conservative defaults",
+)
+
+# Backward-compatible alias.  Callers that previously iterated over
+# DEFAULT_MODEL_METADATA will now get an empty dict.  They should migrate
+# to ModelCatalogService for full model lookups.
+DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {}
 
 
 def get_default_model_metadata(model_name: str) -> ModelMetadata:
+    """Return conservative fallback metadata for *model_name*.
+
+    .. deprecated::
+        Callers should migrate to ``ModelCatalogService.get_model()``
+        which uses the full models.dev snapshot.  This function now
+        simply returns a copy of ``FALLBACK_MODEL_METADATA`` with the
+        ``name`` field set to *model_name*.
     """
-    Get default model metadata by model name.
-
-    Args:
-        model_name: Model identifier
-
-    Returns:
-        ModelMetadata with defaults if not found in registry
-    """
-    # Try exact match first
-    if model_name in DEFAULT_MODEL_METADATA:
-        return DEFAULT_MODEL_METADATA[model_name]
-
-    # Try prefix match (e.g., "gpt-4-turbo-2024-01-01" matches "gpt-4-turbo")
-    for known_model, metadata in DEFAULT_MODEL_METADATA.items():
-        if model_name.startswith(known_model):
-            return metadata
-
-    # Return conservative defaults
     return ModelMetadata(
         name=model_name,
-        context_length=128000,  # Conservative default
-        max_output_tokens=4096,  # Conservative default
-        input_cost_per_1m=None,  # Conservative default
-        output_cost_per_1m=None,  # Conservative default
-        capabilities=[ModelCapability.CHAT],
+        context_length=FALLBACK_MODEL_METADATA.context_length,
+        max_output_tokens=FALLBACK_MODEL_METADATA.max_output_tokens,
+        input_cost_per_1m=FALLBACK_MODEL_METADATA.input_cost_per_1m,
+        output_cost_per_1m=FALLBACK_MODEL_METADATA.output_cost_per_1m,
+        capabilities=list(FALLBACK_MODEL_METADATA.capabilities),
+        supports_streaming=FALLBACK_MODEL_METADATA.supports_streaming,
+        supports_json_mode=FALLBACK_MODEL_METADATA.supports_json_mode,
+        provider=FALLBACK_MODEL_METADATA.provider,
+        modalities=list(FALLBACK_MODEL_METADATA.modalities),
+        description=f"Unknown model '{model_name}' with conservative defaults",
     )
-
 
 class ProviderType(StrEnum):
     """Supported LLM provider types"""

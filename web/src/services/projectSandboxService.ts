@@ -75,6 +75,22 @@ export interface EnsureSandboxRequest {
   auto_create?: boolean | undefined;
 }
 
+export interface GetProjectSandboxOptions {
+  /** Force bypass cache and request deduplication */
+  force?: boolean | undefined;
+  /** Abort signal for request cancellation */
+  signal?: AbortSignal | undefined;
+  /** Optional override for cache TTL in milliseconds */
+  cacheTtlMs?: number | undefined;
+}
+
+interface PendingSandboxRequest {
+  promise: Promise<ProjectSandbox | null>;
+  controller: AbortController;
+  consumers: number;
+  settled: boolean;
+}
+
 /**
  * Tool execution request
  */
@@ -180,9 +196,13 @@ export interface ProjectSandboxService {
   /**
    * Get project's sandbox info
    * @param projectId - Project ID
+   * @param options - Optional cache/cancellation options
    * @returns Promise resolving to sandbox info or null if not exists
    */
-  getProjectSandbox(projectId: string): Promise<ProjectSandbox | null>;
+  getProjectSandbox(
+    projectId: string,
+    options?: GetProjectSandboxOptions
+  ): Promise<ProjectSandbox | null>;
 
   /**
    * Ensure project's sandbox exists and is running
@@ -275,20 +295,148 @@ export interface ProjectSandboxService {
  */
 class ProjectSandboxServiceImpl implements ProjectSandboxService {
   private readonly api = httpClient;
+  private static readonly SANDBOX_STATUS_CACHE_TTL_MS = 3000;
 
   /**
    * Pending ensureSandbox requests by project ID.
    * Used to deduplicate concurrent requests for the same project.
    */
   private pendingEnsureRequests: Map<string, Promise<ProjectSandbox>> = new Map();
+  private pendingGetSandboxRequests: Map<string, PendingSandboxRequest> = new Map();
+  private sandboxStatusCache: Map<string, { value: ProjectSandbox | null; fetchedAt: number }> =
+    new Map();
 
-  async getProjectSandbox(projectId: string): Promise<ProjectSandbox | null> {
+  async getProjectSandbox(
+    projectId: string,
+    options: GetProjectSandboxOptions = {}
+  ): Promise<ProjectSandbox | null> {
+    const { force = false, signal, cacheTtlMs } = options;
+    const ttlMs = cacheTtlMs ?? ProjectSandboxServiceImpl.SANDBOX_STATUS_CACHE_TTL_MS;
+    const now = Date.now();
+
+    if (!force) {
+      const cached = this.sandboxStatusCache.get(projectId);
+      if (cached && now - cached.fetchedAt < ttlMs) {
+        return cached.value;
+      }
+    }
+
+    if (!force) {
+      const pendingRequest = this.pendingGetSandboxRequests.get(projectId);
+      if (pendingRequest) {
+        logger.debug(
+          `[ProjectSandboxService] Reusing pending getSandbox for project: ${projectId}`
+        );
+        const result = await this.consumePendingSandboxRequest(projectId, pendingRequest, signal);
+        this.sandboxStatusCache.set(projectId, { value: result, fetchedAt: Date.now() });
+        return result;
+      }
+
+      const controller = new AbortController();
+      const nextPendingRequest: PendingSandboxRequest = {
+        controller,
+        consumers: 0,
+        settled: false,
+        promise: this._doGetProjectSandbox(projectId, controller.signal).finally(() => {
+          nextPendingRequest.settled = true;
+          const currentPending = this.pendingGetSandboxRequests.get(projectId);
+          if (currentPending === nextPendingRequest) {
+            this.pendingGetSandboxRequests.delete(projectId);
+          }
+        }),
+      };
+      this.pendingGetSandboxRequests.set(projectId, nextPendingRequest);
+      const result = await this.consumePendingSandboxRequest(projectId, nextPendingRequest, signal);
+      this.sandboxStatusCache.set(projectId, { value: result, fetchedAt: Date.now() });
+      return result;
+    }
+
+    const result = await this._doGetProjectSandbox(projectId, signal);
+    this.sandboxStatusCache.set(projectId, { value: result, fetchedAt: Date.now() });
+    return result;
+  }
+
+  private consumePendingSandboxRequest(
+    projectId: string,
+    pendingRequest: PendingSandboxRequest,
+    signal?: AbortSignal
+  ): Promise<ProjectSandbox | null> {
+    pendingRequest.consumers += 1;
+    let released = false;
+    const releaseConsumer = () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      pendingRequest.consumers = Math.max(0, pendingRequest.consumers - 1);
+      if (pendingRequest.consumers === 0 && !pendingRequest.settled) {
+        pendingRequest.controller.abort();
+        const currentPending = this.pendingGetSandboxRequests.get(projectId);
+        if (currentPending === pendingRequest) {
+          this.pendingGetSandboxRequests.delete(projectId);
+        }
+      }
+    };
+
+    if (signal?.aborted) {
+      releaseConsumer();
+      return Promise.reject(this.createCanceledError());
+    }
+
+    return new Promise<ProjectSandbox | null>((resolve, reject) => {
+      const onAbort = () => {
+        cleanupAbortListener();
+        releaseConsumer();
+        reject(this.createCanceledError());
+      };
+
+      const cleanupAbortListener = () => {
+        if (signal) {
+          signal.removeEventListener('abort', onAbort);
+        }
+      };
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+
+      pendingRequest.promise.then(
+        (value) => {
+          cleanupAbortListener();
+          releaseConsumer();
+          resolve(value);
+        },
+        (error) => {
+          cleanupAbortListener();
+          releaseConsumer();
+          reject(error);
+        }
+      );
+    });
+  }
+
+  private createCanceledError(): Error & { code: string } {
+    const error = new Error('Request canceled') as Error & { code: string };
+    error.name = 'CanceledError';
+    error.code = 'ERR_CANCELED';
+    return error;
+  }
+
+  private async _doGetProjectSandbox(
+    projectId: string,
+    signal?: AbortSignal
+  ): Promise<ProjectSandbox | null> {
     logger.debug(`[ProjectSandboxService] Getting sandbox for project: ${projectId}`);
     try {
-      const response = await this.api.get<ProjectSandbox>(`/projects/${projectId}/sandbox`);
+      const requestConfig = signal ? { signal } : undefined;
+      const response = await this.api.get<ProjectSandbox>(
+        `/projects/${projectId}/sandbox`,
+        requestConfig
+      );
       return response;
-    } catch (error: any) {
-      if (error.status === 404) {
+    } catch (error: unknown) {
+      const typedError = error as { status?: number | undefined; statusCode?: number | undefined };
+      if (typedError.status === 404 || typedError.statusCode === 404) {
         return null;
       }
       throw error;
@@ -313,7 +461,9 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     this.pendingEnsureRequests.set(projectId, requestPromise);
 
     try {
-      return await requestPromise;
+      const sandbox = await requestPromise;
+      this.sandboxStatusCache.set(projectId, { value: sandbox, fetchedAt: Date.now() });
+      return sandbox;
     } finally {
       // Clean up after request completes (success or failure)
       this.pendingEnsureRequests.delete(projectId);
@@ -379,18 +529,25 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     const response = await this.api.post<SandboxActionResponse>(
       `/projects/${projectId}/sandbox/restart`
     );
+    if (response.sandbox) {
+      this.sandboxStatusCache.set(projectId, { value: response.sandbox, fetchedAt: Date.now() });
+    } else {
+      this.sandboxStatusCache.delete(projectId);
+    }
     return response;
   }
 
   async terminateSandbox(projectId: string): Promise<SandboxActionResponse> {
     logger.debug(`[ProjectSandboxService] Terminating sandbox for project: ${projectId}`);
     const response = await this.api.delete<SandboxActionResponse>(`/projects/${projectId}/sandbox`);
+    this.sandboxStatusCache.set(projectId, { value: null, fetchedAt: Date.now() });
     return response;
   }
 
   async syncSandboxStatus(projectId: string): Promise<ProjectSandbox> {
     logger.debug(`[ProjectSandboxService] Syncing sandbox status for project: ${projectId}`);
     const response = await this.api.get<ProjectSandbox>(`/projects/${projectId}/sandbox/sync`);
+    this.sandboxStatusCache.set(projectId, { value: response, fetchedAt: Date.now() });
     return response;
   }
 

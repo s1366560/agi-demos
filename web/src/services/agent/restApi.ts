@@ -320,7 +320,7 @@ export const restApi = {
     requestId: string,
     actionName: string,
     sourceComponentId: string,
-    context: Record<string, unknown>,
+    context: Record<string, unknown>
   ): Promise<void> {
     await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,

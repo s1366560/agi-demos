@@ -152,10 +152,32 @@ class SandboxSSEService {
    * Handle incoming sandbox state change from agentService
    */
   private handleSandboxState(state: SandboxStateData): void {
-    // Map SandboxStateData.eventType to SandboxEventType for routing
-    const eventType = state.eventType as SandboxEventType;
+    // Normalize event type from both broadcast and stream formats.
+    const normalizedType = (() => {
+      const rawType = state.eventType.replace(/^sandbox_/, '');
+      switch (rawType) {
+        case 'created':
+        case 'restarted':
+          return 'sandbox_created';
+        case 'terminated':
+          return 'sandbox_terminated';
+        case 'status':
+        case 'status_changed':
+          return 'sandbox_status';
+        case 'desktop_started':
+        case 'desktop_stopped':
+        case 'desktop_status':
+        case 'terminal_started':
+        case 'terminal_stopped':
+        case 'terminal_status':
+          return rawType;
+        default:
+          return state.eventType;
+      }
+    })();
+
     const sandboxEvent: BaseSandboxSSEEvent = {
-      type: eventType,
+      type: normalizedType as SandboxEventType,
       data: state,
       timestamp: new Date().toISOString(),
     };

@@ -234,6 +234,7 @@ class BackgroundExecutor:
                 main_token_budget=main_token_budget,
                 project_id=project_id,
                 tenant_id=tenant_id,
+                conversation_id=conversation_id,
             )
 
             # Create and execute process

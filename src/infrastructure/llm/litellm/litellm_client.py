@@ -31,12 +31,14 @@ from src.domain.llm_providers.llm_types import (
     RateLimitError,
 )
 from src.domain.llm_providers.models import ProviderConfig
+from src.infrastructure.llm.model_catalog import ModelCatalogService
 from src.infrastructure.llm.model_registry import (
     clamp_max_tokens as _clamp_max_tokens,
     get_model_chars_per_token,
     get_model_input_budget,
     get_model_max_input_tokens,
 )
+from src.infrastructure.llm.param_resolver import resolve_llm_params
 from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
 from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
@@ -93,6 +95,7 @@ class LiteLLMClient(LLMClient):
         config: LLMConfig,
         provider_config: ProviderConfig,
         cache: bool | None = None,
+        catalog: ModelCatalogService | None = None,
     ) -> None:
         """
         Initialize LiteLLM client.
@@ -101,6 +104,7 @@ class LiteLLMClient(LLMClient):
             config: LLM configuration (model, temperature, etc.)
             provider_config: Provider configuration from database
             cache: Enable response caching (defaults to LLM_CACHE_ENABLED setting)
+            catalog: Optional model catalog for parameter defaults resolution
         """
         # Use settings default if cache not explicitly provided
         if cache is None:
@@ -109,6 +113,7 @@ class LiteLLMClient(LLMClient):
 
         super().__init__(config, cache)
         self.provider_config = provider_config
+        self._catalog = catalog
         self.encryption_service = get_encryption_service()
 
         # Decrypt and store API key for per-request passing (multi-tenant safe)
@@ -176,8 +181,15 @@ class LiteLLMClient(LLMClient):
     ) -> dict[str, Any]:
         """Build common completion kwargs for LiteLLM calls.
 
-        Centralizes api_key, api_base, temperature, retries, and
-        langfuse metadata — previously duplicated across 3 methods.
+        Centralizes parameter resolution, api_key, api_base, retries, and
+        langfuse metadata -- previously duplicated across 3 methods.
+
+        Parameters are resolved through a multi-layer precedence chain via
+        ``resolve_llm_params``:
+          1. Explicit per-call overrides (``temperature``, ``**extra``)
+          2. Per-tenant provider config (``self.provider_config.config``)
+          3. Model metadata defaults (from models.dev snapshot)
+          4. Omit (LiteLLM uses its own defaults)
         """
         clamped_max_tokens = _clamp_max_tokens(model, max_tokens)
         normalized_messages = self._trim_messages_to_input_limit(
@@ -186,12 +198,64 @@ class LiteLLMClient(LLMClient):
             max_tokens=clamped_max_tokens,
         )
 
+        # --- Vision capability gating ---
+        # Reject image content when the model does not support vision.
+        # The error wording includes "Invalid parameter" so that
+        # ``_is_client_error()`` classifies it as a client error and
+        # the circuit breaker is NOT tripped.
+        if self._has_image_content(normalized_messages):
+            if (
+                self._catalog is not None
+                and not self._catalog.supports_vision(model)
+            ):
+                raise ValueError(
+                    f"Invalid parameter: Model '{model}' does not "
+                    f"support vision/image inputs. Remove image "
+                    f"attachments or select a vision-capable model."
+                )
+
+
+        # Build user-level overrides from explicit params + extra kwargs.
+        # ``temperature`` is an explicit arg; anything else (top_p, seed,
+        # response_format, ...) arrives via ``**extra``.
+        user_overrides: dict[str, Any] = {}
+        if temperature is not None:
+            user_overrides["temperature"] = temperature
+        elif self.temperature is not None:
+            user_overrides["temperature"] = self.temperature
+
+        # Separate resolver-managed keys from passthrough extras.
+        _RESOLVER_KEYS = {
+            "temperature", "top_p", "frequency_penalty",
+            "presence_penalty", "seed", "stop",
+            "response_format", "max_tokens",
+        }
+        for key, value in extra.items():
+            if key in _RESOLVER_KEYS:
+                user_overrides[key] = value
+
+        resolved = resolve_llm_params(
+            model,
+            user_overrides=user_overrides,
+            provider_config=self.provider_config.config,
+            catalog=self._catalog,
+        )
+
+        # ``max_tokens`` is already clamped by _clamp_max_tokens --
+        # do not let the resolver override it.
+        resolved.pop("max_tokens", None)
+
+        # Start with model + messages + clamped max_tokens, then layer
+        # resolved params and passthrough extras (e.g. ``stream``).
+        passthrough = {
+            k: v for k, v in extra.items() if k not in _RESOLVER_KEYS
+        }
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": normalized_messages,
             "max_tokens": clamped_max_tokens,
-            "temperature": self.temperature if temperature is None else temperature,
-            **extra,
+            **resolved,
+            **passthrough,
         }
         if self._api_key:
             kwargs["api_key"] = self._api_key
@@ -261,6 +325,24 @@ class LiteLLMClient(LLMClient):
             if tool_calls is not None:
                 total_chars += len(str(tool_calls))
         return total_chars
+
+    @staticmethod
+    def _has_image_content(messages: list[dict[str, Any]]) -> bool:
+        """Check if any message contains ``image_url`` content parts.
+
+        Scans the multimodal content arrays (OpenAI format) for image
+        parts.  Text-only messages and plain string content are ignored.
+        """
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if (
+                        isinstance(part, dict)
+                        and part.get("type") == "image_url"
+                    ):
+                        return True
+        return False
 
     def _estimate_effective_input_tokens(self, model: str, messages: list[dict[str, Any]]) -> int:
         """Estimate effective input tokens using tokenizer + char-based guard."""
@@ -814,6 +896,7 @@ class LiteLLMClient(LLMClient):
 def create_litellm_client(
     provider_config: ProviderConfig,
     cache: bool | None = None,
+    catalog: ModelCatalogService | None = None,
 ) -> LiteLLMClient:
     """
     Factory function to create LiteLLM client from provider configuration.
@@ -821,6 +904,7 @@ def create_litellm_client(
     Args:
         provider_config: Provider configuration
         cache: Enable response caching (defaults to LLM_CACHE_ENABLED setting)
+        catalog: Optional model catalog for parameter defaults resolution
 
     Returns:
         Configured LiteLLMClient instance
@@ -842,4 +926,5 @@ def create_litellm_client(
         config=config,
         provider_config=provider_config,
         cache=cache,
+        catalog=catalog,
     )

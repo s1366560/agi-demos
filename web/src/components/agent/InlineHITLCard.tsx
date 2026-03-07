@@ -298,7 +298,9 @@ const ClarificationContent: React.FC<{
     }
   }, [selected, customInput, data.allow_custom, hasOptions, onSubmit]);
 
-  const isDisabled = hasOptions ? (!selected || (selected === '__custom__' && !customInput.trim())) : !customInput.trim();
+  const isDisabled = hasOptions
+    ? !selected || (selected === '__custom__' && !customInput.trim())
+    : !customInput.trim();
 
   return (
     <div className="space-y-4">
@@ -398,9 +400,7 @@ const ClarificationContent: React.FC<{
             暂无预设选项，请在下方输入您的回答
           </p>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500 italic">
-            暂无可选选项
-          </p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">暂无可选选项</p>
         )}
       </div>
 
@@ -455,9 +455,7 @@ const DecisionContent: React.FC<{
 
   const toggleMultiSelect = useCallback((optionId: string) => {
     setSelectedMultiple((prev) =>
-      prev.includes(optionId)
-        ? prev.filter((id) => id !== optionId)
-        : [...prev, optionId]
+      prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]
     );
   }, []);
 
@@ -476,8 +474,13 @@ const DecisionContent: React.FC<{
       onSubmit({ decision: selected });
     }
   }, [
-    selected, selectedMultiple, customInput,
-    data.allow_custom, hasOptions, isMultiSelect, onSubmit,
+    selected,
+    selectedMultiple,
+    customInput,
+    data.allow_custom,
+    hasOptions,
+    isMultiSelect,
+    onSubmit,
   ]);
 
   const isDisabled = (() => {
@@ -509,7 +512,8 @@ const DecisionContent: React.FC<{
               const isOptionSelected = isMultiSelect ? isSelectedMulti : isSelectedSingle;
               const isExpanded = expanded === option.id;
               const hasDetails =
-                !isAnswered && (option.estimated_time || option.estimated_cost || option.risks?.length);
+                !isAnswered &&
+                (option.estimated_time || option.estimated_cost || option.risks?.length);
 
               return (
                 <div
@@ -576,12 +580,15 @@ const DecisionContent: React.FC<{
                             已选择
                           </LazyTag>
                         )}
-                        {!isOptionSelected && option.risks && option.risks.length > 0 && !isAnswered && (
-                          <LazyTag color="orange" className="text-xs">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            有风险
-                          </LazyTag>
-                        )}
+                        {!isOptionSelected &&
+                          option.risks &&
+                          option.risks.length > 0 &&
+                          !isAnswered && (
+                            <LazyTag color="orange" className="text-xs">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              有风险
+                            </LazyTag>
+                          )}
                       </div>
                       {option.description && (
                         <p
@@ -672,23 +679,24 @@ const DecisionContent: React.FC<{
             暂无预设选项，请在下方输入您的决策
           </p>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500 italic">
-            暂无可选选项
-          </p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">暂无可选选项</p>
         )}
       </div>
 
-      {!isAnswered && data.allow_custom && (selected === '__custom__' || !hasOptions) && !isMultiSelect && (
-        <Input.TextArea
-          value={customInput}
-          onChange={(e) => {
-            setCustomInput(e.target.value);
-          }}
-          placeholder="请输入您的决策..."
-          rows={3}
-          className="mt-2 rounded-xl"
-        />
-      )}
+      {!isAnswered &&
+        data.allow_custom &&
+        (selected === '__custom__' || !hasOptions) &&
+        !isMultiSelect && (
+          <Input.TextArea
+            value={customInput}
+            onChange={(e) => {
+              setCustomInput(e.target.value);
+            }}
+            placeholder="请输入您的决策..."
+            rows={3}
+            className="mt-2 rounded-xl"
+          />
+        )}
 
       {!isAnswered && (
         <div className="flex justify-end pt-2">

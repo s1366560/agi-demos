@@ -239,6 +239,54 @@ class TestProcessorRunContextPlumbing:
         assert isinstance(processor._abort_event, asyncio.Event)
         assert not processor._abort_event.is_set()
 
+    async def test_run_ctx_conversation_id_seeds_langfuse_context(
+        self,
+        processor: SessionProcessor,
+        sample_messages: list[dict],
+    ) -> None:
+        """conversation_id from RunContext should be available for downstream ToolContext."""
+        abort = asyncio.Event()
+        abort.set()
+        ctx = RunContext(
+            abort_signal=abort,
+            conversation_id="conv-from-runctx",
+        )
+
+        async for _ in processor.process(
+            session_id="ephemeral-session-id",
+            messages=sample_messages,
+            run_ctx=ctx,
+        ):
+            pass
+
+        assert processor._langfuse_context is not None
+        assert processor._langfuse_context["conversation_id"] == "conv-from-runctx"
+
+    async def test_run_ctx_conversation_id_overrides_falsy_langfuse_value(
+        self,
+        processor: SessionProcessor,
+        sample_messages: list[dict],
+    ) -> None:
+        """conversation_id from RunContext should repair None/empty langfuse conversation_id."""
+        abort = asyncio.Event()
+        abort.set()
+        ctx = RunContext(
+            abort_signal=abort,
+            conversation_id="conv-from-runctx",
+            langfuse_context={"conversation_id": None, "user_id": "user-1"},
+        )
+
+        async for _ in processor.process(
+            session_id="ephemeral-session-id",
+            messages=sample_messages,
+            run_ctx=ctx,
+        ):
+            pass
+
+        assert processor._langfuse_context is not None
+        assert processor._langfuse_context["conversation_id"] == "conv-from-runctx"
+        assert processor._langfuse_context["user_id"] == "user-1"
+
 
 # ============================================================================
 # SubAgentProcess RunContext creation tests
@@ -303,6 +351,59 @@ class TestSubAgentProcessRunContext:
             events.append(event)
 
         # Should have started and completed events
+        event_types = [e.get("type", "") for e in events]
+        assert "subagent_started" in event_types
+        assert "subagent_completed" in event_types
+
+    async def test_subagent_uses_parent_conversation_id_when_provided(self) -> None:
+        """SubAgentProcess should use parent conversation_id from context metadata."""
+        from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
+        from src.infrastructure.agent.subagent.context_bridge import SubAgentContext
+        from src.infrastructure.agent.subagent.process import SubAgentProcess
+
+        subagent = SubAgent(
+            id="sa-2",
+            tenant_id="tenant-1",
+            name="test-subagent",
+            display_name="Test SubAgent",
+            system_prompt="You are a test subagent.",
+            trigger=AgentTrigger(description="Test trigger", keywords=["test"]),
+            model=AgentModel.INHERIT,
+            max_iterations=1,
+        )
+        context = SubAgentContext(
+            task_description="Do something",
+            system_prompt="You are a test agent",
+            metadata={"conversation_id": "parent-conv-1"},
+        )
+        abort = asyncio.Event()
+
+        mock_factory = MagicMock()
+        mock_processor = MagicMock()
+
+        async def empty_process(**kwargs):
+            run_ctx = kwargs["run_ctx"]
+            assert isinstance(run_ctx, RunContext)
+            assert run_ctx.conversation_id == "parent-conv-1"
+            return
+            yield
+
+        mock_processor.process = empty_process
+        mock_factory.create_for_subagent.return_value = mock_processor
+
+        process = SubAgentProcess(
+            subagent=subagent,
+            context=context,
+            tools=[],
+            base_model="test-model",
+            abort_signal=abort,
+            factory=mock_factory,
+        )
+
+        events = []
+        async for event in process.execute():
+            events.append(event)
+
         event_types = [e.get("type", "") for e in events]
         assert "subagent_started" in event_types
         assert "subagent_completed" in event_types

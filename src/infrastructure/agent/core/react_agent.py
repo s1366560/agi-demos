@@ -934,9 +934,7 @@ class ReActAgent:
         # Intent gate: lightweight pattern-based pre-classification
         gate_result = self._intent_gate.classify(
             message,
-            _available_skills=[
-                s.name for s in (self.skills or [])
-            ],
+            _available_skills=[s.name for s in (self.skills or [])],
         )
         if gate_result is not None:
             if gate_result.metadata is None:
@@ -1484,9 +1482,7 @@ class ReActAgent:
         if context_result.was_compressed:
             yield cast(
                 dict[str, Any],
-                AgentContextCompressedEvent(
-                    **context_result.to_event_data()
-                ).to_event_dict(),
+                AgentContextCompressedEvent(**context_result.to_event_data()).to_event_dict(),
             )
             logger.info(
                 f"Context compressed: {context_result.original_message_count} -> "
@@ -1499,17 +1495,9 @@ class ReActAgent:
                     dict[str, Any],
                     AgentContextSummaryGeneratedEvent(
                         summary_text=context_result.summary,
-                        summary_tokens=(
-                            context_result.estimated_tokens
-                        ),
-                        messages_covered_count=(
-                            context_result
-                            .summarized_message_count
-                        ),
-                        compression_level=(
-                            context_result
-                            .compression_strategy.value
-                        ),
+                        summary_tokens=(context_result.estimated_tokens),
+                        messages_covered_count=(context_result.summarized_message_count),
+                        compression_level=(context_result.compression_strategy.value),
                     ).to_event_dict(),
                 )
 
@@ -1537,9 +1525,7 @@ class ReActAgent:
         yield cast(
             dict[str, Any],
             AgentContextStatusEvent(
-                current_tokens=(
-                    context_result.estimated_tokens
-                ),
+                current_tokens=(context_result.estimated_tokens),
                 token_budget=context_result.token_budget,
                 occupancy_pct=round(
                     context_result.budget_utilization_pct,
@@ -1548,9 +1534,7 @@ class ReActAgent:
                 compression_level=compression_level,
                 token_distribution={},
                 compression_history_summary=(
-                    context_result.metadata.get(
-                        "compression_history", {}
-                    )
+                    context_result.metadata.get("compression_history", {})
                 ),
                 from_cache=cached_summary is not None,
                 messages_in_summary=(
@@ -1610,22 +1594,12 @@ class ReActAgent:
                 AgentSelectionTraceEvent(
                     route_id=route_id,
                     trace_id=trace_id,
-                    initial_count=cast(
-                        int, trace_data[0]["before_count"]
-                    ),
-                    final_count=cast(
-                        int, trace_data[-1]["after_count"]
-                    ),
+                    initial_count=cast(int, trace_data[0]["before_count"]),
+                    final_count=cast(int, trace_data[-1]["after_count"]),
                     removed_total=removed_total,
-                    domain_lane=(
-                        selection_context.metadata.get(
-                            "domain_lane"
-                        )
-                    ),
+                    domain_lane=(selection_context.metadata.get("domain_lane")),
                     tool_budget=tool_budget,
-                    budget_exceeded_stages=[
-                        str(s) for s in budget_exceeded_stages
-                    ],
+                    budget_exceeded_stages=[str(s) for s in budget_exceeded_stages],
                     stages=trace_data,
                 ).to_event_dict(),
             )
@@ -1637,14 +1611,9 @@ class ReActAgent:
                         trace_id=trace_id,
                         removed_total=removed_total,
                         stage_count=len(trace_data),
-                        domain_lane=(
-                            selection_context.metadata
-                            .get("domain_lane")
-                        ),
+                        domain_lane=(selection_context.metadata.get("domain_lane")),
                         tool_budget=tool_budget,
-                        budget_exceeded_stages=[
-                            str(s) for s in budget_exceeded_stages
-                        ],
+                        budget_exceeded_stages=[str(s) for s in budget_exceeded_stages],
                     ).to_event_dict(),
                 )
         tools_to_use = list(current_tool_definitions)
@@ -1950,11 +1919,7 @@ class ReActAgent:
             dict[str, Any],
             AgentCompleteEvent(
                 content=final_content,
-                skill_used=(
-                    matched_skill.name
-                    if matched_skill
-                    else None
-                ),
+                skill_used=(matched_skill.name if matched_skill else None),
             ).to_event_dict(),
         )
 
@@ -2093,6 +2058,7 @@ class ReActAgent:
         forced_skill_name: str | None = None,
         context_summary_data: dict[str, Any] | None = None,
         plan_mode: bool = False,
+        llm_overrides: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -2184,26 +2150,18 @@ class ReActAgent:
                         auto_start=cfg.get("auto_start", True),
                     )
                     for cfg in mcp_servers_raw
-                    if isinstance(cfg, dict)
-                    and "server_name" in cfg
-                    and "command" in cfg
+                    if isinstance(cfg, dict) and "server_name" in cfg and "command" in cfg
                 ]
                 if mcp_configs:
                     try:
-                        self._skill_mcp_manager.register_skill_mcps(
-                            matched_skill.name, mcp_configs
-                        )
-                        mcp_tools = await self._skill_mcp_manager.activate_skill(
-                            matched_skill.name
-                        )
+                        self._skill_mcp_manager.register_skill_mcps(matched_skill.name, mcp_configs)
+                        mcp_tools = await self._skill_mcp_manager.activate_skill(matched_skill.name)
                         # Convert MCPTool objects to ToolDefinition for injection
                         for mcp_tool in mcp_tools:
                             if not mcp_tool.schema.is_model_visible:
                                 continue
-                            client = (
-                                self._skill_mcp_manager
-                                ._active_clients
-                                .get(mcp_tool.server_name)
+                            client = self._skill_mcp_manager._active_clients.get(
+                                mcp_tool.server_name
                             )
 
                             async def _make_mcp_exec(
@@ -2212,17 +2170,10 @@ class ReActAgent:
                             ) -> Any:
                                 async def _exec(**kwargs: Any) -> Any:
                                     if _client is None:
-                                        return (
-                                            f"MCP server not available"
-                                            f" for tool {_tool_name}"
-                                        )
-                                    result = await _client.call_tool(
-                                        _tool_name, kwargs
-                                    )
+                                        return f"MCP server not available for tool {_tool_name}"
+                                    result = await _client.call_tool(_tool_name, kwargs)
                                     if isinstance(result, dict):
-                                        return result.get(
-                                            "content", str(result)
-                                        )
+                                        return result.get("content", str(result))
                                     return result
 
                                 return _exec
@@ -2240,23 +2191,19 @@ class ReActAgent:
                                         "properties": {},
                                     }
                                 ),
-                                execute=await _make_mcp_exec(
-                                    client, mcp_tool.schema.name
-                                ),
+                                execute=await _make_mcp_exec(client, mcp_tool.schema.name),
                             )
                             self._skill_mcp_tools.append(td)
                         if self._skill_mcp_tools:
                             logger.info(
-                                "[ReActAgent] Activated %d MCP tool(s)"
-                                " for skill '%s': %s",
+                                "[ReActAgent] Activated %d MCP tool(s) for skill '%s': %s",
                                 len(self._skill_mcp_tools),
                                 matched_skill.name,
                                 [t.name for t in self._skill_mcp_tools],
                             )
                     except Exception:
                         logger.exception(
-                            "[ReActAgent] Failed to activate MCP"
-                            " servers for skill '%s'",
+                            "[ReActAgent] Failed to activate MCP servers for skill '%s'",
                             matched_skill.name,
                         )
 
@@ -2356,6 +2303,22 @@ class ReActAgent:
         if is_forced and matched_skill:
             config.forced_skill_name = matched_skill.name
             config.forced_skill_tools = list(matched_skill.tools) if matched_skill.tools else None
+        # Apply per-request LLM overrides (F1.4)
+        if llm_overrides:
+            if "temperature" in llm_overrides:
+                config.temperature = float(llm_overrides["temperature"])
+            if "max_tokens" in llm_overrides:
+                config.max_tokens = int(llm_overrides["max_tokens"])
+            if "top_p" in llm_overrides:
+                config.provider_options["top_p"] = float(llm_overrides["top_p"])
+            if "frequency_penalty" in llm_overrides:
+                config.provider_options["frequency_penalty"] = float(
+                    llm_overrides["frequency_penalty"]
+                )
+            if "presence_penalty" in llm_overrides:
+                config.provider_options["presence_penalty"] = float(
+                    llm_overrides["presence_penalty"]
+                )
         processor = self._processor_factory.create_for_main(
             config=config,
             tools=tools_to_use,
@@ -2409,13 +2372,10 @@ class ReActAgent:
         # Cleanup: Deactivate skill MCP servers
         if matched_skill and self._skill_mcp_manager.active_skills:
             try:
-                await self._skill_mcp_manager.deactivate_skill(
-                    matched_skill.name
-                )
+                await self._skill_mcp_manager.deactivate_skill(matched_skill.name)
             except Exception:
                 logger.exception(
-                    "[ReActAgent] Failed to deactivate MCP servers"
-                    " for skill '%s'",
+                    "[ReActAgent] Failed to deactivate MCP servers for skill '%s'",
                     matched_skill.name,
                 )
         self._skill_mcp_tools = []

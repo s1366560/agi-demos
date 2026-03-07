@@ -5,11 +5,11 @@ import { useShallow } from 'zustand/react/shallow';
 import { providerAPI } from '@/services/api';
 
 import { getErrorMessage } from '@/types/common';
-import type { 
-  ProviderConfig, 
-  ProviderCreate, 
-  ProviderUpdate, 
-  ModelCatalogEntry 
+import type {
+  ProviderConfig,
+  ProviderCreate,
+  ProviderUpdate,
+  ModelCatalogEntry,
 } from '@/types/memory';
 
 interface ProviderState {
@@ -34,7 +34,6 @@ interface ProviderState {
   testConnection: (id: string) => Promise<boolean>;
   reset: () => void;
 }
-
 
 export const useProviderStore = create<ProviderState>()(
   devtools(
@@ -63,9 +62,9 @@ export const useProviderStore = create<ProviderState>()(
         try {
           const newProvider = await providerAPI.create(data);
           const currentProviders = get().providers;
-          set({ 
+          set({
             providers: [...currentProviders, newProvider],
-            loading: false 
+            loading: false,
           });
           return newProvider;
         } catch (err) {
@@ -80,9 +79,9 @@ export const useProviderStore = create<ProviderState>()(
         try {
           const updatedProvider = await providerAPI.update(id, data);
           const currentProviders = get().providers;
-          set({ 
-            providers: currentProviders.map(p => p.id === id ? updatedProvider : p),
-            loading: false 
+          set({
+            providers: currentProviders.map((p) => (p.id === id ? updatedProvider : p)),
+            loading: false,
           });
           return updatedProvider;
         } catch (err) {
@@ -97,9 +96,9 @@ export const useProviderStore = create<ProviderState>()(
         try {
           await providerAPI.delete(id);
           const currentProviders = get().providers;
-          set({ 
-            providers: currentProviders.filter(p => p.id !== id),
-            loading: false 
+          set({
+            providers: currentProviders.filter((p) => p.id !== id),
+            loading: false,
           });
         } catch (err) {
           const errorMsg = getErrorMessage(err);
@@ -123,39 +122,45 @@ export const useProviderStore = create<ProviderState>()(
             catalogLoading: false,
           });
         } catch (err) {
-          set({ error: getErrorMessage(err), catalogLoading: false, modelSearchResults: [], modelCatalog: [] });
+          set({
+            error: getErrorMessage(err),
+            catalogLoading: false,
+            modelSearchResults: [],
+            modelCatalog: [],
+          });
         }
       },
 
       searchModels: (query: string) => {
         const { modelCatalog } = get();
         const lowerQuery = query.toLowerCase().trim();
-        
+
         if (!lowerQuery) {
-          set({ 
+          set({
             modelSearchQuery: query,
-            modelSearchResults: Array.isArray(modelCatalog) ? modelCatalog : [] 
+            modelSearchResults: Array.isArray(modelCatalog) ? modelCatalog : [],
           });
           return;
         }
-        
+
         // Simple client-side fuzzy matching
-        const results = (Array.isArray(modelCatalog) ? modelCatalog : []).filter(model => {
+        const results = (Array.isArray(modelCatalog) ? modelCatalog : []).filter((model) => {
           // Exact substring match
           if (model.name.toLowerCase().includes(lowerQuery)) return true;
           if (model.provider?.toLowerCase().includes(lowerQuery)) return true;
-          
+
           // Split words match (all words must be present in name or provider)
           const words = lowerQuery.split(/\s+/);
-          return words.every(word => 
-            model.name.toLowerCase().includes(word) || 
-            model.provider?.toLowerCase().includes(word)
+          return words.every(
+            (word) =>
+              model.name.toLowerCase().includes(word) ||
+              model.provider?.toLowerCase().includes(word)
           );
         });
-        
-        set({ 
+
+        set({
           modelSearchQuery: query,
-          modelSearchResults: results 
+          modelSearchResults: results,
         });
       },
 
@@ -182,7 +187,7 @@ export const useProviderStore = create<ProviderState>()(
           modelSearchQuery: '',
           modelSearchResults: [],
         });
-      }
+      },
     }),
     { name: 'provider-store' }
   )
@@ -198,14 +203,16 @@ export const useModelSearchResults = () => useProviderStore((s) => s.modelSearch
 
 // Object selectors (MUST use useShallow)
 export const useProviderActions = () =>
-  useProviderStore(useShallow((s) => ({
-    fetchProviders: s.fetchProviders,
-    createProvider: s.createProvider,
-    updateProvider: s.updateProvider,
-    deleteProvider: s.deleteProvider,
-    setSelectedProvider: s.setSelectedProvider,
-    fetchModelCatalog: s.fetchModelCatalog,
-    searchModels: s.searchModels,
-    testConnection: s.testConnection,
-    reset: s.reset,
-  })));
+  useProviderStore(
+    useShallow((s) => ({
+      fetchProviders: s.fetchProviders,
+      createProvider: s.createProvider,
+      updateProvider: s.updateProvider,
+      deleteProvider: s.deleteProvider,
+      setSelectedProvider: s.setSelectedProvider,
+      fetchModelCatalog: s.fetchModelCatalog,
+      searchModels: s.searchModels,
+      testConnection: s.testConnection,
+      reset: s.reset,
+    }))
+  );

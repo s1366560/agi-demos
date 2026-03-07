@@ -167,7 +167,9 @@ export interface AgentStreamHandler {
   onSubAgentKilled?: ((event: AgentEvent<SubAgentKilledEventData>) => void) | undefined;
   onSubAgentSteered?: ((event: AgentEvent<SubAgentSteeredEventData>) => void) | undefined;
   onSubAgentDepthLimited?: ((event: AgentEvent<SubAgentDepthLimitedEventData>) => void) | undefined;
-  onSubAgentSessionUpdate?: ((event: AgentEvent<SubAgentSessionUpdateEventData>) => void) | undefined;
+  onSubAgentSessionUpdate?:
+    | ((event: AgentEvent<SubAgentSessionUpdateEventData>) => void)
+    | undefined;
   onParallelStarted?: ((event: AgentEvent<ParallelStartedEventData>) => void) | undefined;
   onParallelCompleted?: ((event: AgentEvent<ParallelCompletedEventData>) => void) | undefined;
   onChainStarted?: ((event: AgentEvent<ChainStartedEventData>) => void) | undefined;

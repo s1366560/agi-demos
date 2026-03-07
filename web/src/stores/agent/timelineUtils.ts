@@ -20,11 +20,7 @@ import type { Message, TimelineEvent } from '../../types/agent';
 export function updateHITLEventInTimeline(
   timeline: TimelineEvent[],
   requestId: string,
-  eventType:
-    | 'clarification_asked'
-    | 'decision_asked'
-    | 'env_var_requested'
-    | 'permission_asked',
+  eventType: 'clarification_asked' | 'decision_asked' | 'env_var_requested' | 'permission_asked',
   updates: {
     answered: boolean;
     answer?: string | undefined;
@@ -34,10 +30,7 @@ export function updateHITLEventInTimeline(
   }
 ): TimelineEvent[] {
   return timeline.map((event) => {
-    if (
-      event.type === eventType &&
-      (event as any).requestId === requestId
-    ) {
+    if (event.type === eventType && (event as any).requestId === requestId) {
       return { ...event, ...updates };
     }
     return event;
@@ -51,9 +44,7 @@ export function updateHITLEventInTimeline(
  * For each response event, find the matching request event by requestId,
  * mark it as answered with the response value, then remove the response event.
  */
-export function mergeHITLResponseEvents(
-  timeline: TimelineEvent[]
-): TimelineEvent[] {
+export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEvent[] {
   // Map from response type to { requestType, field to copy }
   const responseTypeMap: Record<
     string,
@@ -92,10 +83,7 @@ export function mergeHITLResponseEvents(
   };
 
   // Collect response events keyed by requestId
-  const responsesByRequestId = new Map<
-    string,
-    Record<string, unknown>
-  >();
+  const responsesByRequestId = new Map<string, Record<string, unknown>>();
   const responseEventIds = new Set<string>();
 
   for (const event of timeline) {
@@ -138,9 +126,7 @@ export function mergeHITLResponseEvents(
  * Convert TimelineEvent[] to Message[] - Simple 1:1 conversion without merging
  * Each timeline event maps directly to a message for natural ordering
  */
-export function timelineToMessages(
-  timeline: TimelineEvent[]
-): Message[] {
+export function timelineToMessages(timeline: TimelineEvent[]): Message[] {
   const messages: Message[] = [];
 
   for (const event of timeline) {

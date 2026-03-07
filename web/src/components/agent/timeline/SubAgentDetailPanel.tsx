@@ -2,12 +2,7 @@ import { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  X,
-  Clock,
-  Zap,
-  XCircle,
-} from 'lucide-react';
+import { X, Clock, Zap, XCircle } from 'lucide-react';
 
 import { StatusIcon, ModeIcon } from './SubAgentTimeline';
 import { formatDuration, formatTokens } from './subagentUtils';
@@ -39,7 +34,8 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
     return 'bg-slate-400';
   };
 
-  const firstEventTimestamp = group.events && group.events.length > 0 ? group.events[0]?.timestamp ?? 0 : 0;
+  const firstEventTimestamp =
+    group.events && group.events.length > 0 ? (group.events[0]?.timestamp ?? 0) : 0;
 
   return (
     <div className="relative flex flex-col w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-bottom-2">

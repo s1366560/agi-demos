@@ -537,6 +537,7 @@ def _build_prefetch(
 
     def prefetch_resource_html() -> None:
         if resource_cache is not None:
+
             async def _fetch(uri: str) -> str:
                 html = await sandbox_adapter.read_resource(sandbox_id, uri)
                 return html or ""
@@ -553,7 +554,9 @@ def _build_prefetch(
                 await fetch_fn()
             except Exception as exc:
                 logger.warning(
-                    "Prefetch failed for %s: %s", get_uri(), exc,
+                    "Prefetch failed for %s: %s",
+                    get_uri(),
+                    exc,
                 )
 
         with contextlib.suppress(RuntimeError):
@@ -676,9 +679,7 @@ def create_sandbox_mcp_server_tool(
 
     # -- UI metadata extraction --
     meta = tool_info.get("_meta")
-    ui_metadata: dict[str, Any] | None = (
-        meta.get("ui") if meta and isinstance(meta, dict) else None
-    )
+    ui_metadata: dict[str, Any] | None = meta.get("ui") if meta and isinstance(meta, dict) else None
 
     def _resource_uri() -> str:
         if ui_metadata:
@@ -747,7 +748,8 @@ def create_sandbox_mcp_server_tool(
                 error_msg = texts or "Tool execution failed"
                 logger.error("Sandbox MCP tool error: %s", error_msg)
                 return ToolResult(
-                    output=f"Error: {error_msg}", is_error=True,
+                    output=f"Error: {error_msg}",
+                    is_error=True,
                 )
 
             texts = _extract_text_from_content(content)
@@ -759,10 +761,13 @@ def create_sandbox_mcp_server_tool(
             )
         except Exception as exc:
             logger.exception(
-                "Error executing sandbox MCP tool %s: %s", name, exc,
+                "Error executing sandbox MCP tool %s: %s",
+                name,
+                exc,
             )
             return ToolResult(
-                output=f"Error executing tool: {exc}", is_error=True,
+                output=f"Error executing tool: {exc}",
+                is_error=True,
             )
 
     # -- Build ToolInfo --
@@ -775,6 +780,8 @@ def create_sandbox_mcp_server_tool(
         category="mcp",
         tags=frozenset({"mcp", "sandbox", server_name}),
     )
+    info.sandbox_id = sandbox_id
+    info._sandbox_id = sandbox_id
 
     # -- Attach extra attributes for processor.py compatibility --
     _attach_processor_attrs(
@@ -788,7 +795,8 @@ def create_sandbox_mcp_server_tool(
         invalidate_fn=invalidate_fn,
         prefetch_fn=prefetch_fn,
         cache_stats_fn=lambda: (
-            dict(resource_cache.get_stats()) if resource_cache is not None
+            dict(resource_cache.get_stats())
+            if resource_cache is not None
             else dict(state["cache_stats"])
         ),
     )

@@ -83,8 +83,6 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
   }
 };
 
-
-
 const isSafePreviewUrl = (src: string): boolean => {
   if (!src) return false;
   if (src.startsWith('/')) return true;
@@ -404,10 +402,7 @@ const getOfficeFileType = (mime: string, filename: string): 'docx' | 'xlsx' | 'p
     ext === 'docx'
   )
     return 'docx';
-  if (
-    m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-    ext === 'xlsx'
-  )
+  if (m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || ext === 'xlsx')
     return 'xlsx';
   if (
     m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
@@ -573,7 +568,9 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
             <button
               key={s.name}
               type="button"
-              onClick={() => { setActiveSheet(i); }}
+              onClick={() => {
+                setActiveSheet(i);
+              }}
               className={`px-3 py-1.5 text-xs font-medium rounded-t whitespace-nowrap transition-colors ${
                 i === activeSheet
                   ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-b-0 border-slate-200 dark:border-slate-700'
@@ -641,10 +638,15 @@ function inferMimeFromContent(src: string): string {
   // URL extension detection
   try {
     const pathname = new URL(src, 'http://dummy').pathname.toLowerCase();
-    if (/\.(png|jpg|jpeg|gif|webp|svg|ico|bmp|avif)$/.test(pathname)) return 'image/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'png');
-    if (/\.(mp4|webm|ogg|mov)$/.test(pathname)) return 'video/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'mp4');
-    if (/\.(mp3|wav|flac|aac|m4a)$/.test(pathname)) return 'audio/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'mpeg');
-  } catch { /* not a URL */ }
+    if (/\.(png|jpg|jpeg|gif|webp|svg|ico|bmp|avif)$/.test(pathname))
+      return 'image/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'png');
+    if (/\.(mp4|webm|ogg|mov)$/.test(pathname))
+      return 'video/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'mp4');
+    if (/\.(mp3|wav|flac|aac|m4a)$/.test(pathname))
+      return 'audio/' + (pathname.match(/\.(\w+)$/)?.[1] ?? 'mpeg');
+  } catch {
+    /* not a URL */
+  }
   return '';
 }
 
@@ -739,18 +741,15 @@ function resolveImagePayload(content: string): ImagePreviewPayload | null {
     asString(parsed.src) ??
     asString(parsed.image_url) ??
     asString(parsed.imageUrl) ??
-    (nestedImage ? asString(nestedImage.url) ?? asString(nestedImage.src) : null) ??
-    (nestedData ? asString(nestedData.url) ?? asString(nestedData.src) : null);
+    (nestedImage ? (asString(nestedImage.url) ?? asString(nestedImage.src)) : null) ??
+    (nestedData ? (asString(nestedData.url) ?? asString(nestedData.src)) : null);
 
   if (!src) return null;
 
   const mimeType =
     asString(parsed.mime_type) ??
     asString(parsed.mimeType) ??
-    (nestedImage
-      ? asString(nestedImage.mime_type) ??
-        asString(nestedImage.mimeType)
-      : null) ??
+    (nestedImage ? (asString(nestedImage.mime_type) ?? asString(nestedImage.mimeType)) : null) ??
     undefined;
 
   return { src, mimeType };
@@ -862,7 +861,11 @@ function parseFormField(entry: unknown, index: number): CanvasFormField | null {
   const required = entry.required === true;
 
   let value: string | number | boolean | undefined;
-  if (typeof entry.value === 'string' || typeof entry.value === 'number' || typeof entry.value === 'boolean') {
+  if (
+    typeof entry.value === 'string' ||
+    typeof entry.value === 'number' ||
+    typeof entry.value === 'boolean'
+  ) {
     value = entry.value;
   } else if (
     typeof entry.default === 'string' ||
@@ -899,7 +902,7 @@ function parseFormFields(parsed: unknown): CanvasFormField[] | null {
         ? parsed.required
             .map((value) => asString(value))
             .filter((value): value is string => typeof value === 'string')
-        : [],
+        : []
     );
 
     const fields = Object.entries(parsed.properties)
@@ -934,7 +937,7 @@ function parseFormFields(parsed: unknown): CanvasFormField[] | null {
 const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
   const maxValue = Math.max(
     1,
-    ...model.datasets.flatMap((dataset) => dataset.values).map((value) => Math.max(0, value)),
+    ...model.datasets.flatMap((dataset) => dataset.values).map((value) => Math.max(0, value))
   );
 
   return (
@@ -942,7 +945,10 @@ const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
       <div className="h-64 overflow-x-auto">
         <div className="h-full inline-flex items-end gap-4 min-w-full pb-10">
           {model.labels.map((label, index) => (
-            <div key={`${label}-${index}`} className="flex flex-col items-center gap-2 min-w-[52px]">
+            <div
+              key={`${label}-${index}`}
+              className="flex flex-col items-center gap-2 min-w-[52px]"
+            >
               <div className="h-48 flex items-end gap-1">
                 {model.datasets.map((dataset) => {
                   const value = Math.max(0, dataset.values[index] ?? 0);
@@ -966,8 +972,14 @@ const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         {model.datasets.map((dataset) => (
-          <div key={dataset.label} className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: dataset.color }} />
+          <div
+            key={dataset.label}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300"
+          >
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-sm"
+              style={{ backgroundColor: dataset.color }}
+            />
             <span>{dataset.label}</span>
           </div>
         ))}
@@ -1040,7 +1052,8 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => (
           );
         }
 
-        const inputType = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
+        const inputType =
+          field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
         const inputValue =
           typeof field.value === 'string' || typeof field.value === 'number'
             ? String(field.value)
@@ -1103,7 +1116,13 @@ const CanvasContent = memo<{
               style={highlighter.theme}
               language={tab.language}
               PreTag="div"
-              customStyle={{ margin: 0, padding: '1rem', borderRadius: 0, fontSize: '0.875rem', lineHeight: 1.625 }}
+              customStyle={{
+                margin: 0,
+                padding: '1rem',
+                borderRadius: 0,
+                fontSize: '0.875rem',
+                lineHeight: 1.625,
+              }}
             >
               {tab.content}
             </highlighter.SyntaxHighlighter>
@@ -1138,13 +1157,15 @@ const CanvasContent = memo<{
       const inferredMime = mime || inferMimeFromContent(previewSrc);
 
       // Media files: image, video, audio, SVG
-      if (inferredMime.startsWith('image/') || inferredMime.startsWith('video/') || inferredMime.startsWith('audio/')) {
+      if (
+        inferredMime.startsWith('image/') ||
+        inferredMime.startsWith('video/') ||
+        inferredMime.startsWith('audio/')
+      ) {
         if (!isSafeMediaUrl(previewSrc, inferredMime)) {
           return (
             <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-b-lg">
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Invalid media URL
-              </div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">Invalid media URL</div>
             </div>
           );
         }
@@ -1156,9 +1177,7 @@ const CanvasContent = memo<{
         if (!previewUrl) {
           return (
             <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-b-lg">
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Invalid file URL
-              </div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">Invalid file URL</div>
             </div>
           );
         }
@@ -1189,7 +1208,12 @@ const CanvasContent = memo<{
       }
 
       // If array of objects -> render as Ant Design Table
-      if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null) {
+      if (
+        Array.isArray(parsed) &&
+        parsed.length > 0 &&
+        typeof parsed[0] === 'object' &&
+        parsed[0] !== null
+      ) {
         const columns = Object.keys(parsed[0] as Record<string, unknown>).map((key) => ({
           title: key,
           dataIndex: key,
@@ -1203,7 +1227,10 @@ const CanvasContent = memo<{
         return (
           <div className="h-full overflow-auto bg-white dark:bg-slate-900 rounded-b-lg p-2">
             <AntTable
-              dataSource={(parsed as Record<string, unknown>[]).map((row, i) => ({ ...row, key: i }))}
+              dataSource={(parsed as Record<string, unknown>[]).map((row, i) => ({
+                ...row,
+                key: i,
+              }))}
               columns={columns}
               size="small"
               pagination={parsed.length > 50 ? { pageSize: 50 } : false}
@@ -1224,7 +1251,12 @@ const CanvasContent = memo<{
       );
     }
     case 'a2ui-surface':
-      return <A2UISurfaceRenderer surfaceId={tab.a2uiSurfaceId ?? tab.id} messages={tab.a2uiMessages ?? tab.content} />;
+      return (
+        <A2UISurfaceRenderer
+          surfaceId={tab.a2uiSurfaceId ?? tab.id}
+          messages={tab.a2uiMessages ?? tab.content}
+        />
+      );
     case 'mcp-app':
       // MCP app tabs are rendered by CanvasPanel directly (multi-instance)
       return null;

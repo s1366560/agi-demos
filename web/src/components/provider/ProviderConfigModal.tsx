@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
-import { Select } from 'antd';
+import { Select, Slider, InputNumber } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 
 import { PROVIDERS } from '../../constants/providers';
@@ -115,15 +115,20 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [showAdvancedEmbedding, setShowAdvancedEmbedding] = useState(false);
   const [showAdvancedLLM, setShowAdvancedLLM] = useState(false);
-  const [envProviders, setEnvProviders] = useState<Record<string, {
-    provider_type: string;
-    api_key: string | null;
-    base_url: string | null;
-    llm_model: string | null;
-    llm_small_model: string | null;
-    embedding_model: string | null;
-    reranker_model: string | null;
-  }>>({});
+  const [envProviders, setEnvProviders] = useState<
+    Record<
+      string,
+      {
+        provider_type: string;
+        api_key: string | null;
+        base_url: string | null;
+        llm_model: string | null;
+        llm_small_model: string | null;
+        embedding_model: string | null;
+        reranker_model: string | null;
+      }
+    >
+  >({});
 
   const { searchModels, modelSearchResults, fetchModelCatalog, modelCatalog } = useProviderStore(
     useShallow((s) => ({
@@ -261,7 +266,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
       setCurrentStep('credentials');
     } else {
-      const envDetectionPromise = providerAPI.detectEnvKeys()
+      const envDetectionPromise = providerAPI
+        .detectEnvKeys()
         .then((res) => {
           if (res.detected_providers) {
             setEnvProviders(res.detected_providers);
@@ -307,7 +313,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
             embedding_model: models.embedding[0] || '',
             reranker_model: models.rerank[0] || '',
           }));
-          
+
           envDetectionPromise.then((envData) => {
             if (envData && envData[defaultProvider]) {
               const envValues = envData[defaultProvider];
@@ -359,7 +365,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         embedding_dimensions: '1536', // Default, user can change
         reranker_model: models?.rerank[0] || '',
       };
-      
+
       const envValues = envProviders[type];
       if (envValues) {
         if (envValues.api_key) newData.api_key = envValues.api_key;
@@ -372,7 +378,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         if (envValues.embedding_model) newData.embedding_model = envValues.embedding_model;
         if (envValues.reranker_model) newData.reranker_model = envValues.reranker_model;
       }
-      
+
       return newData;
     });
 
@@ -535,63 +541,73 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       availableModels.chat.length > 0
         ? availableModels.chat
         : [...availableModels.embedding, ...availableModels.rerank];
-    const chatModels = Array.from(new Set([
-      ...fallbackLlmModels,
-      ...(Array.isArray(modelSearchResults) ? modelSearchResults : [])
-        .filter(
-          (m) =>
-            m.provider === catalogProvider &&
-            (m.capabilities.includes('chat') ||
-              (availableModels.chat.length === 0 &&
-                (m.capabilities.includes('embedding') ||
-                  m.capabilities.includes('rerank') ||
-                  m.capabilities.includes('reranking'))))
-        )
-        .map((m) => m.name),
-    ]));
+    const chatModels = Array.from(
+      new Set([
+        ...fallbackLlmModels,
+        ...(Array.isArray(modelSearchResults) ? modelSearchResults : [])
+          .filter(
+            (m) =>
+              m.provider === catalogProvider &&
+              (m.capabilities.includes('chat') ||
+                (availableModels.chat.length === 0 &&
+                  (m.capabilities.includes('embedding') ||
+                    m.capabilities.includes('rerank') ||
+                    m.capabilities.includes('reranking'))))
+          )
+          .map((m) => m.name),
+      ])
+    );
     return [
-      ...chatModels.map(m => ({ value: m, label: m })),
-      { value: '__custom__', label: 'Custom model name...' }
+      ...chatModels.map((m) => ({ value: m, label: m })),
+      { value: '__custom__', label: 'Custom model name...' },
     ];
   };
 
   const getEmbeddingOptions = () => {
     const catalogProvider = resolveCatalogProviderType(formData.provider_type);
-    const embedModels = Array.from(new Set([
-      ...availableModels.embedding,
-      ...(Array.isArray(modelSearchResults) ? modelSearchResults : [])
-        .filter((m) => m.capabilities.includes('embedding') && m.provider === catalogProvider)
-        .map((m) => m.name)
-    ]));
+    const embedModels = Array.from(
+      new Set([
+        ...availableModels.embedding,
+        ...(Array.isArray(modelSearchResults) ? modelSearchResults : [])
+          .filter((m) => m.capabilities.includes('embedding') && m.provider === catalogProvider)
+          .map((m) => m.name),
+      ])
+    );
     return [
-      ...embedModels.map(m => ({ value: m, label: m })),
-      { value: '__custom__', label: 'Custom model name...' }
+      ...embedModels.map((m) => ({ value: m, label: m })),
+      { value: '__custom__', label: 'Custom model name...' },
     ];
   };
 
   const getRerankerOptions = () => {
     const catalogProvider = resolveCatalogProviderType(formData.provider_type);
-    const rerankModels = Array.from(new Set([
-      ...availableModels.rerank,
-      ...(Array.isArray(modelSearchResults) ? modelSearchResults : [])
-        .filter(
-          (m) =>
-            (m.capabilities.includes('reranking') || m.name.includes('rerank')) &&
-            m.provider === catalogProvider
-        )
-        .map((m) => m.name)
-    ]));
+    const rerankModels = Array.from(
+      new Set([
+        ...availableModels.rerank,
+        ...(Array.isArray(modelSearchResults) ? modelSearchResults : [])
+          .filter(
+            (m) =>
+              (m.capabilities.includes('reranking') || m.name.includes('rerank')) &&
+              m.provider === catalogProvider
+          )
+          .map((m) => m.name),
+      ])
+    );
     return [
-      ...rerankModels.map(m => ({ value: m, label: m })),
-      { value: '__custom__', label: 'Custom model name...' }
+      ...rerankModels.map((m) => ({ value: m, label: m })),
+      { value: '__custom__', label: 'Custom model name...' },
     ];
   };
 
   const category = getProviderCategory(formData.provider_type);
-  const providerMeta = PROVIDERS.find((p) => p.value === resolveCatalogProviderType(formData.provider_type));
+  const providerMeta = PROVIDERS.find(
+    (p) => p.value === resolveCatalogProviderType(formData.provider_type)
+  );
   const showLlmFields = category === 'chat' || category === 'coding';
-  const showEmbeddingFields = category === 'embedding' || (category === 'chat' && !!providerMeta?.hasEmbedding);
-  const showRerankerFields = category === 'reranker' || (category === 'chat' && !!providerMeta?.hasNativeRerank);
+  const showEmbeddingFields =
+    category === 'embedding' || (category === 'chat' && !!providerMeta?.hasEmbedding);
+  const showRerankerFields =
+    category === 'reranker' || (category === 'chat' && !!providerMeta?.hasNativeRerank);
 
   if (!isOpen) return null;
 
@@ -712,11 +728,18 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               <div className="space-y-4">
                 {!isEditing && envProviders[formData.provider_type] && (
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-start gap-3">
-                    <MaterialIcon name="auto_awesome" size={20} className="text-green-600 dark:text-green-400 mt-0.5" />
+                    <MaterialIcon
+                      name="auto_awesome"
+                      size={20}
+                      className="text-green-600 dark:text-green-400 mt-0.5"
+                    />
                     <div>
-                      <h4 className="text-sm font-medium text-green-800 dark:text-green-300">Environment Variables Detected</h4>
+                      <h4 className="text-sm font-medium text-green-800 dark:text-green-300">
+                        Environment Variables Detected
+                      </h4>
                       <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
-                        We found configuration in your environment variables. The fields below have been auto-filled.
+                        We found configuration in your environment variables. The fields below have
+                        been auto-filled.
                       </p>
                     </div>
                   </div>
@@ -742,7 +765,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         API Key
                         {!isEditing && envProviders[formData.provider_type]?.api_key && (
-                          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">From ENV</span>
+                          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                            From ENV
+                          </span>
                         )}
                       </label>
                       <div className="flex gap-2">
@@ -792,7 +817,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Base URL (Optional)
                       {!isEditing && envProviders[formData.provider_type]?.base_url && (
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">From ENV</span>
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          From ENV
+                        </span>
                       )}
                     </label>
                     <input
@@ -871,421 +898,555 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                 {/* Primary LLM Model */}
                 {showLlmFields && (
-                <>
-                  <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Primary LLM Model
-                  </label>
-                  {useCustomModel.llm ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.llm_model}
-                        onChange={(e) => {
-                          setFormData({ ...formData, llm_model: e.target.value });
-                        }}
-                        placeholder="Enter custom model name"
-                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomModel({ ...useCustomModel, llm: false });
-                          const primaryModel = resolvePrimaryLlmModel(availableModels);
-                          setFormData({
-                            ...formData,
-                            llm_model: primaryModel,
-                          });
-                        }}
-                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                        title="Use preset model"
-                      >
-                        <MaterialIcon name="list" size={18} />
-                      </button>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Primary LLM Model
+                      </label>
+                      {useCustomModel.llm ? (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={formData.llm_model}
+                            onChange={(e) => {
+                              setFormData({ ...formData, llm_model: e.target.value });
+                            }}
+                            placeholder="Enter custom model name"
+                            className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUseCustomModel({ ...useCustomModel, llm: false });
+                              const primaryModel = resolvePrimaryLlmModel(availableModels);
+                              setFormData({
+                                ...formData,
+                                llm_model: primaryModel,
+                              });
+                            }}
+                            className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            title="Use preset model"
+                          >
+                            <MaterialIcon name="list" size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <Select
+                          showSearch
+                          value={formData.llm_model}
+                          onChange={(value) => {
+                            if (value === '__custom__') {
+                              setUseCustomModel({ ...useCustomModel, llm: true });
+                              setFormData({ ...formData, llm_model: '' });
+                            } else {
+                              setFormData({ ...formData, llm_model: value });
+                            }
+                          }}
+                          onSearch={(val) => {
+                            searchModels(val);
+                          }}
+                          filterOption={(input, option) =>
+                            (option?.label ?? '')
+                              .toString()
+                              .toLowerCase()
+                              .includes(input.toLowerCase())
+                          }
+                          options={getLlmOptions()}
+                          className="w-full h-[42px] custom-ant-select"
+                          disabled={isLoadingModels}
+                          placeholder={isLoadingModels ? 'Loading models...' : 'Select a model'}
+                        />
+                      )}
                     </div>
-                  ) : (
-                    <Select
-                      showSearch
-                      value={formData.llm_model}
-                      onChange={(value) => {
-                        if (value === '__custom__') {
-                          setUseCustomModel({ ...useCustomModel, llm: true });
-                          setFormData({ ...formData, llm_model: '' });
-                        } else {
-                          setFormData({ ...formData, llm_model: value });
-                        }
-                      }}
-                      onSearch={(val) => { searchModels(val); }}
-                      filterOption={(input, option) =>
-                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={getLlmOptions()}
-                      className="w-full h-[42px] custom-ant-select"
-                      disabled={isLoadingModels}
-                      placeholder={isLoadingModels ? 'Loading models...' : 'Select a model'}
-                    />
-                  )}
-                </div>
 
-                {/* Model Info Card */}
-                {selectedModelMeta && (
-                  <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                        Model Info
-                      </span>
-                      {selectedModelMeta.is_deprecated && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
-                          Deprecated
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500">Context</span>
-                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                          {selectedModelMeta.context_length >= 1_000_000
-                            ? `${(selectedModelMeta.context_length / 1_000_000).toFixed(1)}M`
-                            : `${Math.round(selectedModelMeta.context_length / 1000)}k`}
+                    {/* Model Info Card */}
+                    {selectedModelMeta && (
+                      <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                            Model Info
+                          </span>
+                          {selectedModelMeta.is_deprecated && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
+                              Deprecated
+                            </span>
+                          )}
                         </div>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500">Max Output</span>
-                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                          {selectedModelMeta.max_output_tokens >= 1_000_000
-                            ? `${(selectedModelMeta.max_output_tokens / 1_000_000).toFixed(1)}M`
-                            : selectedModelMeta.max_output_tokens >= 1000
-                              ? `${Math.round(selectedModelMeta.max_output_tokens / 1000)}k`
-                              : selectedModelMeta.max_output_tokens}
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-slate-400 dark:text-slate-500">Context</span>
+                            <div className="font-medium text-slate-700 dark:text-slate-300">
+                              {selectedModelMeta.context_length >= 1_000_000
+                                ? `${(selectedModelMeta.context_length / 1_000_000).toFixed(1)}M`
+                                : `${Math.round(selectedModelMeta.context_length / 1000)}k`}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 dark:text-slate-500">Max Output</span>
+                            <div className="font-medium text-slate-700 dark:text-slate-300">
+                              {selectedModelMeta.max_output_tokens >= 1_000_000
+                                ? `${(selectedModelMeta.max_output_tokens / 1_000_000).toFixed(1)}M`
+                                : selectedModelMeta.max_output_tokens >= 1000
+                                  ? `${Math.round(selectedModelMeta.max_output_tokens / 1000)}k`
+                                  : selectedModelMeta.max_output_tokens}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 dark:text-slate-500">Cost ($/1M)</span>
+                            <div className="font-medium text-slate-700 dark:text-slate-300">
+                              {selectedModelMeta.input_cost_per_1m != null
+                                ? `$${selectedModelMeta.input_cost_per_1m} / ${selectedModelMeta.output_cost_per_1m != null ? '$' + selectedModelMeta.output_cost_per_1m : '?'}`
+                                : 'N/A'}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500">Cost ($/1M)</span>
-                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                          {selectedModelMeta.input_cost_per_1m != null
-                            ? `$${selectedModelMeta.input_cost_per_1m} / ${selectedModelMeta.output_cost_per_1m != null ? '$' + selectedModelMeta.output_cost_per_1m : '?'}`
-                            : 'N/A'}
+                        <div className="flex flex-wrap gap-1">
+                          {selectedModelMeta.reasoning && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">
+                              Reasoning
+                            </span>
+                          )}
+                          {selectedModelMeta.supports_tool_call && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">
+                              Tools
+                            </span>
+                          )}
+                          {selectedModelMeta.capabilities.includes('vision') && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
+                              Vision
+                            </span>
+                          )}
+                          {selectedModelMeta.supports_structured_output && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">
+                              Structured
+                            </span>
+                          )}
+                          {selectedModelMeta.supports_temperature && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 rounded">
+                              Temperature
+                            </span>
+                          )}
+                          {selectedModelMeta.open_weights && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 rounded">
+                              Open
+                            </span>
+                          )}
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedModelMeta.reasoning && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">Reasoning</span>
-                      )}
-                      {selectedModelMeta.supports_tool_call && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">Tools</span>
-                      )}
-                      {selectedModelMeta.capabilities.includes('vision') && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">Vision</span>
-                      )}
-                      {selectedModelMeta.supports_structured_output && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">Structured</span>
-                      )}
-                      {selectedModelMeta.supports_temperature && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 rounded">Temperature</span>
-                      )}
-                      {selectedModelMeta.open_weights && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 rounded">Open</span>
-                      )}
-                    </div>
-                    {selectedModelMeta.knowledge_cutoff && (
-                      <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                        Knowledge cutoff: {selectedModelMeta.knowledge_cutoff}
+                        {selectedModelMeta.knowledge_cutoff && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                            Knowledge cutoff: {selectedModelMeta.knowledge_cutoff}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-                </>
+                  </>
                 )}
 
                 {/* Small/Fast Model */}
                 {showLlmFields && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Small/Fast Model (Optional)
-                  </label>
-                  {useCustomModel.small ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.llm_small_model}
-                        onChange={(e) => {
-                          setFormData({ ...formData, llm_small_model: e.target.value });
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Small/Fast Model (Optional)
+                    </label>
+                    {useCustomModel.small ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={formData.llm_small_model}
+                          onChange={(e) => {
+                            setFormData({ ...formData, llm_small_model: e.target.value });
+                          }}
+                          placeholder="Enter custom model name"
+                          className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseCustomModel({ ...useCustomModel, small: false });
+                            const primaryModel =
+                              formData.llm_model || resolvePrimaryLlmModel(availableModels);
+                            setFormData({
+                              ...formData,
+                              llm_small_model: resolveSmallLlmModel(availableModels, primaryModel),
+                            });
+                          }}
+                          className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          title="Use preset model"
+                        >
+                          <MaterialIcon name="list" size={18} />
+                        </button>
+                      </div>
+                    ) : (
+                      <Select
+                        showSearch
+                        allowClear
+                        value={formData.llm_small_model || undefined}
+                        onChange={(value) => {
+                          if (value === '__custom__') {
+                            setUseCustomModel({ ...useCustomModel, small: true });
+                            setFormData({ ...formData, llm_small_model: '' });
+                          } else {
+                            setFormData({ ...formData, llm_small_model: value || '' });
+                          }
                         }}
-                        placeholder="Enter custom model name"
-                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomModel({ ...useCustomModel, small: false });
-                          const primaryModel =
-                            formData.llm_model || resolvePrimaryLlmModel(availableModels);
-                          setFormData({
-                            ...formData,
-                            llm_small_model: resolveSmallLlmModel(availableModels, primaryModel),
-                          });
+                        onSearch={(val) => {
+                          searchModels(val);
                         }}
-                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                        title="Use preset model"
-                      >
-                        <MaterialIcon name="list" size={18} />
-                      </button>
-                    </div>
-                  ) : (
-                    <Select
-                      showSearch
-                      allowClear
-                      value={formData.llm_small_model || undefined}
-                      onChange={(value) => {
-                        if (value === '__custom__') {
-                          setUseCustomModel({ ...useCustomModel, small: true });
-                          setFormData({ ...formData, llm_small_model: '' });
-                        } else {
-                          setFormData({ ...formData, llm_small_model: value || '' });
+                        filterOption={(input, option) =>
+                          (option?.label ?? '')
+                            .toString()
+                            .toLowerCase()
+                            .includes(input.toLowerCase())
                         }
-                      }}
-                      onSearch={(val) => { searchModels(val); }}
-                      filterOption={(input, option) =>
-                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={getLlmOptions()}
-                      className="w-full h-[42px] custom-ant-select"
-                      disabled={isLoadingModels}
-                    />
-                  )}
-                </div>
+                        options={getLlmOptions()}
+                        className="w-full h-[42px] custom-ant-select"
+                        disabled={isLoadingModels}
+                      />
+                    )}
+                  </div>
                 )}
 
                 {/* Advanced LLM Settings */}
                 {showLlmFields && (
-                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAdvancedLLM(!showAdvancedLLM);
-                    }}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Advanced LLM Settings
-                    </span>
-                    <MaterialIcon
-                      name={showAdvancedLLM ? 'expand_less' : 'expand_more'}
-                      size={20}
-                      className="text-slate-500"
-                    />
-                  </button>
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAdvancedLLM(!showAdvancedLLM);
+                      }}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Advanced LLM Settings
+                      </span>
+                      <MaterialIcon
+                        name={showAdvancedLLM ? 'expand_less' : 'expand_more'}
+                        size={20}
+                        className="text-slate-500"
+                      />
+                    </button>
 
-                  {showAdvancedLLM && (
-                    <div className="p-4 space-y-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Temperature
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="2"
-                            step="0.1"
-                            value={formData.config.temperature ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                temperature: e.target.value ? Number(e.target.value) : undefined,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            placeholder="e.g. 0.7"
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                          />
-                          {selectedModelMeta && !selectedModelMeta.supports_temperature && (
-                            <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
-                              This model may not support temperature control
-                            </p>
+                    {showAdvancedLLM && (
+                      <div className="p-4 space-y-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+                        <div className="grid grid-cols-2 gap-4">
+                          {selectedModelMeta?.supports_temperature !== false && (
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Temperature
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <div style={{ flex: 1 }}>
+                                  <Slider
+                                    min={selectedModelMeta?.temperature_range?.[0] ?? 0}
+                                    max={selectedModelMeta?.temperature_range?.[1] ?? 2}
+                                    step={0.01}
+                                    value={
+                                      typeof formData.config.temperature === 'number'
+                                        ? formData.config.temperature
+                                        : (selectedModelMeta?.temperature_range?.[0] ?? 0)
+                                    }
+                                    onChange={(val) => {
+                                      const newConfig = {
+                                        ...formData.config,
+                                        temperature: val ?? undefined,
+                                      };
+                                      setFormData({ ...formData, config: newConfig });
+                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                    }}
+                                  />
+                                </div>
+                                <InputNumber
+                                  min={selectedModelMeta?.temperature_range?.[0] ?? 0}
+                                  max={selectedModelMeta?.temperature_range?.[1] ?? 2}
+                                  step={0.01}
+                                  size="small"
+                                  className="w-20"
+                                  value={formData.config.temperature ?? undefined}
+                                  onChange={(val) => {
+                                    const newConfig = {
+                                      ...formData.config,
+                                      temperature: val ?? undefined,
+                                    };
+                                    setFormData({ ...formData, config: newConfig });
+                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Max Tokens
+                            </label>
+                            <InputNumber
+                              min={1}
+                              size="small"
+                              className="w-full"
+                              placeholder={
+                                selectedModelMeta?.max_output_tokens
+                                  ? `Max: ${selectedModelMeta.max_output_tokens.toLocaleString()}`
+                                  : 'e.g. 4096'
+                              }
+                              value={formData.config.max_tokens ?? undefined}
+                              onChange={(val) => {
+                                const newConfig = {
+                                  ...formData.config,
+                                  max_tokens: val ?? undefined,
+                                };
+                                setFormData({ ...formData, config: newConfig });
+                                setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          {selectedModelMeta?.supports_top_p !== false && (
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Top P
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <div style={{ flex: 1 }}>
+                                  <Slider
+                                    min={selectedModelMeta?.top_p_range?.[0] ?? 0}
+                                    max={selectedModelMeta?.top_p_range?.[1] ?? 1}
+                                    step={0.01}
+                                    value={
+                                      typeof formData.config.top_p === 'number'
+                                        ? formData.config.top_p
+                                        : (selectedModelMeta?.top_p_range?.[0] ?? 0)
+                                    }
+                                    onChange={(val) => {
+                                      const newConfig = {
+                                        ...formData.config,
+                                        top_p: val ?? undefined,
+                                      };
+                                      setFormData({ ...formData, config: newConfig });
+                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                    }}
+                                  />
+                                </div>
+                                <InputNumber
+                                  min={selectedModelMeta?.top_p_range?.[0] ?? 0}
+                                  max={selectedModelMeta?.top_p_range?.[1] ?? 1}
+                                  step={0.01}
+                                  size="small"
+                                  className="w-20"
+                                  value={formData.config.top_p ?? undefined}
+                                  onChange={(val) => {
+                                    const newConfig = {
+                                      ...formData.config,
+                                      top_p: val ?? undefined,
+                                    };
+                                    setFormData({ ...formData, config: newConfig });
+                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Timeout (seconds)
+                            </label>
+                            <InputNumber
+                              min={1}
+                              size="small"
+                              className="w-full"
+                              placeholder="e.g. 120"
+                              value={formData.config.timeout_seconds ?? undefined}
+                              onChange={(val) => {
+                                const newConfig = {
+                                  ...formData.config,
+                                  timeout_seconds: val ?? undefined,
+                                };
+                                setFormData({ ...formData, config: newConfig });
+                                setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          {selectedModelMeta?.supports_frequency_penalty !== false && (
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Frequency Penalty
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <div style={{ flex: 1 }}>
+                                  <Slider
+                                    min={-2}
+                                    max={2}
+                                    step={0.1}
+                                    value={
+                                      typeof formData.config.frequency_penalty === 'number'
+                                        ? formData.config.frequency_penalty
+                                        : 0
+                                    }
+                                    onChange={(val) => {
+                                      const newConfig = {
+                                        ...formData.config,
+                                        frequency_penalty: val ?? undefined,
+                                      };
+                                      setFormData({ ...formData, config: newConfig });
+                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                    }}
+                                  />
+                                </div>
+                                <InputNumber
+                                  min={-2}
+                                  max={2}
+                                  step={0.1}
+                                  size="small"
+                                  className="w-20"
+                                  value={formData.config.frequency_penalty ?? undefined}
+                                  onChange={(val) => {
+                                    const newConfig = {
+                                      ...formData.config,
+                                      frequency_penalty: val ?? undefined,
+                                    };
+                                    setFormData({ ...formData, config: newConfig });
+                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {selectedModelMeta?.supports_presence_penalty !== false && (
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Presence Penalty
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <div style={{ flex: 1 }}>
+                                  <Slider
+                                    min={-2}
+                                    max={2}
+                                    step={0.1}
+                                    value={
+                                      typeof formData.config.presence_penalty === 'number'
+                                        ? formData.config.presence_penalty
+                                        : 0
+                                    }
+                                    onChange={(val) => {
+                                      const newConfig = {
+                                        ...formData.config,
+                                        presence_penalty: val ?? undefined,
+                                      };
+                                      setFormData({ ...formData, config: newConfig });
+                                      setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                    }}
+                                  />
+                                </div>
+                                <InputNumber
+                                  min={-2}
+                                  max={2}
+                                  step={0.1}
+                                  size="small"
+                                  className="w-20"
+                                  value={formData.config.presence_penalty ?? undefined}
+                                  onChange={(val) => {
+                                    const newConfig = {
+                                      ...formData.config,
+                                      presence_penalty: val ?? undefined,
+                                    };
+                                    setFormData({ ...formData, config: newConfig });
+                                    setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                  }}
+                                />
+                              </div>
+                            </div>
                           )}
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Max Tokens
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={formData.config.max_tokens ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                max_tokens: e.target.value ? Number(e.target.value) : undefined,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            placeholder={selectedModelMeta?.max_output_tokens ? `Max: ${selectedModelMeta.max_output_tokens.toLocaleString()}` : 'e.g. 4096'}
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                          />
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Top P
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="1"
-                            step="0.1"
-                            value={formData.config.top_p ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                top_p: e.target.value ? Number(e.target.value) : undefined,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            placeholder="e.g. 1.0"
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Timeout (seconds)
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={formData.config.timeout_seconds ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                timeout_seconds: e.target.value
-                                  ? Number(e.target.value)
-                                  : undefined,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            placeholder="e.g. 120"
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                          />
-                        </div>
+                        {selectedModelMeta?.supports_seed !== false && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Seed
+                              </label>
+                              <InputNumber
+                                size="small"
+                                className="w-full"
+                                placeholder="e.g. 42"
+                                precision={0}
+                                value={formData.config.seed ?? undefined}
+                                onChange={(val) => {
+                                  const newConfig = { ...formData.config, seed: val ?? undefined };
+                                  setFormData({ ...formData, config: newConfig });
+                                  setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Frequency Penalty
-                          </label>
-                          <input
-                            type="number"
-                            min="-2"
-                            max="2"
-                            step="0.1"
-                            value={formData.config.frequency_penalty ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                frequency_penalty: e.target.value
-                                  ? Number(e.target.value)
-                                  : undefined,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            placeholder="e.g. 0.0"
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Presence Penalty
-                          </label>
-                          <input
-                            type="number"
-                            min="-2"
-                            max="2"
-                            step="0.1"
-                            value={formData.config.presence_penalty ?? ''}
-                            onChange={(e) => {
-                              const newConfig = {
-                                ...formData.config,
-                                presence_penalty: e.target.value
-                                  ? Number(e.target.value)
-                                  : undefined,
-                              };
-                              setFormData({ ...formData, config: newConfig });
-                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
-                            }}
-                            placeholder="e.g. 0.0"
-                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Embedding Model */}
                 {showEmbeddingFields && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    {category === 'embedding' ? 'Embedding Model' : 'Embedding Model (Optional)'}
-                  </label>
-                  {useCustomModel.embedding ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.embedding_model}
-                        onChange={(e) => {
-                          setFormData({ ...formData, embedding_model: e.target.value });
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      {category === 'embedding' ? 'Embedding Model' : 'Embedding Model (Optional)'}
+                    </label>
+                    {useCustomModel.embedding ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={formData.embedding_model}
+                          onChange={(e) => {
+                            setFormData({ ...formData, embedding_model: e.target.value });
+                          }}
+                          placeholder="Enter custom model name"
+                          className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseCustomModel({ ...useCustomModel, embedding: false });
+                            setFormData({
+                              ...formData,
+                              embedding_model: availableModels.embedding[0] || '',
+                            });
+                          }}
+                          className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          title="Use preset model"
+                        >
+                          <MaterialIcon name="list" size={18} />
+                        </button>
+                      </div>
+                    ) : (
+                      <Select
+                        showSearch
+                        allowClear
+                        value={formData.embedding_model || undefined}
+                        onChange={(value) => {
+                          if (value === '__custom__') {
+                            setUseCustomModel({ ...useCustomModel, embedding: true });
+                            setFormData({ ...formData, embedding_model: '' });
+                          } else {
+                            setFormData({ ...formData, embedding_model: value || '' });
+                          }
                         }}
-                        placeholder="Enter custom model name"
-                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomModel({ ...useCustomModel, embedding: false });
-                          setFormData({
-                            ...formData,
-                            embedding_model: availableModels.embedding[0] || '',
-                          });
+                        onSearch={(val) => {
+                          searchModels(val);
                         }}
-                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                        title="Use preset model"
-                      >
-                        <MaterialIcon name="list" size={18} />
-                      </button>
-                    </div>
-                  ) : (
-                    <Select
-                      showSearch
-                      allowClear
-                      value={formData.embedding_model || undefined}
-                      onChange={(value) => {
-                        if (value === '__custom__') {
-                          setUseCustomModel({ ...useCustomModel, embedding: true });
-                          setFormData({ ...formData, embedding_model: '' });
-                        } else {
-                          setFormData({ ...formData, embedding_model: value || '' });
+                        filterOption={(input, option) =>
+                          (option?.label ?? '')
+                            .toString()
+                            .toLowerCase()
+                            .includes(input.toLowerCase())
                         }
-                      }}
-                      onSearch={(val) => { searchModels(val); }}
-                      filterOption={(input, option) =>
-                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={getEmbeddingOptions()}
-                      className="w-full h-[42px] custom-ant-select"
-                      disabled={isLoadingModels}
-                    />
-                  )}
-                </div>
+                        options={getEmbeddingOptions()}
+                        className="w-full h-[42px] custom-ant-select"
+                        disabled={isLoadingModels}
+                      />
+                    )}
+                  </div>
                 )}
 
                 {/* Advanced Embedding Settings */}
@@ -1401,60 +1562,65 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                 {/* Reranker Model */}
                 {showRerankerFields && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    {category === 'reranker' ? 'Reranker Model' : 'Reranker Model (Optional)'}
-                  </label>
-                  {useCustomModel.reranker ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.reranker_model}
-                        onChange={(e) => {
-                          setFormData({ ...formData, reranker_model: e.target.value });
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      {category === 'reranker' ? 'Reranker Model' : 'Reranker Model (Optional)'}
+                    </label>
+                    {useCustomModel.reranker ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={formData.reranker_model}
+                          onChange={(e) => {
+                            setFormData({ ...formData, reranker_model: e.target.value });
+                          }}
+                          placeholder="Enter custom model name"
+                          className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseCustomModel({ ...useCustomModel, reranker: false });
+                            setFormData({
+                              ...formData,
+                              reranker_model: availableModels.rerank[0] || '',
+                            });
+                          }}
+                          className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                          title="Use preset model"
+                        >
+                          <MaterialIcon name="list" size={18} />
+                        </button>
+                      </div>
+                    ) : (
+                      <Select
+                        showSearch
+                        allowClear
+                        value={formData.reranker_model || undefined}
+                        onChange={(value) => {
+                          if (value === '__custom__') {
+                            setUseCustomModel({ ...useCustomModel, reranker: true });
+                            setFormData({ ...formData, reranker_model: '' });
+                          } else {
+                            setFormData({ ...formData, reranker_model: value || '' });
+                          }
                         }}
-                        placeholder="Enter custom model name"
-                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomModel({ ...useCustomModel, reranker: false });
-                          setFormData({
-                            ...formData,
-                            reranker_model: availableModels.rerank[0] || '',
-                          });
+                        onSearch={(val) => {
+                          searchModels(val);
                         }}
-                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                        title="Use preset model"
-                      >
-                        <MaterialIcon name="list" size={18} />
-                      </button>
-                    </div>
-                  ) : (
-                    <Select
-                      showSearch
-                      allowClear
-                      value={formData.reranker_model || undefined}
-                      onChange={(value) => {
-                        if (value === '__custom__') {
-                          setUseCustomModel({ ...useCustomModel, reranker: true });
-                          setFormData({ ...formData, reranker_model: '' });
-                        } else {
-                          setFormData({ ...formData, reranker_model: value || '' });
+                        filterOption={(input, option) =>
+                          (option?.label ?? '')
+                            .toString()
+                            .toLowerCase()
+                            .includes(input.toLowerCase())
                         }
-                      }}
-                      onSearch={(val) => { searchModels(val); }}
-                      filterOption={(input, option) =>
-                        (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={getRerankerOptions()}
-                      className="w-full h-[42px] custom-ant-select"
-                      disabled={isLoadingModels}
-                      placeholder="Select or enter custom model..."
-                    />
-                  )}
-                </div>
+                        options={getRerankerOptions()}
+                        className="w-full h-[42px] custom-ant-select"
+                        disabled={isLoadingModels}
+                        placeholder="Select or enter custom model..."
+                      />
+                    )}
+                  </div>
                 )}
               </div>
             )}

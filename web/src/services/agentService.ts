@@ -55,7 +55,8 @@ class AgentServiceImpl implements AgentService {
   private subscriptions: Set<string> = new Set();
 
   // Status subscription for Agent session monitoring
-  private statusSubscriber: { projectId: string; callback: (status: unknown) => void } | null = null;
+  private statusSubscriber: { projectId: string; callback: (status: unknown) => void } | null =
+    null;
 
   // Lifecycle state subscription for Agent lifecycle monitoring
   private lifecycleStateSubscriber: {
@@ -78,8 +79,12 @@ class AgentServiceImpl implements AgentService {
   constructor() {
     this.wsConnection = new WebSocketConnection({
       sessionId: this.sessionId,
-      onMessage: (msg) => { this.handleMessage(msg); },
-      onReconnect: () => { this.resubscribe(); },
+      onMessage: (msg) => {
+        this.handleMessage(msg);
+      },
+      onReconnect: () => {
+        this.resubscribe();
+      },
     });
   }
 
@@ -236,21 +241,23 @@ class AgentServiceImpl implements AgentService {
   getContextStatus(
     conversationId: string,
     projectId: string
-  ): Promise<{
-    conversation_id: string;
-    token_usage: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-      estimated_cost_usd: number;
-    };
-    compression_level: string;
-    last_compressed_time?: string;
-  } & Partial<{
-    from_cache: boolean;
-    messages_in_summary: number;
-    summary_tokens: number;
-  }>> {
+  ): Promise<
+    {
+      conversation_id: string;
+      token_usage: {
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+        estimated_cost_usd: number;
+      };
+      compression_level: string;
+      last_compressed_time?: string;
+    } & Partial<{
+      from_cache: boolean;
+      messages_in_summary: number;
+      summary_tokens: number;
+    }>
+  > {
     return restApi.getContextStatus(conversationId, projectId);
   }
 
@@ -266,17 +273,11 @@ class AgentServiceImpl implements AgentService {
     return restApi.updateConversationTitle(conversationId, projectId, title);
   }
 
-  generateConversationTitle(
-    conversationId: string,
-    projectId: string
-  ): Promise<Conversation> {
+  generateConversationTitle(conversationId: string, projectId: string): Promise<Conversation> {
     return restApi.generateConversationTitle(conversationId, projectId);
   }
 
-  generateConversationSummary(
-    conversationId: string,
-    projectId: string
-  ): Promise<Conversation> {
+  generateConversationSummary(conversationId: string, projectId: string): Promise<Conversation> {
     return restApi.generateConversationSummary(conversationId, projectId);
   }
 
@@ -328,10 +329,7 @@ class AgentServiceImpl implements AgentService {
     return restApi.getExecutionHistory(conversationId, projectId, limit, statusFilter, toolFilter);
   }
 
-  getExecutionStats(
-    conversationId: string,
-    projectId: string
-  ): Promise<ExecutionStatsResponse> {
+  getExecutionStats(conversationId: string, projectId: string): Promise<ExecutionStatsResponse> {
     return restApi.getExecutionStats(conversationId, projectId);
   }
 
@@ -430,7 +428,7 @@ class AgentServiceImpl implements AgentService {
     requestId: string,
     actionName: string,
     sourceComponentId: string,
-    context: Record<string, unknown>,
+    context: Record<string, unknown>
   ): Promise<void> {
     if (this.isConnected()) {
       this.send({
@@ -442,12 +440,7 @@ class AgentServiceImpl implements AgentService {
       });
       return Promise.resolve();
     }
-    return restApi.respondToA2UIActionHttp(
-      requestId,
-      actionName,
-      sourceComponentId,
-      context,
-    );
+    return restApi.respondToA2UIActionHttp(requestId, actionName, sourceComponentId, context);
   }
 
   stopChat(conversationId: string): boolean {
@@ -520,7 +513,14 @@ class AgentServiceImpl implements AgentService {
   }
 
   async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {
-    const { conversation_id, message, project_id, file_metadata } = request;
+    const {
+      conversation_id,
+      message,
+      project_id,
+      file_metadata,
+      forced_skill_name,
+      app_model_context,
+    } = request;
 
     if (!this.isConnected()) {
       await this.connect();
@@ -535,6 +535,8 @@ class AgentServiceImpl implements AgentService {
       message,
       project_id,
       file_metadata,
+      forced_skill_name,
+      app_model_context,
     });
 
     if (!sent) {

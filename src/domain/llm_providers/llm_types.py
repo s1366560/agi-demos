@@ -98,7 +98,13 @@ class ChatResponse:
 
 @dataclass
 class LLMConfig:
-    """Configuration for LLM clients."""
+    """Configuration for LLM clients.
+
+    Core connection fields (api_key, model, base_url) plus generation
+    parameters.  All generation parameters default to ``None`` so that
+    the downstream ``param_resolver`` can distinguish "not set" from
+    "explicitly set to zero".
+    """
 
     api_key: str | None = None
     model: str = ""
@@ -106,6 +112,14 @@ class LLMConfig:
     temperature: float = 0.0
     max_tokens: int = 4096
     base_url: str | None = None
+
+    # --- Extended generation parameters (B2.1) ---
+    top_p: float | None = None
+    frequency_penalty: float | None = None
+    presence_penalty: float | None = None
+    seed: int | None = None
+    stop: list[str] | None = None
+    response_format: dict[str, Any] | None = None
 
 
 class RateLimitError(Exception):

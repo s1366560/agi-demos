@@ -28,7 +28,6 @@ export const STREAMING_CONTENT_SYMBOL = Symbol('MessageAreaStreamingContent');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const MessageAreaContext = createContext<any>(null);
 
- 
 export const useMessageArea = () => {
   return MessageAreaContext;
 };

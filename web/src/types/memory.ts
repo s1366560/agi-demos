@@ -416,6 +416,48 @@ export interface ModelCatalogEntry {
   knowledge_cutoff?: string | null;
   release_date?: string | null;
   description?: string;
+
+  // Parameter defaults (from models.dev catalog data)
+  default_temperature?: number | null;
+  default_top_p?: number | null;
+  default_frequency_penalty?: number | null;
+  default_presence_penalty?: number | null;
+  default_seed?: number | null;
+  default_stop?: string[] | null;
+
+  // Parameter support flags
+  supports_response_format?: boolean;
+  supports_seed?: boolean;
+  supports_stop?: boolean;
+  supports_frequency_penalty?: boolean;
+  supports_presence_penalty?: boolean;
+  supports_top_p?: boolean;
+
+  // Parameter ranges
+  temperature_range?: [number, number] | null;
+  top_p_range?: [number, number] | null;
+
+  // Exhaustive list of supported OpenAI-compatible params
+  supported_params?: string[];
+}
+
+/**
+ * User-configurable LLM parameter overrides.
+ *
+ * These are the parameters a user can override per-provider or per-request.
+ * The resolution chain is: user_overrides > provider_config.config > model defaults > omit.
+ * Only parameters supported by the selected model (via ModelCatalogEntry flags) should
+ * be exposed in the UI.
+ */
+export interface LLMConfigOverrides {
+  temperature?: number | null;
+  top_p?: number | null;
+  max_tokens?: number | null;
+  frequency_penalty?: number | null;
+  presence_penalty?: number | null;
+  seed?: number | null;
+  stop?: string[] | null;
+  response_format?: { type: 'text' | 'json_object' | 'json_schema' } | null;
 }
 
 export interface ProviderListResponse {

@@ -8,12 +8,13 @@ Covers:
 """
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
 
 from src.domain.llm_providers.models import (
-    DEFAULT_MODEL_METADATA,
+    FALLBACK_MODEL_METADATA,
     ModelMetadata,
 )
 from src.domain.llm_providers.repositories import ModelCatalogPort
@@ -127,23 +128,18 @@ class TestModelCatalogService:
 
     # -- Loading --
 
-    def test_load_merges_domain_and_snapshot(self, catalog: ModelCatalogService) -> None:
-        """Snapshot models overlay domain defaults."""
-        # Snapshot-only model
+    def test_load_from_snapshot(self, catalog: ModelCatalogService) -> None:
+        """Snapshot models are loaded into the catalog."""
         assert catalog.get_model("test-model-alpha") is not None
-        # Domain-default model still present
-        assert catalog.get_model("gpt-4-turbo") is not None
+        assert catalog.get_model("test-model-beta") is not None
 
-    def test_model_count_includes_both_sources(self, catalog: ModelCatalogService) -> None:
-        """model_count reflects merged catalog size."""
-        domain_count = len(DEFAULT_MODEL_METADATA)
+    def test_model_count_matches_snapshot(self, catalog: ModelCatalogService) -> None:
+        """model_count reflects snapshot size (no domain defaults since v3)."""
         snapshot_count = len(_TEST_SNAPSHOT["models"])
-        # Some models might overlap; count should be at least max of both
-        assert catalog.model_count >= max(domain_count, snapshot_count)
+        assert catalog.model_count == snapshot_count
 
-    def test_snapshot_overrides_domain_default(self, snapshot_path: Path) -> None:
-        """When a model exists in both domain and snapshot, snapshot wins."""
-        # Create a snapshot that overrides a domain model
+    def test_snapshot_loads_model_data(self, snapshot_path: Path) -> None:
+        """Snapshot data is loaded faithfully into the catalog."""
         override_snapshot = {
             "_meta": {"version": "1.0.0"},
             "models": {
@@ -167,11 +163,12 @@ class TestModelCatalogService:
         assert meta.context_length == 999999
         assert meta.provider == "test-override"
 
-    def test_missing_snapshot_uses_domain_only(self, empty_catalog: ModelCatalogService) -> None:
-        """When snapshot file is missing, only domain defaults load."""
-        assert empty_catalog.get_model("gpt-4-turbo") is not None
+    def test_missing_snapshot_yields_empty_catalog(
+        self, empty_catalog: ModelCatalogService
+    ) -> None:
+        """When snapshot file is missing, catalog is empty (no domain defaults since v3)."""
         assert empty_catalog.get_model("test-model-alpha") is None
-        assert empty_catalog.model_count == len(DEFAULT_MODEL_METADATA)
+        assert empty_catalog.model_count == 0
 
     # -- get_model --
 
@@ -276,6 +273,28 @@ class TestModelCatalogService:
         """model_count returns a positive integer."""
         assert catalog.model_count > 0
 
+    # -- get_model_or_fallback --
+
+    def test_get_model_or_fallback_known(self, catalog: ModelCatalogService) -> None:
+        """get_model_or_fallback returns real metadata for known models."""
+        meta = catalog.get_model_or_fallback("test-model-alpha")
+        assert meta.name == "test-model-alpha"
+        assert meta.context_length == 64000
+
+    def test_get_model_or_fallback_unknown(self, catalog: ModelCatalogService) -> None:
+        """get_model_or_fallback returns fallback for unknown models."""
+        meta = catalog.get_model_or_fallback("totally-unknown-model")
+        assert meta.name == "totally-unknown-model"
+        assert meta.context_length == FALLBACK_MODEL_METADATA.context_length
+        assert meta.max_output_tokens == FALLBACK_MODEL_METADATA.max_output_tokens
+
+    def test_get_model_or_fallback_strips_prefix(
+        self, catalog: ModelCatalogService
+    ) -> None:
+        """get_model_or_fallback strips provider/ prefix."""
+        meta = catalog.get_model_or_fallback("acme/test-model-alpha")
+        assert meta.name == "test-model-alpha"
+        assert meta.context_length == 64000
 
 # ===========================================================================
 # ModelMetadata new fields tests
@@ -301,20 +320,21 @@ class TestModelMetadataNewFields:
         assert meta.input_budget_ratio == 0.9
         assert meta.chars_per_token == 3.0
 
-    def test_domain_defaults_have_provider(self) -> None:
-        """All DEFAULT_MODEL_METADATA entries have a provider set."""
-        for name, meta in DEFAULT_MODEL_METADATA.items():
-            assert meta.provider is not None, f"{name} missing provider"
+    def test_fallback_metadata_has_conservative_defaults(self) -> None:
+        """FALLBACK_MODEL_METADATA has conservative defaults for unknown models."""
+        assert FALLBACK_MODEL_METADATA.name == "unknown"
+        assert FALLBACK_MODEL_METADATA.context_length == 128000
+        assert FALLBACK_MODEL_METADATA.max_output_tokens == 4096
+        assert FALLBACK_MODEL_METADATA.supports_streaming is True
 
-    def test_domain_defaults_have_family(self) -> None:
-        """All DEFAULT_MODEL_METADATA entries have a family set."""
-        for name, meta in DEFAULT_MODEL_METADATA.items():
-            assert meta.family is not None, f"{name} missing family"
+    def test_fallback_metadata_has_chat_capability(self) -> None:
+        """FALLBACK_MODEL_METADATA includes CHAT capability."""
+        caps = [c.lower() for c in FALLBACK_MODEL_METADATA.capabilities]
+        assert "chat" in caps
 
-    def test_domain_defaults_have_description(self) -> None:
-        """All DEFAULT_MODEL_METADATA entries have a description."""
-        for name, meta in DEFAULT_MODEL_METADATA.items():
-            assert meta.description is not None, f"{name} missing description"
+    def test_fallback_metadata_has_text_modality(self) -> None:
+        """FALLBACK_MODEL_METADATA includes text modality."""
+        assert "text" in FALLBACK_MODEL_METADATA.modalities
 
     def test_snapshot_entries_have_catalog_fields(self, catalog: ModelCatalogService) -> None:
         """Snapshot models should have provider, family, description."""
@@ -324,6 +344,48 @@ class TestModelMetadataNewFields:
         assert meta.family == "alpha"
         assert meta.description is not None
 
+
+@pytest.mark.unit
+class TestSnapshotStaleness:
+    """Verify staleness warning logic."""
+
+    def test_stale_snapshot_logs_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Snapshot older than 30 days emits a warning."""
+        import copy
+
+        stale = copy.deepcopy(_TEST_SNAPSHOT)
+        stale["_meta"] = {
+            "version": "3.0.0",
+            "generated_at": "2025-01-01T00:00:00Z",
+        }
+        p = tmp_path / "stale.json"
+        p.write_text(json.dumps(stale), encoding="utf-8")
+        svc = ModelCatalogService(snapshot_path=p)
+        with caplog.at_level(logging.WARNING):
+            svc.refresh()
+        assert any("days old" in r.message for r in caplog.records)
+
+    def test_fresh_snapshot_no_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Recent snapshot does not emit a staleness warning."""
+        import copy
+        from datetime import UTC, datetime
+
+        fresh = copy.deepcopy(_TEST_SNAPSHOT)
+        now_str = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fresh["_meta"] = {
+            "version": "3.0.0",
+            "generated_at": now_str,
+        }
+        p = tmp_path / "fresh.json"
+        p.write_text(json.dumps(fresh), encoding="utf-8")
+        svc = ModelCatalogService(snapshot_path=p)
+        with caplog.at_level(logging.WARNING):
+            svc.refresh()
+        assert not any("days old" in r.message for r in caplog.records)
 
 # ===========================================================================
 # model_registry backward compatibility tests
@@ -342,7 +404,7 @@ class TestModelRegistryBackwardCompat:
         assert isinstance(limits, ModelLimits)
         assert limits.max_output_tokens == 8192
         assert limits.context_window == 32768
-        assert limits.max_input_tokens == 30720
+        assert limits.max_input_tokens is None  # catalog has no explicit input cap
 
     def test_get_model_limits_with_provider_prefix(self) -> None:
         """Provider prefix is stripped correctly."""
@@ -389,7 +451,7 @@ class TestModelRegistryBackwardCompat:
     def test_context_window_known_model(self) -> None:
         """Known model returns its context window."""
         ctx = get_model_context_window("deepseek-chat")
-        assert ctx == 65536
+        assert ctx == 128_000  # models.dev: DeepSeek V3 = 128K context
 
     def test_context_window_unknown_model(self) -> None:
         """Unknown model returns default 128000."""
@@ -399,20 +461,22 @@ class TestModelRegistryBackwardCompat:
     def test_context_window_with_prefix(self) -> None:
         """Provider prefix is stripped."""
         ctx = get_model_context_window("deepseek/deepseek-chat")
-        assert ctx == 65536
+        assert ctx == 128_000
 
     # -- get_model_max_input_tokens --
 
     def test_max_input_tokens_explicit_limit(self) -> None:
-        """Model with explicit input cap returns it."""
+        """Model with catalog-derived input cap returns it."""
         result = get_model_max_input_tokens("qwen-max")
-        assert result == 30720
+        # catalog: context_length=32768, max_output_tokens=8192
+        # derived: 32768 - 8192 = 24576
+        assert result == 24576
 
     def test_max_input_tokens_derived(self) -> None:
         """Model without explicit cap derives from context - output."""
         result = get_model_max_input_tokens("deepseek-chat", max_output_tokens=8192)
-        # context_window(65536) - 8192 = 57344
-        assert result == 57344
+        # context_window(128000) - 8192 = 119808
+        assert result == 119808
 
     def test_max_input_tokens_positive(self) -> None:
         """Result is always >= 1."""
@@ -424,8 +488,8 @@ class TestModelRegistryBackwardCompat:
     def test_input_budget_known_ratio(self) -> None:
         """Model with known ratio applies it."""
         budget = get_model_input_budget("qwen-max")
-        # 30720 * 0.85 = 26112
-        assert budget == 26112
+        # 24576 * 0.85 = 20889.6 -> 20889
+        assert budget == 20889
 
     def test_input_budget_default_ratio(self) -> None:
         """Model without known ratio uses default 0.9."""

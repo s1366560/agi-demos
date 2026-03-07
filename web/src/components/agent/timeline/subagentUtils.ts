@@ -125,7 +125,7 @@ export const ERROR_PATTERNS: Array<{ pattern: RegExp; key: string; fallback: str
 export const resolveSubAgentName = (
   subagentName: string | undefined | null,
   subagentId: string | undefined | null,
-  fallbackLabel: string,
+  fallbackLabel: string
 ): string => {
   if (subagentName && subagentName.trim().length > 0) return subagentName;
   if (subagentId && subagentId.length > 0) return subagentId.slice(0, 8);

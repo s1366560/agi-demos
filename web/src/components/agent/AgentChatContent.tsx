@@ -575,7 +575,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const isPlanMode = useAgentV3Store((s) => s.isPlanMode);
 
     const groupedTimeline = useMemo(() => groupTimelineEvents(timeline), [timeline]);
-    const subagentSummaries = useMemo(() => getSubAgentSummaries(groupedTimeline), [groupedTimeline]);
+    const subagentSummaries = useMemo(
+      () => getSubAgentSummaries(groupedTimeline),
+      [groupedTimeline]
+    );
 
     const handleScrollToSubAgent = useCallback((startIndex: number) => {
       const element = document.querySelector(`[data-timeline-index="${startIndex}"]`);

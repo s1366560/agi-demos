@@ -16,9 +16,7 @@ import { tabSync, type TabSyncMessage } from '../../utils/tabSync';
  */
 export function initTabSync(): void {
   if (!tabSync.isSupported()) {
-    logger.info(
-      '[AgentV3] Cross-tab sync not supported in this browser'
-    );
+    logger.info('[AgentV3] Cross-tab sync not supported in this browser');
     return;
   }
 
@@ -48,21 +46,13 @@ export function initTabSync(): void {
             streamStatus: string;
           };
           // Update conversation state if we have it
-          const convState = state.conversationStates.get(
-            msg.conversationId
-          );
+          const convState = state.conversationStates.get(msg.conversationId);
           if (convState) {
             state.updateConversationState(msg.conversationId, {
               isStreaming: msg.isStreaming,
-              streamStatus: msg.streamStatus as
-                | 'idle'
-                | 'connecting'
-                | 'streaming'
-                | 'error',
+              streamStatus: msg.streamStatus as 'idle' | 'connecting' | 'streaming' | 'error',
             });
-            logger.debug(
-              `[TabSync] Updated streaming state for ${msg.conversationId}`
-            );
+            logger.debug(`[TabSync] Updated streaming state for ${msg.conversationId}`);
           }
           break;
         }
@@ -72,22 +62,15 @@ export function initTabSync(): void {
             conversationId: string;
           };
           // If this is our active conversation, reload messages to get the latest
-          if (
-            state.activeConversationId === msg.conversationId
-          ) {
+          if (state.activeConversationId === msg.conversationId) {
             // Trigger a refresh of messages
             logger.info(
               `[TabSync] Conversation ${msg.conversationId} completed in another tab, reloading...`
             );
             // Find the project ID from conversations list
-            const conv = state.conversations.find(
-              (c) => c.id === msg.conversationId
-            );
+            const conv = state.conversations.find((c) => c.id === msg.conversationId);
             if (conv) {
-              state.loadMessages(
-                msg.conversationId,
-                conv.project_id
-              );
+              state.loadMessages(msg.conversationId, conv.project_id);
             }
           }
           break;
@@ -100,9 +83,7 @@ export function initTabSync(): void {
             hitlType?: string | undefined;
           };
           // Update HITL state for this conversation
-          const convState = state.conversationStates.get(
-            msg.conversationId
-          );
+          const convState = state.conversationStates.get(msg.conversationId);
           if (convState) {
             // If HITL was resolved in another tab, clear our local pending state
             if (!msg.hasPendingHITL) {
@@ -112,9 +93,7 @@ export function initTabSync(): void {
                 pendingEnvVarRequest: null,
               });
             }
-            logger.debug(
-              `[TabSync] Updated HITL state for ${msg.conversationId}`
-            );
+            logger.debug(`[TabSync] Updated HITL state for ${msg.conversationId}`);
           }
           break;
         }
@@ -125,23 +104,17 @@ export function initTabSync(): void {
           };
           // Remove from conversations list
           store.setState((s) => ({
-            conversations: s.conversations.filter(
-              (c) => c.id !== msg.conversationId
-            ),
+            conversations: s.conversations.filter((c) => c.id !== msg.conversationId),
           }));
           // Clean up conversation state
           const newStates = new Map(state.conversationStates);
           newStates.delete(msg.conversationId);
           store.setState({ conversationStates: newStates });
           // Clear active conversation if it was deleted
-          if (
-            state.activeConversationId === msg.conversationId
-          ) {
+          if (state.activeConversationId === msg.conversationId) {
             store.setState({ activeConversationId: null });
           }
-          logger.info(
-            `[TabSync] Removed deleted conversation ${msg.conversationId}`
-          );
+          logger.info(`[TabSync] Removed deleted conversation ${msg.conversationId}`);
           break;
         }
 
@@ -153,14 +126,10 @@ export function initTabSync(): void {
           // Update title in conversations list
           store.setState((s) => ({
             conversations: s.conversations.map((c) =>
-              c.id === msg.conversationId
-                ? { ...c, title: msg.newTitle }
-                : c
+              c.id === msg.conversationId ? { ...c, title: msg.newTitle } : c
             ),
           }));
-          logger.debug(
-            `[TabSync] Updated title for ${msg.conversationId}`
-          );
+          logger.debug(`[TabSync] Updated title for ${msg.conversationId}`);
           break;
         }
       }

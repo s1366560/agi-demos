@@ -5,6 +5,7 @@ Tests the LiteLLMClient implementation of the LLMClient interface.
 """
 
 from datetime import datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -12,8 +13,9 @@ import pytest
 from pydantic import BaseModel
 
 from src.domain.llm_providers.llm_types import LLMConfig, Message, ModelSize, RateLimitError
-from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.domain.llm_providers.models import ModelMetadata, ProviderConfig, ProviderType
 from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
+from src.infrastructure.llm.model_catalog import ModelCatalogService
 from src.infrastructure.llm.model_registry import get_model_input_budget, get_model_max_input_tokens
 from src.infrastructure.llm.provider_credentials import NO_API_KEY_SENTINEL
 
@@ -167,13 +169,16 @@ class TestLiteLLMClient:
         assert get_model_max_input_tokens("gpt-4o", max_output_tokens=16384) == 111616
 
     def test_get_model_max_input_tokens_qwen_specific(self):
-        """Should use explicit Qwen input limits when defined."""
-        assert get_model_max_input_tokens("qwen-max", max_output_tokens=8192) == 30720
-        assert get_model_max_input_tokens("dashscope/qwen-max", max_output_tokens=8192) == 30720
+        """qwen-max is now served by the catalog (context=32768, max_out=8192)."""
+        # catalog: context_length=32768, no explicit max_input_tokens
+        # derived: 32768 - 8192 = 24576
+        assert get_model_max_input_tokens("qwen-max", max_output_tokens=8192) == 24576
+        assert get_model_max_input_tokens("dashscope/qwen-max", max_output_tokens=8192) == 24576
 
     def test_get_model_input_budget_qwen_specific(self):
-        """Should apply conservative default budget ratio for Qwen models."""
-        assert get_model_input_budget("qwen-max", max_output_tokens=8192) == 26112
+        """Should apply catalog-sourced budget ratio (0.85) for qwen-max."""
+        # 24576 * 0.85 = 20889.6 -> int = 20889
+        assert get_model_input_budget("qwen-max", max_output_tokens=8192) == 20889
 
     def test_build_completion_kwargs_trims_oversized_prompt(self, client):
         """Should trim oldest context to stay within model input budget."""
@@ -628,3 +633,1070 @@ class TestLiteLLMClientMandatorySkillProtection:
         assert '<mandatory-skill name="rescue">' in result
         assert "Important instructions" in result
         assert "</mandatory-skill>" in result
+
+
+
+@pytest.mark.unit
+class TestBuildCompletionKwargsParamResolver:
+    """Test _build_completion_kwargs with param_resolver integration."""
+
+    @pytest.fixture
+    def provider_config(self):
+        """Create a test provider configuration."""
+        return ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+    @pytest.fixture
+    def provider_config_with_overrides(self):
+        """Create a provider config with temperature override."""
+        return ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={"temperature": 0.5},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+    @pytest.fixture
+    def llm_config(self):
+        """Create a test LLM config with temperature=0."""
+        return LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=0,
+        )
+
+    @pytest.fixture
+    def llm_config_no_temp(self):
+        """Create a test LLM config with temperature=None."""
+        return LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=None,
+        )
+
+    @pytest.fixture
+    def client(self, provider_config, llm_config):
+        """Create a LiteLLMClient instance."""
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            return LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+            )
+
+    @pytest.fixture
+    def client_with_config_overrides(
+        self, provider_config_with_overrides, llm_config
+    ):
+        """Create a LiteLLMClient with provider config overrides."""
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            return LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config_with_overrides,
+                cache=False,
+            )
+
+    @pytest.fixture
+    def client_no_temp(
+        self, provider_config, llm_config_no_temp
+    ):
+        """Create a LiteLLMClient with temperature=None in LLMConfig."""
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            return LiteLLMClient(
+                config=llm_config_no_temp,
+                provider_config=provider_config,
+                cache=False,
+            )
+
+    @pytest.fixture
+    def client_with_provider_override_temp(
+        self, provider_config_with_overrides, llm_config_no_temp
+    ):
+        """Create a client with provider config temp override."""
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            return LiteLLMClient(
+                config=llm_config_no_temp,
+                provider_config=provider_config_with_overrides,
+                cache=False,
+            )
+
+    def test_temperature_from_explicit_param(self, client):
+        """Test that explicit temperature param is in kwargs."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=0.7,
+        )
+
+        # Assert
+        assert "temperature" in kwargs
+        assert kwargs["temperature"] == 0.7
+
+    def test_temperature_from_llm_config_fallback(self, client):
+        """Test temperature fallback from LLMConfig."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        # Don't pass explicit temperature, should fallback to LLMConfig
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+        )
+
+        # Assert
+        # LLMConfig has temperature=0, which should be in kwargs
+        assert "temperature" in kwargs
+        assert kwargs["temperature"] == 0
+
+    def test_top_p_flows_through_extra_to_resolver(self, client):
+        """Test that top_p passed via extra flows to kwargs."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            top_p=0.9,
+        )
+
+        # Assert
+        assert "top_p" in kwargs
+        assert kwargs["top_p"] == 0.9
+
+    def test_seed_flows_through_extra_to_resolver(self, client):
+        """Test that seed passed via extra flows to kwargs."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            seed=42,
+        )
+
+        # Assert
+        assert "seed" in kwargs
+        assert kwargs["seed"] == 42
+
+    def test_provider_config_overrides_temperature(
+        self, client_with_provider_override_temp
+    ):
+        """Test that provider_config.config temperature is used."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        # No explicit temp, LLMConfig temp is None, but provider config
+        # has temperature=0.5
+        kwargs = client_with_provider_override_temp._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+        )
+
+        # Assert
+        # Should get 0.5 from provider_config.config
+        assert "temperature" in kwargs
+        assert kwargs["temperature"] == 0.5
+
+    def test_passthrough_keys_bypass_resolver(self, client):
+        """Test stream and tools pass through without resolver."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+        tools = [{"type": "function"}]
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            stream=True,
+            tools=tools,
+        )
+
+        # Assert
+        assert "stream" in kwargs
+        assert kwargs["stream"] is True
+        assert "tools" in kwargs
+        assert kwargs["tools"] == tools
+
+    def test_drop_params_always_present(self, client):
+        """Test that drop_params=True is always in kwargs."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+        )
+
+        # Assert
+        assert "drop_params" in kwargs
+        assert kwargs["drop_params"] is True
+
+    def test_max_tokens_from_clamp_not_resolver(self, client):
+        """Test max_tokens is clamped, not from resolver."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            seed=42,  # Pass via extra but not max_tokens
+        )
+
+        # Assert
+        # max_tokens should be present from clamping, not from resolver
+        assert "max_tokens" in kwargs
+        assert isinstance(kwargs["max_tokens"], int)
+        assert kwargs["max_tokens"] > 0
+
+    def test_mixed_resolver_and_passthrough(self, client):
+        """Test resolver params and passthrough both present."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            top_p=0.9,  # resolver param
+            stream=True,  # passthrough param
+        )
+
+        # Assert
+        assert "top_p" in kwargs
+        assert kwargs["top_p"] == 0.9
+        assert "stream" in kwargs
+        assert kwargs["stream"] is True
+
+    def test_explicit_temperature_overrides_provider_config(
+        self, client_with_config_overrides
+    ):
+        """Test explicit temp overrides provider_config temp."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+        model = "gpt-4o"
+        max_tokens = 4096
+
+        # Act
+        # Provider config has temp=0.5, but we pass explicit temp=0.9
+        kwargs = client_with_config_overrides._build_completion_kwargs(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=0.9,
+        )
+
+        # Assert
+        # Explicit param should win
+        assert "temperature" in kwargs
+        assert kwargs["temperature"] == 0.9
+
+
+@pytest.mark.unit
+class TestBuildCompletionKwargsCatalogIntegration:
+    """Tests for catalog-based parameter defaults in _build_completion_kwargs."""
+
+    @pytest.fixture
+    def catalog_metadata(self):
+        """Create a ModelMetadata with known defaults for testing."""
+        return ModelMetadata(
+            name="gpt-4o",
+            context_length=128000,
+            max_output_tokens=4096,
+            default_temperature=0.7,
+            default_top_p=0.9,
+            default_frequency_penalty=0.1,
+            supports_temperature=True,
+            supports_top_p=True,
+            supports_frequency_penalty=True,
+            supports_presence_penalty=True,
+            supports_seed=True,
+            temperature_range=[0.0, 1.0],
+        )
+
+    @pytest.fixture
+    def mock_catalog(self, catalog_metadata):
+        """Create a mock ModelCatalogService returning catalog_metadata."""
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.get_model_fuzzy.return_value = catalog_metadata
+        return catalog
+
+    @pytest.fixture
+    def provider_config(self):
+        """Create a test provider configuration."""
+        return ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+    @pytest.fixture
+    def llm_config_no_temp(self):
+        """LLMConfig with temperature=None so catalog default wins."""
+        return LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=None,
+        )
+
+    @pytest.fixture
+    def client_with_catalog(
+        self, provider_config, llm_config_no_temp, mock_catalog
+    ):
+        """LiteLLMClient with a mock catalog injected."""
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            return LiteLLMClient(
+                config=llm_config_no_temp,
+                provider_config=provider_config,
+                cache=False,
+                catalog=mock_catalog,
+            )
+
+    @pytest.fixture
+    def client_no_catalog(self, provider_config, llm_config_no_temp):
+        """LiteLLMClient without any catalog."""
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            return LiteLLMClient(
+                config=llm_config_no_temp,
+                provider_config=provider_config,
+                cache=False,
+                catalog=None,
+            )
+
+    def test_catalog_defaults_flow_when_no_override(
+        self, client_with_catalog
+    ):
+        """Catalog defaults appear when no user/provider override is set."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+
+        # Act
+        kwargs = client_with_catalog._build_completion_kwargs(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4096,
+        )
+
+        # Assert — catalog default_temperature=0.7 should be used
+        assert "temperature" in kwargs
+        assert kwargs["temperature"] == 0.7
+
+    def test_user_override_wins_over_catalog_default(
+        self, client_with_catalog
+    ):
+        """Explicit user param beats catalog default."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+
+        # Act
+        kwargs = client_with_catalog._build_completion_kwargs(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.3,
+        )
+
+        # Assert — user's 0.3 should win over catalog's 0.7
+        assert kwargs["temperature"] == 0.3
+
+    def test_provider_config_wins_over_catalog_default(self, mock_catalog):
+        """Provider config (JSONB) override beats catalog default."""
+        # Arrange — provider config has top_p=0.8, catalog has 0.9
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={"top_p": 0.8},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        llm_config = LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=None,
+        )
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            client = LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+                catalog=mock_catalog,
+            )
+
+        messages = [{"role": "user", "content": "hello"}]
+
+        # Act
+        kwargs = client._build_completion_kwargs(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4096,
+        )
+
+        # Assert — provider 0.8 should win over catalog 0.9
+        assert kwargs["top_p"] == 0.8
+
+    def test_catalog_none_means_no_catalog_defaults(
+        self, client_no_catalog
+    ):
+        """Client without catalog still works; resolver returns no defaults."""
+        # Arrange
+        messages = [{"role": "user", "content": "hello"}]
+
+        # Act
+        kwargs = client_no_catalog._build_completion_kwargs(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4096,
+        )
+
+        # Assert — no catalog, no LLMConfig temp, no provider temp
+        # so temperature should not appear in output
+        assert "temperature" not in kwargs
+
+    def test_catalog_unsupported_param_dropped(self):
+        """Catalog says supports_frequency_penalty=False; user's value is dropped."""
+        # Arrange — catalog says frequency_penalty not supported
+        metadata = ModelMetadata(
+            name="gpt-4o",
+            context_length=128000,
+            max_output_tokens=4096,
+            supports_frequency_penalty=False,
+        )
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.get_model_fuzzy.return_value = metadata
+
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        llm_config = LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=None,
+        )
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            client = LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+                catalog=catalog,
+            )
+
+        messages = [{"role": "user", "content": "hello"}]
+
+        # Act — user passes frequency_penalty but catalog says unsupported
+        kwargs = client._build_completion_kwargs(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4096,
+            frequency_penalty=0.5,
+        )
+
+        # Assert — should be dropped
+        assert "frequency_penalty" not in kwargs
+
+    def test_catalog_temperature_clamped_to_range(self):
+        """Temperature exceeding catalog range is clamped."""
+        # Arrange — catalog says temperature_range=[0.0, 1.0]
+        metadata = ModelMetadata(
+            name="gpt-4o",
+            context_length=128000,
+            max_output_tokens=4096,
+            supports_temperature=True,
+            temperature_range=[0.0, 1.0],
+        )
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.get_model_fuzzy.return_value = metadata
+
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        llm_config = LLMConfig(
+            api_key="test_key",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=None,
+        )
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ):
+            client = LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+                catalog=catalog,
+            )
+
+        messages = [{"role": "user", "content": "hello"}]
+
+        # Act — user passes temperature=1.5 which exceeds range
+        kwargs = client._build_completion_kwargs(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4096,
+            temperature=1.5,
+        )
+
+        # Assert — should be clamped to 1.0 (max of range)
+        assert kwargs["temperature"] == 1.0
+
+    def test_create_litellm_client_forwards_catalog(self):
+        """Factory function forwards catalog arg to LiteLLMClient."""
+        from src.infrastructure.llm.litellm.litellm_client import (
+            create_litellm_client,
+        )
+
+        # Arrange
+        catalog = MagicMock(spec=ModelCatalogService)
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        # Act
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ) as mock_get_enc:
+            mock_enc = MagicMock()
+            mock_enc.decrypt.return_value = "test_key"
+            mock_get_enc.return_value = mock_enc
+            client = create_litellm_client(
+                provider_config=provider_config,
+                cache=False,
+                catalog=catalog,
+            )
+
+        # Assert — client should have the catalog stored
+        assert client._catalog is catalog
+
+
+@pytest.mark.unit
+class TestVisionCapabilityGating:
+    """Tests for vision/image capability gating in LiteLLMClient."""
+
+    # -- helpers / fixtures ------------------------------------
+
+    @staticmethod
+    def _text_only_messages() -> list[dict[str, Any]]:
+        return [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Hello"},
+        ]
+
+    @staticmethod
+    def _image_messages() -> list[dict[str, Any]]:
+        return [
+            {"role": "system", "content": "You are helpful."},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/img.png"},
+                    },
+                ],
+            },
+        ]
+
+    @pytest.fixture
+    def vision_catalog(self) -> MagicMock:
+        """Catalog where model supports vision."""
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.supports_vision.return_value = True
+        catalog.get_model_fuzzy.return_value = ModelMetadata(
+            name="gpt-4o",
+            provider="openai",
+            context_length=128000,
+            max_output_tokens=4096,
+        )
+        return catalog
+
+    @pytest.fixture
+    def no_vision_catalog(self) -> MagicMock:
+        """Catalog where model does NOT support vision."""
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.supports_vision.return_value = False
+        catalog.get_model_fuzzy.return_value = ModelMetadata(
+            name="gpt-3.5-turbo",
+            provider="openai",
+            context_length=16385,
+            max_output_tokens=4096,
+        )
+        return catalog
+
+    def _make_client(
+        self,
+        catalog: ModelCatalogService | None = None,
+    ) -> LiteLLMClient:
+        config = LLMConfig(api_key="test_key")
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        return LiteLLMClient(
+            config=config,
+            provider_config=provider_config,
+            cache=False,
+            catalog=catalog,
+        )
+
+    # -- _has_image_content tests --------------------------------
+
+    def test_has_image_content_detects_image_url_parts(self):
+        """_has_image_content returns True for messages with image_url parts."""
+        assert LiteLLMClient._has_image_content(self._image_messages()) is True
+
+    def test_has_image_content_false_for_text_only(self):
+        """_has_image_content returns False for plain text messages."""
+        assert LiteLLMClient._has_image_content(self._text_only_messages()) is False
+
+    def test_has_image_content_false_for_empty_messages(self):
+        """_has_image_content returns False for empty message list."""
+        assert LiteLLMClient._has_image_content([]) is False
+
+    def test_has_image_content_false_for_text_parts_only(self):
+        """_has_image_content returns False when content list has only text parts."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Just text"},
+                    {"type": "text", "text": "More text"},
+                ],
+            },
+        ]
+        assert LiteLLMClient._has_image_content(messages) is False
+
+    def test_has_image_content_detects_nested_in_later_message(self):
+        """_has_image_content finds image_url even in non-first messages."""
+        messages = [
+            {"role": "system", "content": "System prompt"},
+            {"role": "user", "content": "text question"},
+            {"role": "assistant", "content": "answer"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Now look at this"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,abc"},
+                    },
+                ],
+            },
+        ]
+        assert LiteLLMClient._has_image_content(messages) is True
+
+    # -- _build_completion_kwargs gating tests --------------------
+
+    def test_non_vision_model_with_image_raises_value_error(
+        self, no_vision_catalog: MagicMock
+    ):
+        """Non-vision model receiving image content raises ValueError."""
+        client = self._make_client(catalog=no_vision_catalog)
+        with pytest.raises(ValueError, match="Invalid parameter"):
+            client._build_completion_kwargs(
+                model="gpt-3.5-turbo",
+                messages=self._image_messages(),
+                max_tokens=1024,
+            )
+
+    def test_vision_model_with_image_passes_through(
+        self, vision_catalog: MagicMock
+    ):
+        """Vision-capable model with image content passes without error."""
+        client = self._make_client(catalog=vision_catalog)
+        kwargs = client._build_completion_kwargs(
+            model="gpt-4o",
+            messages=self._image_messages(),
+            max_tokens=1024,
+        )
+        # Should return valid kwargs dict without raising
+        assert kwargs["model"] == "gpt-4o"
+        assert "messages" in kwargs
+
+    def test_no_catalog_with_image_passes_through(self):
+        """When catalog is None, image content passes through (graceful)."""
+        client = self._make_client(catalog=None)
+        kwargs = client._build_completion_kwargs(
+            model="some-model",
+            messages=self._image_messages(),
+            max_tokens=1024,
+        )
+        assert kwargs["model"] == "some-model"
+        assert "messages" in kwargs
+
+    def test_no_image_content_with_non_vision_model_passes(
+        self, no_vision_catalog: MagicMock
+    ):
+        """Text-only messages pass through even for non-vision models."""
+        client = self._make_client(catalog=no_vision_catalog)
+        kwargs = client._build_completion_kwargs(
+            model="gpt-3.5-turbo",
+            messages=self._text_only_messages(),
+            max_tokens=1024,
+        )
+        assert kwargs["model"] == "gpt-3.5-turbo"
+
+    def test_vision_gating_error_matches_client_error_detection(
+        self, no_vision_catalog: MagicMock
+    ):
+        """The ValueError message matches _is_client_error() indicators.
+
+        This ensures the circuit breaker is NOT tripped for vision
+        gating rejections.
+        """
+        client = self._make_client(catalog=no_vision_catalog)
+        with pytest.raises(ValueError) as exc_info:
+            client._build_completion_kwargs(
+                model="gpt-3.5-turbo",
+                messages=self._image_messages(),
+                max_tokens=1024,
+            )
+        # Verify _is_client_error classifies this correctly
+        assert LiteLLMClient._is_client_error(exc_info.value) is True
+
+
+@pytest.mark.unit
+class TestMultimodalFormatTranslation:
+    """B3.2 verification: OpenAI-format image_url messages pass through unchanged.
+
+    LiteLLM handles provider-specific translation (Gemini inline_data,
+    Anthropic source/base64, etc.) automatically. Our job is to NOT
+    mangle the standard format before handing off.
+    """
+
+    @staticmethod
+    def _vision_catalog() -> MagicMock:
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.supports_vision.return_value = True
+        return catalog
+
+    @staticmethod
+    def _make_client(catalog: MagicMock | None = None) -> LiteLLMClient:
+        config = LLMConfig(api_key="test_key")
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-gemini",
+            provider_type=ProviderType.GEMINI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gemini-2.0-flash",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        return LiteLLMClient(
+            config=config,
+            provider_config=provider_config,
+            cache=False,
+            catalog=catalog,
+        )
+
+    def test_openai_image_url_format_preserved_for_litellm(self) -> None:
+        """URL-based image_url parts must pass through unchanged."""
+        client = self._make_client(catalog=self._vision_catalog())
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "https://example.com/photo.jpg",
+                            "detail": "auto",
+                        },
+                    },
+                ],
+            }
+        ]
+        kwargs = client._build_completion_kwargs(
+            model="gemini-2.0-flash",
+            messages=messages,
+            max_tokens=1024,
+        )
+        content = kwargs["messages"][0]["content"]
+        image_part = next(p for p in content if p["type"] == "image_url")
+        assert image_part["image_url"]["url"] == "https://example.com/photo.jpg"
+        assert image_part["image_url"]["detail"] == "auto"
+
+    def test_base64_image_url_format_preserved_for_litellm(self) -> None:
+        """Base64 data-URI image_url parts must pass through unchanged."""
+        client = self._make_client(catalog=self._vision_catalog())
+        b64_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is in this image?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": b64_uri},
+                    },
+                ],
+            }
+        ]
+        kwargs = client._build_completion_kwargs(
+            model="gemini-2.0-flash",
+            messages=messages,
+            max_tokens=1024,
+        )
+        content = kwargs["messages"][0]["content"]
+        image_part = next(p for p in content if p["type"] == "image_url")
+        assert image_part["image_url"]["url"] == b64_uri
+
+    def test_multiple_images_preserved_for_litellm(self) -> None:
+        """Multiple image_url parts in a single message are all preserved."""
+        client = self._make_client(catalog=self._vision_catalog())
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Compare these images"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/a.jpg"},
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/b.jpg"},
+                    },
+                ],
+            }
+        ]
+        kwargs = client._build_completion_kwargs(
+            model="gemini-2.0-flash",
+            messages=messages,
+            max_tokens=1024,
+        )
+        content = kwargs["messages"][0]["content"]
+        image_parts = [p for p in content if p["type"] == "image_url"]
+        assert len(image_parts) == 2
+        assert image_parts[0]["image_url"]["url"] == "https://example.com/a.jpg"
+        assert image_parts[1]["image_url"]["url"] == "https://example.com/b.jpg"
+
+
+@pytest.mark.unit
+class TestVisionGatingErrorPropagation:
+    """B3.3 verification: Vision gating errors are user-friendly and SSE-safe.
+
+    The ValueError from _build_completion_kwargs propagates through
+    generate_stream -> LLMStream.generate -> StreamEvent.error -> SSE event.
+    These tests verify the error message quality at the source.
+    """
+
+    @staticmethod
+    def _no_vision_catalog() -> MagicMock:
+        catalog = MagicMock(spec=ModelCatalogService)
+        catalog.supports_vision.return_value = False
+        return catalog
+
+    @staticmethod
+    def _make_client(catalog: MagicMock) -> LiteLLMClient:
+        config = LLMConfig(api_key="test_key")
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="test-openai",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-3.5-turbo",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        return LiteLLMClient(
+            config=config,
+            provider_config=provider_config,
+            cache=False,
+            catalog=catalog,
+        )
+
+    @staticmethod
+    def _image_messages() -> list[dict[str, object]]:
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/img.jpg"},
+                    },
+                ],
+            }
+        ]
+
+    def test_error_message_is_user_friendly(self) -> None:
+        """Error message contains model name and actionable guidance."""
+        client = self._make_client(catalog=self._no_vision_catalog())
+        with pytest.raises(ValueError, match="gpt-3.5-turbo") as exc_info:
+            client._build_completion_kwargs(
+                model="gpt-3.5-turbo",
+                messages=self._image_messages(),
+                max_tokens=1024,
+            )
+        msg = str(exc_info.value)
+        assert "vision" in msg.lower()
+        assert "select" in msg.lower() or "remove" in msg.lower()
+
+    def test_error_does_not_trip_circuit_breaker(self) -> None:
+        """_is_client_error recognizes the vision gating ValueError."""
+        client = self._make_client(catalog=self._no_vision_catalog())
+        with pytest.raises(ValueError) as exc_info:
+            client._build_completion_kwargs(
+                model="gpt-3.5-turbo",
+                messages=self._image_messages(),
+                max_tokens=1024,
+            )
+        assert LiteLLMClient._is_client_error(exc_info.value) is True
+
+    def test_error_message_suitable_for_sse_event(self) -> None:
+        """Error message is clean enough for SSE: no stack traces, under 200 chars."""
+        client = self._make_client(catalog=self._no_vision_catalog())
+        with pytest.raises(ValueError) as exc_info:
+            client._build_completion_kwargs(
+                model="gpt-3.5-turbo",
+                messages=self._image_messages(),
+                max_tokens=1024,
+            )
+        msg = str(exc_info.value)
+        assert len(msg) < 200
+        assert "Traceback" not in msg
+        assert "\n" not in msg

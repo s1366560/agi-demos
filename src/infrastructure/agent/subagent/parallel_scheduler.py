@@ -69,6 +69,7 @@ class _RunTaskContext:
     main_token_budget: int
     project_id: str
     tenant_id: str
+    conversation_id: str
     tools: list[Any]
     base_model: str
     base_api_key: str | None
@@ -114,6 +115,7 @@ class ParallelScheduler:
         main_token_budget: int = 128000,
         project_id: str = "",
         tenant_id: str = "",
+        conversation_id: str = "",
         abort_signal: asyncio.Event | None = None,
         factory: ProcessorFactory | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
@@ -133,6 +135,7 @@ class ParallelScheduler:
             main_token_budget: Main agent's token budget.
             project_id: Project ID.
             tenant_id: Tenant ID.
+            conversation_id: Parent conversation ID shared by all parallel subtasks.
             abort_signal: Signal to abort all execution.
 
         Yields:
@@ -163,6 +166,7 @@ class ParallelScheduler:
             main_token_budget=main_token_budget,
             project_id=project_id,
             tenant_id=tenant_id,
+            conversation_id=conversation_id,
             tools=tools,
             base_model=base_model,
             base_api_key=base_api_key,
@@ -180,17 +184,9 @@ class ParallelScheduler:
             dict[str, Any],
             AgentParallelCompletedEvent(
                 total_tasks=len(executions),
-                succeeded=sum(
-                    1 for e in executions.values()
-                    if e.completed and not e.error
-                ),
-                failed=sum(
-                    1 for e in executions.values()
-                    if e.error
-                ),
-                results=[
-                    r.to_event_data() for r in ctx.results
-                ],
+                succeeded=sum(1 for e in executions.values() if e.completed and not e.error),
+                failed=sum(1 for e in executions.values() if e.error),
+                results=[r.to_event_data() for r in ctx.results],
             ).to_event_dict(),
         )
 
@@ -310,6 +306,7 @@ class ParallelScheduler:
             main_token_budget=ctx.main_token_budget,
             project_id=ctx.project_id,
             tenant_id=ctx.tenant_id,
+            conversation_id=ctx.conversation_id,
         )
 
         process = SubAgentProcess(

@@ -50,14 +50,14 @@ const providerTypeRequiresApiKey = (type: ProviderType) =>
 
 const DEFAULT_MODELS: Partial<
   Record<
-  ProviderType,
-  {
-    llm: string;
-    small?: string | undefined;
-    embedding?: string | undefined;
-    reranker?: string | undefined;
-  }
->
+    ProviderType,
+    {
+      llm: string;
+      small?: string | undefined;
+      embedding?: string | undefined;
+      reranker?: string | undefined;
+    }
+  >
 > = {
   openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
   anthropic: { llm: 'claude-sonnet-4-20250514', small: 'claude-3-5-haiku-20241022' },

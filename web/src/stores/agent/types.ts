@@ -21,6 +21,7 @@ import type {
   CostTrackingState,
   HITLSummary,
 } from '../../types/conversationState';
+import type { LLMConfigOverrides } from '../../types/memory';
 
 /**
  * Additional handlers that can be injected into sendMessage
@@ -28,9 +29,7 @@ import type {
  */
 export interface AdditionalAgentHandlers {
   onAct?: ((event: AgentEvent<ActEventData>) => void) | undefined;
-  onObserve?:
-    | ((event: AgentEvent<ObserveEventData>) => void)
-    | undefined;
+  onObserve?: ((event: AgentEvent<ObserveEventData>) => void) | undefined;
   /** File metadata for files uploaded to sandbox */
   fileMetadata?: FileMetadata[] | undefined;
   /** Force execution of a specific skill by name */
@@ -107,10 +106,7 @@ export interface AgentV3State {
 
   // Multi-conversation state helpers
   getConversationState: (conversationId: string) => ConversationState;
-  updateConversationState: (
-    conversationId: string,
-    updates: Partial<ConversationState>
-  ) => void;
+  updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   getStreamingConversationCount: () => number;
   getConversationsWithPendingHITL: () => Array<{
     conversationId: string;
@@ -122,53 +118,27 @@ export interface AgentV3State {
   setActiveConversation: (id: string | null) => void;
   loadConversations: (projectId: string) => Promise<void>;
   loadMoreConversations: (projectId: string) => Promise<void>;
-  loadMessages: (
-    conversationId: string,
-    projectId: string
-  ) => Promise<void>;
-  loadEarlierMessages: (
-    conversationId: string,
-    projectId: string
-  ) => Promise<boolean>;
-  createNewConversation: (
-    projectId: string
-  ) => Promise<string | null>;
+  loadMessages: (conversationId: string, projectId: string) => Promise<void>;
+  loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;
+  createNewConversation: (projectId: string) => Promise<string | null>;
   sendMessage: (
     content: string,
     projectId: string,
     additionalHandlers?: AdditionalAgentHandlers
   ) => Promise<string | null>;
-  deleteConversation: (
-    conversationId: string,
-    projectId: string
-  ) => Promise<void>;
-  renameConversation: (
-    conversationId: string,
-    projectId: string,
-    title: string
-  ) => Promise<void>;
+  deleteConversation: (conversationId: string, projectId: string) => Promise<void>;
+  renameConversation: (conversationId: string, projectId: string, title: string) => Promise<void>;
   abortStream: (conversationId?: string) => void;
   togglePlanPanel: () => void;
   toggleHistorySidebar: () => void;
   setLeftSidebarWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
-  respondToClarification: (
-    requestId: string,
-    answer: string
-  ) => Promise<void>;
-  respondToDecision: (
-    requestId: string,
-    decision: string | string[]
-  ) => Promise<void>;
-  respondToEnvVar: (
-    requestId: string,
-    values: Record<string, string>
-  ) => Promise<void>;
-  respondToPermission: (
-    requestId: string,
-    granted: boolean
-  ) => Promise<void>;
+  respondToClarification: (requestId: string, answer: string) => Promise<void>;
+  respondToDecision: (requestId: string, decision: string | string[]) => Promise<void>;
+  respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
+  respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
   loadPendingHITL: (conversationId: string) => Promise<void>;
   clearError: () => void;
   togglePinEvent: (eventId: string) => void;
+  setLlmOverrides: (conversationId: string, overrides: LLMConfigOverrides | null) => void;
 }

@@ -18,12 +18,14 @@ const DATA_MODEL_UPDATE_PATTERN =
  */
 export function mergeA2UIMessageStream(
   previousMessages: string | undefined,
-  incomingMessages: string,
+  incomingMessages: string
 ): string {
   if (!incomingMessages) return previousMessages ?? '';
   if (!previousMessages) return incomingMessages;
 
-  const hasBeginRendering = BEGIN_RENDERING_PATTERNS.some((pattern) => pattern.test(incomingMessages));
+  const hasBeginRendering = BEGIN_RENDERING_PATTERNS.some((pattern) =>
+    pattern.test(incomingMessages)
+  );
   const hasIncrementalUpdate =
     SURFACE_UPDATE_PATTERN.test(incomingMessages) ||
     DATA_MODEL_UPDATE_PATTERN.test(incomingMessages);

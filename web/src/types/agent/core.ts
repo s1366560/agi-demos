@@ -5,18 +5,15 @@ import type { TimelineEvent } from './timeline';
  */
 export type ConversationStatus = 'active' | 'archived' | 'deleted';
 
-
 /**
  * Message role
  */
 export type MessageRole = 'user' | 'assistant' | 'system';
 
-
 /**
  * Message type (extended for multi-level thinking)
  */
 export type MessageType = 'text' | 'thought' | 'tool_call' | 'tool_result' | 'error' | 'work_plan';
-
 
 /**
  * Agent execution status (extended for multi-level thinking)
@@ -31,18 +28,15 @@ export type ExecutionStatus =
   | 'planning'
   | 'step_executing';
 
-
 /**
  * Thought level for multi-level thinking
  */
 export type ThoughtLevel = 'work' | 'task';
 
-
 /**
  * Plan status
  */
 export type PlanStatus = 'planning' | 'in_progress' | 'completed' | 'failed';
-
 
 /**
  * Tool call information
@@ -53,7 +47,6 @@ export interface ToolCall {
   result?: string | undefined;
 }
 
-
 /**
  * Tool result information
  */
@@ -62,7 +55,6 @@ export interface ToolResult {
   result?: string | undefined;
   error?: string | undefined;
 }
-
 
 /**
  * Artifact reference (externalized payload)
@@ -74,7 +66,6 @@ export interface ArtifactReference {
   size_bytes?: number | undefined;
   source?: string | undefined;
 }
-
 
 /**
  * Message in a conversation
@@ -96,7 +87,6 @@ export interface Message {
   edited_at?: string | undefined;
 }
 
-
 /**
  * Conversation entity
  */
@@ -117,7 +107,6 @@ export interface Conversation {
   branch_point_message_id?: string | null | undefined;
 }
 
-
 /**
  * Paginated response for conversation listing
  */
@@ -128,7 +117,6 @@ export interface PaginatedConversationsResponse {
   offset: number;
   limit: number;
 }
-
 
 /**
  * Agent execution tracking
@@ -149,7 +137,6 @@ export interface AgentExecution {
   completed_at?: string | undefined;
 }
 
-
 /**
  * Create conversation request
  */
@@ -159,12 +146,10 @@ export interface CreateConversationRequest {
   agent_config?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Create conversation response
  */
 export type CreateConversationResponse = Conversation;
-
 
 /**
  * Chat request
@@ -188,7 +173,6 @@ export interface ChatRequest {
   app_model_context?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Tool information
  */
@@ -197,14 +181,12 @@ export interface ToolInfo {
   description: string;
 }
 
-
 /**
  * Tools list response
  */
 export interface ToolsListResponse {
   tools: ToolInfo[];
 }
-
 
 /**
  * Conversation messages response (unified timeline format)
@@ -220,7 +202,6 @@ export interface ConversationMessagesResponse {
   last_time_us: number | null;
   last_counter: number | null;
 }
-
 
 /**
  * Agent execution with multi-level thinking details
@@ -249,7 +230,6 @@ export interface AgentExecutionWithDetails {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Execution history response
  */
@@ -258,7 +238,6 @@ export interface ExecutionHistoryResponse {
   executions: AgentExecutionWithDetails[];
   total: number;
 }
-
 
 /**
  * Execution statistics response
@@ -277,7 +256,6 @@ export interface ExecutionStatsResponse {
     failed: number;
   }>;
 }
-
 
 /**
  * Tool execution record from database
@@ -299,7 +277,6 @@ export interface ToolExecutionRecord {
   duration_ms?: number | null | undefined;
 }
 
-
 /**
  * Tool executions response from API
  */
@@ -308,7 +285,6 @@ export interface ToolExecutionsResponse {
   tool_executions: ToolExecutionRecord[];
   total: number;
 }
-
 
 /**
  * Display mode for assistant response

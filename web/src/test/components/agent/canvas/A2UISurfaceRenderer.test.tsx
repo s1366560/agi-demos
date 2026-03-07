@@ -210,12 +210,9 @@ describe('A2UISurfaceRenderer', () => {
     });
 
     await waitFor(() => {
-      expect(respondToA2UIActionSpy).toHaveBeenCalledWith(
-        'hitl-req-1',
-        'approve',
-        'btn-1',
-        { ok: true },
-      );
+      expect(respondToA2UIActionSpy).toHaveBeenCalledWith('hitl-req-1', 'approve', 'btn-1', {
+        ok: true,
+      });
     });
   });
 

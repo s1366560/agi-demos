@@ -29,8 +29,7 @@ describe('mergeA2UIMessageStream', () => {
     const previous =
       '{"beginRendering":{"surfaceId":"s1","root":"root-1"}}\n' +
       '{"surfaceUpdate":{"surfaceId":"s1","components":[{"id":"root-1","component":{"Text":{"text":{"literal":"hello"}}}}]}}';
-    const incoming =
-      '{"dataModelUpdate":{"surfaceId":"s1","path":"/","contents":[{"count":2}]}}';
+    const incoming = '{"dataModelUpdate":{"surfaceId":"s1","path":"/","contents":[{"count":2}]}}';
 
     const merged = mergeA2UIMessageStream(previous, incoming);
 

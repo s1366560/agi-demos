@@ -119,7 +119,7 @@ class SubAgentChain:
     def result(self) -> ChainResult | None:
         return self._result
 
-    async def execute(
+    async def execute(  # noqa: PLR0913
         self,
         user_message: str,
         tools: list[Any],
@@ -131,6 +131,7 @@ class SubAgentChain:
         main_token_budget: int = 200000,
         project_id: str = "",
         tenant_id: str = "",
+        conversation_id: str = "",
         abort_signal: asyncio.Event | None = None,
         factory: ProcessorFactory | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
@@ -149,6 +150,7 @@ class SubAgentChain:
             main_token_budget: Main agent's token budget.
             project_id: Project scope.
             tenant_id: Tenant scope.
+            conversation_id: Parent conversation ID for shared persistence scope.
             abort_signal: Cancellation signal.
         """
 
@@ -213,6 +215,7 @@ class SubAgentChain:
                 main_token_budget=main_token_budget,
                 project_id=project_id,
                 tenant_id=tenant_id,
+                conversation_id=conversation_id,
             )
 
             process = SubAgentProcess(

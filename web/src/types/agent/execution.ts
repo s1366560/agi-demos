@@ -1,5 +1,3 @@
-
-
 // ============================================
 // SubAgent Types (L3 - Specialized Agent System)
 // ============================================
@@ -12,7 +10,6 @@ export interface SubAgentTrigger {
   examples: string[];
   keywords: string[];
 }
-
 
 /**
  * SubAgent response from API
@@ -44,7 +41,6 @@ export interface SubAgentResponse {
   file_path?: string | null | undefined;
 }
 
-
 /**
  * SubAgent create request
  */
@@ -67,7 +63,6 @@ export interface SubAgentCreate {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * SubAgent update request
  */
@@ -89,7 +84,6 @@ export interface SubAgentUpdate {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * SubAgent template for quick creation
  */
@@ -100,14 +94,12 @@ export interface SubAgentTemplate {
   category?: string | undefined;
 }
 
-
 /**
  * SubAgent templates list response
  */
 export interface SubAgentTemplatesResponse {
   templates: SubAgentTemplate[];
 }
-
 
 /**
  * SubAgent list response
@@ -116,7 +108,6 @@ export interface SubAgentsListResponse {
   subagents: SubAgentResponse[];
   total: number;
 }
-
 
 /**
  * SubAgent stats response
@@ -129,7 +120,6 @@ export interface SubAgentStatsResponse {
   last_invoked_at: string | null;
 }
 
-
 /**
  * SubAgent match response
  */
@@ -137,7 +127,6 @@ export interface SubAgentMatchResponse {
   subagent: SubAgentResponse | null;
   confidence: number;
 }
-
 
 // ============================================
 // Skill Types (L2 - Agent Skill System)
@@ -151,7 +140,6 @@ export interface TriggerPattern {
   weight: number;
   examples?: string[] | undefined;
 }
-
 
 /**
  * Skill response from API
@@ -181,7 +169,6 @@ export interface SkillResponse {
   version_label: string | null;
 }
 
-
 /**
  * Skill create request
  */
@@ -198,7 +185,6 @@ export interface SkillCreate {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Skill update request
  */
@@ -214,7 +200,6 @@ export interface SkillUpdate {
   metadata?: Record<string, unknown> | undefined;
 }
 
-
 /**
  * Skill list response
  */
@@ -223,14 +208,12 @@ export interface SkillsListResponse {
   total: number;
 }
 
-
 /**
  * Skill match response
  */
 export interface SkillMatchResponse {
   skills: SkillResponse[];
 }
-
 
 /**
  * Skill content response
@@ -242,7 +225,6 @@ export interface SkillContentResponse {
   scope: 'system' | 'tenant' | 'project';
   is_system_skill: boolean;
 }
-
 
 /**
  * Tenant skill config response
@@ -257,7 +239,6 @@ export interface TenantSkillConfigResponse {
   updated_at: string;
 }
 
-
 /**
  * Tenant skill config list response
  */
@@ -265,7 +246,6 @@ export interface TenantSkillConfigListResponse {
   configs: TenantSkillConfigResponse[];
   total: number;
 }
-
 
 /**
  * Skill status for a system skill

@@ -80,8 +80,6 @@ const MarkdownRenderer = lazy(async () => {
   return { default: MarkdownWrapper };
 });
 
-
-
 /**
  * TimeBadge - Natural time display component
  * 自然时间标签组件
@@ -443,9 +441,7 @@ function OptionButton({
 /**
  * Render clarification_asked event (inline in timeline)
  */
-function ClarificationAskedItem({
-  event,
-}: { event: ClarificationAskedTimelineEvent }) {
+function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEvent }) {
   const hasOptions = event.options && event.options.length > 0;
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [customAnswer, setCustomAnswer] = useState('');
@@ -454,9 +450,7 @@ function ClarificationAskedItem({
   const isAnswered = event.answered || false;
 
   const handleSubmit = async () => {
-    const answer = hasOptions
-      ? selectedOption || customAnswer
-      : customAnswer;
+    const answer = hasOptions ? selectedOption || customAnswer : customAnswer;
     if (!answer) return;
 
     setIsSubmitting(true);
@@ -498,33 +492,29 @@ function ClarificationAskedItem({
             <>
               {hasOptions ? (
                 <div className="space-y-2 mb-3">
-                {event.options.map((option: ClarificationOption, idx: number) => (
-                      <OptionButton
-                        key={option.id || `option-${idx}`}
-                        option={option}
-                        isSelected={selectedOption === option.id}
-                        isRecommended={option.recommended}
-                        onClick={() => {
-                          setSelectedOption(option.id);
-                          setCustomAnswer('');
-                        }}
-                        disabled={isSubmitting}
-                      />
-                    )
-                  )}
+                  {event.options.map((option: ClarificationOption, idx: number) => (
+                    <OptionButton
+                      key={option.id || `option-${idx}`}
+                      option={option}
+                      isSelected={selectedOption === option.id}
+                      isRecommended={option.recommended}
+                      onClick={() => {
+                        setSelectedOption(option.id);
+                        setCustomAnswer('');
+                      }}
+                      disabled={isSubmitting}
+                    />
+                  ))}
                 </div>
               ) : event.allowCustom ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
                   暂无预设选项，请直接输入
                 </p>
               ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
-                  暂无可选选项
-                </p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">暂无可选选项</p>
               )}
 
-              {(event.allowCustom || !hasOptions) &&
-                (hasOptions || event.allowCustom) && (
+              {(event.allowCustom || !hasOptions) && (hasOptions || event.allowCustom) && (
                 <div className="mb-3">
                   <input
                     type="text"
@@ -553,8 +543,7 @@ function ClarificationAskedItem({
             </>
           ) : (
             <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">已选择:</span>{' '}
-              {event.answer}
+              <span className="font-medium">已选择:</span> {event.answer}
             </div>
           )}
         </div>
@@ -641,30 +630,27 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
               {hasOptions ? (
                 <>
                   <div className="space-y-2 mb-3">
-                {event.options.map((option: DecisionOption, idx: number) => (
-                        <OptionButton
-                          key={option.id || `option-${idx}`}
-                          option={option}
-                          isSelected={
-                            isMultiSelect
-                              ? selectedMultiple.includes(
-                                  option.id
-                                )
-                              : selectedOption === option.id
+                    {event.options.map((option: DecisionOption, idx: number) => (
+                      <OptionButton
+                        key={option.id || `option-${idx}`}
+                        option={option}
+                        isSelected={
+                          isMultiSelect
+                            ? selectedMultiple.includes(option.id)
+                            : selectedOption === option.id
+                        }
+                        isRecommended={option.recommended}
+                        onClick={() => {
+                          if (isMultiSelect) {
+                            toggleMultiSelect(option.id);
+                          } else {
+                            setSelectedOption(option.id);
+                            setCustomDecision('');
                           }
-                          isRecommended={option.recommended}
-                          onClick={() => {
-                            if (isMultiSelect) {
-                              toggleMultiSelect(option.id);
-                            } else {
-                              setSelectedOption(option.id);
-                              setCustomDecision('');
-                            }
-                          }}
-                          disabled={isSubmitting}
-                        />
-                      )
-                    )}
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    ))}
                   </div>
 
                   {event.allowCustom && !isMultiSelect && (
@@ -692,7 +678,9 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
                     type="text"
                     placeholder="\u8F93\u5165\u4F60\u7684\u51B3\u7B56..."
                     value={customDecision}
-                    onChange={(e) => { setCustomDecision(e.target.value); }}
+                    onChange={(e) => {
+                      setCustomDecision(e.target.value);
+                    }}
                     disabled={isSubmitting}
                     className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
@@ -720,8 +708,7 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
             </>
           ) : (
             <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">\u5DF2\u51B3\u5B9A\uFF1A</span>{' '}
-              {event.decision}
+              <span className="font-medium">\u5DF2\u51B3\u5B9A\uFF1A</span> {event.decision}
             </div>
           )}
         </div>

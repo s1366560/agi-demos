@@ -26,13 +26,13 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { agentService } from '../../../services/agentService';
 import {
   projectSandboxService,
   type ProjectSandbox,
   type SandboxStats,
   type ProjectSandboxStatus,
 } from '../../../services/projectSandboxService';
+import { sandboxSSEService, type BaseSandboxSSEEvent } from '../../../services/sandboxSSEService';
 import { type SandboxStateData } from '../../../types/agent';
 import { logger } from '../../../utils/logger';
 
@@ -124,6 +124,8 @@ const statusConfig: Record<
     clickable: true,
   },
 };
+
+const SANDBOX_SYNC_THROTTLE_MS = 1500;
 
 /**
  * Format bytes to human readable string
@@ -348,6 +350,12 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   const [statsLoading, setStatsLoading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const isFetchingSandboxRef = useRef(false);
+  const activeSandboxFetchControllerRef = useRef<AbortController | null>(null);
+  const lastSandboxFetchAtRef = useRef(0);
+  const latestRequestSeqRef = useRef(0);
+  const activeProjectIdRef = useRef(projectId);
+  activeProjectIdRef.current = projectId;
 
   // Track sandbox status in ref to avoid recreating fetchStats on every status change
   const sandboxStatusRef = useRef<ProjectSandboxStatus | null>(null);
@@ -360,24 +368,75 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   /**
    * Fetch sandbox info
    */
-  const fetchSandbox = useCallback(async () => {
-    if (!projectId) return;
+  const fetchSandbox = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!projectId) return;
 
-    setLoading(true);
-    try {
-      const info = await projectSandboxService.getProjectSandbox(projectId);
-      setSandbox(info);
-    } catch (error) {
-      // 404 means no sandbox exists - handle silently
-      const apiError = error as { statusCode?: number | undefined };
-      if (apiError?.statusCode !== 404) {
-        logger.error('[SandboxStatusIndicator] Failed to fetch sandbox:', error);
+      const force = options?.force ?? false;
+      const now = Date.now();
+      if (isFetchingSandboxRef.current && !force) return;
+      if (isFetchingSandboxRef.current && force) {
+        activeSandboxFetchControllerRef.current?.abort();
       }
-      setSandbox(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+      if (!force && now - lastSandboxFetchAtRef.current < SANDBOX_SYNC_THROTTLE_MS) {
+        return;
+      }
+
+      const requestSeq = latestRequestSeqRef.current + 1;
+      latestRequestSeqRef.current = requestSeq;
+      const requestProjectId = projectId;
+      const controller = new AbortController();
+      activeSandboxFetchControllerRef.current = controller;
+      isFetchingSandboxRef.current = true;
+      lastSandboxFetchAtRef.current = now;
+      setLoading(true);
+      try {
+        const requestOptions = { force, signal: controller.signal };
+        const info = await projectSandboxService.getProjectSandbox(
+          requestProjectId,
+          requestOptions
+        );
+        if (
+          latestRequestSeqRef.current !== requestSeq ||
+          activeProjectIdRef.current !== requestProjectId
+        ) {
+          return;
+        }
+        setSandbox(info);
+      } catch (error) {
+        const typedError = error as { code?: string | undefined; name?: string | undefined };
+        const isCancelled =
+          controller.signal.aborted ||
+          typedError.code === 'ERR_CANCELED' ||
+          typedError.name === 'CanceledError';
+        if (isCancelled) {
+          return;
+        }
+        if (
+          latestRequestSeqRef.current !== requestSeq ||
+          activeProjectIdRef.current !== requestProjectId
+        ) {
+          return;
+        }
+        // 404 means no sandbox exists - handle silently
+        const apiError = error as { statusCode?: number | undefined };
+        if (apiError?.statusCode !== 404) {
+          logger.error('[SandboxStatusIndicator] Failed to fetch sandbox:', error);
+        }
+        setSandbox(null);
+      } finally {
+        if (
+          latestRequestSeqRef.current === requestSeq &&
+          activeSandboxFetchControllerRef.current === controller
+        ) {
+          activeSandboxFetchControllerRef.current = null;
+          setLoading(false);
+          isFetchingSandboxRef.current = false;
+        }
+      }
+    },
+    [projectId]
+  );
 
   /**
    * Fetch sandbox stats (stable callback - uses ref for status check)
@@ -480,10 +539,32 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     }
   }, [config.clickable, starting, loading, currentStatus, handleStartSandbox, handleRestart]);
 
+  // Reset fetch guards and invalidate stale requests when switching project
+  useEffect(() => {
+    latestRequestSeqRef.current += 1;
+    activeSandboxFetchControllerRef.current?.abort();
+    activeSandboxFetchControllerRef.current = null;
+    isFetchingSandboxRef.current = false;
+    lastSandboxFetchAtRef.current = 0;
+    setLoading(false);
+    setStatsLoading(false);
+    setSandbox(null);
+    setStats(null);
+  }, [projectId]);
+
   // Initial fetch
   useEffect(() => {
-    fetchSandbox();
+    void fetchSandbox();
   }, [fetchSandbox]);
+
+  // Abort in-flight sandbox request on unmount
+  useEffect(() => {
+    return () => {
+      activeSandboxFetchControllerRef.current?.abort();
+      activeSandboxFetchControllerRef.current = null;
+      isFetchingSandboxRef.current = false;
+    };
+  }, []);
 
   // Fetch stats when popover opens and sandbox is running
   useEffect(() => {
@@ -492,89 +573,105 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     }
   }, [popoverOpen, sandbox?.status, fetchStats]);
 
-  // Subscribe to WebSocket sandbox state events
-  // Note: WebSocket connection is managed by parent components (via useUnifiedAgentStatus)
-  // The subscription will receive events once connection is established
+  const handleSandboxStateChange = useCallback(
+    (state: SandboxStateData) => {
+      logger.debug('[SandboxStatusIndicator] Sandbox state change:', state);
+
+      // Normalize event types from different sources:
+      // - broadcast_sandbox_state uses: "created", "restarted", "terminated"
+      // - Redis stream uses: "sandbox_created", "sandbox_terminated", "sandbox_status"
+      const eventType = state.eventType.replace(/^sandbox_/, '');
+
+      switch (eventType) {
+        case 'created':
+        case 'restarted':
+          // On created/restarted, update sandbox info from event data
+          if (state.status) {
+            setSandbox((prev) => {
+              if (!prev) {
+                void fetchSandbox({ force: true });
+                return prev;
+              }
+
+              return {
+                ...prev,
+                status: state.status as ProjectSandboxStatus,
+                sandbox_id: state.sandboxId || prev.sandbox_id,
+                endpoint: state.endpoint || prev.endpoint,
+                websocket_url: state.websocketUrl || prev.websocket_url,
+                mcp_port: state.mcpPort ?? prev.mcp_port,
+                desktop_port: state.desktopPort ?? prev.desktop_port,
+                terminal_port: state.terminalPort ?? prev.terminal_port,
+                is_healthy: state.isHealthy,
+              };
+            });
+          } else {
+            // If no status in event, refetch
+            void fetchSandbox({ force: true });
+          }
+          break;
+
+        case 'terminated':
+          logger.debug('[SandboxStatusIndicator] Sandbox terminated');
+          setSandbox(null);
+          setStats(null);
+          break;
+
+        case 'status':
+        case 'status_changed':
+          // Update status from event data
+          if (state.status) {
+            setSandbox((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: state.status as ProjectSandboxStatus,
+                    is_healthy: state.isHealthy,
+                  }
+                : null
+            );
+          }
+          break;
+
+        case 'desktop_started':
+        case 'desktop_stopped':
+        case 'desktop_status':
+        case 'terminal_started':
+        case 'terminal_stopped':
+        case 'terminal_status':
+          // Ignore service-level events here; they are handled by sandbox store/UI panels.
+          break;
+
+        default:
+          // Unknown events are ignored to avoid high-frequency fallback queries.
+          logger.debug(`[SandboxStatusIndicator] Ignored unknown event type: ${state.eventType}`);
+      }
+    },
+    [fetchSandbox]
+  );
+
+  // Subscribe to sandbox events via shared sandboxSSEService (single WS subscriber).
   useEffect(() => {
     if (!projectId) return;
 
-    // Subscribe to sandbox state changes via WebSocket
-    // Events will be queued internally until WebSocket is connected
-    agentService.subscribeSandboxState(
-      projectId,
-      '', // tenantId can be empty as it's optional on backend
-      (state: SandboxStateData) => {
-        logger.debug('[SandboxStatusIndicator] Sandbox state change:', state);
+    const toState = (event: BaseSandboxSSEEvent) => {
+      const state = event.data as SandboxStateData;
+      handleSandboxStateChange(state);
+    };
 
-        // Normalize event types from different sources:
-        // - broadcast_sandbox_state uses: "created", "restarted", "terminated"
-        // - Redis stream uses: "sandbox_created", "sandbox_terminated", "sandbox_status"
-        const eventType = state.eventType.replace(/^sandbox_/, '');
-
-        switch (eventType) {
-          case 'created':
-          case 'restarted':
-            // On created/restarted, update sandbox info from event data
-            if (state.status) {
-              setSandbox((prev) => {
-                if (prev) {
-                  return {
-                    ...prev,
-                    status: state.status as ProjectSandboxStatus,
-                    sandbox_id: state.sandboxId || prev.sandbox_id,
-                    endpoint: state.endpoint || prev.endpoint,
-                    websocket_url: state.websocketUrl || prev.websocket_url,
-                    mcp_port: state.mcpPort ?? prev.mcp_port,
-                    desktop_port: state.desktopPort ?? prev.desktop_port,
-                    terminal_port: state.terminalPort ?? prev.terminal_port,
-                    is_healthy: state.isHealthy,
-                  };
-                } else {
-                  // Create new sandbox object from event data - refetch for complete data
-                  fetchSandbox();
-                  return null;
-                }
-              });
-            } else {
-              // If no status in event, refetch
-              fetchSandbox();
-            }
-            break;
-
-          case 'terminated':
-            logger.debug('[SandboxStatusIndicator] Sandbox terminated');
-            setSandbox(null);
-            setStats(null);
-            break;
-
-          case 'status':
-          case 'status_changed':
-            // Update status from event data
-            if (state.status) {
-              setSandbox((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      status: state.status as ProjectSandboxStatus,
-                      is_healthy: state.isHealthy,
-                    }
-                  : null
-              );
-            }
-            break;
-
-          default:
-            // For any other event type, refetch to ensure consistency
-            logger.debug(`[SandboxStatusIndicator] Unknown event type: ${state.eventType}`);
-            fetchSandbox();
-        }
-      }
-    );
+    const unsubscribe = sandboxSSEService.subscribe(projectId, {
+      onSandboxCreated: toState,
+      onSandboxTerminated: toState,
+      onStatusUpdate: toState,
+      onError: (error) => {
+        logger.error('[SandboxStatusIndicator] sandboxSSEService error:', error);
+      },
+    });
 
     return () => {
-      agentService.unsubscribeSandboxState();
+      unsubscribe();
     };
-  }, [projectId, fetchSandbox]);
+  }, [projectId, handleSandboxStateChange]);
 
   // Auto-refresh stats while popover is open (stable interval, no recreation on sandbox change)
   useEffect(() => {

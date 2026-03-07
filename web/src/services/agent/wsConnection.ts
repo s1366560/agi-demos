@@ -40,7 +40,9 @@ export class WebSocketConnection {
   private setStatus(status: WebSocketStatus): void {
     if (this.status !== status) {
       this.status = status;
-      this.statusListeners.forEach((listener) => { listener(status); });
+      this.statusListeners.forEach((listener) => {
+        listener(status);
+      });
     }
   }
 
@@ -112,14 +114,18 @@ export class WebSocketConnection {
 
           this.startHeartbeat();
 
-          this.reconnectListeners.forEach((listener) => { listener(); });
+          this.reconnectListeners.forEach((listener) => {
+            listener();
+          });
           resolve();
         };
 
         this.ws.onmessage = (event) => {
           try {
             const message: ServerMessage = JSON.parse(event.data);
-            this.messageListeners.forEach((listener) => { listener(message); });
+            this.messageListeners.forEach((listener) => {
+              listener(message);
+            });
           } catch (err) {
             logger.error('[AgentWS] Failed to parse message:', err);
           }

@@ -189,6 +189,17 @@ class TestContextBridge:
         # Should take only last 3 messages
         assert len(ctx.context_messages) <= 3
 
+    def test_build_subagent_context_includes_conversation_id(self):
+        bridge = ContextBridge()
+        ctx = bridge.build_subagent_context(
+            user_message="Fix the bug",
+            subagent_system_prompt="You are a coder.",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            conversation_id="conv-123",
+        )
+        assert ctx.metadata["conversation_id"] == "conv-123"
+
     def test_token_budget_ratio(self):
         bridge = ContextBridge(budget_ratio=0.3)
         ctx = bridge.build_subagent_context(

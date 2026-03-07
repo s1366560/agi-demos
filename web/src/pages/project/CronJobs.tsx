@@ -166,7 +166,9 @@ export const CronJobs: React.FC = () => {
         <Switch
           checked={enabled}
           loading={submitting}
-          onChange={(checked) => { void handleToggle(record.id, checked); }}
+          onChange={(checked) => {
+            void handleToggle(record.id, checked);
+          }}
         />
       ),
     },
@@ -193,10 +195,21 @@ export const CronJobs: React.FC = () => {
           >
             History
           </Button>
-          <Button type="link" onClick={() => { void handleRunNow(record.id); }} className="p-0">
+          <Button
+            type="link"
+            onClick={() => {
+              void handleRunNow(record.id);
+            }}
+            className="p-0"
+          >
             Run Now
           </Button>
-          <Popconfirm title="Delete this task?" onConfirm={() => { void handleDelete(record.id); }}>
+          <Popconfirm
+            title="Delete this task?"
+            onConfirm={() => {
+              void handleDelete(record.id);
+            }}
+          >
             <Button type="link" danger className="p-0">
               Delete
             </Button>

@@ -567,25 +567,24 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
     }
   }, [projectId, fetchSandboxInfo]);
 
-  const statusColor = sandboxInfo?.status === 'running'
-    ? 'text-green-500'
-    : sandboxInfo?.status === 'terminated'
-      ? 'text-gray-400'
-      : sandboxInfo?.status === 'error'
-        ? 'text-red-500'
-        : 'text-yellow-500';
+  const statusColor =
+    sandboxInfo?.status === 'running'
+      ? 'text-green-500'
+      : sandboxInfo?.status === 'terminated'
+        ? 'text-gray-400'
+        : sandboxInfo?.status === 'error'
+          ? 'text-red-500'
+          : 'text-yellow-500';
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
       <div className="flex items-center gap-2 mb-4">
         <Box className="h-5 w-5 text-purple-500" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Sandbox
-        </h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Sandbox</h3>
       </div>
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-        Sandboxes provide isolated execution environments for tools and code.
-        They are automatically created on first use and destroyed after idle timeout.
+        Sandboxes provide isolated execution environments for tools and code. They are automatically
+        created on first use and destroyed after idle timeout.
       </p>
 
       {loading ? (
@@ -634,7 +633,8 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
               <div>
                 <span className="text-gray-500 dark:text-slate-400">Memory:</span>{' '}
                 <span className="text-gray-700 dark:text-slate-300">
-                  {stats.memory_used_mb?.toFixed(0) ?? '-'} / {stats.memory_limit_mb?.toFixed(0) ?? '-'} MB
+                  {stats.memory_used_mb?.toFixed(0) ?? '-'} /{' '}
+                  {stats.memory_limit_mb?.toFixed(0) ?? '-'} MB
                 </span>
               </div>
             </div>

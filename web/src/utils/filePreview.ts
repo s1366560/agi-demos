@@ -9,8 +9,7 @@ const OFFICE_MIME_TYPES = [
 ];
 
 /** Check if MIME type is an Office document */
-export const isOfficeMimeType = (mime: string): boolean =>
-  OFFICE_MIME_TYPES.includes(mime);
+export const isOfficeMimeType = (mime: string): boolean => OFFICE_MIME_TYPES.includes(mime);
 
 /** Check if filename has an Office extension */
 export const isOfficeExtension = (filename: string): boolean => {

@@ -75,7 +75,6 @@ import type {
 // Utilities
 // ========================================
 
-
 // ========================================
 // HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard
 // ========================================
