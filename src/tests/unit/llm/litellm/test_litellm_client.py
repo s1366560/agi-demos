@@ -271,6 +271,44 @@ class TestLiteLLMClient:
         assert kwargs["api_base"] == "http://localhost:11434"
         assert "api_key" not in kwargs
 
+    def test_openrouter_uses_openai_prefix_and_default_base_url(self):
+        """OpenRouter should use OpenAI-compatible model prefix and default base URL."""
+        provider_config = ProviderConfig(
+            id=uuid4(),
+            name="openrouter-provider",
+            provider_type=ProviderType.OPENROUTER,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        llm_config = LLMConfig(
+            api_key="sk-or-test",
+            model="gpt-4o",
+            small_model="gpt-4o-mini",
+            temperature=0,
+        )
+        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service"):
+            client = LiteLLMClient(
+                config=llm_config,
+                provider_config=provider_config,
+                cache=False,
+            )
+
+        kwargs = client._build_completion_kwargs(
+            model=client._get_model_for_size(ModelSize.medium),
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=256,
+        )
+        assert kwargs["model"] == "openai/gpt-4o"
+        assert kwargs["api_base"] == "https://openrouter.ai/api/v1"
+        assert kwargs["api_key"] == "sk-or-test"
+
 
 class TestLiteLLMClientDeepseek:
     """Test suite for LiteLLMClient with Deepseek provider."""

@@ -114,6 +114,18 @@ def _endpoint_openai(
     )
 
 
+def _endpoint_openrouter(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://openrouter.ai/api/v1"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
 def _endpoint_gemini(
     config: ProviderConfig,
     api_key: str | None,
@@ -227,6 +239,7 @@ _HEALTH_ENDPOINT_REGISTRY: dict[
     Callable[[ProviderConfig, str | None], _HealthEndpoint],
 ] = {
     ProviderType.OPENAI: _endpoint_openai,
+    ProviderType.OPENROUTER: _endpoint_openrouter,
     ProviderType.GEMINI: _endpoint_gemini,
     ProviderType.DASHSCOPE: _endpoint_dashscope,
     ProviderType.ANTHROPIC: _endpoint_anthropic,

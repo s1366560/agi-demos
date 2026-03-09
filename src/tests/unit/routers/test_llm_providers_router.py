@@ -609,6 +609,7 @@ class TestLLMProvidersRouterTypes:
         data = response.json()
         assert isinstance(data, list)
         assert "openai" in data
+        assert "openrouter" in data
         assert "dashscope" in data
         assert "gemini" in data
         assert "anthropic" in data
@@ -625,6 +626,17 @@ class TestLLMProvidersRouterTypes:
         assert "models" in data
         assert "gpt-4o" in data["models"]["chat"]
         assert "gpt-4o-mini" in data["models"]["chat"]
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_openrouter(self, llm_client):
+        """Test listing models for OpenRouter provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/openrouter")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["provider_type"] == "openrouter"
+        assert "openai/gpt-4o" in data["models"]["chat"]
+        assert "openai/text-embedding-3-small" in data["models"]["embedding"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_dashscope(self, llm_client):

@@ -220,6 +220,11 @@ async def list_models_for_provider_type(
             "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
             "rerank": [],
         },
+        "openrouter": {
+            "chat": ["openai/gpt-4o", "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet"],
+            "embedding": ["openai/text-embedding-3-small"],
+            "rerank": ["openai/gpt-4o-mini"],
+        },
         "dashscope": {
             "chat": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],
             "embedding": ["text-embedding-v3", "text-embedding-v2"],

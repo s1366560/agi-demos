@@ -283,6 +283,7 @@ class ProviderType(StrEnum):
     """Supported LLM provider types"""
 
     OPENAI = "openai"
+    OPENROUTER = "openrouter"
     DASHSCOPE = "dashscope"
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"

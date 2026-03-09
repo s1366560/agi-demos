@@ -40,6 +40,7 @@ _RERANKER_PROVIDER_PREFIXES: dict[str, str] = {
     "mistral": "mistral",
     "deepseek": "deepseek",
     "dashscope": "openai",
+    "openrouter": "openai",
     "kimi": "openai",
     "minimax": "minimax",
     "zai": "zai",
@@ -51,6 +52,7 @@ _RERANKER_PROVIDER_PREFIXES: dict[str, str] = {
 DEFAULT_RERANK_MODELS = {
     ProviderType.COHERE: "rerank-english-v3.0",
     ProviderType.OPENAI: "gpt-4o-mini",
+    ProviderType.OPENROUTER: "gpt-4o-mini",
     ProviderType.ANTHROPIC: "claude-3-5-haiku-20241022",
     ProviderType.GEMINI: "gemini-1.5-flash",
     ProviderType.DASHSCOPE: "qwen-turbo",
@@ -129,6 +131,8 @@ class LiteLLMReranker(BaseReranker):
         """Resolve api_base using configured value or local-provider defaults."""
         if base_url:
             return base_url
+        if provider_type == ProviderType.OPENROUTER:
+            return "https://openrouter.ai/api/v1"
         if provider_type == ProviderType.OLLAMA:
             return "http://localhost:11434"
         if provider_type == ProviderType.LMSTUDIO:

@@ -54,6 +54,7 @@ _DEFAULT_API_BASES: dict[str, str] = {
     "zai": "https://open.bigmodel.cn/api/paas/v4",
     "kimi": "https://api.moonshot.cn/v1",
     "minimax": "https://api.minimax.chat/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
     "ollama": "http://localhost:11434",
     "lmstudio": "http://localhost:1234/v1",
 }
@@ -69,6 +70,7 @@ _PROVIDER_PREFIXES: dict[str, str] = {
     "deepseek": "deepseek",
     "zai": "zai",
     "minimax": "minimax",
+    "openrouter": "openai",
     "kimi": "openai",
     "ollama": "ollama",
     "lmstudio": "openai",
@@ -161,6 +163,7 @@ class LiteLLMClient(LLMClient):
             "zai": "ZAI_API_KEY",
             "kimi": "KIMI_API_KEY",
             "minimax": "MINIMAX_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
         }
         env_var = env_key_map.get(provider_type)
         if env_var and api_key:

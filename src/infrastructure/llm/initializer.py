@@ -22,6 +22,8 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "gemini": ProviderType.GEMINI,
     "dashscope": ProviderType.DASHSCOPE,
     "openai": ProviderType.OPENAI,
+    "openrouter": ProviderType.OPENROUTER,
+    "open-router": ProviderType.OPENROUTER,
     "deepseek": ProviderType.DEEPSEEK,
     "minimax": ProviderType.MINIMAX,
     "zai": ProviderType.ZAI,
@@ -39,6 +41,7 @@ _PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("GEMINI_API_KEY", "gemini"),
     ("DASHSCOPE_API_KEY", "dashscope"),
     ("OPENAI_API_KEY", "openai"),
+    ("OPENROUTER_API_KEY", "openrouter"),
     ("DEEPSEEK_API_KEY", "deepseek"),
     ("MINIMAX_API_KEY", "minimax"),
     ("ZAI_API_KEY", "zai"),
@@ -248,6 +251,17 @@ def _env_openai() -> dict[str, Any]:
     }
 
 
+def _env_openrouter() -> dict[str, Any]:
+    return {
+        "api_key": os.getenv("OPENROUTER_API_KEY"),
+        "llm_model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o"),
+        "llm_small_model": os.getenv("OPENROUTER_SMALL_MODEL", "openai/gpt-4o-mini"),
+        "embedding_model": os.getenv("OPENROUTER_EMBEDDING_MODEL", "openai/text-embedding-3-small"),
+        "reranker_model": os.getenv("OPENROUTER_RERANK_MODEL", "openai/gpt-4o-mini"),
+        "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+    }
+
+
 def _env_deepseek() -> dict[str, Any]:
     return {
         "api_key": os.getenv("DEEPSEEK_API_KEY"),
@@ -321,6 +335,8 @@ _PROVIDER_ENV_REGISTRY: dict[str, Any] = {
     "zai": _env_zai,
     "dashscope": _env_dashscope,
     "openai": _env_openai,
+    "openrouter": _env_openrouter,
+    "open-router": _env_openrouter,
     "deepseek": _env_deepseek,
     "minimax": _env_minimax,
     "kimi": _env_kimi,

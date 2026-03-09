@@ -27,6 +27,18 @@ export const PROVIDERS: ProviderMeta[] = [
     documentationUrl: 'https://platform.openai.com/docs',
   },
   {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    icon: '🧭',
+    description: 'Unified access to OpenAI/Anthropic/Meta and more',
+    apiKeyEnvVar: 'OPENROUTER_API_KEY',
+    apiKeyPlaceholder: 'sk-or-...',
+    hasEmbedding: true,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://openrouter.ai/docs',
+  },
+  {
     value: 'anthropic',
     label: 'Anthropic',
     icon: '🧠',

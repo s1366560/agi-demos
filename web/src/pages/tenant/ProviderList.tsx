@@ -23,6 +23,7 @@ import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../type
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   openai: 'OpenAI',
+  openrouter: 'OpenRouter',
   dashscope: 'Dashscope',
   dashscope_coding: 'Dashscope Coding',
   dashscope_embedding: 'Dashscope Embedding',

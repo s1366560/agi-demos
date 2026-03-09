@@ -107,6 +107,7 @@ class LLMProviderManager:
         self._fallback_order: dict[OperationType, list[ProviderType]] = {
             OperationType.LLM: [
                 ProviderType.OPENAI,
+                ProviderType.OPENROUTER,
                 ProviderType.MINIMAX,
                 ProviderType.ANTHROPIC,
                 ProviderType.GEMINI,
@@ -117,6 +118,7 @@ class LLMProviderManager:
             ],
             OperationType.EMBEDDING: [
                 ProviderType.OPENAI,
+                ProviderType.OPENROUTER,
                 ProviderType.MINIMAX,
                 ProviderType.DASHSCOPE,
                 ProviderType.GEMINI,
@@ -126,16 +128,19 @@ class LLMProviderManager:
             OperationType.STRUCTURED_OUTPUT: [
                 ProviderType.DASHSCOPE,  # Best structured output support
                 ProviderType.OPENAI,
+                ProviderType.OPENROUTER,
                 ProviderType.GEMINI,
             ],
             OperationType.VISION: [
                 ProviderType.GEMINI,  # Best vision support
                 ProviderType.OPENAI,
+                ProviderType.OPENROUTER,
                 ProviderType.ANTHROPIC,
             ],
             OperationType.CODE: [
                 ProviderType.DEEPSEEK,  # DeepSeek-Coder
                 ProviderType.OPENAI,
+                ProviderType.OPENROUTER,
                 ProviderType.ANTHROPIC,
             ],
         }

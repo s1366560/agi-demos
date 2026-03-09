@@ -66,6 +66,7 @@ EMBEDDING_DIMENSIONS = {
 # Default models by provider
 DEFAULT_EMBEDDING_MODELS = {
     ProviderType.OPENAI: "text-embedding-3-small",
+    ProviderType.OPENROUTER: "text-embedding-3-small",
     ProviderType.ANTHROPIC: "text-embedding-3-small",  # Uses OpenAI
     ProviderType.GEMINI: "text-embedding-004",
     ProviderType.DASHSCOPE: "text-embedding-v3",
@@ -276,6 +277,8 @@ class LiteLLMEmbedder(BaseEmbedder):
         """Resolve api_base using configured value or local-provider defaults."""
         if base_url:
             return base_url
+        if provider_type == ProviderType.OPENROUTER:
+            return "https://openrouter.ai/api/v1"
         if provider_type == ProviderType.OLLAMA:
             return "http://localhost:11434"
         if provider_type == ProviderType.LMSTUDIO:
@@ -323,6 +326,7 @@ class LiteLLMEmbedder(BaseEmbedder):
         "mistral": "mistral/",
         "azure_openai": "azure/",
         "dashscope": "openai/",
+        "openrouter": "openai/",
         "kimi": "openai/",
         "minimax": "minimax/",
         "zai": "openai/",

@@ -23,6 +23,12 @@ const PROVIDER_CONFIG: Record<
     label: 'OpenAI',
     description: 'GPT-4, GPT-3.5, text-embedding',
   },
+  openrouter: {
+    icon: '🧭',
+    gradient: 'from-cyan-500 to-blue-600',
+    label: 'OpenRouter',
+    description: 'OpenAI-compatible multi-provider gateway',
+  },
   anthropic: {
     icon: '🧠',
     gradient: 'from-orange-400 to-pink-500',

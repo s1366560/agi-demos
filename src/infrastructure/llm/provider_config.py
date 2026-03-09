@@ -91,6 +91,12 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "embedding": "text-embedding-3-small",
         "rerank": "gpt-4o-mini",  # LLM-based rerank
     },
+    ProviderType.OPENROUTER: {
+        "completion": "openai/gpt-4o-mini",
+        "completion_medium": "openai/gpt-4o",
+        "embedding": "openai/text-embedding-3-small",
+        "rerank": "openai/gpt-4o-mini",
+    },
     ProviderType.ANTHROPIC: {
         "completion": "claude-3-5-haiku-20241022",
         "completion_medium": "claude-3-5-sonnet-20241022",
@@ -196,6 +202,7 @@ def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
     """
     prefix_map: dict[ProviderType, ProviderPrefix] = {
         ProviderType.OPENAI: ProviderPrefix.OPENAI,
+        ProviderType.OPENROUTER: ProviderPrefix.OPENAI,
         ProviderType.ANTHROPIC: ProviderPrefix.ANTHROPIC,
         ProviderType.GEMINI: ProviderPrefix.GEMINI,
         ProviderType.DASHSCOPE: ProviderPrefix.DASHSCOPE,
@@ -339,6 +346,7 @@ class UnifiedLLMConfig:
             ProviderType.ANTHROPIC,
             ProviderType.GEMINI,
             ProviderType.DASHSCOPE,
+            ProviderType.OPENROUTER,
             ProviderType.MISTRAL,
             ProviderType.GROQ,
             ProviderType.DEEPSEEK,

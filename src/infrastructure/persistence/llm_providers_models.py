@@ -100,7 +100,7 @@ class LLMProvider(Base):
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="llm_providers_name_not_empty"),
         CheckConstraint(
-            "provider_type IN ('openai', 'dashscope', 'gemini', 'anthropic', 'groq', 'azure_openai', 'cohere', 'mistral', 'bedrock', 'vertex', 'deepseek', 'minimax', 'zai', 'kimi', 'ollama', 'lmstudio', 'dashscope_coding', 'dashscope_embedding', 'dashscope_reranker', 'kimi_coding', 'kimi_embedding', 'kimi_reranker', 'minimax_coding', 'minimax_embedding', 'minimax_reranker', 'zai_coding', 'zai_embedding', 'zai_reranker')",
+            "provider_type IN ('openai', 'openrouter', 'dashscope', 'gemini', 'anthropic', 'groq', 'azure_openai', 'cohere', 'mistral', 'bedrock', 'vertex', 'deepseek', 'minimax', 'zai', 'kimi', 'ollama', 'lmstudio', 'dashscope_coding', 'dashscope_embedding', 'dashscope_reranker', 'kimi_coding', 'kimi_embedding', 'kimi_reranker', 'minimax_coding', 'minimax_embedding', 'minimax_reranker', 'zai_coding', 'zai_embedding', 'zai_reranker')",
             name="llm_providers_valid_type",
         ),
         Index("idx_llm_providers_type", "provider_type"),

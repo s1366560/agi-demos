@@ -14,6 +14,7 @@ interface ProviderModalProps {
 
 const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
+  { value: 'openrouter', label: 'OpenRouter' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'gemini', label: 'Google Gemini' },
   { value: 'dashscope', label: 'Alibaba Dashscope' },
@@ -60,6 +61,11 @@ const DEFAULT_MODELS: Partial<
   >
 > = {
   openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
+  openrouter: {
+    llm: 'openai/gpt-4o',
+    small: 'openai/gpt-4o-mini',
+    embedding: 'openai/text-embedding-3-small',
+  },
   anthropic: { llm: 'claude-sonnet-4-20250514', small: 'claude-3-5-haiku-20241022' },
   gemini: { llm: 'gemini-1.5-pro', small: 'gemini-1.5-flash', embedding: 'text-embedding-004' },
   dashscope: {

@@ -82,6 +82,11 @@ DEFAULT_RATE_LIMITS: dict[ProviderType, RateLimitConfig] = {
         rpm=10000,  # Tier 3 limit
         tpm=2000000,
     ),
+    ProviderType.OPENROUTER: RateLimitConfig(
+        max_concurrent=50,
+        rpm=10000,
+        tpm=2000000,
+    ),
     ProviderType.GEMINI: RateLimitConfig(
         max_concurrent=100,
         rpm=60000,  # Very generous limits

@@ -259,6 +259,7 @@ class ProviderService:
         # Providers with standard GET /models + Bearer auth
         bearer_providers: dict[str, str] = {
             "openai": "https://api.openai.com/v1",
+            "openrouter": "https://openrouter.ai/api/v1",
             "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "deepseek": "https://api.deepseek.com/v1",
             "minimax": "https://api.minimax.chat/v1",
