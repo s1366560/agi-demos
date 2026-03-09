@@ -61,5 +61,17 @@ export function parseSandboxStateData(message: ServerMessage): SandboxStateData 
     terminalUrl: typeof data.terminal_url === 'string' ? data.terminal_url : undefined,
     isHealthy: Boolean(data.is_healthy),
     errorMessage: typeof data.error_message === 'string' ? data.error_message : undefined,
+    serviceId: typeof data.service_id === 'string' ? data.service_id : undefined,
+    serviceName: typeof data.service_name === 'string' ? data.service_name : undefined,
+    sourceType:
+      data.source_type === 'sandbox_internal' || data.source_type === 'external_url'
+        ? data.source_type
+        : undefined,
+    serviceUrl: typeof data.service_url === 'string' ? data.service_url : undefined,
+    previewUrl: typeof data.preview_url === 'string' ? data.preview_url : undefined,
+    wsPreviewUrl: typeof data.ws_preview_url === 'string' ? data.ws_preview_url : undefined,
+    autoOpen: typeof data.auto_open === 'boolean' ? data.auto_open : undefined,
+    restartToken: typeof data.restart_token === 'string' ? data.restart_token : undefined,
+    updatedAt: typeof data.updated_at === 'string' ? data.updated_at : undefined,
   };
 }

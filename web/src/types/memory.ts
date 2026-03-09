@@ -266,6 +266,7 @@ export interface UserProject {
 // LLM Provider Types
 export type ProviderType =
   | 'openai'
+  | 'openrouter'
   | 'dashscope'
   | 'dashscope_coding'
   | 'dashscope_embedding'
