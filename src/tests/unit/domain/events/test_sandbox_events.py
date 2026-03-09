@@ -17,6 +17,10 @@ from src.domain.events.agent_events import (
     AgentDesktopStatusEvent,
     AgentDesktopStoppedEvent,
     AgentEventType,
+    AgentHttpServiceErrorEvent,
+    AgentHttpServiceStartedEvent,
+    AgentHttpServiceStoppedEvent,
+    AgentHttpServiceUpdatedEvent,
     AgentSandboxCreatedEvent,
     AgentSandboxStatusEvent,
     AgentSandboxTerminatedEvent,
@@ -229,6 +233,65 @@ class TestSandboxEvents:
         assert event.running is False
         assert event.url is None
 
+    def test_http_service_started_event(self):
+        """Test http_service_started event creation."""
+        event = AgentHttpServiceStartedEvent(
+            sandbox_id="sb_123",
+            service_id="svc_123",
+            service_name="vite-dev",
+            source_type="sandbox_internal",
+            service_url="http://172.17.0.2:5173",
+            proxy_url="/api/v1/projects/proj_456/sandbox/http-services/svc_123/proxy/",
+            ws_proxy_url="/api/v1/projects/proj_456/sandbox/http-services/svc_123/proxy/ws/",
+            auto_open=True,
+            restart_token="token-1",
+        )
+
+        assert event.event_type == AgentEventType.HTTP_SERVICE_STARTED
+        assert event.service_id == "svc_123"
+        assert event.service_name == "vite-dev"
+        assert event.source_type == "sandbox_internal"
+        assert event.auto_open is True
+        assert event.restart_token == "token-1"
+
+    def test_http_service_updated_event(self):
+        """Test http_service_updated event creation."""
+        event = AgentHttpServiceUpdatedEvent(
+            sandbox_id="sb_123",
+            service_id="svc_123",
+            service_name="vite-dev",
+            source_type="sandbox_internal",
+            service_url="http://172.17.0.2:5173",
+            status="running",
+        )
+
+        assert event.event_type == AgentEventType.HTTP_SERVICE_UPDATED
+        assert event.status == "running"
+
+    def test_http_service_stopped_event(self):
+        """Test http_service_stopped event creation."""
+        event = AgentHttpServiceStoppedEvent(
+            sandbox_id="sb_123",
+            service_id="svc_123",
+            service_name="vite-dev",
+        )
+
+        assert event.event_type == AgentEventType.HTTP_SERVICE_STOPPED
+        assert event.status == "stopped"
+
+    def test_http_service_error_event(self):
+        """Test http_service_error event creation."""
+        event = AgentHttpServiceErrorEvent(
+            sandbox_id="sb_123",
+            service_id="svc_123",
+            service_name="vite-dev",
+            error_message="Port not reachable",
+        )
+
+        assert event.event_type == AgentEventType.HTTP_SERVICE_ERROR
+        assert event.status == "error"
+        assert event.error_message == "Port not reachable"
+
     def test_all_sandbox_event_types_exist(self):
         """Test that all sandbox event types are defined in AgentEventType."""
         expected_types = [
@@ -241,6 +304,10 @@ class TestSandboxEvents:
             "terminal_started",
             "terminal_stopped",
             "terminal_status",
+            "http_service_started",
+            "http_service_updated",
+            "http_service_stopped",
+            "http_service_error",
         ]
 
         for expected in expected_types:
@@ -262,6 +329,10 @@ class TestSandboxEvents:
             "terminal_started",
             "terminal_stopped",
             "terminal_status",
+            "http_service_started",
+            "http_service_updated",
+            "http_service_stopped",
+            "http_service_error",
         ]
 
         for event_type in sandbox_types:

@@ -380,6 +380,24 @@ export interface SandboxStateData {
   isHealthy: boolean;
   /** Error message if in error state */
   errorMessage?: string | undefined;
+  /** HTTP service identifier for sandbox web previews */
+  serviceId?: string | undefined;
+  /** Human-readable service name */
+  serviceName?: string | undefined;
+  /** Service source type */
+  sourceType?: 'sandbox_internal' | 'external_url' | undefined;
+  /** Upstream service URL */
+  serviceUrl?: string | undefined;
+  /** Preview URL to use in Canvas */
+  previewUrl?: string | undefined;
+  /** WebSocket preview URL for HMR/live updates */
+  wsPreviewUrl?: string | undefined;
+  /** Whether frontend should auto-open this service in Canvas */
+  autoOpen?: boolean | undefined;
+  /** Restart/version token to force iframe refresh */
+  restartToken?: string | undefined;
+  /** Event timestamp for idempotency */
+  updatedAt?: string | undefined;
 }
 
 /**

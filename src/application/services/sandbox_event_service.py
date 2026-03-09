@@ -11,6 +11,10 @@ from src.domain.events.agent_events import (
     AgentDesktopStatusEvent,
     AgentDesktopStoppedEvent,
     AgentDomainEvent,
+    AgentHttpServiceErrorEvent,
+    AgentHttpServiceStartedEvent,
+    AgentHttpServiceStoppedEvent,
+    AgentHttpServiceUpdatedEvent,
     AgentSandboxCreatedEvent,
     AgentSandboxStatusEvent,
     AgentSandboxTerminatedEvent,
@@ -174,6 +178,98 @@ class SandboxEventPublisher:
             port=port,
             session_id=session_id,
             pid=pid,
+        )
+        return await self._publish(project_id, event)
+
+    async def publish_http_service_started(
+        self,
+        project_id: str,
+        service_id: str,
+        service_name: str,
+        source_type: str,
+        service_url: str,
+        sandbox_id: str | None = None,
+        proxy_url: str | None = None,
+        ws_proxy_url: str | None = None,
+        auto_open: bool = True,
+        restart_token: str | None = None,
+    ) -> str:
+        """Emit http_service_started event."""
+        event = AgentHttpServiceStartedEvent(
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=service_name,
+            source_type=source_type,
+            service_url=service_url,
+            proxy_url=proxy_url,
+            ws_proxy_url=ws_proxy_url,
+            auto_open=auto_open,
+            restart_token=restart_token,
+        )
+        return await self._publish(project_id, event)
+
+    async def publish_http_service_updated(
+        self,
+        project_id: str,
+        service_id: str,
+        service_name: str,
+        source_type: str,
+        service_url: str,
+        sandbox_id: str | None = None,
+        proxy_url: str | None = None,
+        ws_proxy_url: str | None = None,
+        auto_open: bool = True,
+        restart_token: str | None = None,
+        status: str = "running",
+    ) -> str:
+        """Emit http_service_updated event."""
+        event = AgentHttpServiceUpdatedEvent(
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=service_name,
+            source_type=source_type,
+            service_url=service_url,
+            proxy_url=proxy_url,
+            ws_proxy_url=ws_proxy_url,
+            auto_open=auto_open,
+            restart_token=restart_token,
+            status=status,
+        )
+        return await self._publish(project_id, event)
+
+    async def publish_http_service_stopped(
+        self,
+        project_id: str,
+        service_id: str,
+        service_name: str,
+        sandbox_id: str | None = None,
+        status: str = "stopped",
+    ) -> str:
+        """Emit http_service_stopped event."""
+        event = AgentHttpServiceStoppedEvent(
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=service_name,
+            status=status,
+        )
+        return await self._publish(project_id, event)
+
+    async def publish_http_service_error(
+        self,
+        project_id: str,
+        service_id: str,
+        service_name: str,
+        error_message: str,
+        sandbox_id: str | None = None,
+        status: str = "error",
+    ) -> str:
+        """Emit http_service_error event."""
+        event = AgentHttpServiceErrorEvent(
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=service_name,
+            status=status,
+            error_message=error_message,
         )
         return await self._publish(project_id, event)
 

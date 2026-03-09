@@ -167,6 +167,10 @@ export type AgentEventType =
   | 'terminal_started' // Web terminal started
   | 'terminal_stopped' // Web terminal stopped
   | 'terminal_status' // Web terminal status update
+  | 'http_service_started' // Sandbox HTTP preview service started
+  | 'http_service_updated' // Sandbox HTTP preview service updated
+  | 'http_service_stopped' // Sandbox HTTP preview service stopped
+  | 'http_service_error' // Sandbox HTTP preview service error
   | 'screenshot_update' // Desktop screenshot update
   // Artifact events
   | 'artifact_created' // Artifact (file/image/video) created
@@ -633,6 +637,14 @@ export interface SandboxEventData {
   websocket_url?: string | undefined;
   desktop_url?: string | undefined;
   terminal_url?: string | undefined;
+  service_id?: string | undefined;
+  service_name?: string | undefined;
+  source_type?: 'sandbox_internal' | 'external_url' | undefined;
+  service_url?: string | undefined;
+  preview_url?: string | undefined;
+  ws_preview_url?: string | undefined;
+  auto_open?: boolean | undefined;
+  restart_token?: string | undefined;
   error_message?: string | undefined;
   timestamp: string;
 }

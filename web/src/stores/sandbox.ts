@@ -13,6 +13,8 @@ import { devtools } from 'zustand/middleware';
 import { projectSandboxService } from '../services/projectSandboxService';
 import { sandboxSSEService } from '../services/sandboxSSEService';
 import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
+import { useCanvasStore } from './canvasStore';
+import { useLayoutModeStore } from './layoutMode';
 import { logger } from '../utils/logger';
 import { getAuthToken } from '../utils/tokenResolver';
 
@@ -33,6 +35,19 @@ export interface CurrentTool {
   input: Record<string, unknown>;
   callId?: string | undefined;
   startTime: number;
+}
+
+export interface HttpServiceStatus {
+  serviceId: string;
+  name: string;
+  sourceType: 'sandbox_internal' | 'external_url';
+  status: 'running' | 'stopped' | 'error';
+  serviceUrl: string;
+  previewUrl: string;
+  wsPreviewUrl: string | null;
+  autoOpen: boolean;
+  restartToken: string | null;
+  updatedAt: string;
 }
 
 export interface SandboxState {
@@ -56,6 +71,8 @@ export interface SandboxState {
 
   // Error state
   error: string | null;
+  // Registered sandbox HTTP preview services
+  httpServices: Record<string, HttpServiceStatus>;
 
   // Tool execution tracking
   currentTool: CurrentTool | null;
@@ -138,6 +155,7 @@ const initialState = {
   terminalStatus: null as TerminalStatus | null,
   isDesktopLoading: false,
   isTerminalLoading: false,
+  httpServices: {} as Record<string, HttpServiceStatus>,
   currentTool: null,
   toolExecutions: [],
   maxExecutions: 50,
@@ -145,6 +163,26 @@ const initialState = {
   artifactsByToolExecution: new Map<string, string[]>(),
   error: null as string | null,
 };
+
+function appendTokenAndRestart(
+  url: string,
+  restartToken?: string | null,
+  includeToken = false
+): string {
+  const token = includeToken ? getAuthToken() : null;
+  const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  const parsed = new URL(url, base);
+  if (token) {
+    parsed.searchParams.set('token', token);
+  }
+  if (restartToken) {
+    parsed.searchParams.set('_ms_restart', restartToken);
+  }
+  if (!url.startsWith('/') && /^https?:\/\//i.test(url)) {
+    return parsed.toString();
+  }
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
 
 export const useSandboxStore = create<SandboxState>()(
   devtools(
@@ -351,6 +389,10 @@ export const useSandboxStore = create<SandboxState>()(
           onDesktopStopped: get().handleSSEEvent,
           onTerminalStarted: get().handleSSEEvent,
           onTerminalStopped: get().handleSSEEvent,
+          onHttpServiceStarted: get().handleSSEEvent,
+          onHttpServiceUpdated: get().handleSSEEvent,
+          onHttpServiceStopped: get().handleSSEEvent,
+          onHttpServiceError: get().handleSSEEvent,
           onStatusUpdate: get().handleSSEEvent,
           onError: (error) => {
             logger.error('[SandboxSSE] Error:', error);
@@ -560,6 +602,90 @@ export const useSandboxStore = create<SandboxState>()(
               pid: data.pid || null,
             };
             set({ terminalStatus: status });
+            break;
+          }
+
+          case 'http_service_started':
+          case 'http_service_updated':
+          case 'http_service_stopped':
+          case 'http_service_error': {
+            const serviceId = (data.service_id || data.serviceId) as string | undefined;
+            if (!serviceId) {
+              break;
+            }
+
+            const sourceType = ((data.source_type || data.sourceType) as
+              | 'sandbox_internal'
+              | 'external_url'
+              | undefined) || 'sandbox_internal';
+            const eventStatus =
+              type === 'http_service_stopped'
+                ? 'stopped'
+                : type === 'http_service_error'
+                  ? 'error'
+                  : 'running';
+            const previewUrl = (data.preview_url ||
+              data.previewUrl ||
+              data.service_url ||
+              data.serviceUrl) as string | undefined;
+
+            if (!previewUrl) {
+              break;
+            }
+
+            const restartToken = (data.restart_token || data.restartToken) as string | undefined;
+            const autoOpen = (data.auto_open ?? data.autoOpen ?? true) as boolean;
+            const serviceName = (data.service_name || data.serviceName || serviceId) as string;
+            const updatedAt = (data.updated_at || data.updatedAt || new Date().toISOString()) as string;
+            const wsPreviewUrl = (data.ws_preview_url || data.wsPreviewUrl) as string | undefined;
+            const serviceUrl = (data.service_url || data.serviceUrl || previewUrl) as string;
+
+            const serviceStatus: HttpServiceStatus = {
+              serviceId,
+              name: serviceName,
+              sourceType,
+              status: eventStatus,
+              serviceUrl,
+              previewUrl,
+              wsPreviewUrl: wsPreviewUrl || null,
+              autoOpen,
+              restartToken: restartToken || null,
+              updatedAt,
+            };
+
+            set((state) => ({
+              httpServices: {
+                ...state.httpServices,
+                [serviceId]: serviceStatus,
+              },
+            }));
+
+            if ((type === 'http_service_started' || type === 'http_service_updated') && autoOpen) {
+              const projectScope = activeProjectId || 'unknown-project';
+              const tabId = `sandbox-http:${projectScope}:${serviceId}`;
+              const previewTabUrl = appendTokenAndRestart(
+                previewUrl,
+                restartToken,
+                sourceType === 'sandbox_internal'
+              );
+
+              useCanvasStore.getState().openTab({
+                id: tabId,
+                title: serviceName,
+                type: 'preview',
+                content: previewTabUrl,
+                mimeType: 'text/html',
+                previewMode: 'url',
+                previewUrlPolicy: 'allow-any-url',
+                sandboxServiceId: serviceId,
+                sandboxServiceSourceType: sourceType,
+              });
+
+              const currentMode = useLayoutModeStore.getState().mode;
+              if (currentMode !== 'canvas') {
+                useLayoutModeStore.getState().setMode('canvas');
+              }
+            }
             break;
           }
 

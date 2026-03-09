@@ -48,6 +48,7 @@ import {
   useCanvasActions,
   type CanvasTab,
   type CanvasContentType,
+  type CanvasPreviewUrlPolicy,
 } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 
@@ -83,7 +84,7 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
   }
 };
 
-const isSafePreviewUrl = (src: string): boolean => {
+const isSafePreviewUrl = (src: string, _policy: CanvasPreviewUrlPolicy = 'strict'): boolean => {
   if (!src) return false;
   if (src.startsWith('/')) return true;
   const lower = src.toLowerCase();
@@ -236,12 +237,14 @@ const IsolatedPreviewFrame = memo<{
   title: string;
   srcUrl?: string | undefined;
   pdfVerified?: boolean | undefined;
-}>(({ content, title, srcUrl, pdfVerified }) => {
+  embedUrl?: boolean | undefined;
+  previewPolicy?: CanvasPreviewUrlPolicy | undefined;
+}>(({ content, title, srcUrl, pdfVerified, embedUrl = false, previewPolicy = 'strict' }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const previewSrc = srcUrl || content.trim();
   const lowerPreviewSrc = previewSrc.toLowerCase();
-  const canUsePdfSrc = isSafePreviewUrl(previewSrc);
+  const canUsePdfSrc = isSafePreviewUrl(previewSrc, previewPolicy);
   const shouldSandboxPdf = (() => {
     try {
       const resolved = new URL(previewSrc, window.location.origin);
@@ -307,6 +310,26 @@ ${htmlContent}
         ref={iframeRef}
         src={previewSrc}
         {...(shouldSandboxPdf ? { sandbox: 'allow-same-origin allow-downloads' } : {})}
+        referrerPolicy="no-referrer"
+        className="w-full h-full border-0 bg-white rounded-b-lg"
+        title={title}
+      />
+    );
+  }
+
+  if (embedUrl) {
+    if (!isSafePreviewUrl(previewSrc, previewPolicy)) {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
+          <div className="text-slate-400">Invalid URL</div>
+        </div>
+      );
+    }
+    return (
+      <iframe
+        ref={iframeRef}
+        src={previewSrc}
+        sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups allow-downloads"
         referrerPolicy="no-referrer"
         className="w-full h-full border-0 bg-white rounded-b-lg"
         title={title}
@@ -1151,7 +1174,8 @@ const CanvasContent = memo<{
       const imagePayload = resolveImagePayload(tab.content);
       const mime = (tab.mimeType ?? imagePayload?.mimeType ?? '').toLowerCase();
       const previewSrc = tab.artifactUrl || imagePayload?.src || tab.content;
-      const previewUrl = isSafePreviewUrl(previewSrc) ? previewSrc : undefined;
+      const previewPolicy = tab.previewUrlPolicy ?? 'strict';
+      const previewUrl = isSafePreviewUrl(previewSrc, previewPolicy) ? previewSrc : undefined;
 
       // Auto-detect image when mimeType is missing
       const inferredMime = mime || inferMimeFromContent(previewSrc);
@@ -1191,6 +1215,8 @@ const CanvasContent = memo<{
           title={tab.title}
           srcUrl={tab.artifactUrl ?? previewUrl}
           pdfVerified={tab.pdfVerified}
+          embedUrl={tab.previewMode === 'url'}
+          previewPolicy={tab.previewUrlPolicy}
         />
       );
     }

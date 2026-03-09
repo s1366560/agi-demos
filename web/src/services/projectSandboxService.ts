@@ -189,6 +189,44 @@ export interface TerminalStatus {
   pid: number | null;
 }
 
+export type HttpServiceSourceType = 'sandbox_internal' | 'external_url';
+
+export interface HttpServiceInfo {
+  service_id: string;
+  name: string;
+  source_type: HttpServiceSourceType;
+  status: 'running' | 'stopped' | 'error';
+  service_url: string;
+  preview_url: string;
+  ws_preview_url?: string | null | undefined;
+  sandbox_id?: string | null | undefined;
+  auto_open: boolean;
+  restart_token?: string | null | undefined;
+  updated_at: string;
+}
+
+export interface RegisterHttpServiceRequest {
+  service_id?: string | undefined;
+  name: string;
+  source_type: HttpServiceSourceType;
+  internal_port?: number | undefined;
+  internal_scheme?: 'http' | 'https' | undefined;
+  path_prefix?: string | undefined;
+  external_url?: string | undefined;
+  auto_open?: boolean | undefined;
+}
+
+export interface ListHttpServicesResponse {
+  services: HttpServiceInfo[];
+  total: number;
+}
+
+export interface HttpServiceActionResponse {
+  success: boolean;
+  message: string;
+  service?: HttpServiceInfo | undefined;
+}
+
 /**
  * Project sandbox service interface
  */
@@ -283,6 +321,24 @@ export interface ProjectSandboxService {
    * @returns Promise that resolves when stopped
    */
   stopTerminal(projectId: string): Promise<void>;
+
+  /**
+   * Register or update a sandbox HTTP service preview
+   */
+  registerHttpService(
+    projectId: string,
+    request: RegisterHttpServiceRequest
+  ): Promise<HttpServiceInfo>;
+
+  /**
+   * List registered sandbox HTTP preview services
+   */
+  listHttpServices(projectId: string): Promise<ListHttpServicesResponse>;
+
+  /**
+   * Stop/unregister a sandbox HTTP preview service
+   */
+  stopHttpService(projectId: string, serviceId: string): Promise<HttpServiceActionResponse>;
 }
 
 /**
@@ -612,6 +668,34 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
   async stopTerminal(projectId: string): Promise<void> {
     logger.debug(`[ProjectSandboxService] Stopping terminal for project: ${projectId}`);
     await this.api.delete(`/projects/${projectId}/sandbox/terminal`);
+  }
+
+  async registerHttpService(
+    projectId: string,
+    request: RegisterHttpServiceRequest
+  ): Promise<HttpServiceInfo> {
+    logger.debug(
+      `[ProjectSandboxService] Registering HTTP service ${request.name} for project: ${projectId}`
+    );
+    const response = await this.api.post<HttpServiceInfo>(
+      `/projects/${projectId}/sandbox/http-services`,
+      request
+    );
+    return response;
+  }
+
+  async listHttpServices(projectId: string): Promise<ListHttpServicesResponse> {
+    logger.debug(`[ProjectSandboxService] Listing HTTP services for project: ${projectId}`);
+    return this.api.get<ListHttpServicesResponse>(`/projects/${projectId}/sandbox/http-services`);
+  }
+
+  async stopHttpService(projectId: string, serviceId: string): Promise<HttpServiceActionResponse> {
+    logger.debug(
+      `[ProjectSandboxService] Stopping HTTP service ${serviceId} for project: ${projectId}`
+    );
+    return this.api.delete<HttpServiceActionResponse>(
+      `/projects/${projectId}/sandbox/http-services/${encodeURIComponent(serviceId)}`
+    );
   }
 }
 

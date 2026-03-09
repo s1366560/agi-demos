@@ -30,6 +30,10 @@ __all__ = [
     "AgentElicitationAnsweredEvent",
     "AgentElicitationAskedEvent",
     "AgentEventType",
+    "AgentHttpServiceErrorEvent",
+    "AgentHttpServiceStartedEvent",
+    "AgentHttpServiceStoppedEvent",
+    "AgentHttpServiceUpdatedEvent",
     "AgentMCPAppRegisteredEvent",
     "AgentMCPAppResultEvent",
     "AgentParallelCompletedEvent",
@@ -531,6 +535,58 @@ class AgentTerminalStatusEvent(AgentDomainEvent):
     port: int = 0
     session_id: str | None = None
     pid: int | None = None
+
+
+class AgentHttpServiceStartedEvent(AgentDomainEvent):
+    """Event emitted when an HTTP service is registered/started for sandbox preview."""
+
+    event_type: AgentEventType = AgentEventType.HTTP_SERVICE_STARTED
+    sandbox_id: str | None = None
+    service_id: str
+    service_name: str
+    source_type: str  # sandbox_internal | external_url
+    service_url: str
+    proxy_url: str | None = None
+    ws_proxy_url: str | None = None
+    auto_open: bool = True
+    restart_token: str | None = None
+
+
+class AgentHttpServiceUpdatedEvent(AgentDomainEvent):
+    """Event emitted when an HTTP service registration is updated."""
+
+    event_type: AgentEventType = AgentEventType.HTTP_SERVICE_UPDATED
+    sandbox_id: str | None = None
+    service_id: str
+    service_name: str
+    source_type: str  # sandbox_internal | external_url
+    service_url: str
+    proxy_url: str | None = None
+    ws_proxy_url: str | None = None
+    auto_open: bool = True
+    restart_token: str | None = None
+    status: str = "running"
+
+
+class AgentHttpServiceStoppedEvent(AgentDomainEvent):
+    """Event emitted when an HTTP service is stopped/unregistered."""
+
+    event_type: AgentEventType = AgentEventType.HTTP_SERVICE_STOPPED
+    sandbox_id: str | None = None
+    service_id: str
+    service_name: str
+    status: str = "stopped"
+
+
+class AgentHttpServiceErrorEvent(AgentDomainEvent):
+    """Event emitted when an HTTP service enters error state."""
+
+    event_type: AgentEventType = AgentEventType.HTTP_SERVICE_ERROR
+    sandbox_id: str | None = None
+    service_id: str
+    service_name: str
+    status: str = "error"
+    error_message: str
 
 
 # === Artifact Events ===

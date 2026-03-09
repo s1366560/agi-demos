@@ -30,7 +30,11 @@ export type SandboxEventType =
   | 'desktop_status'
   | 'terminal_started'
   | 'terminal_stopped'
-  | 'terminal_status';
+  | 'terminal_status'
+  | 'http_service_started'
+  | 'http_service_updated'
+  | 'http_service_stopped'
+  | 'http_service_error';
 
 /**
  * Sandbox SSE event format (from backend)
@@ -51,6 +55,10 @@ export interface SandboxEventHandler {
   onDesktopStopped?: ((event: BaseSandboxSSEEvent) => void) | undefined;
   onTerminalStarted?: ((event: BaseSandboxSSEEvent) => void) | undefined;
   onTerminalStopped?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onHttpServiceStarted?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onHttpServiceUpdated?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onHttpServiceStopped?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onHttpServiceError?: ((event: BaseSandboxSSEEvent) => void) | undefined;
   onStatusUpdate?: ((event: BaseSandboxSSEEvent) => void) | undefined;
   onError?: ((error: Error) => void) | undefined;
 }
@@ -170,6 +178,10 @@ class SandboxSSEService {
         case 'terminal_started':
         case 'terminal_stopped':
         case 'terminal_status':
+        case 'http_service_started':
+        case 'http_service_updated':
+        case 'http_service_stopped':
+        case 'http_service_error':
           return rawType;
         default:
           return state.eventType;
@@ -209,6 +221,18 @@ class SandboxSSEService {
         break;
       case 'terminal_stopped':
         this.notifyHandlers('onTerminalStopped', event);
+        break;
+      case 'http_service_started':
+        this.notifyHandlers('onHttpServiceStarted', event);
+        break;
+      case 'http_service_updated':
+        this.notifyHandlers('onHttpServiceUpdated', event);
+        break;
+      case 'http_service_stopped':
+        this.notifyHandlers('onHttpServiceStopped', event);
+        break;
+      case 'http_service_error':
+        this.notifyHandlers('onHttpServiceError', event);
         break;
       case 'sandbox_status':
       case 'desktop_status':

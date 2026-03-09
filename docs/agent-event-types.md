@@ -2,8 +2,8 @@
 
 本文档记录 MemStack Agent 系统中所有的事件类型定义。
 
-**最后更新**: 2026-02-01  
-**事件总数**: 52 种
+**最后更新**: 2026-03-09  
+**事件总数**: 56 种
 
 ## 事件类型概览
 
@@ -26,8 +26,8 @@
 | 技能执行 | 4 | 4 |
 | Plan Mode | 14 | 7 |
 | 标题生成 | 1 | 1 |
-| 沙箱 | 9 | 0 |
-| **总计** | **52** | **33** |
+| 沙箱 | 13 | 4 |
+| **总计** | **56** | **37** |
 
 ---
 
@@ -183,14 +183,18 @@
 | `TERMINAL_STARTED` | `terminal_started` | ❌ | 终端启动 |
 | `TERMINAL_STOPPED` | `terminal_stopped` | ❌ | 终端停止 |
 | `TERMINAL_STATUS` | `terminal_status` | ❌ | 终端状态 |
+| `HTTP_SERVICE_STARTED` | `http_service_started` | ✅ | HTTP 预览服务启动 |
+| `HTTP_SERVICE_UPDATED` | `http_service_updated` | ✅ | HTTP 预览服务配置更新/重启 |
+| `HTTP_SERVICE_STOPPED` | `http_service_stopped` | ✅ | HTTP 预览服务停止 |
+| `HTTP_SERVICE_ERROR` | `http_service_error` | ✅ | HTTP 预览服务错误 |
 
 ---
 
 ## 统计摘要
 
-- **总计**: 52 种事件类型
-- **前端已处理**: 33 种 (63%)
-- **前端未处理**: 19 种 (37%)
+- **总计**: 56 种事件类型
+- **前端已处理**: 37 种 (66%)
+- **前端未处理**: 19 种 (34%)
   - 内部事件: 3 种 (`status`, `start`, `compact_needed`)
   - 预留功能: 9 种 (沙箱相关)
   - 待实现: 7 种 (`step_finish`, `permission_*`, `doom_loop_*`, `cost_update`, Plan 相关)

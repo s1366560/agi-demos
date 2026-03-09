@@ -10,9 +10,14 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 from datetime import UTC, datetime
+from enum import Enum
 from typing import Any, cast
+from urllib.parse import parse_qsl, urlencode, urlparse
+from uuid import uuid4
 
+import redis.asyncio as redis
 from fastapi import (
     APIRouter,
     Depends,
@@ -222,6 +227,88 @@ class CleanupStaleResponse(BaseModel):
     dry_run: bool = Field(..., description="Whether this was a dry run")
 
 
+class HttpServiceSourceType(str, Enum):
+    """Supported source types for HTTP preview services."""
+
+    SANDBOX_INTERNAL = "sandbox_internal"
+    EXTERNAL_URL = "external_url"
+
+
+class RegisterHttpServiceRequest(BaseModel):
+    """Register/update an HTTP service for Canvas preview."""
+
+    service_id: str | None = Field(default=None, description="Stable service identifier")
+    name: str = Field(..., min_length=1, max_length=120, description="Display name")
+    source_type: HttpServiceSourceType = Field(
+        default=HttpServiceSourceType.SANDBOX_INTERNAL,
+        description="Service source type",
+    )
+    internal_port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        description="Sandbox-internal HTTP service port",
+    )
+    internal_scheme: str = Field(
+        default="http",
+        pattern="^(http|https)$",
+        description="Scheme for sandbox-internal service",
+    )
+    path_prefix: str = Field(default="/", description="Optional base path for service")
+    external_url: str | None = Field(
+        default=None,
+        description="External URL when source_type=external_url",
+    )
+    auto_open: bool = Field(default=True, description="Whether frontend should auto-open Canvas")
+
+
+class HttpServiceResponse(BaseModel):
+    """HTTP service registration response."""
+
+    service_id: str
+    name: str
+    source_type: HttpServiceSourceType
+    status: str
+    service_url: str
+    preview_url: str
+    ws_preview_url: str | None = None
+    sandbox_id: str | None = None
+    auto_open: bool = True
+    restart_token: str | None = None
+    updated_at: str
+
+
+class ListHttpServicesResponse(BaseModel):
+    """List registered HTTP services for a project."""
+
+    services: list[HttpServiceResponse] = Field(default_factory=list)
+    total: int = Field(default=0, description="Total service count")
+
+
+class HttpServiceActionResponse(BaseModel):
+    """Response for HTTP service lifecycle actions."""
+
+    success: bool
+    message: str
+    service: HttpServiceResponse | None = None
+
+
+class HttpServiceProxyInfo(BaseModel):
+    """Internal HTTP service registry record."""
+
+    service_id: str
+    name: str
+    source_type: HttpServiceSourceType
+    status: str
+    service_url: str
+    preview_url: str
+    ws_preview_url: str | None = None
+    sandbox_id: str | None = None
+    auto_open: bool = True
+    restart_token: str | None = None
+    updated_at: str
+
+
 # ============================================================================
 # Dependency Injection
 # ============================================================================
@@ -297,6 +384,36 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
         return None
 
 
+def get_event_publisher_for_websocket(websocket: WebSocket) -> SandboxEventPublisher | None:
+    """Get the sandbox event publisher for WebSocket endpoints."""
+    try:
+        container = websocket.app.state.container
+        return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
+    except Exception as e:
+        logger.warning(f"Could not create websocket event publisher: {e}")
+        return None
+
+
+def get_http_service_redis_client(request: Request) -> redis.Redis | None:
+    """Get Redis client for HTTP service registry persistence."""
+    try:
+        container = request.app.state.container
+        return cast(redis.Redis | None, container.redis_client)
+    except Exception as e:
+        logger.debug("Could not get Redis client for HTTP service routes: %s", e)
+        return None
+
+
+def get_http_service_redis_client_for_websocket(websocket: WebSocket) -> redis.Redis | None:
+    """Get Redis client for HTTP service WebSocket routes."""
+    try:
+        container = websocket.app.state.container
+        return cast(redis.Redis | None, container.redis_client)
+    except Exception as e:
+        logger.debug("Could not get Redis client for HTTP service websocket routes: %s", e)
+        return None
+
+
 def get_orchestrator() -> SandboxOrchestrator:
     """Get the sandbox orchestrator singleton.
 
@@ -309,6 +426,413 @@ def get_orchestrator() -> SandboxOrchestrator:
     )
 
     return get_sandbox_orchestrator()
+
+
+# In-memory registry for HTTP services: project_id -> service_id -> service info
+_http_service_registry: dict[str, dict[str, HttpServiceProxyInfo]] = {}
+_http_service_registry_lock = asyncio.Lock()
+
+
+def _http_service_registry_redis_key(project_id: str) -> str:
+    """Build Redis hash key for project-scoped HTTP services."""
+    return f"project:sandbox:http-services:{project_id}"
+
+
+def _decode_redis_text(value: Any) -> str:
+    """Decode Redis bytes values to text."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)
+
+
+def _deserialize_http_service_payload(
+    payload: Any,
+    *,
+    project_id: str,
+    service_id: str | None = None,
+) -> HttpServiceProxyInfo | None:
+    """Deserialize an HTTP service payload from Redis."""
+    try:
+        serialized = _decode_redis_text(payload)
+        return HttpServiceProxyInfo.model_validate_json(serialized)
+    except Exception as e:
+        logger.warning(
+            "Failed to deserialize HTTP service payload for project %s service %s: %s",
+            project_id,
+            service_id or "unknown",
+            e,
+        )
+        return None
+
+
+def _normalize_http_service_id(service_id: str | None) -> str:
+    """Normalize/generate a service id."""
+    if service_id:
+        normalized = service_id.strip()
+        if not normalized:
+            raise HTTPException(status_code=400, detail="service_id cannot be empty")
+        if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", normalized):
+            raise HTTPException(
+                status_code=400,
+                detail="service_id contains invalid characters",
+            )
+        return normalized
+    return f"http-{uuid4().hex[:12]}"
+
+
+def _normalize_path_prefix(path_prefix: str) -> str:
+    """Normalize service base path."""
+    normalized = path_prefix.strip() or "/"
+    if not normalized.startswith("/"):
+        normalized = f"/{normalized}"
+    return normalized
+
+
+def _validate_external_http_url(url: str) -> str:
+    """Validate external URL and return normalized value."""
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(
+            status_code=400,
+            detail="external_url must be a valid http/https URL",
+        )
+    return url.strip()
+
+
+def _build_http_preview_proxy_url(project_id: str, service_id: str) -> str:
+    return f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy/"
+
+
+def _build_http_preview_ws_proxy_url(project_id: str, service_id: str) -> str:
+    return f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy/ws/"
+
+
+async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: str) -> str:
+    """Resolve Docker bridge IP for a sandbox container."""
+    docker_client = getattr(adapter, "_docker", None)
+    if docker_client is None:
+        raise HTTPException(status_code=500, detail="Sandbox adapter Docker client unavailable")
+
+    try:
+        loop = asyncio.get_running_loop()
+        container = await loop.run_in_executor(
+            None,
+            lambda: docker_client.containers.get(sandbox_id),
+        )
+        network_settings = container.attrs.get("NetworkSettings", {})
+        networks = network_settings.get("Networks", {})
+        for network in networks.values():
+            ip_address = network.get("IPAddress")
+            if isinstance(ip_address, str) and ip_address:
+                return ip_address
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to resolve sandbox container IP for %s: %s", sandbox_id, e)
+
+    raise HTTPException(
+        status_code=503,
+        detail=f"Unable to resolve sandbox network address for {sandbox_id}",
+    )
+
+
+async def _upsert_http_service(
+    project_id: str,
+    info: HttpServiceProxyInfo,
+    redis_client: redis.Redis | None = None,
+) -> tuple[bool, HttpServiceProxyInfo]:
+    """Insert/update a service record. Returns (already_exists, stored_record)."""
+    if redis_client:
+        redis_key = _http_service_registry_redis_key(project_id)
+        try:
+            existing = await redis_client.hget(redis_key, info.service_id)  # type: ignore[misc]
+            await redis_client.hset(  # type: ignore[misc]
+                redis_key,
+                info.service_id,
+                info.model_dump_json(),
+            )
+            async with _http_service_registry_lock:
+                project_services = _http_service_registry.setdefault(project_id, {})
+                project_services[info.service_id] = info
+            return existing is not None, info
+        except Exception as e:
+            logger.warning(
+                "Failed to persist HTTP service %s to Redis for project %s: %s",
+                info.service_id,
+                project_id,
+                e,
+            )
+
+    async with _http_service_registry_lock:
+        project_services = _http_service_registry.setdefault(project_id, {})
+        existed = info.service_id in project_services
+        project_services[info.service_id] = info
+        return existed, info
+
+
+async def _list_http_services(
+    project_id: str, redis_client: redis.Redis | None = None
+) -> list[HttpServiceProxyInfo]:
+    if redis_client:
+        redis_key = _http_service_registry_redis_key(project_id)
+        try:
+            payloads = await redis_client.hgetall(redis_key)  # type: ignore[misc]
+            services: list[HttpServiceProxyInfo] = []
+            for raw_service_id, raw_payload in payloads.items():
+                service_info = _deserialize_http_service_payload(
+                    raw_payload,
+                    project_id=project_id,
+                    service_id=_decode_redis_text(raw_service_id),
+                )
+                if service_info:
+                    services.append(service_info)
+
+            async with _http_service_registry_lock:
+                if services:
+                    _http_service_registry[project_id] = {
+                        service.service_id: service for service in services
+                    }
+                else:
+                    _http_service_registry.pop(project_id, None)
+            return services
+        except Exception as e:
+            logger.warning("Failed to list HTTP services from Redis for project %s: %s", project_id, e)
+
+    async with _http_service_registry_lock:
+        project_services = _http_service_registry.get(project_id, {})
+        return list(project_services.values())
+
+
+async def _get_http_service(
+    project_id: str,
+    service_id: str,
+    redis_client: redis.Redis | None = None,
+) -> HttpServiceProxyInfo | None:
+    if redis_client:
+        redis_key = _http_service_registry_redis_key(project_id)
+        try:
+            payload = await redis_client.hget(redis_key, service_id)  # type: ignore[misc]
+            if payload is None:
+                async with _http_service_registry_lock:
+                    project_services = _http_service_registry.get(project_id, {})
+                    project_services.pop(service_id, None)
+                    if not project_services:
+                        _http_service_registry.pop(project_id, None)
+                return None
+
+            service_info = _deserialize_http_service_payload(
+                payload,
+                project_id=project_id,
+                service_id=service_id,
+            )
+            if service_info:
+                async with _http_service_registry_lock:
+                    project_services = _http_service_registry.setdefault(project_id, {})
+                    project_services[service_id] = service_info
+                return service_info
+        except Exception as e:
+            logger.warning(
+                "Failed to get HTTP service %s from Redis for project %s: %s",
+                service_id,
+                project_id,
+                e,
+            )
+
+    async with _http_service_registry_lock:
+        project_services = _http_service_registry.get(project_id, {})
+        return project_services.get(service_id)
+
+
+async def _pop_http_service(
+    project_id: str,
+    service_id: str,
+    redis_client: redis.Redis | None = None,
+) -> HttpServiceProxyInfo | None:
+    async def _pop_from_memory() -> HttpServiceProxyInfo | None:
+        async with _http_service_registry_lock:
+            project_services = _http_service_registry.get(project_id, {})
+            service_info = project_services.pop(service_id, None)
+            if not project_services:
+                _http_service_registry.pop(project_id, None)
+            return service_info
+
+    async def _drop_from_memory() -> None:
+        async with _http_service_registry_lock:
+            project_services = _http_service_registry.get(project_id, {})
+            project_services.pop(service_id, None)
+            if not project_services:
+                _http_service_registry.pop(project_id, None)
+
+    if redis_client:
+        redis_key = _http_service_registry_redis_key(project_id)
+        try:
+            payload = await redis_client.eval(  # type: ignore[misc]
+                (
+                    "local value = redis.call('HGET', KEYS[1], ARGV[1]); "
+                    "if value then redis.call('HDEL', KEYS[1], ARGV[1]); end; "
+                    "return value"
+                ),
+                1,
+                redis_key,
+                service_id,
+            )
+            if payload is None:
+                await _drop_from_memory()
+                return None
+
+            service_info = _deserialize_http_service_payload(
+                payload,
+                project_id=project_id,
+                service_id=service_id,
+            )
+            await _drop_from_memory()
+            return service_info
+        except Exception as e:
+            logger.warning(
+                "Failed to pop HTTP service %s from Redis for project %s: %s",
+                service_id,
+                project_id,
+                e,
+            )
+
+    return await _pop_from_memory()
+
+
+def _format_error_message(detail: Any) -> str:
+    """Convert route error detail to a stable string."""
+    if isinstance(detail, str):
+        return detail
+    try:
+        return json.dumps(detail, ensure_ascii=False)
+    except TypeError:
+        return str(detail)
+
+
+async def _publish_http_service_error_event(
+    event_publisher: SandboxEventPublisher | None,
+    *,
+    project_id: str,
+    service_id: str,
+    service_name: str,
+    error_message: str,
+    sandbox_id: str | None = None,
+) -> None:
+    """Publish http_service_error event when publisher is available."""
+    if not event_publisher:
+        return
+
+    try:
+        await event_publisher.publish_http_service_error(
+            project_id=project_id,
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=service_name,
+            error_message=error_message,
+        )
+    except Exception as e:
+        logger.warning("Failed to publish http_service_error for %s: %s", service_id, e)
+
+
+def _filter_proxy_headers(headers: Any) -> dict[str, str]:
+    """Filter incoming headers for safe upstream forwarding."""
+    blocked = {
+        "host",
+        "content-length",
+        "connection",
+        "authorization",
+        "cookie",
+        "proxy-authorization",
+        "x-forwarded-for",
+        "x-forwarded-proto",
+    }
+    return {k: v for k, v in headers.items() if k.lower() not in blocked}
+
+
+def _build_upstream_http_url(base_url: str, path: str, query_pairs: list[tuple[str, str]]) -> str:
+    """Build final upstream URL for HTTP proxy."""
+    parsed = urlparse(base_url)
+    base_path = parsed.path.rstrip("/")
+    extra_path = path.lstrip("/")
+    final_path = "/".join(part for part in [base_path, extra_path] if part)
+    if not final_path.startswith("/"):
+        final_path = f"/{final_path}"
+    query = urlencode(query_pairs, doseq=True)
+    return parsed._replace(path=final_path, query=query).geturl()
+
+
+def _build_upstream_ws_url(base_url: str, path: str, query_pairs: list[tuple[str, str]]) -> str:
+    """Build final upstream URL for WebSocket proxy."""
+    parsed = urlparse(base_url)
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    base_path = parsed.path.rstrip("/")
+    extra_path = path.lstrip("/")
+    final_path = "/".join(part for part in [base_path, extra_path] if part)
+    if not final_path.startswith("/"):
+        final_path = f"/{final_path}"
+    query = urlencode(query_pairs, doseq=True)
+    return parsed._replace(scheme=scheme, path=final_path, query=query).geturl()
+
+
+def _rewrite_http_service_content(
+    content_bytes: bytes,
+    content_type: str,
+    project_id: str,
+    service_id: str,
+    token_param: str,
+) -> bytes:
+    """Rewrite root-relative asset and websocket URLs to go through the proxy."""
+    if not (
+        content_type.startswith("text/html")
+        or content_type.startswith("application/javascript")
+        or content_type.startswith("text/javascript")
+    ):
+        return content_bytes
+
+    content_str = content_bytes.decode("utf-8", errors="replace")
+    proxy_prefix = _build_http_preview_proxy_url(project_id, service_id)
+    ws_proxy_prefix = _build_http_preview_ws_proxy_url(project_id, service_id)
+
+    def _append_token(url: str) -> str:
+        if not token_param:
+            return url
+        delimiter = "&" if "?" in url else "?"
+        return f"{url}{delimiter}token={token_param}"
+
+    def _rewrite_root_relative(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        quote = match.group(2)
+        path_part = match.group(3)
+        proxied = _append_token(f"{proxy_prefix}{path_part}")
+        return f"{attr}={quote}{proxied}"
+
+    content_str = re.sub(r'(href|src|action)=(["\'])/([^"\']*)', _rewrite_root_relative, content_str)
+
+    ws_with_token = _append_token(ws_proxy_prefix)
+    content_str = content_str.replace(
+        'ws://" + location.host + "/', f'ws://" + location.host + "{ws_with_token}'
+    )
+    content_str = content_str.replace(
+        'wss://" + location.host + "/', f'wss://" + location.host + "{ws_with_token}'
+    )
+    content_str = content_str.replace('new WebSocket("/', f'new WebSocket("{ws_with_token}')
+    content_str = content_str.replace("new WebSocket('/", f"new WebSocket('{ws_with_token}")
+
+    return content_str.encode("utf-8")
+
+
+async def _connect_http_service_upstream(ws_target: str, origin: str) -> Any:
+    """Connect to upstream WebSocket service for generic HTTP preview proxy."""
+    import websockets
+
+    return await websockets.connect(
+        ws_target,
+        open_timeout=10,
+        ping_interval=30,
+        ping_timeout=10,
+        max_size=2**23,
+        additional_headers={"Origin": origin},
+        proxy=None,
+    )
 
 
 # ============================================================================
@@ -891,6 +1415,280 @@ async def stop_project_terminal(
 
 
 # ============================================================================
+# HTTP service registration & lifecycle
+# ============================================================================
+
+
+@router.post("/{project_id}/sandbox/http-services", response_model=HttpServiceResponse)
+async def register_project_http_service(
+    project_id: str,
+    request: RegisterHttpServiceRequest,
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+) -> HttpServiceResponse:
+    """Register or update an HTTP service preview for a project sandbox."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
+
+    service_id = _normalize_http_service_id(request.service_id)
+    now_iso = datetime.now(UTC).isoformat()
+    restart_token = str(int(datetime.now(UTC).timestamp() * 1000))
+
+    sandbox_id: str | None = None
+    service_url: str
+    preview_url: str
+    ws_preview_url: str | None = None
+
+    try:
+        if request.source_type == HttpServiceSourceType.SANDBOX_INTERNAL:
+            if request.internal_port is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="internal_port is required for sandbox_internal services",
+                )
+
+            info = await service.ensure_sandbox_running(project_id=project_id, tenant_id=tenant_id)
+            sandbox_id = info.sandbox_id
+            sandbox_ip = await _resolve_sandbox_container_ip(adapter, sandbox_id)
+            path_prefix = _normalize_path_prefix(request.path_prefix)
+            service_url = f"{request.internal_scheme}://{sandbox_ip}:{request.internal_port}{path_prefix}"
+            preview_url = _build_http_preview_proxy_url(project_id, service_id)
+            ws_preview_url = _build_http_preview_ws_proxy_url(project_id, service_id)
+        else:
+            if not request.external_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="external_url is required for external_url services",
+                )
+            service_url = _validate_external_http_url(request.external_url)
+            preview_url = service_url
+
+        service_info = HttpServiceProxyInfo(
+            service_id=service_id,
+            name=request.name,
+            source_type=request.source_type,
+            status="running",
+            service_url=service_url,
+            preview_url=preview_url,
+            ws_preview_url=ws_preview_url,
+            sandbox_id=sandbox_id,
+            auto_open=request.auto_open,
+            restart_token=restart_token,
+            updated_at=now_iso,
+        )
+        existed, stored = await _upsert_http_service(project_id, service_info, redis_client)
+    except HTTPException as e:
+        await _publish_http_service_error_event(
+            event_publisher,
+            project_id=project_id,
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=request.name,
+            error_message=_format_error_message(e.detail),
+        )
+        raise
+    except Exception as e:
+        await _publish_http_service_error_event(
+            event_publisher,
+            project_id=project_id,
+            sandbox_id=sandbox_id,
+            service_id=service_id,
+            service_name=request.name,
+            error_message=str(e) or type(e).__name__,
+        )
+        raise
+
+    event_type = "http_service_updated" if existed else "http_service_started"
+
+    if event_publisher:
+        try:
+            if existed:
+                await event_publisher.publish_http_service_updated(
+                    project_id=project_id,
+                    sandbox_id=stored.sandbox_id,
+                    service_id=stored.service_id,
+                    service_name=stored.name,
+                    source_type=stored.source_type.value,
+                    service_url=stored.service_url,
+                    proxy_url=stored.preview_url,
+                    ws_proxy_url=stored.ws_preview_url,
+                    auto_open=stored.auto_open,
+                    restart_token=stored.restart_token,
+                    status=stored.status,
+                )
+            else:
+                await event_publisher.publish_http_service_started(
+                    project_id=project_id,
+                    sandbox_id=stored.sandbox_id,
+                    service_id=stored.service_id,
+                    service_name=stored.name,
+                    source_type=stored.source_type.value,
+                    service_url=stored.service_url,
+                    proxy_url=stored.preview_url,
+                    ws_proxy_url=stored.ws_preview_url,
+                    auto_open=stored.auto_open,
+                    restart_token=stored.restart_token,
+                )
+        except Exception as e:
+            logger.warning("Failed to publish %s event for %s: %s", event_type, service_id, e)
+
+    try:
+        from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+            get_connection_manager,
+        )
+
+        manager = get_connection_manager()
+        await manager.broadcast_sandbox_state(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            state={
+                "event_type": event_type,
+                "sandbox_id": stored.sandbox_id,
+                "service_id": stored.service_id,
+                "service_name": stored.name,
+                "source_type": stored.source_type.value,
+                "status": stored.status,
+                "service_url": stored.service_url,
+                "preview_url": stored.preview_url,
+                "ws_preview_url": stored.ws_preview_url,
+                "auto_open": stored.auto_open,
+                "restart_token": stored.restart_token,
+                "updated_at": stored.updated_at,
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to broadcast %s websocket state: %s", event_type, e)
+
+    return HttpServiceResponse(
+        service_id=stored.service_id,
+        name=stored.name,
+        source_type=stored.source_type,
+        status=stored.status,
+        service_url=stored.service_url,
+        preview_url=stored.preview_url,
+        ws_preview_url=stored.ws_preview_url,
+        sandbox_id=stored.sandbox_id,
+        auto_open=stored.auto_open,
+        restart_token=stored.restart_token,
+        updated_at=stored.updated_at,
+    )
+
+
+@router.get("/{project_id}/sandbox/http-services", response_model=ListHttpServicesResponse)
+async def list_project_http_services(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+) -> ListHttpServicesResponse:
+    """List all registered HTTP services for a project."""
+    await verify_project_access(project_id, current_user, db)
+    services = await _list_http_services(project_id, redis_client)
+    return ListHttpServicesResponse(
+        services=[
+            HttpServiceResponse(
+                service_id=svc.service_id,
+                name=svc.name,
+                source_type=svc.source_type,
+                status=svc.status,
+                service_url=svc.service_url,
+                preview_url=svc.preview_url,
+                ws_preview_url=svc.ws_preview_url,
+                sandbox_id=svc.sandbox_id,
+                auto_open=svc.auto_open,
+                restart_token=svc.restart_token,
+                updated_at=svc.updated_at,
+            )
+            for svc in services
+        ],
+        total=len(services),
+    )
+
+
+@router.delete(
+    "/{project_id}/sandbox/http-services/{service_id}",
+    response_model=HttpServiceActionResponse,
+)
+async def stop_project_http_service(
+    project_id: str,
+    service_id: str,
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+) -> HttpServiceActionResponse:
+    """Stop/unregister an HTTP service preview for a project."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
+
+    removed = await _pop_http_service(project_id, service_id, redis_client)
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"HTTP service {service_id} not found for project {project_id}",
+        )
+
+    removed.status = "stopped"
+    removed.updated_at = datetime.now(UTC).isoformat()
+
+    if event_publisher:
+        try:
+            await event_publisher.publish_http_service_stopped(
+                project_id=project_id,
+                sandbox_id=removed.sandbox_id,
+                service_id=removed.service_id,
+                service_name=removed.name,
+                status=removed.status,
+            )
+        except Exception as e:
+            logger.warning("Failed to publish http_service_stopped for %s: %s", service_id, e)
+
+    try:
+        from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+            get_connection_manager,
+        )
+
+        manager = get_connection_manager()
+        await manager.broadcast_sandbox_state(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            state={
+                "event_type": "http_service_stopped",
+                "sandbox_id": removed.sandbox_id,
+                "service_id": removed.service_id,
+                "service_name": removed.name,
+                "status": removed.status,
+                "updated_at": removed.updated_at,
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to broadcast http_service_stopped websocket state: %s", e)
+
+    removed_response = HttpServiceResponse(
+        service_id=removed.service_id,
+        name=removed.name,
+        source_type=removed.source_type,
+        status=removed.status,
+        service_url=removed.service_url,
+        preview_url=removed.preview_url,
+        ws_preview_url=removed.ws_preview_url,
+        sandbox_id=removed.sandbox_id,
+        auto_open=removed.auto_open,
+        restart_token=removed.restart_token,
+        updated_at=removed.updated_at,
+    )
+    return HttpServiceActionResponse(
+        success=True,
+        message=f"HTTP service {service_id} stopped",
+        service=removed_response,
+    )
+
+
+# ============================================================================
 # Desktop/Terminal Proxy endpoints
 # ============================================================================
 
@@ -1169,6 +1967,186 @@ async def _relay_mcp_upstream_to_browser(websocket: WebSocket, upstream_ws: Any)
         # Signal browser to close when upstream disconnects
         with contextlib.suppress(Exception):
             await websocket.close(code=1001, reason="Upstream disconnected")
+
+
+@router.api_route(
+    "/{project_id}/sandbox/http-services/{service_id}/proxy",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+@router.api_route(
+    "/{project_id}/sandbox/http-services/{service_id}/proxy/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+async def proxy_project_http_service(
+    project_id: str,
+    service_id: str,
+    request: Request,
+    path: str = "",
+    current_user: User = Depends(get_current_user_from_desktop_proxy),
+    db: AsyncSession = Depends(get_db),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+) -> Any:
+    """HTTP reverse proxy for registered sandbox internal web services."""
+    await verify_project_access(project_id, current_user, db)
+
+    service_info = await _get_http_service(project_id, service_id, redis_client)
+    if not service_info:
+        raise HTTPException(
+            status_code=404,
+            detail=f"HTTP service {service_id} not found for project {project_id}",
+        )
+
+    if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
+        raise HTTPException(
+            status_code=400,
+            detail="HTTP proxy is only available for sandbox_internal services",
+        )
+
+    import httpx
+
+    query_pairs = [(k, v) for k, v in parse_qsl(request.url.query, keep_blank_values=True) if k != "token"]
+    target_url = _build_upstream_http_url(service_info.service_url, path, query_pairs)
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0, verify=False, follow_redirects=False) as client:
+            body = await request.body()
+            headers = _filter_proxy_headers(request.headers)
+            upstream_response = await client.request(
+                request.method,
+                target_url,
+                headers=headers,
+                content=body,
+            )
+
+            content_type = upstream_response.headers.get("content-type", "application/octet-stream")
+            token_param = request.query_params.get("token", "")
+            content = _rewrite_http_service_content(
+                upstream_response.content,
+                content_type,
+                project_id,
+                service_id,
+                token_param,
+            )
+
+            response_obj = Response(
+                content=content,
+                status_code=upstream_response.status_code,
+                headers={"content-type": content_type},
+            )
+
+            cache_control = upstream_response.headers.get("cache-control")
+            if cache_control:
+                response_obj.headers["cache-control"] = cache_control
+
+            if token_param:
+                response_obj.set_cookie(
+                    key="desktop_token",
+                    value=token_param,
+                    httponly=True,
+                    samesite="strict",
+                    max_age=86400,
+                    path=f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy",
+                )
+
+            return response_obj
+    except httpx.RequestError as e:
+        error_detail = str(e) or type(e).__name__
+        logger.error("HTTP service proxy error for %s (%s): %s", service_id, target_url, error_detail)
+        await _publish_http_service_error_event(
+            event_publisher,
+            project_id=project_id,
+            sandbox_id=service_info.sandbox_id,
+            service_id=service_info.service_id,
+            service_name=service_info.name,
+            error_message=error_detail,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to connect to HTTP service {service_id}: {error_detail}",
+        ) from e
+
+
+@router.websocket("/{project_id}/sandbox/http-services/{service_id}/proxy/ws")
+@router.websocket("/{project_id}/sandbox/http-services/{service_id}/proxy/ws/{path:path}")
+async def proxy_project_http_service_websocket(
+    websocket: WebSocket,
+    project_id: str,
+    service_id: str,
+    path: str = "",
+    current_user: User = Depends(get_current_user_from_header_or_query),
+    db: AsyncSession = Depends(get_db),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher_for_websocket),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client_for_websocket),
+) -> None:
+    """WebSocket reverse proxy for registered sandbox internal web services."""
+    await verify_project_access(project_id, current_user, db)
+
+    service_info = await _get_http_service(project_id, service_id, redis_client)
+    if not service_info:
+        await websocket.close(
+            code=1008,
+            reason=f"HTTP service {service_id} not found for project {project_id}",
+        )
+        return
+
+    if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
+        await websocket.close(
+            code=1008,
+            reason="WebSocket proxy is only available for sandbox_internal services",
+        )
+        return
+
+    query_pairs = [(k, v) for k, v in websocket.query_params.multi_items() if k != "token"]
+    ws_target = _build_upstream_ws_url(service_info.service_url, path, query_pairs)
+
+    await websocket.accept()
+
+    upstream_ws = None
+    websocket_closed = False
+    try:
+        upstream_ws = await _connect_http_service_upstream(ws_target, service_info.service_url)
+        await _run_ws_relay_pair(
+            lambda: _relay_binary_browser_to_upstream(websocket, upstream_ws),
+            lambda: _relay_binary_upstream_to_browser(websocket, upstream_ws),
+        )
+        upstream_close_code = getattr(upstream_ws, "close_code", None)
+        if upstream_close_code not in (None, 1000, 1001):
+            await _publish_http_service_error_event(
+                event_publisher,
+                project_id=project_id,
+                sandbox_id=service_info.sandbox_id,
+                service_id=service_info.service_id,
+                service_name=service_info.name,
+                error_message=f"Upstream websocket closed with code {upstream_close_code}",
+            )
+    except Exception as e:
+        logger.error(
+            "HTTP service WS proxy error for %s (%s): %s",
+            service_id,
+            ws_target,
+            e,
+        )
+        await _publish_http_service_error_event(
+            event_publisher,
+            project_id=project_id,
+            sandbox_id=service_info.sandbox_id,
+            service_id=service_info.service_id,
+            service_name=service_info.name,
+            error_message=str(e) or type(e).__name__,
+        )
+        with contextlib.suppress(Exception):
+            await websocket.send_text(f'{{"error": "{e!s}"}}')
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011, reason="HTTP service WS proxy failure")
+            websocket_closed = True
+    finally:
+        if upstream_ws:
+            with contextlib.suppress(Exception):
+                await upstream_ws.close()
+        if not websocket_closed:
+            with contextlib.suppress(Exception):
+                await websocket.close()
 
 
 @router.get("/{project_id}/sandbox/desktop/proxy/{path:path}")

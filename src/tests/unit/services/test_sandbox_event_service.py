@@ -160,6 +160,57 @@ class TestSandboxEventPublisher:
         assert event_dict["data"]["session_id"] == "sess-abc"
 
     @pytest.mark.asyncio
+    async def test_publish_http_service_started(self, publisher, mock_event_bus):
+        """Test publishing http_service_started event."""
+        result = await publisher.publish_http_service_started(
+            project_id="proj-123",
+            sandbox_id="sb-456",
+            service_id="svc-789",
+            service_name="vite-dev",
+            source_type="sandbox_internal",
+            service_url="http://172.17.0.2:5173",
+            proxy_url="/api/v1/projects/proj-123/sandbox/http-services/svc-789/proxy/",
+            ws_proxy_url="/api/v1/projects/proj-123/sandbox/http-services/svc-789/proxy/ws/",
+            auto_open=True,
+            restart_token="r1",
+        )
+
+        assert result == "msg-id-123"
+
+        mock_event_bus.stream_add.assert_called_once()
+        call_args = mock_event_bus.stream_add.call_args
+        event_dict = call_args[0][1]
+
+        assert event_dict["type"] == "http_service_started"
+        assert event_dict["data"]["service_id"] == "svc-789"
+        assert event_dict["data"]["service_name"] == "vite-dev"
+        assert event_dict["data"]["source_type"] == "sandbox_internal"
+        assert event_dict["data"]["service_url"] == "http://172.17.0.2:5173"
+        assert event_dict["data"]["auto_open"] is True
+        assert event_dict["project_id"] == "proj-123"
+
+    @pytest.mark.asyncio
+    async def test_publish_http_service_stopped(self, publisher, mock_event_bus):
+        """Test publishing http_service_stopped event."""
+        result = await publisher.publish_http_service_stopped(
+            project_id="proj-123",
+            sandbox_id="sb-456",
+            service_id="svc-789",
+            service_name="vite-dev",
+        )
+
+        assert result == "msg-id-123"
+
+        mock_event_bus.stream_add.assert_called_once()
+        call_args = mock_event_bus.stream_add.call_args
+        event_dict = call_args[0][1]
+
+        assert event_dict["type"] == "http_service_stopped"
+        assert event_dict["data"]["service_id"] == "svc-789"
+        assert event_dict["data"]["service_name"] == "vite-dev"
+        assert event_dict["data"]["status"] == "stopped"
+
+    @pytest.mark.asyncio
     async def test_publish_without_event_bus(self, caplog):
         """Test publishing when event bus is not available."""
         publisher = SandboxEventPublisher(event_bus=None)
@@ -204,6 +255,10 @@ class TestSandboxEventPublisher:
             "terminal_started",
             "terminal_stopped",
             "terminal_status",
+            "http_service_started",
+            "http_service_updated",
+            "http_service_stopped",
+            "http_service_error",
         ]
 
         for event_type in sandbox_types:

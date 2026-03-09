@@ -20,6 +20,9 @@ export type CanvasContentType =
   | 'mcp-app'
   | 'a2ui-surface';
 
+export type CanvasPreviewMode = 'inline' | 'url';
+export type CanvasPreviewUrlPolicy = 'strict' | 'allow-any-url';
+
 export interface CanvasTab {
   id: string;
   title: string;
@@ -62,6 +65,14 @@ export interface CanvasTab {
   a2uiMessages?: string | undefined;
   /** A2UI HITL request ID from server (when type is 'a2ui-surface', interactive) */
   a2uiHitlRequestId?: string | undefined;
+  /** Preview rendering mode for type=preview */
+  previewMode?: CanvasPreviewMode | undefined;
+  /** URL safety policy for preview tabs */
+  previewUrlPolicy?: CanvasPreviewUrlPolicy | undefined;
+  /** Sandbox HTTP service ID associated with this tab */
+  sandboxServiceId?: string | undefined;
+  /** Sandbox HTTP service source type */
+  sandboxServiceSourceType?: 'sandbox_internal' | 'external_url' | undefined;
 }
 
 const MAX_HISTORY = 50;
@@ -273,6 +284,11 @@ export const useCanvasStore = create<CanvasState>()(
             a2uiSurfaceId: t.a2uiSurfaceId,
             a2uiMessages: t.a2uiMessages,
             a2uiHitlRequestId: t.a2uiHitlRequestId,
+            // Persist preview metadata for sandbox http services
+            previewMode: t.previewMode,
+            previewUrlPolicy: t.previewUrlPolicy,
+            sandboxServiceId: t.sandboxServiceId,
+            sandboxServiceSourceType: t.sandboxServiceSourceType,
             // Persist pinned state
             pinned: t.pinned,
           })),

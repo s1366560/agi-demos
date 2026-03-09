@@ -10,7 +10,7 @@ Event Naming Convention:
 - Text events: text_start, text_delta, text_end
 - Plan events: plan_*, step_*
 - HITL events: clarification_*, decision_*, env_var_*
-- Sandbox events: sandbox_*, desktop_*, terminal_*
+- Sandbox events: sandbox_*, desktop_*, terminal_*, http_service_*
 - Artifact events: artifact_*
 
 Note: Event type values use flat naming (e.g., "thought", "act") for backward compatibility.
@@ -152,6 +152,10 @@ class AgentEventType(str, Enum):
     TERMINAL_STARTED = "terminal_started"
     TERMINAL_STOPPED = "terminal_stopped"
     TERMINAL_STATUS = "terminal_status"
+    HTTP_SERVICE_STARTED = "http_service_started"
+    HTTP_SERVICE_UPDATED = "http_service_updated"
+    HTTP_SERVICE_STOPPED = "http_service_stopped"
+    HTTP_SERVICE_ERROR = "http_service_error"
 
     # =========================================================================
     # Suggestion events (follow-up suggestions)
@@ -313,6 +317,10 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.TERMINAL_STARTED: EventCategory.SANDBOX,
     AgentEventType.TERMINAL_STOPPED: EventCategory.SANDBOX,
     AgentEventType.TERMINAL_STATUS: EventCategory.SANDBOX,
+    AgentEventType.HTTP_SERVICE_STARTED: EventCategory.SANDBOX,
+    AgentEventType.HTTP_SERVICE_UPDATED: EventCategory.SANDBOX,
+    AgentEventType.HTTP_SERVICE_STOPPED: EventCategory.SANDBOX,
+    AgentEventType.HTTP_SERVICE_ERROR: EventCategory.SANDBOX,
     # Message events
     AgentEventType.MESSAGE: EventCategory.MESSAGE,
     AgentEventType.USER_MESSAGE: EventCategory.MESSAGE,
