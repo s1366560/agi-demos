@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from src.application.services.mcp_app_service import MCPAppService
 from src.domain.exceptions.mcp import MCPLockBusyError
 from src.domain.model.mcp.app import MCPApp
-from src.domain.model.mcp.server import MCPServer
+from src.domain.model.mcp.server import MCPServer, MCPServerConfig
 from src.domain.ports.mcp.app_repository_port import MCPAppRepositoryPort
 from src.domain.ports.mcp.lifecycle_event_repository_port import MCPLifecycleEventRepositoryPort
 from src.domain.ports.repositories.mcp_server_repository import MCPServerRepositoryPort
@@ -606,6 +606,50 @@ class MCPRuntimeService:
             "last_failed_at": _utcnow().isoformat(),
         }
 
+    @staticmethod
+    def _to_sandbox_config(config: MCPServerConfig) -> dict[str, Any]:
+        """Transform MCPServerConfig into the format the sandbox manager expects.
+
+        The sandbox-side ``manager.install_server`` / ``manager.start_server``
+        expect::
+
+            command  -> str   (e.g. "npx")
+            args     -> list  (e.g. ["@anthropic/chrome-devtools-mcp"])
+            env      -> dict  (environment variables)
+
+        But ``MCPServerConfig.to_dict()`` outputs::
+
+            command      -> list[str] | None  (full command + args combined)
+            environment  -> dict | None        (key mismatch: 'environment' vs 'env')
+
+        This helper bridges the two formats.
+        """
+        result: dict[str, Any] = {}
+
+        # Split command list into command (str) + args (list[str])
+        cmd = config.command
+        if isinstance(cmd, list) and cmd:
+            result["command"] = cmd[0]
+            result["args"] = cmd[1:]
+        elif isinstance(cmd, str) and cmd:
+            parts = cmd.strip().split()
+            result["command"] = parts[0]
+            result["args"] = parts[1:]
+        else:
+            result["command"] = ""
+            result["args"] = []
+
+        # Rename 'environment' -> 'env' for sandbox compatibility
+        result["env"] = config.environment or {}
+
+        # Pass through connection-related fields for remote transports
+        if config.url:
+            result["url"] = config.url
+        if config.headers:
+            result["headers"] = config.headers
+
+        return result
+
     async def _install_start_and_sync(
         self,
         server: MCPServer,
@@ -625,12 +669,16 @@ class MCPRuntimeService:
             },
         )
 
+        sandbox_config = (
+            self._to_sandbox_config(server.config) if server.config else {}
+        )
+
         start_status = await self._sandbox_manager.install_and_start(
             project_id=server.project_id,
             tenant_id=tenant_id,
             server_name=server.name,
             server_type=server.config.transport_type.value if server.config else "",
-            transport_config=server.config.to_dict() if server.config else {},
+            transport_config=sandbox_config,
         )
         if start_status.status == "failed":
             raise RuntimeError(start_status.error or "install/start failed")
@@ -653,7 +701,7 @@ class MCPRuntimeService:
             tenant_id=tenant_id,
             server_name=server.name,
             server_type=server.config.transport_type.value if server.config else "",
-            transport_config=server.config.to_dict() if server.config else {},
+            transport_config=sandbox_config,
             ensure_running=False,
         )
         await self._server_repo.update_discovered_tools(

@@ -89,8 +89,18 @@ async def install_package(
     Returns:
         InstallResult with success status and details.
     """
+    # Normalize: command may arrive as list from older config formats
+    if isinstance(command, list):
+        if command:
+            args = list(command[1:]) + list(args)
+            command = command[0]
+        else:
+            command = ""
+
     pkg_manager = _detect_package_manager(command)
     cmd_parts = command.strip().split()
+    if not cmd_parts:
+        return InstallResult(success=False, error="Empty command")
     base_cmd = cmd_parts[0]
 
     if pkg_manager is None:

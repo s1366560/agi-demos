@@ -170,6 +170,14 @@ class MCPServerManager:
         args = transport_config.get("args", [])
         env = transport_config.get("env", {})
 
+        # Normalize: command may arrive as list[str] from older config formats
+        if isinstance(command, list):
+            if command:
+                args = command[1:] + list(args)
+                command = command[0]
+            else:
+                command = ""
+
         if not command and server_type in ("http", "sse", "websocket"):
             # Remote servers don't need installation
             return {
@@ -212,6 +220,14 @@ class MCPServerManager:
         command = transport_config.get("command", "")
         args = list(transport_config.get("args", []))
         env = transport_config.get("env", {})
+
+        # Normalize: command may arrive as list[str] from older config formats
+        if isinstance(command, list):
+            if command:
+                args = command[1:] + args
+                command = command[0]
+            else:
+                command = ""
         url = transport_config.get("url", "")
 
         # Inject required flags for chrome-devtools-mcp running as root in container
