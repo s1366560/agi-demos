@@ -193,6 +193,13 @@ class StdioTransport(MCPTransport):
                 "extensions": {
                     "io.modelcontextprotocol/ui": {
                         "mimeTypes": ["text/html;profile=mcp-app"],
+                        "hostCapabilities": {
+                            "openLinks": True,
+                            "serverTools": True,
+                            "serverResources": True,
+                            "logging": False,
+                            "sandbox": True,
+                        },
                     },
                 },
             },
@@ -630,6 +637,13 @@ class SSETransport(MCPTransport):
         caps["extensions"] = {
             "io.modelcontextprotocol/ui": {
                 "mimeTypes": ["text/html;profile=mcp-app"],
+                "hostCapabilities": {
+                    "openLinks": True,
+                    "serverTools": True,
+                    "serverResources": True,
+                    "logging": False,
+                    "sandbox": True,
+                },
             },
         }
         jsonrpc_request = JSONRPCRequest(
@@ -912,6 +926,13 @@ class WebSocketTransport(MCPTransport):
                 "extensions": {
                     "io.modelcontextprotocol/ui": {
                         "mimeTypes": ["text/html;profile=mcp-app"],
+                        "hostCapabilities": {
+                            "openLinks": True,
+                            "serverTools": True,
+                            "serverResources": True,
+                            "logging": False,
+                            "sandbox": True,
+                        },
                     },
                 },
             },

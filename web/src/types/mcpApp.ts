@@ -103,3 +103,29 @@ export interface MCPAppRegisteredEventData {
   resource_uri: string;
   title?: string | undefined;
 }
+
+/** Capabilities declared by the guest MCP App (mirrors McpUiAppCapabilities). */
+export interface MCPAppCapabilities {
+  experimental?: Record<string, never>;
+  /** App exposes MCP-style tools that the host can call. */
+  tools?: {
+    /** App supports tools/list_changed notifications. */
+    listChanged?: boolean;
+  };
+}
+
+/** Capabilities the host advertises to the guest app (mirrors McpUiHostCapabilities). */
+export interface MCPAppHostCapabilities {
+  experimental?: Record<string, never>;
+  openLinks?: Record<string, never>;
+  serverTools?: { listChanged?: boolean };
+  serverResources?: { listChanged?: boolean };
+  logging?: Record<string, never>;
+}
+
+/** A tool exposed by the guest MCP App (returned from app tools/list). */
+export interface MCPAppTool {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}

@@ -144,6 +144,13 @@ class MCPSubprocessClient:
                         "extensions": {
                             "io.modelcontextprotocol/ui": {
                                 "mimeTypes": ["text/html;profile=mcp-app"],
+                                "hostCapabilities": {
+                                    "openLinks": True,
+                                    "serverTools": True,
+                                    "serverResources": True,
+                                    "logging": False,
+                                    "sandbox": True,
+                                },
                             },
                         },
                     },

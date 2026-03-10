@@ -1,10 +1,13 @@
-import { SearchOutlined } from "@ant-design/icons";
-import { Button, Input, Space, Table, Tag, Typography } from "antd";
 import type React from "react";
 import { useEffect, useState } from "react";
+
+import { SearchOutlined } from "@ant-design/icons";
+import { Button, Input, Space, Table, Tag, Typography } from "antd";
 import { useShallow } from "zustand/react/shallow";
-import { PROVIDERS } from "@/constants/providers";
+
 import { useProviderStore } from "@/stores/provider";
+
+import { PROVIDERS } from "@/constants/providers";
 
 import type { ModelCatalogEntry } from "@/types/memory";
 
@@ -52,15 +55,15 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
 	};
 
 	const filteredResults = modelSearchResults.filter((model) => {
-		if (activeFilters.vision && model.supports_attachment !== true)
+		if (activeFilters.vision && !model.supports_attachment)
 			return false;
-		if (activeFilters.reasoning && model.reasoning !== true) return false;
-		if (activeFilters.tools && model.supports_tool_call !== true) return false;
-		if (activeFilters.temp && model.supports_temperature !== true) return false;
+		if (activeFilters.reasoning && !model.reasoning) return false;
+		if (activeFilters.tools && !model.supports_tool_call) return false;
+		if (activeFilters.temp && !model.supports_temperature) return false;
 		if (activeFilters.seed && model.supports_seed !== true) return false;
 		if (activeFilters.json && model.supports_response_format !== true)
 			return false;
-		if (activeFilters.open && model.open_weights !== true) return false;
+		if (activeFilters.open && !model.open_weights) return false;
 		return true;
 	});
 
@@ -167,20 +170,20 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
 			render: (_: unknown, record: ModelCatalogEntry) => (
 				<Space direction="vertical" size={4}>
 					<Space size={[0, 4]} wrap>
-						{record.reasoning === true && <Tag color="gold">Reasoning</Tag>}
-						{record.supports_tool_call === true && (
+						{record.reasoning && <Tag color="gold">Reasoning</Tag>}
+						{record.supports_tool_call && (
 							<Tag color="green">Tools</Tag>
 						)}
-						{record.supports_attachment === true && (
+						{record.supports_attachment && (
 							<Tag color="purple">Vision</Tag>
 						)}
-						{record.supports_structured_output === true && (
+						{record.supports_structured_output && (
 							<Tag color="cyan">Structured</Tag>
 						)}
-						{record.open_weights === true && <Tag color="orange">Open</Tag>}
+						{record.open_weights && <Tag color="orange">Open</Tag>}
 					</Space>
 					<Space size={[0, 4]} wrap>
-						{record.supports_temperature === true && <Tag>Temp</Tag>}
+						{record.supports_temperature && <Tag>Temp</Tag>}
 						{record.supports_top_p === true && <Tag>TopP</Tag>}
 						{record.supports_frequency_penalty === true && <Tag>FreqP</Tag>}
 						{record.supports_presence_penalty === true && <Tag>PresP</Tag>}
@@ -229,7 +232,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
 					<Tag.CheckableTag
 						key={tag.key}
 						checked={activeFilters[tag.key]}
-						onChange={(checked) => toggleFilter(tag.key, checked)}
+						onChange={(checked) => { toggleFilter(tag.key, checked); }}
 					>
 						{tag.label}
 					</Tag.CheckableTag>

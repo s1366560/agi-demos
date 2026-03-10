@@ -25,6 +25,8 @@ import React, {
   forwardRef,
 } from 'react';
 
+import ReactDOM from 'react-dom';
+
 import { Alert, Button, Spin } from 'antd';
 import { RefreshCw } from 'lucide-react';
 
@@ -40,7 +42,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import { buildHostStyles } from './hostStyles';
 
-import type { MCPAppUIMetadata, MCPAppDisplayMode } from '@/types/mcpApp';
+import type { MCPAppUIMetadata, MCPAppDisplayMode, MCPAppCapabilities, MCPAppTool } from '@/types/mcpApp';
 
 /**
  * Prefix for synthetic (auto-discovered) MCP App IDs that have no DB record.
@@ -62,6 +64,10 @@ const VALID_DISPLAY_MODES: readonly MCPAppDisplayMode[] = ['inline', 'fullscreen
 export interface StandardMCPAppRendererHandle {
   /** Call teardownResource() on the inner AppRenderer before unmounting */
   teardown: () => void;
+  /** List tools exposed by the guest MCP App (SEP-1865 P1-3). Resolves to empty array if app has no tools capability. */
+  listAppTools: () => Promise<MCPAppTool[]>;
+  /** Call a tool exposed by the guest MCP App (SEP-1865 P1-3). Throws if app has no tools capability. */
+  callAppTool: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
 export interface StandardMCPAppRendererProps {
@@ -157,6 +163,17 @@ export const StandardMCPAppRenderer = forwardRef<
     const [displayMode, setDisplayMode] = useState<MCPAppDisplayMode>('inline');
     const containerRef = useRef<HTMLDivElement>(null);
 
+    // SEP-1865 P1-1: Track app capabilities parsed from ui/initialize postMessage
+    const [appCapabilities, setAppCapabilities] = useState<MCPAppCapabilities | null>(null);
+
+    // SEP-1865 P1-3: JSON-RPC request infrastructure for app-exposed tools.
+    // We send JSON-RPC requests to the iframe via postMessage and resolve via
+    // a pending-requests map keyed by request id.
+    const rpcIdCounter = useRef(0);
+    const pendingRpcRequests = useRef<
+      Map<number, { resolve: (value: unknown) => void; reject: (err: Error) => void }>
+    >(new Map());
+
     // Mode A: Direct WebSocket MCP client (low-latency, 2-hop)
     // Memoize reconnectionConfig to prevent reconnection loops
     const mcpClientReconnectionConfig = useMemo(
@@ -196,7 +213,35 @@ export const StandardMCPAppRenderer = forwardRef<
     const appRendererRef = useRef<any>(null);
     const computedTheme = useThemeStore((s) => s.computedTheme);
 
-    // Expose teardown handle to parent for graceful cleanup (SEP-1865 ui/resource-teardown)
+    // Helper: send a JSON-RPC request to the guest app iframe and await the response.
+    // Returns a promise that resolves when the iframe posts back a matching JSON-RPC response.
+    const sendRpcToApp = useCallback(
+      (method: string, params?: Record<string, unknown>): Promise<unknown> => {
+        return new Promise<unknown>((resolve, reject) => {
+          const iframe = containerRef.current?.querySelector('iframe');
+          if (!iframe?.contentWindow) {
+            reject(new Error('No iframe found for app communication'));
+            return;
+          }
+          const id = ++rpcIdCounter.current;
+          pendingRpcRequests.current.set(id, { resolve, reject });
+          iframe.contentWindow.postMessage(
+            { jsonrpc: '2.0', id, method, ...(params !== undefined ? { params } : {}) },
+            '*'
+          );
+          // Timeout after 30s to prevent memory leaks from unresolved promises
+          setTimeout(() => {
+            if (pendingRpcRequests.current.has(id)) {
+              pendingRpcRequests.current.delete(id);
+              reject(new Error(`RPC call '${method}' timed out after 30s`));
+            }
+          }, 30_000);
+        });
+      },
+      []
+    );
+
+    // Expose teardown + app-tool methods to parent (SEP-1865 P1-3)
     useImperativeHandle(
       ref,
       () => ({
@@ -207,8 +252,28 @@ export const StandardMCPAppRenderer = forwardRef<
             // Ignore errors during teardown
           }
         },
+        listAppTools: async (): Promise<MCPAppTool[]> => {
+          if (!appCapabilities?.tools) return [];
+          try {
+            const result = await sendRpcToApp('tools/list');
+            const data = result as { tools?: MCPAppTool[] } | undefined;
+            return data?.tools ?? [];
+          } catch (err) {
+            console.error('[StandardMCPAppRenderer] listAppTools failed:', err);
+            return [];
+          }
+        },
+        callAppTool: async (
+          name: string,
+          args?: Record<string, unknown>
+        ): Promise<unknown> => {
+          if (!appCapabilities?.tools) {
+            throw new Error('App does not declare tools capability');
+          }
+          return sendRpcToApp('tools/call', { name, arguments: args ?? {} });
+        },
       }),
-      []
+      [appCapabilities, sendRpcToApp]
     );
 
     // Track container dimensions via ResizeObserver for hostContext
@@ -277,24 +342,79 @@ export const StandardMCPAppRenderer = forwardRef<
       const config: {
         url: URL;
         permissions: string;
-        csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+        csp?: {
+          connectDomains?: string[];
+          resourceDomains?: string[];
+          frameDomains?: string[];
+          baseUriDomains?: string[];
+        };
       } = {
         url: getSandboxProxyUrl(),
         permissions: 'allow-scripts allow-same-origin allow-forms',
       };
       // Forward CSP metadata to sandbox proxy for enforcement
+      // Includes frameDomains and baseUriDomains from MCPAppUIMetadata
+      // even though McpUiResourceCsp does not define them (SEP-1865 extension).
       if (uiMetadata?.csp) {
-        const csp: { connectDomains?: string[]; resourceDomains?: string[] } = {};
+        const csp: {
+          connectDomains?: string[];
+          resourceDomains?: string[];
+          frameDomains?: string[];
+          baseUriDomains?: string[];
+        } = {};
         if (uiMetadata.csp.connectDomains) {
           csp.connectDomains = uiMetadata.csp.connectDomains;
         }
         if (uiMetadata.csp.resourceDomains) {
           csp.resourceDomains = uiMetadata.csp.resourceDomains;
         }
+        if (uiMetadata.csp.frameDomains) {
+          csp.frameDomains = uiMetadata.csp.frameDomains;
+        }
+        if (uiMetadata.csp.baseUriDomains) {
+          csp.baseUriDomains = uiMetadata.csp.baseUriDomains;
+        }
         config.csp = csp;
       }
       return config;
     }, [uiMetadata?.csp]);
+
+    // SEP-1865 P0-1: Enforce iframe Feature Policy / Permissions Policy from
+    // MCPAppUIPermissions. The @mcp-ui/client SandboxConfig type has no `allow`
+    // prop, so we compute the allow string and apply it to the iframe DOM element
+    // after render via a MutationObserver.
+    const iframeAllowPolicy = useMemo(() => {
+      const permissions = uiMetadata?.permissions;
+      if (!permissions) return '';
+      const policies: string[] = [];
+      if (permissions.camera !== undefined) policies.push('camera');
+      if (permissions.microphone !== undefined) policies.push('microphone');
+      if (permissions.geolocation !== undefined) policies.push('geolocation');
+      if (permissions.clipboardWrite !== undefined) policies.push('clipboard-write');
+      return policies.join('; ');
+    }, [uiMetadata?.permissions]);
+
+    useEffect(() => {
+      if (!iframeAllowPolicy || !containerRef.current) return;
+      // Apply to any existing iframes
+      const applyAllow = (): void => {
+        const iframes = containerRef.current?.querySelectorAll('iframe');
+        iframes?.forEach((iframe) => {
+          if (iframe.allow !== iframeAllowPolicy) {
+            iframe.allow = iframeAllowPolicy;
+          }
+        });
+      };
+      applyAllow();
+      // Watch for new iframes added by @mcp-ui/client
+      const observer = new MutationObserver(() => {
+        applyAllow();
+      });
+      observer.observe(containerRef.current, { childList: true, subtree: true });
+      return () => {
+        observer.disconnect();
+      };
+    }, [iframeAllowPolicy]);
 
     // SEP-1865 host styles: map Ant Design tokens to standardized CSS variables
     const hostStyles = useMemo(() => buildHostStyles(computedTheme), [computedTheme]);
@@ -315,6 +435,14 @@ export const StandardMCPAppRenderer = forwardRef<
               availableDisplayModes: ['inline', 'fullscreen', 'pip'],
               locale: navigator.language,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              // SEP-1865 P0-2: Advertise host capabilities to the guest app.
+              // McpUiHostContext has [key: string]: unknown so extra keys are safe.
+              hostCapabilities: {
+                openLinks: {},
+                serverTools: { listChanged: false },
+                serverResources: { listChanged: false },
+                logging: {},
+              },
               containerDimensions:
                 containerSize.width > 0
                   ? { width: containerSize.width, maxHeight: containerSize.height }
@@ -589,6 +717,59 @@ export const StandardMCPAppRenderer = forwardRef<
       };
     }, []);
 
+    // SEP-1865 P1-1: Listen for ui/initialize JSON-RPC request from the guest app
+    // to capture appCapabilities. Also handles JSON-RPC responses for the
+    // sendRpcToApp request/response pattern (Fix 6).
+    useEffect(() => {
+      const handleAppMessage = (event: MessageEvent<unknown>): void => {
+        if (typeof event.data !== 'object' || event.data === null) return;
+        const data = event.data as Record<string, unknown>;
+        if (data.jsonrpc !== '2.0') return;
+
+        // Case 1: JSON-RPC response (has 'id' + 'result' or 'error', no 'method')
+        // This resolves pending sendRpcToApp promises.
+        if (
+          typeof data.id === 'number' &&
+          !('method' in data) &&
+          ('result' in data || 'error' in data)
+        ) {
+          const pending = pendingRpcRequests.current.get(data.id);
+          if (pending) {
+            pendingRpcRequests.current.delete(data.id);
+            if ('error' in data) {
+              const err = data.error as { message?: string } | undefined;
+              pending.reject(new Error(err?.message ?? 'RPC error'));
+            } else {
+              pending.resolve(data.result);
+            }
+          }
+          return;
+        }
+
+        // Case 2: ui/initialize request from the guest -- extract appCapabilities
+        if (data.method === 'ui/initialize') {
+          const params = data.params as Record<string, unknown> | undefined;
+          if (params?.appCapabilities) {
+            setAppCapabilities(params.appCapabilities as MCPAppCapabilities);
+          }
+          return;
+        }
+
+        // Case 3: ui/notifications/initialized notification -- secondary signal
+        if (data.method === 'ui/notifications/initialized') {
+          const params = data.params as Record<string, unknown> | undefined;
+          if (params?.appCapabilities) {
+            setAppCapabilities(params.appCapabilities as MCPAppCapabilities);
+          }
+        }
+      };
+
+      window.addEventListener('message', handleAppMessage);
+      return () => {
+        window.removeEventListener('message', handleAppMessage);
+      };
+    }, []);
+
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center gap-3 p-4" style={{ height }}>
@@ -633,10 +814,15 @@ export const StandardMCPAppRenderer = forwardRef<
         ? {}
         : { border: '1px solid var(--color-border-primary, #e2e8f0)', borderRadius: '6px' };
 
-    return (
+    // Core content rendered by AppRenderer (shared across all display modes)
+    const appContent = (
       <div
-        ref={containerRef}
-        style={{ height, width: '100%', position: 'relative', ...borderStyle }}
+        ref={displayMode === 'inline' ? containerRef : undefined}
+        style={
+          displayMode === 'inline'
+            ? { height, width: '100%', position: 'relative' as const, ...borderStyle }
+            : { width: '100%', height: '100%' }
+        }
       >
         <ErrorBoundary context="MCP App" showHomeButton={false}>
           <React.Suspense
@@ -684,6 +870,120 @@ export const StandardMCPAppRenderer = forwardRef<
         </ErrorBoundary>
       </div>
     );
+
+    // SEP-1865 P1-2: Render based on display mode
+    if (displayMode === 'fullscreen') {
+      return (
+        <>
+          {/* Placeholder in the original position so layout does not collapse */}
+          <div style={{ height, width: '100%' }} />
+          {ReactDOM.createPortal(
+            <div
+              ref={containerRef}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
+                background: 'var(--color-bg-container, #fff)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {/* Fullscreen toolbar */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  padding: '8px 12px',
+                  borderBottom: '1px solid var(--color-border-primary, #e2e8f0)',
+                  flexShrink: 0,
+                }}
+              >
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setDisplayMode('inline');
+                  }}
+                >
+                  Exit Fullscreen
+                </Button>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto' }}>{appContent}</div>
+            </div>,
+            document.body
+          )}
+        </>
+      );
+    }
+
+    if (displayMode === 'pip') {
+      return (
+        <>
+          {/* Placeholder in the original position */}
+          <div style={{ height, width: '100%' }} />
+          {ReactDOM.createPortal(
+            <div
+              ref={containerRef}
+              style={{
+                position: 'fixed',
+                bottom: 16,
+                right: 16,
+                width: 400,
+                height: 300,
+                zIndex: 9998,
+                background: 'var(--color-bg-container, #fff)',
+                border: '1px solid var(--color-border-primary, #e2e8f0)',
+                borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              {/* PiP toolbar */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '4px 8px',
+                  borderBottom: '1px solid var(--color-border-primary, #e2e8f0)',
+                  cursor: 'move',
+                  flexShrink: 0,
+                  fontSize: 12,
+                  color: 'var(--color-text-secondary, #64748b)',
+                }}
+              >
+                <span>{uiMetadata?.title ?? toolName}</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setDisplayMode('fullscreen');
+                    }}
+                  >
+                    Fullscreen
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setDisplayMode('inline');
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto' }}>{appContent}</div>
+            </div>,
+            document.body
+          )}
+        </>
+      );
+    }
+
+    // Default: inline mode
+    return appContent;
   }
 );
 StandardMCPAppRenderer.displayName = 'StandardMCPAppRenderer';

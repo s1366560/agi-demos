@@ -13,10 +13,11 @@ import { devtools } from 'zustand/middleware';
 import { projectSandboxService } from '../services/projectSandboxService';
 import { sandboxSSEService } from '../services/sandboxSSEService';
 import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
-import { useCanvasStore } from './canvasStore';
-import { useLayoutModeStore } from './layoutMode';
 import { logger } from '../utils/logger';
 import { getAuthToken } from '../utils/tokenResolver';
+
+import { useCanvasStore } from './canvasStore';
+import { useLayoutModeStore } from './layoutMode';
 
 import type { ToolExecution } from '../components/agent/sandbox/SandboxOutputViewer';
 import type { Artifact, DesktopStatus, TerminalStatus } from '../types/agent';
