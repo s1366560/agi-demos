@@ -329,6 +329,18 @@ def _env_lmstudio() -> dict[str, Any]:
     }
 
 
+def _env_volcengine() -> dict[str, Any]:
+    return {
+        "api_key": os.getenv("VOLCENGINE_API_KEY") or os.getenv("ARK_API_KEY"),
+        "llm_model": os.getenv("VOLCENGINE_MODEL", "doubao-1.5-pro-32k"),
+        "llm_small_model": os.getenv("VOLCENGINE_SMALL_MODEL", "doubao-1.5-lite-32k"),
+        "embedding_model": os.getenv("VOLCENGINE_EMBEDDING_MODEL", "doubao-embedding"),
+        "reranker_model": os.getenv("VOLCENGINE_RERANK_MODEL", "doubao-1.5-pro-32k"),
+        "base_url": os.getenv(
+            "VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"
+        ),
+    }
+
 _PROVIDER_ENV_REGISTRY: dict[str, Any] = {
     "gemini": _env_gemini,
     "zhipu": _env_zai,
@@ -345,6 +357,10 @@ _PROVIDER_ENV_REGISTRY: dict[str, Any] = {
     "claude": _env_anthropic,
     "ollama": _env_ollama,
     "lmstudio": _env_lmstudio,
+    "volcengine": _env_volcengine,
+    "volcano": _env_volcengine,
+    "ark": _env_volcengine,
+    "doubao": _env_volcengine,
 }
 
 

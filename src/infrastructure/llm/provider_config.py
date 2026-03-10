@@ -58,6 +58,7 @@ class ProviderPrefix(StrEnum):
     # Local providers
     OLLAMA = "ollama"
     LMSTUDIO = "openai"  # LM Studio uses OpenAI-compatible API
+    VOLCENGINE = "volcengine"
 
     # Default (no prefix needed)
     DEFAULT = ""
@@ -80,6 +81,7 @@ MODEL_PREFIX_TO_PROVIDER: dict[str, ProviderType] = {
     "rerank-": ProviderType.COHERE,
     "embed-": ProviderType.OPENAI,
     "text-embedding-": ProviderType.OPENAI,
+    "doubao-": ProviderType.VOLCENGINE,
 }
 
 
@@ -187,6 +189,12 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "embedding": "text-embedding-3-small",
         "rerank": "gpt-4o-mini",
     },
+    ProviderType.VOLCENGINE: {
+        "completion": "doubao-1.5-pro-32k",
+        "completion_medium": "doubao-1.5-pro-256k",
+        "embedding": "doubao-embedding",
+        "rerank": "doubao-1.5-pro-32k",
+    },
 }
 
 
@@ -218,6 +226,7 @@ def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
         ProviderType.AZURE_OPENAI: ProviderPrefix.AZURE,
         ProviderType.OLLAMA: ProviderPrefix.OLLAMA,
         ProviderType.LMSTUDIO: ProviderPrefix.LMSTUDIO,
+        ProviderType.VOLCENGINE: ProviderPrefix.VOLCENGINE,
     }
     return prefix_map.get(provider_type, ProviderPrefix.DEFAULT)
 
@@ -356,6 +365,7 @@ class UnifiedLLMConfig:
             ProviderType.BEDROCK,
             ProviderType.VERTEX,
             ProviderType.OLLAMA,
+            ProviderType.VOLCENGINE,
         }
 
         if self.provider_type in needs_prefix and prefix.value:

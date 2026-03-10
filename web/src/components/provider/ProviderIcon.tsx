@@ -191,6 +191,12 @@ const PROVIDER_CONFIG: Record<
     label: 'LM Studio',
     description: 'Local OpenAI-compatible',
   },
+  volcengine: {
+    icon: '\uD83C\uDF0B',
+    gradient: 'from-orange-500 to-red-600',
+    label: 'Volcengine \u706B\u5C71\u5F15\u64CE',
+    description: 'Doubao (\u8C46\u5305) models',
+  },
 };
 
 const SIZE_MAP: Record<string, string> = {

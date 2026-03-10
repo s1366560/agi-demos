@@ -57,6 +57,7 @@ _DEFAULT_API_BASES: dict[str, str] = {
     "openrouter": "https://openrouter.ai/api/v1",
     "ollama": "http://localhost:11434",
     "lmstudio": "http://localhost:1234/v1",
+    "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
 }
 
 # Provider prefixes for LiteLLM model qualification
@@ -75,6 +76,7 @@ _PROVIDER_PREFIXES: dict[str, str] = {
     "ollama": "ollama",
     "lmstudio": "openai",
     "dashscope": "dashscope",
+    "volcengine": "volcengine",
 }
 
 
@@ -164,6 +166,7 @@ class LiteLLMClient(LLMClient):
             "kimi": "KIMI_API_KEY",
             "minimax": "MINIMAX_API_KEY",
             "openrouter": "OPENROUTER_API_KEY",
+            "volcengine": "VOLCENGINE_API_KEY",
         }
         env_var = env_key_map.get(provider_type)
         if env_var and api_key:

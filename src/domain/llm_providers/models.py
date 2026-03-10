@@ -299,6 +299,7 @@ class ProviderType(StrEnum):
     KIMI = "kimi"  # Moonshot AI (Kimi)
     OLLAMA = "ollama"  # Local Ollama server
     LMSTUDIO = "lmstudio"  # LM Studio OpenAI-compatible server
+    VOLCENGINE = "volcengine"  # Volcengine (Doubao/豆包)
     # Specialized sub-providers (coding, embedding, reranker variants)
     MINIMAX_CODING = "minimax_coding"
     MINIMAX_EMBEDDING = "minimax_embedding"

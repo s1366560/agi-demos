@@ -93,6 +93,10 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "claude": ProviderType.ANTHROPIC,
     "ollama": ProviderType.OLLAMA,
     "lmstudio": ProviderType.LMSTUDIO,
+    "volcengine": ProviderType.VOLCENGINE,
+    "volcano": ProviderType.VOLCENGINE,
+    "ark": ProviderType.VOLCENGINE,
+    "doubao": ProviderType.VOLCENGINE,
 }
 
 PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
@@ -108,6 +112,8 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
+    ("VOLCENGINE_API_KEY", "volcengine"),
+    ("ARK_API_KEY", "volcengine"),
 ]
 
 _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
@@ -348,6 +354,17 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
         ),
         reranker_model=_EnvField(("LMSTUDIO_RERANK_MODEL",), "local-model"),
         base_url=_EnvField(("LMSTUDIO_BASE_URL",), "http://localhost:1234/v1"),
+    ),
+    ProviderType.VOLCENGINE: _ProviderEnvProfile(
+        api_key=_EnvField(("VOLCENGINE_API_KEY", "ARK_API_KEY")),
+        llm_model=_EnvField(("VOLCENGINE_MODEL",), "doubao-1.5-pro-32k"),
+        llm_small_model=_EnvField(("VOLCENGINE_SMALL_MODEL",), "doubao-1.5-lite-32k"),
+        embedding_model=_EnvField(("VOLCENGINE_EMBEDDING_MODEL",), "doubao-embedding"),
+        reranker_model=_EnvField(("VOLCENGINE_RERANK_MODEL",), "doubao-1.5-pro-32k"),
+        base_url=_EnvField(
+            ("VOLCENGINE_BASE_URL",),
+            "https://ark.cn-beijing.volces.com/api/v3",
+        ),
     ),
 }
 

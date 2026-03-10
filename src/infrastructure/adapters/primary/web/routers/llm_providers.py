@@ -318,6 +318,18 @@ async def list_models_for_provider_type(
             "embedding": ["textembedding-gecko"],
             "rerank": [],
         },
+        "volcengine": {
+            "chat": [
+                "doubao-1.5-pro-32k",
+                "doubao-1.5-pro-256k",
+                "doubao-1.5-lite-32k",
+                "doubao-pro-32k",
+                "doubao-pro-256k",
+                "doubao-lite-32k",
+            ],
+            "embedding": ["doubao-embedding"],
+            "rerank": ["doubao-1.5-pro-32k"],
+        },
     }
 
     if provider_type not in models_data:

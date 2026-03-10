@@ -293,7 +293,8 @@ export type ProviderType =
   | 'zai_embedding'
   | 'zai_reranker'
   | 'ollama'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'volcengine';
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
 
 export interface EmbeddingConfig {

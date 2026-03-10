@@ -362,4 +362,16 @@ export const PROVIDERS: ProviderMeta[] = [
     baseUrlRequired: false,
     documentationUrl: 'https://lmstudio.ai/docs',
   },
+  {
+    value: 'volcengine',
+    label: 'Volcengine \u706B\u5C71\u5F15\u64CE',
+    icon: '\uD83C\uDF0B',
+    description: 'Doubao (\u8C46\u5305) series: doubao-1.5-pro, doubao-embedding',
+    apiKeyEnvVar: 'VOLCENGINE_API_KEY',
+    apiKeyPlaceholder: 'Enter your Volcengine API key',
+    hasEmbedding: true,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://www.volcengine.com/docs/82379',
+  },
 ];

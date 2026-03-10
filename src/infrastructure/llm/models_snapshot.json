@@ -4,7 +4,7 @@
     "source": "models.dev",
     "generated_at": "2026-03-07T04:31:48Z",
     "description": "Model catalog snapshot generated from models.dev API",
-    "model_count": 212
+    "model_count": 219
   },
   "models": {
     "claude-3-5-haiku-20241022": {
@@ -7365,6 +7365,205 @@
         0.0,
         1.0
       ]
+    },
+    "doubao-1.5-pro-32k": {
+      "name": "doubao-1.5-pro-32k",
+      "context_length": 32768,
+      "max_output_tokens": 16384,
+      "input_cost_per_1m": 0.4,
+      "output_cost_per_1m": 0.8,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2025-01-15",
+      "description": "Doubao 1.5 Pro 32K - Volcengine flagship model",
+      "supports_tool_call": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "doubao-1.5-pro-256k": {
+      "name": "doubao-1.5-pro-256k",
+      "context_length": 262144,
+      "max_output_tokens": 16384,
+      "input_cost_per_1m": 2.0,
+      "output_cost_per_1m": 4.0,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2025-01-15",
+      "description": "Doubao 1.5 Pro 256K - Long context variant",
+      "supports_tool_call": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "doubao-1.5-lite-32k": {
+      "name": "doubao-1.5-lite-32k",
+      "context_length": 32768,
+      "max_output_tokens": 16384,
+      "input_cost_per_1m": 0.15,
+      "output_cost_per_1m": 0.3,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2025-01-15",
+      "description": "Doubao 1.5 Lite 32K - Cost-effective model",
+      "supports_tool_call": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "doubao-pro-32k": {
+      "name": "doubao-pro-32k",
+      "context_length": 32768,
+      "max_output_tokens": 4096,
+      "input_cost_per_1m": 0.3,
+      "output_cost_per_1m": 0.6,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2024-08-01",
+      "description": "Doubao Pro 32K",
+      "supports_tool_call": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "doubao-pro-256k": {
+      "name": "doubao-pro-256k",
+      "context_length": 262144,
+      "max_output_tokens": 4096,
+      "input_cost_per_1m": 1.5,
+      "output_cost_per_1m": 3.0,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2024-08-01",
+      "description": "Doubao Pro 256K - Long context variant",
+      "supports_tool_call": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "doubao-lite-32k": {
+      "name": "doubao-lite-32k",
+      "context_length": 32768,
+      "max_output_tokens": 4096,
+      "input_cost_per_1m": 0.1,
+      "output_cost_per_1m": 0.2,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2024-08-01",
+      "description": "Doubao Lite 32K - Lightweight cost-effective model",
+      "supports_tool_call": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "doubao-embedding": {
+      "name": "doubao-embedding",
+      "context_length": 4096,
+      "max_output_tokens": 0,
+      "input_cost_per_1m": 0.1,
+      "output_cost_per_1m": 0.0,
+      "capabilities": [
+        "embedding"
+      ],
+      "supports_streaming": false,
+      "supports_json_mode": false,
+      "provider": "volcengine",
+      "modalities": [
+        "text"
+      ],
+      "family": "doubao",
+      "release_date": "2024-08-01",
+      "description": "Doubao Embedding - Text embedding model"
     }
   }
 }
