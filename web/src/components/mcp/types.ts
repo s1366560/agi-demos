@@ -41,6 +41,15 @@ export interface ToolStats {
 export function getRuntimeStatus(server: MCPServerResponse): RuntimeStatus {
   if (!server.enabled) return 'stopped';
 
+  // Primary signal: top-level runtime_status from backend
+  const topLevelStatus = server.runtime_status;
+  if (topLevelStatus === 'running') return 'running';
+  if (topLevelStatus === 'starting') return 'starting';
+  if (topLevelStatus === 'stopping') return 'stopping';
+  if (topLevelStatus === 'error') return 'error';
+  if (topLevelStatus === 'stopped') return 'stopped';
+
+  // Fallback: check runtime_metadata for granular state
   const runtimeState = server.runtime_metadata?.runtime_state as string;
   const isReady = server.runtime_metadata?.is_ready as boolean;
 
@@ -49,7 +58,7 @@ export function getRuntimeStatus(server: MCPServerResponse): RuntimeStatus {
   if (runtimeState === 'stopping') return 'stopping';
   if (runtimeState === 'stopped' || runtimeState === 'not_started') return 'stopped';
 
-  // For newly registered servers, runtime_state is undefined.
+  // For newly registered servers, both are undefined.
   // Treat undefined/unknown states as 'stopped' rather than 'error'.
   if (!runtimeState || runtimeState === 'unknown') return 'stopped';
 
