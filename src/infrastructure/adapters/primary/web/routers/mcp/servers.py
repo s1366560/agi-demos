@@ -492,3 +492,95 @@ async def get_mcp_server_health(
         )
 
     return _compute_server_health(server)
+
+
+# ---------------------------------------------------------------------------
+# SEP-1865 P2: Prompts & Logging stub endpoints
+# These endpoints provide the API surface for the frontend Prompts and Logs
+# tabs.  Real MCP client connections are ephemeral and not easily accessible
+# from the web layer, so these return stubs until full wiring is done.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{server_id}/prompts")
+async def list_mcp_server_prompts(
+    server_id: str,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_current_user_tenant),
+) -> list[dict[str, Any]]:
+    """List prompts exposed by an MCP server.
+
+    NOTE: Stub endpoint. Real prompt listing requires an active MCP client
+    session which is currently managed inside the sandbox runtime, not the
+    web layer.  Returns an empty list until full wiring is implemented.
+    """
+    repository = SqlMCPServerRepository(db)
+    server = await repository.get_by_id(server_id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"MCP server not found: {server_id}",
+        )
+    if server.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+    return []
+
+
+@router.post("/{server_id}/log-level")
+async def set_mcp_server_log_level(
+    server_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_current_user_tenant),
+) -> dict[str, Any]:
+    """Set the logging level for an MCP server.
+
+    NOTE: Stub endpoint.  The actual `logging/setLevel` JSON-RPC call requires
+    an active MCP client connection managed by the sandbox runtime.
+    """
+    repository = SqlMCPServerRepository(db)
+    server = await repository.get_by_id(server_id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"MCP server not found: {server_id}",
+        )
+    if server.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+    body = await request.json()
+    level: str = body.get("level", "info")
+    logger.info(f"Log level set request for server {server_id}: {level} (stub)")
+    return {"status": "accepted", "level": level, "note": "Stub: not yet forwarded to MCP server"}
+
+
+@router.get("/{server_id}/logs")
+async def list_mcp_server_logs(
+    server_id: str,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_current_user_tenant),
+) -> list[dict[str, Any]]:
+    """List recent log messages from an MCP server.
+
+    NOTE: Stub endpoint.  MCP log messages (`notifications/message`) are
+    transient server-pushed notifications, not stored persistently.  Returns
+    an empty list until a log aggregation pipeline is implemented.
+    """
+    repository = SqlMCPServerRepository(db)
+    server = await repository.get_by_id(server_id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"MCP server not found: {server_id}",
+        )
+    if server.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+    return []

@@ -119,6 +119,28 @@ export const mcpAPI = {
    */
   callTool: async (request: MCPToolCallRequest): Promise<MCPToolCallResponse> => {
     return await api.post<MCPToolCallResponse>('/mcp/tools/call', request);
+    return await api.post<MCPToolCallResponse>('/mcp/tools/call', request);
+  },
+
+  /**
+   * Get prompts from an MCP server (SEP-1865 P2-2)
+   */
+  getPrompts: async (serverId: string): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: Array<{ name: string; description?: string; required?: boolean }> }> }> => {
+    return await api.get(`/mcp/${serverId}/prompts`);
+  },
+
+  /**
+   * Set logging level for an MCP server (SEP-1865 P2-3)
+   */
+  setLogLevel: async (serverId: string, level: string): Promise<void> => {
+    await api.post(`/mcp/${serverId}/log-level`, { level });
+  },
+
+  /**
+   * Get recent logs from an MCP server (SEP-1865 P2-3)
+   */
+  getLogs: async (serverId: string): Promise<{ logs: Array<{ level: string; logger?: string; data?: unknown; timestamp?: string }> }> => {
+    return await api.get(`/mcp/${serverId}/logs`);
   },
 };
 

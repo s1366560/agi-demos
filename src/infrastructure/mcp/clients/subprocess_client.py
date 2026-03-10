@@ -148,7 +148,7 @@ class MCPSubprocessClient:
                                     "openLinks": True,
                                     "serverTools": True,
                                     "serverResources": True,
-                                    "logging": False,
+                                    "logging": True,
                                     "sandbox": True,
                                 },
                             },

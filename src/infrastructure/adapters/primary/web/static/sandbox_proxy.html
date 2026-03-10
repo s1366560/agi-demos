@@ -63,47 +63,38 @@
         return parts.join("; ");
       }
 
-      // Common CDN domains allowed by default so that AI-generated apps
-      // using three.js, D3, etc. from CDNs do not hit CSP violations.
-      var DEFAULT_CDN_DOMAINS = [
-        "https://cdnjs.cloudflare.com",
-        "https://unpkg.com",
-        "https://cdn.jsdelivr.net",
-        "https://cdn.skypack.dev",
-        "https://esm.sh"
-      ].join(" ");
-
-      // Build CSP meta tag content from _meta.ui.csp metadata per SEP-1865.
-      // If no CSP metadata is provided, applies restrictive defaults with CDN allowlist.
+      // Build CSP meta tag content for the inner iframe.
+      // Product requirement: allow loading arbitrary external script/style/media resources.
+      // Keep object/base restrictions to avoid widening attack surface beyond resource loading.
       function buildCSPContent(csp) {
-        var connectSrc = "'self'";
-        var resourceSrc = DEFAULT_CDN_DOMAINS;
+        var connectSrc = "* data: blob: ws: wss: http: https:";
+        var resourceSrc = "* data: blob: http: https:";
         var frameSrc = "'none'";
         var baseUri = "'self'";
 
-        if (csp) {
-          if (csp.connectDomains && csp.connectDomains.length > 0) {
-            connectSrc = "'self' " + csp.connectDomains.join(" ");
-          }
-          if (csp.resourceDomains && csp.resourceDomains.length > 0) {
-            resourceSrc = DEFAULT_CDN_DOMAINS + " " + csp.resourceDomains.join(" ");
-          }
-          if (csp.frameDomains && csp.frameDomains.length > 0) {
-            frameSrc = csp.frameDomains.join(" ");
-          }
-          if (csp.baseUriDomains && csp.baseUriDomains.length > 0) {
-            baseUri = csp.baseUriDomains.join(" ");
-          }
+        // Keep compatibility with existing metadata shape by appending explicit domains.
+        if (csp && csp.connectDomains && csp.connectDomains.length > 0) {
+          connectSrc += " " + csp.connectDomains.join(" ");
+        }
+        if (csp && csp.resourceDomains && csp.resourceDomains.length > 0) {
+          resourceSrc += " " + csp.resourceDomains.join(" ");
+        }
+        if (csp && csp.frameDomains && csp.frameDomains.length > 0) {
+          frameSrc += " " + csp.frameDomains.join(" ");
+        }
+        if (csp && csp.baseUriDomains && csp.baseUriDomains.length > 0) {
+          baseUri += " " + csp.baseUriDomains.join(" ");
         }
 
         return [
-          "default-src 'none'",
-          "script-src 'self' 'unsafe-inline' " + resourceSrc,
-          "style-src 'self' 'unsafe-inline' " + resourceSrc,
-          "img-src 'self' data: " + resourceSrc,
-          "font-src 'self' " + resourceSrc,
-          "media-src 'self' data: " + resourceSrc,
+          "default-src " + resourceSrc,
+          "script-src * 'unsafe-inline' 'unsafe-eval' blob: data: http: https:",
+          "style-src * 'unsafe-inline' blob: data: http: https:",
+          "img-src * data: blob: http: https:",
+          "font-src * data: blob: http: https:",
+          "media-src * data: blob: http: https:",
           "connect-src " + connectSrc,
+          "worker-src * blob: data: http: https:",
           "frame-src " + frameSrc,
           "object-src 'none'",
           "base-uri " + baseUri

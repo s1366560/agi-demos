@@ -110,6 +110,7 @@ export interface StandardMCPAppRendererProps {
  * The proxy must be on a different origin from the frontend for iframe security.
  */
 function getSandboxProxyUrl(): URL {
+  const SANDBOX_PROXY_VERSION = '20260310-csp-open';
   // Accept both host-only (localhost:8000) and full URL forms
   // (http://localhost:8000/api/v1) from env configs.
   const envApiTarget =
@@ -118,7 +119,9 @@ function getSandboxProxyUrl(): URL {
     (window.location.host.includes(':3000') ? 'localhost:8000' : window.location.host);
   const apiHost = envApiTarget.replace(/^[a-z]+:\/\//i, '').split('/')[0] || 'localhost:8000';
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-  return new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`);
+  const url = new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`);
+  url.searchParams.set('v', SANDBOX_PROXY_VERSION);
+  return url;
 }
 
 export const StandardMCPAppRenderer = forwardRef<
@@ -240,6 +243,29 @@ export const StandardMCPAppRenderer = forwardRef<
       },
       []
     );
+
+    // One-way notification helper (no response expected) -- SEP-1865 P2-1
+    const sendNotificationToApp = useCallback(
+      (method: string, params?: Record<string, unknown>) => {
+        const iframe = containerRef.current?.querySelector('iframe');
+        if (!iframe?.contentWindow) return;
+        iframe.contentWindow.postMessage(
+          { jsonrpc: '2.0', method, ...(params !== undefined ? { params } : {}) },
+          '*'
+        );
+      },
+      []
+    );
+
+    // Forward toolResult changes as progressive chunks to app iframe (SEP-1865 P2-1)
+    useEffect(() => {
+      if (toolResult != null && appInitialized) {
+        sendNotificationToApp('ui/notifications/tool-result-chunk', {
+          toolName,
+          chunk: toolResult,
+        });
+      }
+    }, [toolResult, appInitialized, toolName, sendNotificationToApp]);
 
     // Expose teardown + app-tool methods to parent (SEP-1865 P1-3)
     useImperativeHandle(

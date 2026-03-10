@@ -38,6 +38,77 @@ When tool is called → Platform fetches HTML via resources/read → Renders in 
 
 **Key insight**: The platform handles ALL the wiring. You just write a correct MCP server, register it, and the UI appears automatically.
 
+## Two Approaches to Build MCP Apps
+
+### Approach 1: FastMCP Framework (Recommended)
+
+FastMCP is a modern, higher-level framework that simplifies MCP server development. It supports both tool-only servers and interactive UI apps.
+
+**Install FastMCP:**
+```bash
+pip install "fastmcp[apps]"
+```
+
+**Minimal FastMCP Server with UI:**
+```python
+"""MCP Server using FastMCP framework."""
+
+from fastmcp import FastMCP
+
+mcp = FastMCP("my-dashboard")
+
+
+@mcp.tool()
+def render_dashboard(query: str = "default") -> str:
+    """Render the dashboard with current data."""
+    return "Dashboard rendered"
+
+
+@mcp.resource("ui://my-dashboard/dashboard")
+def dashboard_ui() -> str:
+    """Serve the dashboard HTML."""
+    return """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>My Dashboard</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h1>My Dashboard</h1>
+    <div id="content">Dashboard content here</div>
+</body>
+</html>"""
+
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+**FastMCP with Tool-UI Binding:**
+```python
+from fastmcp import FastMCP
+from fastmcp.server.apps import AppConfig
+
+mcp = FastMCP("my-app")
+
+@mcp.tool(app=AppConfig(resource_uri="ui://my-app/view.html"))
+def show_data(data: str) -> str:
+    """Show data with interactive UI."""
+    return f"Data: {data}"
+
+
+@mcp.resource("ui://my-app/view.html")
+def view_html() -> str:
+    return "<html>...</html>"
+```
+
+### Approach 2: Native MCP SDK (Lower-level)
+
+Use the official `mcp` package for full control. This is the approach documented in the main sections below.
+
 ## Step-by-Step Workflow
 
 ### Step 1: Create the MCP Server Code
@@ -285,6 +356,72 @@ The platform provides 3 server templates you can reference:
 | `data-processor` | Data transformation pipeline | Tool-only, no UI |
 
 The `web-dashboard` template is the canonical example for MCP Apps with UI.
+
+## FastMCP Prefab Apps (Recommended for Interactive UIs)
+
+Prefab is a declarative UI framework for Python. You describe layouts, charts, tables, forms using Python DSL, and FastMCP compiles them to JSON for the Canvas renderer.
+
+**Install Prefab:**
+```bash
+pip install "fastmcp[apps]" "prefab-ui"
+```
+
+**Example: Interactive Chart:**
+```python
+from prefab_ui.components import Column, Heading, BarChart, ChartSeries
+from prefab_ui.app import PrefabApp
+from fastmcp import FastMCP
+
+mcp = FastMCP("Dashboard")
+
+@mcp.tool(app=True)
+def sales_chart(year: int) -> PrefabApp:
+    """Show sales data as an interactive chart."""
+    data = [
+        {"month": "Jan", "revenue": 10000},
+        {"month": "Feb", "revenue": 15000},
+        {"month": "Mar", "revenue": 12000},
+    ]
+    
+    with Column(gap=4, css_class="p-6") as view:
+        Heading(f"{year} Sales")
+        BarChart(
+            data=data,
+            series=[ChartSeries(data_key="revenue", label="Revenue")],
+            x_axis="month",
+        )
+    
+    return PrefabApp(view=view)
+```
+
+**Available Prefab Components:**
+- **Layout**: `Column`, `Row`, `Stack`
+- **Typography**: `Heading`, `Text`, `Label`
+- **Interactive**: `Button`, `IconButton`, `Link`
+- **Charts**: `BarChart`, `LineChart`, `PieChart`, `ScatterChart`
+- **Data**: `Table`, `DataGrid`, `List`
+- **Forms**: `TextField`, `Select`, `Checkbox`, `Radio`, `Slider`, `DatePicker`
+- **Containers**: `Card`, `Modal`, `Drawer`, `Tabs`, `Accordion`
+
+**Example: Interactive Form:**
+```python
+from prefab_ui.components import Column, TextField, Button, Heading
+from prefab_ui.app import PrefabApp
+from fastmcp import FastMCP
+
+mcp = FastMCP("FormApp")
+
+@mcp.tool(app=True)
+def user_form() -> PrefabApp:
+    """Show a user input form."""
+    with Column(gap=3, css_class="p-4") as view:
+        Heading("User Information")
+        TextField(label="Name", placeholder="Enter your name")
+        TextField(label="Email", placeholder="Enter your email")
+        Button(label="Submit", on_click="submit_form")
+    
+    return PrefabApp(view=view)
+```
 
 ## Debugging
 

@@ -128,6 +128,7 @@ class MCPWebSocketClient:
         self.on_cancelled: Callable[..., Any] | None = None
         self.on_prompts_list_changed: Callable[..., Any] | None = None
 
+        self.on_logging_message: Callable[..., Any] | None = None
         # Request handlers for server-initiated requests (Phase 2)
         self.on_sampling_request: Callable[..., Any] | None = None
         self.on_elicitation_request: Callable[..., Any] | None = None
@@ -217,7 +218,7 @@ class MCPWebSocketClient:
                                     "openLinks": True,
                                     "serverTools": True,
                                     "serverResources": True,
-                                    "logging": False,
+                                    "logging": True,
                                     "sandbox": True,
                                 },
                             },
@@ -406,6 +407,9 @@ class MCPWebSocketClient:
                 await self.on_prompts_list_changed(params)
             elif method == "notifications/roots/list_changed" and self.on_roots_list_changed:
                 await self.on_roots_list_changed(params)
+            elif method == "notifications/message" and self.on_logging_message:
+                logger.info(f"MCP server log: {params}")
+                await self.on_logging_message(params)
 
         else:
             logger.warning(f"Received unexpected message: {data}")

@@ -507,7 +507,7 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
       const renderer = await screen.findByTestId('app-renderer', {}, { timeout: 10000 });
       expect(renderer).toHaveAttribute(
         'data-sandbox-url',
-        'http://localhost:8000/static/sandbox_proxy.html'
+        'http://localhost:8000/static/sandbox_proxy.html?v=20260310-csp-open'
       );
     } finally {
       if (originalHost === undefined) {

@@ -9,7 +9,7 @@ import type { MCPServerResponse } from '@/types/agent';
 // Type Definitions
 // ============================================================================
 
-export type McpTabKey = 'servers' | 'tools' | 'apps';
+export type McpTabKey = 'servers' | 'tools' | 'apps' | 'prompts' | 'logs';
 
 export type RuntimeStatus = 'running' | 'starting' | 'stopping' | 'stopped' | 'error';
 

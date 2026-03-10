@@ -18,6 +18,8 @@ import { MaterialIcon } from '../agent/shared/MaterialIcon';
 import { McpAppsTabV2 } from './McpAppsTabV2';
 import { McpServerTabV2 } from './McpServerTabV2';
 import { McpToolsTabV2 } from './McpToolsTabV2';
+import { McpPromptsTabV2 } from './McpPromptsTabV2';
+import { McpLogsTabV2 } from './McpLogsTabV2';
 import { getRuntimeStatus } from './types';
 
 import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
@@ -289,6 +291,40 @@ export const McpServerListV2: React.FC = () => {
               <MaterialIcon name="apps" size={18} />
               Applications
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'prompts'}
+              aria-controls="tabpanel-prompts"
+              onClick={() => {
+                setActiveTab('prompts');
+              }}
+              className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'prompts'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
+            >
+              <MaterialIcon name="chat" size={18} />
+              Prompts
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'logs'}
+              aria-controls="tabpanel-logs"
+              onClick={() => {
+                setActiveTab('logs');
+              }}
+              className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'logs'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
+            >
+              <MaterialIcon name="terminal" size={18} />
+              Logs
+            </button>
           </div>
         </div>
 
@@ -297,6 +333,8 @@ export const McpServerListV2: React.FC = () => {
           {activeTab === 'servers' && <div id="tabpanel-servers" role="tabpanel"><McpServerTabV2 /></div>}
           {activeTab === 'tools' && <div id="tabpanel-tools" role="tabpanel"><McpToolsTabV2 /></div>}
           {activeTab === 'apps' && <div id="tabpanel-apps" role="tabpanel"><McpAppsTabV2 /></div>}
+          {activeTab === 'prompts' && <div id="tabpanel-prompts" role="tabpanel"><McpPromptsTabV2 /></div>}
+          {activeTab === 'logs' && <div id="tabpanel-logs" role="tabpanel"><McpLogsTabV2 /></div>}
         </div>
       </div>
     </div>
