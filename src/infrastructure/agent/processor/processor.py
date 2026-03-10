@@ -2139,12 +2139,58 @@ class SessionProcessor:
                                             n for n in tool_names_in_event if n not in self.tools
                                         ]
                                         if still_missing:
-                                            logger.warning(
-                                                "[Processor] MCP tools still missing after retry "
-                                                "refresh: %s (total tools: %d)",
-                                                still_missing,
-                                                len(self.tools),
-                                            )
+                                            # Attempt direct cache injection from
+                                            # discovered_tools payload
+                                            disc = event_data.get("discovered_tools")
+                                            if disc:
+                                                from src.infrastructure.agent.state.agent_worker_state import (
+                                                    inject_discovered_mcp_tools_into_cache,
+                                                )
+
+                                                injected = await inject_discovered_mcp_tools_into_cache(
+                                                    project_id=event_data.get(
+                                                        "project_id", ""
+                                                    ),
+                                                    server_name=event_data.get(
+                                                        "server_name", ""
+                                                    ),
+                                                    discovered_tools=disc,
+                                                )
+                                                if injected > 0:
+                                                    final_count = self._refresh_tools()
+                                                    if final_count is not None:
+                                                        event_data["refresh_status"] = (
+                                                            "success_injection"
+                                                        )
+                                                        event_data[
+                                                            "refreshed_tool_count"
+                                                        ] = final_count
+                                                        logger.info(
+                                                            "[Processor] Cache injection + refresh "
+                                                            "loaded %d tools for %s",
+                                                            final_count,
+                                                            still_missing,
+                                                        )
+                                                    else:
+                                                        logger.warning(
+                                                            "[Processor] MCP tools still missing "
+                                                            "after cache injection + refresh"
+                                                        )
+                                                else:
+                                                    logger.warning(
+                                                        "[Processor] Cache injection returned 0 "
+                                                        "tools for %s",
+                                                        still_missing,
+                                                    )
+                                            else:
+                                                logger.warning(
+                                                    "[Processor] MCP tools still missing "
+                                                    "after retry refresh and no "
+                                                    "discovered_tools in event: %s "
+                                                    "(total tools: %d)",
+                                                    still_missing,
+                                                    len(self.tools),
+                                                )
                         yield event
                 except Exception as pending_err:
                     logger.error(

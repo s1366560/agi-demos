@@ -112,6 +112,7 @@ __all__ = [
     "invalidate_subagent_router_cache",
     "invalidate_tool_definitions_cache",
     "invalidate_tools_cache",
+    "inject_discovered_mcp_tools_into_cache",
     "is_pool_enabled",
     # Prewarm
     "prewarm_agent_session",
@@ -2596,6 +2597,69 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
         _custom_tool_diagnostics.clear()
         logger.info("Agent Worker: All tool caches invalidated")
 
+async def inject_discovered_mcp_tools_into_cache(
+    project_id: str,
+    server_name: str,
+    discovered_tools: list[dict[str, Any]],
+) -> int:
+    """Inject freshly discovered MCP tools into ``_tools_cache`` for immediate availability.
+
+    Called by SessionProcessor when ``register_mcp_server`` produces
+    ``discovered_tools`` but the cache was invalidated and the normal
+    provider refresh failed to find them (cache race condition).
+
+    Creates ``SandboxMCPServerToolAdapter`` instances matching the same
+    pattern used by ``_load_user_mcp_server_tools``.
+
+    Args:
+        project_id: Project whose tool cache to populate.
+        server_name: MCP server name (e.g. ``"chrome-devtools"``).
+        discovered_tools: Raw MCP tool metadata dicts from the
+            ``toolset_changed`` event payload.
+
+    Returns:
+        Number of tools injected.
+    """
+    from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
+
+    if not discovered_tools or _mcp_sandbox_adapter is None:
+        return 0
+
+    sandbox_id = await _resolve_project_sandbox_id(project_id)
+    if not sandbox_id:
+        logger.warning(
+            "[AgentWorker] Cannot inject MCP tools: no sandbox for project %s",
+            project_id,
+        )
+        return 0
+
+    adapter = cast("MCPSandboxAdapter", _mcp_sandbox_adapter)
+    injected: dict[str, Any] = {}
+
+    for tool_info in discovered_tools:
+        tool_name = tool_info.get("name", "")
+        if not tool_name:
+            continue
+        tool_adapter = SandboxMCPServerToolAdapter(
+            sandbox_adapter=adapter,
+            sandbox_id=sandbox_id,
+            server_name=server_name,
+            tool_info=tool_info,
+        )
+        injected[tool_adapter.name] = tool_adapter
+
+    if injected:
+        existing = _tools_cache.get(project_id, {})
+        merged = {**existing, **injected}
+        _tools_cache[project_id] = merged
+        logger.info(
+            "[AgentWorker] Injected %d MCP tools into cache for project %s (total: %d)",
+            len(injected),
+            project_id,
+            len(merged),
+        )
+
+    return len(injected)
 
 def rescan_custom_tools_for_project(project_id: str) -> int:
     """Re-scan custom tools for a project and merge into the tools cache.
