@@ -242,6 +242,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
                 transport_type=TransportType.normalize(db_server.server_type or "local"),
                 enabled=db_server.enabled,
                 command=transport_cfg.get("command"),
+                args=transport_cfg.get("args"),
                 environment=transport_cfg.get("environment"),
                 url=transport_cfg.get("url"),
                 headers=transport_cfg.get("headers"),
@@ -284,6 +285,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
                 k: v
                 for k, v in {
                     "command": tc.command,
+                    "args": tc.args,
                     "environment": tc.environment,
                     "url": tc.url,
                     "headers": tc.headers,
@@ -321,6 +323,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
                 k: v
                 for k, v in {
                     "command": tc.command,
+                    "args": tc.args,
                     "environment": tc.environment,
                     "url": tc.url,
                     "headers": tc.headers,

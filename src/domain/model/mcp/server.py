@@ -100,6 +100,7 @@ class MCPServerConfig(ValueObject):
 
     # Local (stdio) transport config
     command: list[str] | None = None
+    args: list[str] | None = None
     environment: dict[str, str] | None = None
 
     # Remote transport config (HTTP/SSE/WebSocket)
@@ -115,6 +116,9 @@ class MCPServerConfig(ValueObject):
 
     def __post_init__(self) -> None:
         """Validate configuration based on transport type."""
+        # Normalize: if command is a bare string (from DB), wrap in list
+        if isinstance(self.command, str):
+            object.__setattr__(self, "command", [self.command])
         if self.transport_type == TransportType.LOCAL:
             if not self.command:
                 raise ValueError("Command is required for local transport")
@@ -141,7 +145,7 @@ class MCPServerConfig(ValueObject):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        result: dict[str, Any] = {
             "server_name": self.server_name,
             "tenant_id": self.tenant_id,
             "transport_type": self.transport_type.value,
@@ -154,6 +158,9 @@ class MCPServerConfig(ValueObject):
             "reconnect_attempts": self.reconnect_attempts,
             "timeout": self.timeout,
         }
+        if self.args:
+            result["args"] = self.args
+        return result
 
 
 @dataclass(kw_only=True)
@@ -238,6 +245,8 @@ class MCPServer(Entity):
         result: dict[str, Any] = {}
         if self.config.command is not None:
             result["command"] = self.config.command
+        if self.config.args:
+            result["args"] = self.config.args
         if self.config.environment is not None:
             result["environment"] = self.config.environment
         if self.config.url is not None:

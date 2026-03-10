@@ -617,27 +617,36 @@ class MCPRuntimeService:
             args     -> list  (e.g. ["@anthropic/chrome-devtools-mcp"])
             env      -> dict  (environment variables)
 
-        But ``MCPServerConfig.to_dict()`` outputs::
+        ``MCPServerConfig`` may store the transport details in two ways:
 
-            command      -> list[str] | None  (full command + args combined)
-            environment  -> dict | None        (key mismatch: 'environment' vs 'env')
+        1. Separate fields: ``command=["npx"]`` + ``args=["pkg@latest"]``
+           (populated from DB where transport_config has separate keys)
+        2. Combined list: ``command=["npx", "pkg@latest"]``, ``args=None``
+           (legacy / manually constructed configs)
 
-        This helper bridges the two formats.
+        This helper normalises both into the sandbox format.
         """
         result: dict[str, Any] = {}
 
-        # Split command list into command (str) + args (list[str])
+        # Extract command string
         cmd = config.command
         if isinstance(cmd, list) and cmd:
             result["command"] = cmd[0]
-            result["args"] = cmd[1:]
+            # Prefer explicit args if present; otherwise use tail of command list
+            if config.args:
+                result["args"] = list(config.args)
+            else:
+                result["args"] = cmd[1:]
         elif isinstance(cmd, str) and cmd:
             parts = cmd.strip().split()
             result["command"] = parts[0]
-            result["args"] = parts[1:]
+            if config.args:
+                result["args"] = list(config.args)
+            else:
+                result["args"] = parts[1:]
         else:
             result["command"] = ""
-            result["args"] = []
+            result["args"] = list(config.args) if config.args else []
 
         # Rename 'environment' -> 'env' for sandbox compatibility
         result["env"] = config.environment or {}
