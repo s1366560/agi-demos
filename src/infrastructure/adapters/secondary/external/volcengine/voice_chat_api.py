@@ -203,7 +203,6 @@ class VolcengineVoiceChatAPI:
             "AppId": app_id,
             "RoomId": room_id,
             "TaskId": room_id,
-            "UserId": f"ai_bot_{bot_user_id}",
         }
 
         body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
