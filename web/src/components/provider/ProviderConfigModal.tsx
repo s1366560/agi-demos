@@ -952,18 +952,34 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            ASR/TTS App ID
+                            Speech App ID
                           </label>
                           <input
                             type="text"
-                            value={(formData.config?.volc_app_id as string) || ''}
+                            value={(formData.config?.speech_app_id as string) || ''}
                             onChange={(e) => {
-                              const newConfig = { ...formData.config, volc_app_id: e.target.value };
+                              const newConfig = { ...formData.config, speech_app_id: e.target.value };
                               setFormData({ ...formData, config: newConfig });
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="App ID for ASR/TTS service (leave blank to use VOLC_APP_ID env)"
+                            placeholder="Speech App ID from Volcengine Speech Console"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            Speech Access Token
+                          </label>
+                          <input
+                            type="password"
+                            value={(formData.config?.speech_access_token as string) || ''}
+                            onChange={(e) => {
+                              const newConfig = { ...formData.config, speech_access_token: e.target.value };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                            placeholder="Access Token from Volcengine Speech Console"
                           />
                         </div>
                         <div>
@@ -1906,11 +1922,19 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             </span>
                           </div>
                         )}
-                        {formData.config?.volc_app_id && (
+                        {formData.config?.speech_app_id && (
                           <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">ASR/TTS App ID:</span>
+                            <span className="text-slate-500">Speech App ID:</span>
                             <span className="font-medium text-slate-900 dark:text-white">
-                              {String(formData.config.volc_app_id)}
+                              {String(formData.config.speech_app_id)}
+                            </span>
+                          </div>
+                        )}
+                        {formData.config?.speech_access_token && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">Speech Access Token:</span>
+                            <span className="font-medium text-slate-900 dark:text-white">
+                              ********
                             </span>
                           </div>
                         )}

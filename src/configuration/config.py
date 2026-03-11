@@ -453,6 +453,8 @@ class Settings(BaseSettings):
     volc_ak: str | None = Field(default=None, alias="VOLC_AK")
     volc_sk: str | None = Field(default=None, alias="VOLC_SK")
     volc_app_id: str | None = Field(default=None, alias="VOLC_APP_ID")
+    speech_app_id: str | None = Field(default=None, alias="SPEECH_APP_ID")
+    speech_access_token: str | None = Field(default=None, alias="SPEECH_ACCESS_TOKEN")
     volc_asr_cluster: str = Field(default="volcano_asr", alias="VOLC_ASR_CLUSTER")
     volc_tts_cluster: str = Field(default="volcano_tts", alias="VOLC_TTS_CLUSTER")
     volc_tts_resource_id: str = Field(default="volc.speech.dialog", alias="VOLC_TTS_RESOURCE_ID")

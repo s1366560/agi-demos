@@ -80,10 +80,10 @@ async def voice_chat_endpoint(
     _sample_rate: int = config_msg.get("sample_rate", 16000)
     speaker: str = config_msg.get("speaker", "zh_female_tianmeixiaoyuan_moon_bigtts")
 
-    # 4. Resolve Volcengine ASR/TTS credentials (DB first, env fallback)
+    # 4. Resolve Volcengine Speech Console credentials (DB first, env fallback)
     settings = get_settings()
-    volc_ak: str | None = settings.volc_ak
-    volc_app_id: str | None = settings.volc_app_id
+    speech_access_token: str | None = settings.speech_access_token
+    speech_app_id: str | None = settings.speech_app_id
 
     try:
         from src.infrastructure.persistence.llm_providers_models import (
@@ -99,28 +99,25 @@ async def voice_chat_endpoint(
         provider = result.scalar_one_or_none()
         if provider and provider.config:
             db_cfg: dict[str, Any] = provider.config
-            volc_ak = db_cfg.get("volc_ak") or volc_ak
-            # Try volc_app_id first, then fall back to rtc_app_key
-            volc_app_id = (
-                db_cfg.get("volc_app_id")
-                or db_cfg.get("rtc_app_key")
-                or volc_app_id
-            )
+            speech_access_token = db_cfg.get("speech_access_token") or speech_access_token
+            speech_app_id = db_cfg.get("speech_app_id") or speech_app_id
             logger.info(
-                "[Voice WS] Resolved credentials from DB: ak=%s app_id=%s",
-                bool(volc_ak),
-                bool(volc_app_id),
+                "[Voice WS] Resolved Speech credentials from DB: "
+                "access_token=%s app_id=%s",
+                bool(speech_access_token),
+                bool(speech_app_id),
             )
     except Exception:
         logger.warning(
             "[Voice WS] Failed to read provider config from DB, using env vars",
             exc_info=True,
         )
-    if not volc_ak or not volc_app_id:
+    if not speech_access_token or not speech_app_id:
         await _send_error(
             websocket,
-            "Volcengine ASR/TTS credentials not configured "
-            "(set volc_ak + volc_app_id in provider config or VOLC_AK + VOLC_APP_ID env vars)",
+            "Volcengine Speech credentials not configured "
+            "(set speech_app_id + speech_access_token in provider config "
+            "or SPEECH_APP_ID + SPEECH_ACCESS_TOKEN env vars)",
         )
         await websocket.close(code=4000)
         return
@@ -133,8 +130,8 @@ async def voice_chat_endpoint(
     )
 
     asr_client = AsyncASRStreamingClient(
-        volc_ak,
-        volc_app_id,
+        speech_access_token,
+        speech_app_id,
     )
     tts_client: AsyncTTSStreamingClient | None = None
 
@@ -185,8 +182,8 @@ async def voice_chat_endpoint(
                 _tts_sender(
                     websocket,
                     tts_text_queue,
-                    volc_ak,
-                    volc_app_id,
+                    speech_access_token,
+                    speech_app_id,
                     speaker,
                     shutdown_event,
                 ),
