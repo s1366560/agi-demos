@@ -247,26 +247,49 @@ async def _audio_receiver(
     shutdown: asyncio.Event,
 ) -> None:
     """Receive binary PCM audio frames from browser and forward to ASR client."""
+    frame_count = 0
+    total_bytes = 0
     try:
         while not shutdown.is_set():
             data = await websocket.receive_bytes()
             if not data:
                 continue
+            frame_count += 1
+            total_bytes += len(data)
+            if frame_count == 1:
+                logger.info(
+                    "[Voice WS] First audio frame received: %d bytes",
+                    len(data),
+                )
+            elif frame_count % 100 == 0:
+                logger.info(
+                    "[Voice WS] Audio frames received: count=%d total_bytes=%d",
+                    frame_count,
+                    total_bytes,
+                )
             await asr_client.send_audio(data, is_last=False)
     except WebSocketDisconnect:
-        logger.info("[Voice WS] Audio receiver: client disconnected")
+        logger.info(
+            "[Voice WS] Audio receiver: client disconnected (frames=%d bytes=%d)",
+            frame_count,
+            total_bytes,
+        )
     except asyncio.CancelledError:
         pass
     except Exception as e:
         logger.error("[Voice WS] Audio receiver error: %s", e, exc_info=True)
     finally:
+        logger.info(
+            "[Voice WS] Audio receiver stopping (frames=%d bytes=%d)",
+            frame_count,
+            total_bytes,
+        )
         # Signal end of audio to ASR
         try:
             await asr_client.send_audio(b"", is_last=True)
         except Exception:
             pass
         shutdown.set()
-
 
 async def _asr_processor(
     websocket: WebSocket,

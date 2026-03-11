@@ -168,8 +168,17 @@ class AsyncASRStreamingClient:
         frame = header + payload_size + compressed
 
         await self._ws.send(frame)
+        self._sequence += 1
+        if self._sequence == 2:
+            logger.info(
+                "ASR first audio packet sent: %d bytes raw, %d bytes compressed",
+                len(audio_data),
+                len(compressed),
+            )
+        elif self._sequence % 100 == 0:
+            logger.info("ASR audio packets sent: seq=%d", self._sequence)
         if is_last:
-            logger.debug("ASR sent last audio packet")
+            logger.info("ASR sent last audio packet (seq=%d)", self._sequence)
 
     # ------------------------------------------------------------------
     # Receive results
@@ -200,9 +209,9 @@ class AsyncASRStreamingClient:
         utterances: list[dict[str, Any]] = result.get("utterances", [])
 
         is_final = any(bool(u.get("definite")) for u in utterances)
-        logger.debug(
+        logger.info(
             "ASR recv seq=%s final=%s text=%r",
-            parsed.get("sequence"),
+            parsed.get("payload_sequence"),
             is_final,
             text[:80] if text else "",
         )
@@ -220,11 +229,10 @@ class AsyncASRStreamingClient:
         handshake_payload: dict[str, Any] = {
             "user": {"uid": "memstack"},
             "audio": {
-                "format": "raw",
-                "codec": "pcm",
+                "format": "pcm",
+                "codec": "raw",
                 "sample_rate": 16000,
                 "channel": 1,
-                "bits": 16,
             },
             "request": {
                 "model_name": "bigmodel",
@@ -233,6 +241,8 @@ class AsyncASRStreamingClient:
                 "result_type": "full",
             },
         }
+
+        logger.info("ASR handshake payload: %s", handshake_payload)
 
         payload_json = json.dumps(handshake_payload).encode("utf-8")
         compressed_payload = gzip.compress(payload_json)
