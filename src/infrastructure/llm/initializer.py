@@ -34,6 +34,10 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "claude": ProviderType.ANTHROPIC,  # Alias for anthropic
     "ollama": ProviderType.OLLAMA,  # Local Ollama
     "lmstudio": ProviderType.LMSTUDIO,  # LM Studio
+    "volcengine": ProviderType.VOLCENGINE,
+    "volcano": ProviderType.VOLCENGINE,  # Alias for volcengine
+    "ark": ProviderType.VOLCENGINE,  # Alias for volcengine (Ark platform)
+    "doubao": ProviderType.VOLCENGINE,  # Alias for volcengine (Doubao models)
 }
 
 # Auto-detection order: env var -> provider name
@@ -50,6 +54,8 @@ _PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
     ("LMSTUDIO_BASE_URL", "lmstudio"),
+    ("VOLCENGINE_API_KEY", "volcengine"),
+    ("ARK_API_KEY", "volcengine")
 ]
 
 _LOCAL_FALLBACK_PROVIDER = "ollama"
