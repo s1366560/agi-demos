@@ -257,12 +257,12 @@ async def _audio_receiver(
             frame_count += 1
             total_bytes += len(data)
             if frame_count == 1:
-                logger.info(
+                logger.debug(
                     "[Voice WS] First audio frame received: %d bytes",
                     len(data),
                 )
             elif frame_count % 100 == 0:
-                logger.info(
+                logger.debug(
                     "[Voice WS] Audio frames received: count=%d total_bytes=%d",
                     frame_count,
                     total_bytes,

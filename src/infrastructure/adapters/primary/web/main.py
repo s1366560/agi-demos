@@ -397,11 +397,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     app.include_router(create_pool_router())
 
-    # Volcengine RTC (Voice/Video Call)
-    from src.infrastructure.adapters.primary.web.routers import volcengine_rtc
-
-    app.include_router(volcengine_rtc.router)
-    logger.info("Volcengine RTC API registered at /api/v1/volcengine")
     logger.info("Agent Pool Admin API registered at /api/v1/admin/pool")
 
     # Voice WebSocket (ASR/TTS streaming pipeline)

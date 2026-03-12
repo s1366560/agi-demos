@@ -37,7 +37,6 @@ from src.infrastructure.adapters.secondary.external.volcengine.binary_protocol i
     JSON_SERIALIZATION,
     LAST_PACKAGE,
     NO_SEQUENCE,
-    NO_SERIALIZATION,
     POS_SEQUENCE,
     generate_before_payload,
     generate_header,
@@ -159,7 +158,7 @@ class AsyncASRStreamingClient:
         header = generate_header(
             message_type=AUDIO_ONLY_REQUEST,
             message_type_specific_flags=flags,
-            serialization=NO_SERIALIZATION,
+            serialization=JSON_SERIALIZATION,
             compression=GZIP_COMPRESSION,
         )
 
@@ -170,13 +169,13 @@ class AsyncASRStreamingClient:
         await self._ws.send(frame)
         self._sequence += 1
         if self._sequence == 2:
-            logger.info(
+            logger.debug(
                 "ASR first audio packet sent: %d bytes raw, %d bytes compressed",
                 len(audio_data),
                 len(compressed),
             )
         elif self._sequence % 100 == 0:
-            logger.info("ASR audio packets sent: seq=%d", self._sequence)
+            logger.debug("ASR audio packets sent: seq=%d", self._sequence)
         if is_last:
             logger.info("ASR sent last audio packet (seq=%d)", self._sequence)
 
@@ -209,7 +208,7 @@ class AsyncASRStreamingClient:
         utterances: list[dict[str, Any]] = result.get("utterances", [])
 
         is_final = any(bool(u.get("definite")) for u in utterances)
-        logger.info(
+        logger.debug(
             "ASR recv seq=%s final=%s text=%r",
             parsed.get("payload_sequence"),
             is_final,
@@ -238,11 +237,10 @@ class AsyncASRStreamingClient:
                 "model_name": "bigmodel",
                 "enable_itn": True,
                 "enable_punc": True,
-                "result_type": "full",
             },
         }
 
-        logger.info("ASR handshake payload: %s", handshake_payload)
+        logger.debug("ASR handshake payload: %s", handshake_payload)
 
         payload_json = json.dumps(handshake_payload).encode("utf-8")
         compressed_payload = gzip.compress(payload_json)
