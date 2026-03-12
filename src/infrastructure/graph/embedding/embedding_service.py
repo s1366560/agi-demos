@@ -120,6 +120,20 @@ class EmbeddingService:
             logger.error(f"Failed to generate embedding: {e}")
             raise
 
+    async def embed_text_safe(self, text: str) -> list[float] | None:
+        """Generate embedding with graceful fallback.
+
+        Returns None instead of raising on failure, enabling
+        FTS-only search fallback.
+        """
+        try:
+            return await self.embed_text(text)
+        except Exception as e:
+            logger.warning(
+                "Embedding failed, falling back to FTS-only: %s", e
+            )
+            return None
+
     async def embed_batch(
         self,
         texts: list[str],
@@ -168,6 +182,32 @@ class EmbeddingService:
                 embeddings[i] = [0.0] * self.embedding_dim
 
         return cast(list[list[float]], embeddings)
+
+    async def embed_batch_safe(
+        self,
+        texts: list[str],
+        batch_size: int = 100,
+        max_concurrency: int = 5,
+    ) -> list[list[float] | None]:
+        """Batch embed with graceful fallback.
+
+        Returns a list whose entries are None for texts that failed
+        to embed, rather than raising an exception.
+        """
+        try:
+            return [
+                list(e) for e in
+                await self.embed_batch(
+                    texts,
+                    batch_size=batch_size,
+                    max_concurrency=max_concurrency,
+                )
+            ]
+        except Exception as e:
+            logger.warning(
+                "Batch embedding failed, returning all None: %s", e
+            )
+            return [None] * len(texts)
 
     async def _embed_batch_api(
         self,
@@ -348,3 +388,67 @@ class EmbeddingService:
 
         similarities.sort(key=lambda x: x[1], reverse=True)
         return similarities[:top_k]
+
+
+
+class NullEmbeddingService:
+    """No-op embedding service for when no embedding model is configured.
+
+    Used as a graceful fallback so that search and indexing pipelines
+    degrade to FTS-only mode instead of crashing.
+    """
+
+    _SENTINEL_DIM = 0
+
+    @property
+    def embedding_dim(self) -> int:
+        """Return 0 -- no real embedding dimension."""
+        return self._SENTINEL_DIM
+
+    async def embed_text(self, text: str) -> list[float]:
+        """Always raise -- callers should use embed_text_safe()."""
+        raise RuntimeError(
+            "No embedding model configured. "
+            "Use embed_text_safe() for graceful degradation."
+        )
+
+    async def embed_text_safe(self, text: str) -> list[float] | None:
+        """Always return None -- embedding unavailable."""
+        return None
+
+    async def embed_batch(
+        self,
+        texts: list[str],
+        batch_size: int = 100,
+        max_concurrency: int = 5,
+    ) -> list[list[float]]:
+        """Always raise -- callers should use embed_batch_safe()."""
+        raise RuntimeError(
+            "No embedding model configured. "
+            "Use embed_batch_safe() for graceful degradation."
+        )
+
+    async def embed_batch_safe(
+        self,
+        texts: list[str],
+        batch_size: int = 100,
+        max_concurrency: int = 5,
+    ) -> list[list[float] | None]:
+        """Return all None -- embedding unavailable."""
+        return [None] * len(texts)
+
+    def validate_embedding(
+        self,
+        embedding: list[float],
+        name: str = "unknown",
+    ) -> bool:
+        """Always return False -- no valid embeddings possible."""
+        return False
+
+    async def compute_similarity(
+        self,
+        embedding1: list[float],
+        embedding2: list[float],
+    ) -> float:
+        """Return 0.0 -- similarity is meaningless without embeddings."""
+        return 0.0

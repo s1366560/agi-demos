@@ -169,6 +169,27 @@ class CachedEmbeddingService:
 
         return results
 
+    async def embed_batch_safe(
+        self,
+        texts: list[str],
+        batch_size: int = 100,
+    ) -> list[list[float] | None]:
+        """Batch embed with graceful fallback.
+
+        Returns a list whose entries are None for texts that
+        failed to embed, rather than raising.
+        """
+        try:
+            return [
+                list(e) for e in
+                await self.embed_batch(texts, batch_size=batch_size)
+            ]
+        except Exception as e:
+            logger.warning(
+                "Batch embedding failed, returning all None: %s", e
+            )
+            return [None] * len(texts)
+
     def get_stats(self) -> dict[str, int]:
         """Return cache hit/miss statistics."""
         return dict(self._stats)
