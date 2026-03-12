@@ -25,10 +25,15 @@ router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 logger = logging.getLogger(__name__)
 
 # Sentence boundary pattern for TTS chunking
-_SENTENCE_BOUNDARY = re.compile(r"[.!?。！？]")
+_SENTENCE_BOUNDARY = re.compile(r"[.!?\u3002\uff01\uff1f]")
 
 # Maximum buffer size before forcing a TTS flush
 _MAX_BUFFER_CHARS = 100
+
+# Silence threshold (seconds) -- when no new ASR text arrives for this
+# long, treat the accumulated buffer as a complete utterance.  Matches the
+# reference implementation's ASRInterval=2000ms approach.
+_ASR_SILENCE_THRESHOLD = 1.5
 
 
 @router.websocket("/chat")
@@ -297,41 +302,132 @@ async def _asr_processor(
     asr_final_queue: asyncio.Queue[str],
     shutdown: asyncio.Event,
 ) -> None:
-    """Receive transcription results from ASR client and dispatch to agent."""
+    """Receive transcription results from ASR and dispatch complete utterances.
+
+    Uses a **silence-timeout** strategy (matching the Volcengine reference
+    implementation) instead of relying on the ``definite`` flag which may not
+    be reliably set in streaming mode.
+
+    The algorithm:
+    1. Accumulate ``asr_buffer`` from ``result.text``.
+    2. Track when the buffer last *grew* (``last_growth_time``).
+    3. When the buffer has content and silence exceeds
+       ``_ASR_SILENCE_THRESHOLD``, treat the buffer as a complete sentence
+       and enqueue it for the agent.
+    4. ``definite=True`` is still honoured as an immediate flush trigger.
+    """
+    import time
+
+    asr_buffer = ""
+    last_growth_time: float = time.monotonic()
+    pending_interim_sent = False
+
     try:
         while not shutdown.is_set():
-            result = await asr_client.receive()
+            # Use a short timeout so we can check silence even when no
+            # new ASR messages arrive.
+            try:
+                result = await asyncio.wait_for(
+                    asr_client.receive(), timeout=0.3
+                )
+            except asyncio.TimeoutError:
+                # No new ASR data -- check silence timeout
+                if (
+                    asr_buffer
+                    and (time.monotonic() - last_growth_time)
+                    > _ASR_SILENCE_THRESHOLD
+                ):
+                    logger.info(
+                        "[Voice WS] ASR silence timeout, flushing: %s",
+                        asr_buffer[:80],
+                    )
+                    await _send_json(
+                        websocket, {"type": "asr_final", "text": asr_buffer}
+                    )
+                    await asr_final_queue.put(asr_buffer)
+                    asr_buffer = ""
+                    pending_interim_sent = False
+                continue
+
             if result is None:
                 break
 
             payload = result.get("payload_msg", {})
             asr_result = payload.get("result", {})
             text = asr_result.get("text", "")
-
-            # Check for utterances with definite flag
             utterances = asr_result.get("utterances", [])
-            is_final = any(u.get("definite", False) for u in utterances)
+            is_definite = any(
+                u.get("definite", False) for u in utterances
+            )
+
+            logger.debug(
+                "[Voice WS] ASR recv text=%r definite=%s buf_len=%d",
+                text[:80] if text else "",
+                is_definite,
+                len(asr_buffer),
+            )
 
             if text:
-                if is_final:
-                    # Send final transcript to browser
-                    await _send_json(websocket, {"type": "asr_final", "text": text})
-                    # Enqueue for agent processing
-                    await asr_final_queue.put(text)
-                    logger.info("[Voice WS] ASR final: %s", text[:80])
-                else:
-                    # Send interim transcript to browser
-                    await _send_json(websocket, {"type": "asr_interim", "text": text})
+                # Check if buffer grew (new speech detected)
+                if len(text) > len(asr_buffer):
+                    last_growth_time = time.monotonic()
+                asr_buffer = text
+
+                if is_definite:
+                    # Immediate flush on definite utterance
+                    logger.info(
+                        "[Voice WS] ASR definite utterance: %s",
+                        asr_buffer[:80],
+                    )
+                    await _send_json(
+                        websocket,
+                        {"type": "asr_final", "text": asr_buffer},
+                    )
+                    await asr_final_queue.put(asr_buffer)
+                    asr_buffer = ""
+                    pending_interim_sent = False
+                elif not pending_interim_sent or len(text) > len(asr_buffer) - 2:
+                    # Send interim update to browser for live display
+                    await _send_json(
+                        websocket,
+                        {"type": "asr_interim", "text": text},
+                    )
+                    pending_interim_sent = True
 
             if result.get("is_last_package"):
+                # Server signals end of stream -- flush remaining buffer
+                if asr_buffer:
+                    logger.info(
+                        "[Voice WS] ASR last package, flushing: %s",
+                        asr_buffer[:80],
+                    )
+                    await _send_json(
+                        websocket,
+                        {"type": "asr_final", "text": asr_buffer},
+                    )
+                    await asr_final_queue.put(asr_buffer)
+                    asr_buffer = ""
                 break
+
+        # Flush any remaining buffer on normal exit
+        if asr_buffer:
+            logger.info(
+                "[Voice WS] ASR processor exiting, flushing remaining: %s",
+                asr_buffer[:80],
+            )
+            await _send_json(
+                websocket, {"type": "asr_final", "text": asr_buffer}
+            )
+            await asr_final_queue.put(asr_buffer)
+
     except asyncio.CancelledError:
-        pass
+        # Flush on cancellation too
+        if asr_buffer:
+            await asr_final_queue.put(asr_buffer)
     except Exception as e:
         logger.error("[Voice WS] ASR processor error: %s", e, exc_info=True)
     finally:
         shutdown.set()
-
 
 async def _agent_bridge(
     websocket: WebSocket,
@@ -366,7 +462,7 @@ async def _agent_bridge(
             # Stream agent response
             full_response = ""
             tts_buffer = ""
-
+            event_count = 0
             async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=asr_text,
@@ -376,7 +472,13 @@ async def _agent_bridge(
                 image_attachments=None,
             ):
                 event_type = event.get("type")
-
+                event_count += 1
+                if event_count <= 3 or event_count % 20 == 0:
+                    logger.info(
+                        "[Voice WS] Agent event #%d: type=%s",
+                        event_count,
+                        event_type,
+                    )
                 if event_type == "error":
                     error_msg = event.get("data", {}).get("message", "Unknown agent error")
                     logger.error("[Voice WS] Agent error: %s", error_msg)
@@ -409,6 +511,11 @@ async def _agent_bridge(
                     await _send_json(
                         websocket,
                         {"type": "agent_complete", "content": full_response},
+                    )
+                    logger.info(
+                        "[Voice WS] Agent complete: %d events, response_len=%d",
+                        event_count,
+                        len(full_response),
                     )
 
             # Flush remaining TTS buffer
