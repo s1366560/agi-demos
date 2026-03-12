@@ -140,14 +140,11 @@ async def voice_chat_endpoint(
     )
     tts_client: AsyncTTSStreamingClient | None = None
 
-    # 5. Build agent service (same pattern as chat_handler.py)
+    # 5. Build base container and LLM (agent_service built per-request in _agent_bridge)
     from src.configuration.factories import create_llm_client
 
     base_container = cast(DIContainer, websocket.app.state.container)
-    container = base_container.with_db(db)
-
     llm = await create_llm_client(tenant_id)
-    agent_service = container.agent_service(llm)
 
     # Shared state between tasks
     asr_final_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -172,7 +169,8 @@ async def voice_chat_endpoint(
             asyncio.create_task(
                 _agent_bridge(
                     websocket,
-                    agent_service,
+                    base_container,
+                    llm,
                     asr_final_queue,
                     tts_text_queue,
                     conversation_id,
@@ -431,7 +429,8 @@ async def _asr_processor(
 
 async def _agent_bridge(
     websocket: WebSocket,
-    agent_service: Any,
+    base_container: Any,
+    llm: Any,
     asr_final_queue: asyncio.Queue[str],
     tts_text_queue: asyncio.Queue[str | None],
     conversation_id: str,
@@ -440,7 +439,15 @@ async def _agent_bridge(
     tenant_id: str,
     shutdown: asyncio.Event,
 ) -> None:
-    """Process ASR final transcripts through the agent pipeline."""
+    """Process ASR final transcripts through the agent pipeline.
+
+    Creates a **fresh DB session** for each agent invocation to avoid
+    stale-session issues in long-lived WebSocket connections.
+    """
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+
     try:
         logger.info(
             "[Voice WS] Agent bridge started (conv=%s, project=%s, user=%s)",
@@ -459,72 +466,99 @@ async def _agent_bridge(
                 "[Voice WS] ASR final text received, sending to agent: %.80s...",
                 asr_text,
             )
-            # Stream agent response
-            full_response = ""
-            tts_buffer = ""
-            event_count = 0
-            async for event in agent_service.stream_chat_v2(
-                conversation_id=conversation_id,
-                user_message=asr_text,
-                project_id=project_id,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                image_attachments=None,
-            ):
-                event_type = event.get("type")
-                event_count += 1
-                if event_count <= 3 or event_count % 20 == 0:
+
+            # Create a FRESH DB session for each agent invocation
+            # to avoid stale session issues in long-lived WebSocket.
+            async with async_session_factory() as fresh_db:
+                try:
+                    container = base_container.with_db(fresh_db)
+                    agent_service = container.agent_service(llm)
                     logger.info(
-                        "[Voice WS] Agent event #%d: type=%s",
-                        event_count,
-                        event_type,
+                        "[Voice WS] Built fresh agent_service, calling stream_chat_v2",
                     )
-                if event_type == "error":
+
+                    # Stream agent response
+                    full_response = ""
+                    tts_buffer = ""
+                    event_count = 0
+                    async for event in agent_service.stream_chat_v2(
+                        conversation_id=conversation_id,
+                        user_message=asr_text,
+                        project_id=project_id,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        image_attachments=None,
+                    ):
+                        event_type = event.get("type")
+                        event_count += 1
+                        if event_count <= 5 or event_count % 20 == 0:
+                            logger.info(
+                                "[Voice WS] Agent event #%d: type=%s data_keys=%s",
+                                event_count,
+                                event_type,
+                                list(event.get("data", {}).keys()) if isinstance(event.get("data"), dict) else "N/A",
+                            )
+                        if event_type == "error":
                     error_msg = event.get("data", {}).get("message", "Unknown agent error")
-                    logger.error("[Voice WS] Agent error: %s", error_msg)
+                            logger.error("[Voice WS] Agent error: %s", error_msg)
                     await _send_json(websocket, {"type": "error", "message": error_msg})
-                    break
+                            break
 
+                        if event_type == "token":
+                            token_text = event.get("data", {}).get("content", "")
+                            if token_text:
+                                full_response += token_text
+                                tts_buffer += token_text
 
-                if event_type == "token":
-                    token_text = event.get("data", {}).get("content", "")
-                    if token_text:
-                        full_response += token_text
-                        tts_buffer += token_text
+                                # Send token to browser
+                                await _send_json(
+                                    websocket,
+                                    {"type": "agent_token", "content": token_text},
+                                )
 
-                        # Send token to browser
-                        await _send_json(
-                            websocket,
-                            {"type": "agent_token", "content": token_text},
-                        )
+                                # Check if we should flush to TTS
+                                tts_buffer = await _flush_tts_buffer(
+                                    tts_buffer, tts_text_queue, force=False
+                                )
 
-                        # Check if we should flush to TTS
-                        tts_buffer = await _flush_tts_buffer(
-                            tts_buffer, tts_text_queue, force=False
-                        )
-
-                elif event_type == "complete":
+                        elif event_type == "complete":
                     complete_content = event.get("data", {}).get("content", "")
-                    if complete_content:
-                        full_response = complete_content
+                            if complete_content:
+                                full_response = complete_content
 
-                    await _send_json(
-                        websocket,
-                        {"type": "agent_complete", "content": full_response},
-                    )
+                            await _send_json(
+                                websocket,
+                                {"type": "agent_complete", "content": full_response},
+                            )
+                            logger.info(
+                                "[Voice WS] Agent complete: %d events, response_len=%d",
+                                event_count,
+                                len(full_response),
+                            )
+
                     logger.info(
-                        "[Voice WS] Agent complete: %d events, response_len=%d",
+                        "[Voice WS] stream_chat_v2 finished: %d events total",
                         event_count,
-                        len(full_response),
                     )
 
-            # Flush remaining TTS buffer
-            if tts_buffer.strip():
-                await tts_text_queue.put(tts_buffer.strip())
-                tts_buffer = ""
+                    # Flush remaining TTS buffer
+                    if tts_buffer.strip():
+                        await tts_text_queue.put(tts_buffer.strip())
+                        tts_buffer = ""
 
-            # Signal TTS that this response is done
-            await tts_text_queue.put(None)
+                    # Signal TTS that this response is done
+                    await tts_text_queue.put(None)
+
+                except Exception as inner_err:
+                    logger.error(
+                        "[Voice WS] Agent bridge inner error: %s",
+                        inner_err,
+                        exc_info=True,
+                    )
+                    await _send_error(
+                        websocket, f"Agent error: {inner_err}"
+                    )
+                    await tts_text_queue.put(None)
 
     except asyncio.CancelledError:
         pass
@@ -534,7 +568,6 @@ async def _agent_bridge(
     finally:
         # Ensure TTS sender can exit
         await tts_text_queue.put(None)
-
 
 async def _tts_sender(
     websocket: WebSocket,
