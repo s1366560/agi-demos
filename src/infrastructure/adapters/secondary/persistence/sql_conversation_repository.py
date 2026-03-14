@@ -23,7 +23,7 @@ Key Features:
 
 import logging
 
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import BigInteger, delete, desc, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,10 @@ from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_mode import AgentMode
 from src.domain.ports.repositories.agent_repository import ConversationRepository
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
-from src.infrastructure.adapters.secondary.persistence.models import Conversation as DBConversation
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent as DBAgentExecutionEvent,
+    Conversation as DBConversation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,7 @@ class SqlConversationRepository(
         await self._session.execute(stmt)
         await self._session.flush()
         return conversation
+
     async def save_and_commit(self, conversation: Conversation) -> None:
         """
         Save a conversation and immediately commit to database.
@@ -149,16 +153,40 @@ class SqlConversationRepository(
             offset: Number of results to skip
 
         Returns:
-            List of conversations ordered by updated_at descending
+            List of conversations ordered by last activity time descending.
+            Last activity is determined by the most recent event in agent_execution_events.
+            Falls back to conversation created_at if no events exist.
         """
-        query = select(DBConversation).where(DBConversation.project_id == project_id)
+        last_activity_subq = (
+            select(
+                DBAgentExecutionEvent.conversation_id,
+                func.max(DBAgentExecutionEvent.event_time_us).label("last_event_time_us"),
+            )
+            .group_by(DBAgentExecutionEvent.conversation_id)
+            .subquery("last_activity")
+        )
+
+        query = (
+            select(DBConversation)
+            .outerjoin(
+                last_activity_subq,
+                DBConversation.id == last_activity_subq.c.conversation_id,
+            )
+            .where(DBConversation.project_id == project_id)
+        )
 
         if status:
             query = query.where(DBConversation.status == status.value)
 
+        # Sort by last event time (microseconds), falling back to created_at converted
+        # to microseconds for consistent comparison with event_time_us.
+        created_at_us = func.cast(
+            func.extract("epoch", DBConversation.created_at) * 1_000_000,
+            BigInteger,
+        )
         query = (
             query.order_by(
-                desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
+                desc(func.coalesce(last_activity_subq.c.last_event_time_us, created_at_us))
             )
             .offset(offset)
             .limit(limit)
@@ -185,16 +213,38 @@ class SqlConversationRepository(
             offset: Number of results to skip
 
         Returns:
-            List of conversations ordered by updated_at descending
+            List of conversations ordered by last activity time descending.
+            Last activity is determined by the most recent event in agent_execution_events.
+            Falls back to conversation created_at if no events exist.
         """
-        query = select(DBConversation).where(DBConversation.user_id == user_id)
+        last_activity_subq = (
+            select(
+                DBAgentExecutionEvent.conversation_id,
+                func.max(DBAgentExecutionEvent.event_time_us).label("last_event_time_us"),
+            )
+            .group_by(DBAgentExecutionEvent.conversation_id)
+            .subquery("last_activity")
+        )
+
+        query = (
+            select(DBConversation)
+            .outerjoin(
+                last_activity_subq,
+                DBConversation.id == last_activity_subq.c.conversation_id,
+            )
+            .where(DBConversation.user_id == user_id)
+        )
 
         if project_id:
             query = query.where(DBConversation.project_id == project_id)
 
+        created_at_us = func.cast(
+            func.extract("epoch", DBConversation.created_at) * 1_000_000,
+            BigInteger,
+        )
         query = (
             query.order_by(
-                desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
+                desc(func.coalesce(last_activity_subq.c.last_event_time_us, created_at_us))
             )
             .offset(offset)
             .limit(limit)
@@ -220,6 +270,7 @@ class SqlConversationRepository(
         )
         await self._session.flush()
         return True
+
     async def count_by_project(
         self, project_id: str, status: ConversationStatus | None = None
     ) -> int:

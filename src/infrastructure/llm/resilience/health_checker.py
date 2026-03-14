@@ -105,11 +105,12 @@ def _bearer_auth(api_key: str | None) -> dict[str, str | None]:
 
 
 def _endpoint_openai(
-    _config: ProviderConfig,
+    config: ProviderConfig,
     api_key: str | None,
 ) -> _HealthEndpoint:
+    base_url = config.base_url or "https://api.openai.com/v1"
     return _HealthEndpoint(
-        url="https://api.openai.com/v1/models",
+        url=f"{base_url}/models",
         headers=_bearer_auth(api_key),
         acceptable_statuses=_OK_ONLY,
     )
@@ -131,9 +132,10 @@ def _endpoint_gemini(
     config: ProviderConfig,
     api_key: str | None,
 ) -> _HealthEndpoint:
+    base_url = config.base_url or "https://generativelanguage.googleapis.com/v1beta"
     model = config.llm_model or "gemini-pro"
     return _HealthEndpoint(
-        url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}",
+        url=f"{base_url}/models/{model}",
         headers={"x-goog-api-key": api_key},
         acceptable_statuses=_OK_ONLY,
     )
@@ -152,11 +154,12 @@ def _endpoint_dashscope(
 
 
 def _endpoint_anthropic(
-    _config: ProviderConfig,
+    config: ProviderConfig,
     api_key: str | None,
 ) -> _HealthEndpoint:
+    base_url = config.base_url or "https://api.anthropic.com/v1"
     return _HealthEndpoint(
-        url="https://api.anthropic.com/v1/models",
+        url=f"{base_url}/models",
         headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
         acceptable_statuses=_OK_OR_NOT_FOUND,
     )
