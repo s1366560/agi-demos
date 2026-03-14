@@ -614,7 +614,8 @@ class AgentService(AgentServicePort):
         message_id: str | None,
         last_event_time_us: int,
         last_event_counter: int,
-        max_delay: float = 15.0,
+        max_delay: float = 3.0,
+        idle_timeout: float = 0.5,
     ) -> list[dict[str, Any]]:
         """Read delayed events after stream completion.
 
@@ -624,16 +625,28 @@ class AgentService(AgentServicePort):
         - artifact_ready: S3 upload completed for an artifact
         - artifact_error: S3 upload failed for an artifact
 
+        Args:
+            stream_key: Redis stream key to read from
+            conversation_id: Conversation ID for filtering
+            message_id: Optional message ID for filtering
+            last_event_time_us: Last event timestamp for deduplication
+            last_event_counter: Last event counter for deduplication
+            max_delay: Maximum seconds to wait for delayed events (default: 3.0)
+            idle_timeout: Exit early if no new events for this many seconds (default: 0.5)
+
         Returns:
             List of event dicts to yield.
         """
         delayed_start = time_module.time()
+        last_activity_time = delayed_start  # Track last time we saw any event
         result: list[dict[str, Any]] = []
         try:
             assert self._event_bus is not None
             async for delayed_message in self._event_bus.stream_read(
                 stream_key, last_id="0", count=100, block_ms=200
             ):
+                current_time = time_module.time()
+
                 delayed_event = delayed_message.get("data", {})
                 delayed_type = delayed_event.get("type", "unknown")
                 delayed_time_us = delayed_event.get("event_time_us", 0)
@@ -644,9 +657,11 @@ class AgentService(AgentServicePort):
                 if self._is_event_already_seen(
                     delayed_time_us, delayed_counter, last_event_time_us, last_event_counter
                 ):
+                    last_activity_time = current_time
                     continue
 
                 if not self._is_delayed_event_relevant(delayed_data, conversation_id, message_id):
+                    last_activity_time = current_time
                     continue
 
                 # Only process specific delayed events (conversation-level events
@@ -677,9 +692,16 @@ class AgentService(AgentServicePort):
                     ):
                         last_event_time_us = delayed_time_us
                         last_event_counter = delayed_counter
+                    last_activity_time = current_time
 
-                # Timeout check
-                if time_module.time() - delayed_start > max_delay:
+                # Timeout check: exit if max_delay exceeded or idle for too long
+                if current_time - delayed_start > max_delay:
+                    break
+                if current_time - last_activity_time > idle_timeout:
+                    logger.debug(
+                        f"[AgentService] Idle timeout reached ({idle_timeout}s), "
+                        f"exiting delayed event read loop"
+                    )
                     break
         except Exception as delay_err:
             logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
