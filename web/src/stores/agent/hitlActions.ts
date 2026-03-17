@@ -9,10 +9,16 @@
 import { agentService } from '../../services/agentService';
 import { tabSync } from '../../utils/tabSync';
 
+import {
+  queueTimelineEvent as queueTimelineEventRaw,
+  flushTimelineBufferSync as flushTimelineBufferSyncRaw,
+  bindTimelineBufferDeps,
+} from './deltaBuffers';
 import { createStreamEventHandlers } from './streamEventHandlers';
 
 import type { DeltaBufferState } from './deltaBuffers';
 import type { AgentStreamHandler, TimelineEvent } from '../../types/agent';
+import type { ConversationState } from '../../types/conversationState';
 
 /**
  * Store setter/getter interface needed by HITL actions
@@ -20,6 +26,8 @@ import type { AgentStreamHandler, TimelineEvent } from '../../types/agent';
 export interface HITLActionDeps {
   get: () => {
     activeConversationId: string | null;
+    getConversationState: (conversationId: string) => ConversationState;
+    updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   };
   set: (updater: any) => void;
   timelineToMessages: (timeline: TimelineEvent[]) => any[];
@@ -56,6 +64,11 @@ async function ensureConnectedAndSubscribe(
     await agentService.connect();
   }
 
+  bindTimelineBufferDeps(conversationId, {
+    getConversationState: deps.get().getConversationState,
+    updateConversationState: deps.get().updateConversationState,
+  });
+
   const handler: AgentStreamHandler = createStreamEventHandlers(conversationId, undefined, {
     get: deps.get as any,
     set: deps.set as any,
@@ -65,6 +78,10 @@ async function ensureConnectedAndSubscribe(
     timelineToMessages: deps.timelineToMessages,
     tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
     thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+    queueTimelineEvent: (event, stateUpdates) =>
+      { queueTimelineEventRaw(conversationId, event, stateUpdates); },
+    flushTimelineBufferSync: () =>
+      { flushTimelineBufferSyncRaw(conversationId); },
   });
 
   agentService.subscribe(conversationId, handler);

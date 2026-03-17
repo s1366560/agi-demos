@@ -35,7 +35,7 @@ import type {
   ModelOverrideRejectedEventData,
   MessageEventData,
   PermissionAskedEventData,
-  ReflectionCompleteEvent,
+
   ThoughtEventData,
   ToolCall,
   SubAgentQueuedEventData,
@@ -69,6 +69,11 @@ export interface StreamHandlerDeps {
   timelineToMessages: (timeline: any[]) => any[];
   tokenBatchIntervalMs: number;
   thoughtBatchIntervalMs: number;
+  queueTimelineEvent: (
+    event: AgentEvent<unknown>,
+    immediateStateUpdates?: Partial<ConversationState>
+  ) => void;
+  flushTimelineBufferSync: () => void;
 }
 
 /**
@@ -93,6 +98,8 @@ export function createStreamEventHandlers(
     timelineToMessages,
     tokenBatchIntervalMs,
     thoughtBatchIntervalMs,
+    queueTimelineEvent,
+    flushTimelineBufferSync,
   } = deps;
 
   // Type-safe wrapper for set to handle both object and updater forms
@@ -226,15 +233,12 @@ export function createStreamEventHandlers(
       clearThoughtIdleResetTimer();
       clearPendingThoughtDelta();
       const newThought = event.data.thought;
-      const { updateConversationState, getConversationState } = get();
+      const { getConversationState } = get();
 
-      const thoughtEvent: AgentEvent<ThoughtEventData> = event;
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, thoughtEvent);
 
       const stateUpdates: Partial<ConversationState> = {
         agentState: 'thinking',
-        timeline: updatedTimeline,
         streamingThought: '',
         isThinkingStreaming: false,
       };
@@ -243,7 +247,8 @@ export function createStreamEventHandlers(
         stateUpdates.currentThought = convState.currentThought + '\n' + newThought;
       }
 
-      updateConversationState(handlerConversationId, stateUpdates);
+      queueTimelineEvent(event, stateUpdates);
+      flushTimelineBufferSync();
     },
 
     onWorkPlan: (_event) => {
@@ -320,21 +325,11 @@ export function createStreamEventHandlers(
 
     // Task timeline handlers (add events to timeline for plan execution tracking)
     onTaskStart: (event) => {
-      const { updateConversationState, getConversationState } = get();
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
-      });
+      queueTimelineEvent(event);
     },
 
     onTaskComplete: (event) => {
-      const { updateConversationState, getConversationState } = get();
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
-      });
+      queueTimelineEvent(event);
     },
 
     onModelSwitchRequested: (event: AgentEvent<ModelSwitchRequestedEventData>) => {
@@ -348,23 +343,20 @@ export function createStreamEventHandlers(
         );
       }
 
-      const { updateConversationState, getConversationState } = get();
+      const { getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const nextAppModelContext = {
-        ...((convState.appModelContext ?? {}) as Record<string, unknown>),
+        ...((convState.appModelContext ?? {})),
         llm_model_override: model,
       };
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-      updateConversationState(handlerConversationId, {
+      queueTimelineEvent(event, {
         appModelContext: nextAppModelContext,
-        timeline: updatedTimeline,
       });
     },
 
     onModelOverrideRejected: (event: AgentEvent<ModelOverrideRejectedEventData>) => {
-      const { updateConversationState, getConversationState } = get();
-      const convState = getConversationState(handlerConversationId);
+      const { getConversationState } = get();
 
       console.warn(
         '[model-switch] Model override rejected by backend:',
@@ -374,13 +366,12 @@ export function createStreamEventHandlers(
       );
 
       // Clear the rejected override from appModelContext
-      const currentCtx = (convState.appModelContext ?? {}) as Record<string, unknown>;
+      const convState = getConversationState(handlerConversationId);
+      const currentCtx = (convState.appModelContext ?? {});
       const { llm_model_override: _removed, ...restCtx } = currentCtx;
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-      updateConversationState(handlerConversationId, {
+      queueTimelineEvent(event, {
         appModelContext: Object.keys(restCtx).length > 0 ? restCtx : null,
-        timeline: updatedTimeline,
       });
     },
 
@@ -523,15 +514,7 @@ export function createStreamEventHandlers(
     },
 
     onReflectionComplete: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
-      const reflectionEvent: AgentEvent<ReflectionCompleteEvent> = event;
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, reflectionEvent);
-
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
-      });
+      queueTimelineEvent(event);
     },
 
     onActDelta: (event: AgentEvent<ActDeltaEventData>) => {
@@ -590,7 +573,6 @@ export function createStreamEventHandlers(
       }
 
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
       const toolName = event.data.tool_name;
       const startTime = Date.now();
@@ -607,12 +589,15 @@ export function createStreamEventHandlers(
 
       const newStack = [...convState.pendingToolsStack, toolName];
 
+      // Tool state must update immediately so the UI shows tool activity right away
       updateConversationState(handlerConversationId, {
         activeToolCalls: newMap,
         pendingToolsStack: newStack,
         agentState: 'acting',
-        timeline: updatedTimeline,
       });
+
+      // Timeline append is batched
+      queueTimelineEvent(event);
 
       additionalHandlers?.onAct?.(event);
     },
@@ -621,13 +606,10 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
       const stack = [...convState.pendingToolsStack];
       stack.pop();
 
-      // FIX: Update activeToolCalls to mark the completed tool
-      // This ensures the tool is visible during fast execution
       const toolName = event.data.tool_name;
       const newMap = new Map(convState.activeToolCalls);
 
@@ -642,12 +624,15 @@ export function createStreamEventHandlers(
         }
       }
 
+      // Tool state must update immediately
       updateConversationState(handlerConversationId, {
         pendingToolsStack: stack,
         activeToolCalls: newMap,
         agentState: 'observing',
-        timeline: updatedTimeline,
       });
+
+      // Timeline append is batched
+      queueTimelineEvent(event);
 
       additionalHandlers?.onObserve?.(event);
     },
@@ -693,7 +678,7 @@ export function createStreamEventHandlers(
     },
 
     onTextEnd: (event) => {
-      const { updateConversationState, getConversationState } = get();
+      const { getConversationState } = get();
 
       const buffer = getDeltaBuffer(handlerConversationId);
       if (buffer.textDeltaFlushTimer) {
@@ -711,32 +696,24 @@ export function createStreamEventHandlers(
         type: 'text_end',
         data: { full_text: finalContent },
       };
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, textEndEvent);
 
-      // Clear streamingAssistantContent so the streaming bubble disappears.
-      // The text_end event in the timeline now renders the full text instead,
-      // preventing duplicate content display.
-      updateConversationState(handlerConversationId, {
+      queueTimelineEvent(textEndEvent, {
         streamingAssistantContent: '',
-        timeline: updatedTimeline,
       });
+      flushTimelineBufferSync();
     },
 
     onClarificationAsked: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
       const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
         type: 'clarification_asked',
         data: event.data,
       };
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, clarificationEvent);
 
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
+      queueTimelineEvent(clarificationEvent, {
         pendingClarification: event.data,
         agentState: 'awaiting_input',
       });
+      flushTimelineBufferSync();
 
       useUnifiedHITLStore
         .getState()
@@ -748,20 +725,16 @@ export function createStreamEventHandlers(
     },
 
     onDecisionAsked: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
       const decisionEvent: AgentEvent<DecisionAskedEventData> = {
         type: 'decision_asked',
         data: event.data,
       };
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, decisionEvent);
 
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
+      queueTimelineEvent(decisionEvent, {
         pendingDecision: event.data,
         agentState: 'awaiting_input',
       });
+      flushTimelineBufferSync();
 
       useUnifiedHITLStore
         .getState()
@@ -864,20 +837,16 @@ export function createStreamEventHandlers(
     },
 
     onEnvVarRequested: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
       const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
         type: 'env_var_requested',
         data: event.data,
       };
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, envVarEvent);
 
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
+      queueTimelineEvent(envVarEvent, {
         pendingEnvVarRequest: event.data,
         agentState: 'awaiting_input',
       });
+      flushTimelineBufferSync();
 
       useUnifiedHITLStore
         .getState()
@@ -889,20 +858,16 @@ export function createStreamEventHandlers(
     },
 
     onPermissionAsked: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
       const permissionEvent: AgentEvent<PermissionAskedEventData> = {
         type: 'permission_asked',
         data: event.data,
       };
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, permissionEvent);
 
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
+      queueTimelineEvent(permissionEvent, {
         pendingPermission: event.data,
         agentState: 'awaiting_input',
       });
+      flushTimelineBufferSync();
 
       useUnifiedHITLStore
         .getState()
@@ -940,13 +905,7 @@ export function createStreamEventHandlers(
     },
 
     onDoomLoopIntervened: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
+      queueTimelineEvent(event, {
         doomLoopDetected: null,
       });
     },
@@ -985,14 +944,7 @@ export function createStreamEventHandlers(
     },
 
     onArtifactCreated: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-
-      updateConversationState(handlerConversationId, {
-        timeline: updatedTimeline,
-      });
+      queueTimelineEvent(event);
     },
 
     onArtifactReady: (event) => {
@@ -1065,18 +1017,14 @@ export function createStreamEventHandlers(
     },
 
     onArtifactsBatch: (event) => {
-      const { updateConversationState, getConversationState } = get();
       const data = event.data;
 
       if (!data.artifacts || !Array.isArray(data.artifacts)) return;
 
-      const convState = getConversationState(handlerConversationId);
+      // Queue the batch event itself
+      queueTimelineEvent(event);
 
-      // Append the batch event to timeline
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-
-      // Also add individual artifact_created timeline entries for each artifact in the batch
-      let timeline = updatedTimeline;
+      // Queue individual artifact_created timeline entries for each artifact
       for (const info of data.artifacts) {
         const artifactEvent = {
           type: 'artifact_created' as const,
@@ -1092,12 +1040,9 @@ export function createStreamEventHandlers(
             tool_execution_id: data.tool_execution_id,
           },
         };
-        timeline = appendSSEEventToTimeline(timeline, artifactEvent as any);
+        queueTimelineEvent(artifactEvent as any);
       }
-
-      updateConversationState(handlerConversationId, {
-        timeline,
-      });
+      flushTimelineBufferSync();
 
       // Auto-open canvas for the first preview-compatible artifact
       let canvasOpened = false;

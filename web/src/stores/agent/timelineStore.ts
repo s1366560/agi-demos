@@ -142,7 +142,7 @@ export const useTimelineStore = create<TimelineState>()(
       addTimelineEvent: (event: TimelineEvent) => {
         const { timeline } = get();
 
-        let newTimeline = [...timeline, event];
+        let newTimeline = timeline.concat(event);
         if (newTimeline.length > MAX_TIMELINE_EVENTS) {
           newTimeline = newTimeline.slice(newTimeline.length - MAX_TIMELINE_EVENTS);
           set({ timeline: newTimeline, hasEarlier: true });
@@ -210,7 +210,7 @@ export const useTimelineStore = create<TimelineState>()(
 
           // Prepend new events to existing timeline
           const { timeline } = get();
-          let newTimeline = [...response.timeline, ...timeline];
+          let newTimeline = response.timeline.concat(timeline);
           if (newTimeline.length > MAX_TIMELINE_EVENTS) {
             newTimeline = newTimeline.slice(0, MAX_TIMELINE_EVENTS);
           }

@@ -1,102 +1,34 @@
 /**
- * TimelineEventItem - Optimized single timeline event renderer
+ * TimelineEventItem - Thin orchestrator for timeline event rendering
  *
- * Renders individual TimelineEvents in chronological order with
- * improved visual hierarchy and spacing.
- *
- * Features:
- * - Natural time rendering for each event (不分组)
- * - Tool status tracking with act/observe matching
- * - Human-in-the-loop (HITL) interaction support
+ * Dispatches each TimelineEvent to the appropriate sub-component
+ * from ./timeline-items/. User and assistant message cases are
+ * rendered inline since they depend on external chat components.
  *
  * @module components/agent/TimelineEventItem
  */
 
-import { lazy, memo, Suspense, useCallback, useState } from 'react';
-
-import { useTranslation } from 'react-i18next';
-
-import { Loader2, PanelRight } from 'lucide-react';
-
-import { useAgentV3Store } from '../../stores/agentV3';
-import { type CanvasContentType, useCanvasStore } from '../../stores/canvasStore';
-import { useLayoutModeStore } from '../../stores/layoutMode';
-import { useSandboxStore } from '../../stores/sandbox';
-import { formatDateTime, formatDistanceToNowCN, formatTimeOnly } from '../../utils/date';
-import { isOfficeMimeType, isOfficeExtension } from '../../utils/filePreview';
+import { memo } from 'react';
 
 import { AssistantMessage } from './chat/AssistantMessage';
-import { safeMarkdownComponents } from './chat/markdownPlugins';
+import { UserMessage } from './chat/MessageStream';
 import {
-  AgentSection,
-  ReasoningLogCard,
-  ToolExecutionCardDisplay,
-  UserMessage,
-} from './chat/MessageStream';
-import {
-  ASSISTANT_AVATAR_CLASSES,
-  ASSISTANT_BUBBLE_CLASSES,
-  MARKDOWN_PROSE_CLASSES,
-} from './styles';
+  TimeBadge,
+  ThoughtItem,
+  ActItem,
+  ObserveItem,
+  WorkPlanItem,
+  TextDeltaItem,
+  TextEndItem,
+  ClarificationAskedItem,
+  DecisionAskedItem,
+  EnvVarRequestedItem,
+  ArtifactCreatedItem,
+  TaskStartItem,
+  TaskCompleteItem,
+} from './timeline-items';
 
-import type {
-  ActEvent,
-  ArtifactCreatedEvent,
-  ClarificationAskedTimelineEvent,
-  ClarificationOption,
-  DecisionAskedTimelineEvent,
-  DecisionOption,
-  EnvVarField,
-  EnvVarRequestedTimelineEvent,
-  ObserveEvent,
-  TimelineEvent,
-} from '../../types/agent';
-
-// Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
-const MarkdownRenderer = lazy(async () => {
-  const [
-    { default: ReactMarkdown },
-    { default: remarkGfm },
-    { default: remarkMath },
-    { default: rehypeKatex },
-  ] = await Promise.all([
-    import('react-markdown'),
-    import('remark-gfm'),
-    import('remark-math'),
-    import('rehype-katex'),
-  ]);
-  await import('katex/dist/katex.min.css');
-
-  const MarkdownWrapper = ({ children }: { children: string }) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-      components={safeMarkdownComponents}
-    >
-      {children}
-    </ReactMarkdown>
-  );
-
-  return { default: MarkdownWrapper };
-});
-
-/**
- * TimeBadge - Natural time display component
- * 自然时间标签组件
- */
-function TimeBadge({ timestamp }: { timestamp: number }) {
-  const naturalTime = formatDistanceToNowCN(timestamp);
-  const readableTime = formatTimeOnly(timestamp);
-
-  return (
-    <span
-      className="text-[10px] text-slate-400 dark:text-slate-500 select-none"
-      title={formatDateTime(timestamp)}
-    >
-      {naturalTime} · {readableTime}
-    </span>
-  );
-}
+import type { ArtifactCreatedEvent, TimelineEvent } from '../../types/agent';
 
 export interface TimelineEventItemProps {
   /** The timeline event to render */
@@ -105,1090 +37,19 @@ export interface TimelineEventItemProps {
   isStreaming?: boolean | undefined;
   /** All timeline events (for looking ahead to find observe events) */
   allEvents?: TimelineEvent[] | undefined;
+  /** Index of the event in the timeline for staggered animations */
+  index?: number;
 }
 
-/**
- * Find matching observe event for an act event
- */
-function findMatchingObserve(
-  actEvent: ActEvent,
-  events: TimelineEvent[]
-): ObserveEvent | undefined {
-  const actIndex = events.indexOf(actEvent);
-
-  for (let i = actIndex + 1; i < events.length; i++) {
-    const event = events[i];
-    if (!event) continue;
-    if (event.type !== 'observe') continue;
-
-    // Priority 1: Match by execution_id
-    if (actEvent.execution_id && event.execution_id) {
-      if (actEvent.execution_id === event.execution_id) {
-        return event;
-      }
-      continue;
-    }
-
-    // Priority 2: Fallback to toolName matching
-    if (event.toolName === actEvent.toolName) {
-      return event;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Render thought event
- */
-function ThoughtItem({ event, isStreaming }: { event: TimelineEvent; isStreaming: boolean }) {
-  if (event.type !== 'thought') return null;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <AgentSection icon="psychology" opacity={!isStreaming}>
-        <ReasoningLogCard
-          steps={[event.content]}
-          summary="Thinking..."
-          completed={!isStreaming}
-          expanded={isStreaming}
-        />
-      </AgentSection>
-      <div className="pl-12">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render act (tool call) event
- * 工具调用事件渲染 - 带状态跟踪
- */
-function ActItem({
-  event,
-  allEvents,
-}: {
-  event: TimelineEvent;
-  allEvents?: TimelineEvent[] | undefined;
-}) {
-  if (event.type !== 'act') return null;
-
-  const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
-
-  const ToolCard = observeEvent ? (
-    <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
-      <ToolExecutionCardDisplay
-        toolName={event.toolName}
-        status={observeEvent.isError ? 'error' : 'success'}
-        parameters={event.toolInput}
-        result={observeEvent.isError ? undefined : observeEvent.toolOutput}
-        error={observeEvent.isError ? observeEvent.toolOutput : undefined}
-        duration={observeEvent.timestamp - event.timestamp}
-        defaultExpanded={false}
-      />
-    </AgentSection>
-  ) : (
-    <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800">
-      <ToolExecutionCardDisplay
-        toolName={event.toolName}
-        status="running"
-        parameters={event.toolInput}
-        defaultExpanded={true}
-      />
-    </AgentSection>
-  );
-
-  return (
-    <div className="flex flex-col gap-1">
-      {ToolCard}
-      <div className="pl-12">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render observe (tool result) event
- * 工具结果事件渲染 - 孤儿observe（无对应act）时显示
- */
-function ObserveItem({
-  event,
-  allEvents,
-}: {
-  event: TimelineEvent;
-  allEvents?: TimelineEvent[] | undefined;
-}) {
-  if (event.type !== 'observe') return null;
-
-  const hasMatchingAct = allEvents
-    ? allEvents.some((e) => {
-        if (e.type !== 'act') return false;
-        if (e.execution_id && event.execution_id) {
-          return e.execution_id === event.execution_id;
-        }
-        return e.toolName === event.toolName && e.timestamp < event.timestamp;
-      })
-    : false;
-
-  if (hasMatchingAct) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
-        <ToolExecutionCardDisplay
-          toolName={event.toolName}
-          status={event.isError ? 'error' : 'success'}
-          result={event.toolOutput}
-          error={event.isError ? event.toolOutput : undefined}
-          defaultExpanded={false}
-        />
-      </AgentSection>
-      <div className="pl-12">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render work_plan event
- */
-function WorkPlanItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== 'work_plan') return null;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <AgentSection icon="psychology">
-        <ReasoningLogCard
-          steps={event.steps.map((s) => s.description)}
-          summary={`Work Plan: ${String(event.steps.length)} steps`}
-          completed={event.status === 'completed'}
-          expanded={event.status !== 'completed'}
-        />
-      </AgentSection>
-      <div className="pl-12">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render task_start event (timeline marker when agent begins working on a task)
- */
-function TaskStartItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== 'task_start') return null;
-  const e = event;
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-3">
-        <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-xs">
-            task_alt
-          </span>
-        </div>
-        <div className="flex-1 min-w-0 pt-1">
-          <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
-            Task {e.orderIndex + 1}/{e.totalTasks}
-          </div>
-          <div className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{e.content}</div>
-        </div>
-      </div>
-      <div className="pl-10">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render task_complete event (compact completion badge)
- */
-function TaskCompleteItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== 'task_complete') return null;
-  const e = event;
-  const isSuccess = e.status === 'completed';
-  return (
-    <div className="flex items-start gap-3 my-2 opacity-70">
-      <div
-        className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-          isSuccess ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-        }`}
-      >
-        <span
-          className={`material-symbols-outlined text-xs ${
-            isSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-          }`}
-        >
-          {isSuccess ? 'check_circle' : 'cancel'}
-        </span>
-      </div>
-      <div className="flex-1 min-w-0 text-sm text-slate-500 dark:text-slate-400 pt-1">
-        Task {e.orderIndex + 1}/{e.totalTasks} {isSuccess ? 'completed' : e.status}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render text_delta event (typewriter effect)
- * Uses ReactMarkdown for consistent rendering with final message
- */
-function TextDeltaItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== 'text_delta') return null;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-4">
-        <div className={ASSISTANT_AVATAR_CLASSES}>
-          <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
-        </div>
-        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES}`}>
-          <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
-            <MarkdownRenderer>{event.content}</MarkdownRenderer>
-          </Suspense>
-        </div>
-      </div>
-      <div className="pl-11">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render text_end event as formal assistant message
- * This displays the final content after streaming completes
- */
-function TextEndItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== 'text_end') return null;
-
-  const fullText = event.fullText || '';
-  if (!fullText || !fullText.trim()) return null;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-4">
-        <div className={ASSISTANT_AVATAR_CLASSES}>
-          <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
-        </div>
-        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES}`}>
-          <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
-            <MarkdownRenderer>{fullText}</MarkdownRenderer>
-          </Suspense>
-        </div>
-      </div>
-      <div className="pl-11">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-// ============================================
-// Human-in-the-Loop Event Components
-// ============================================
-
-/**
- * Option button component for HITL events
- */
-function OptionButton({
-  option,
-  isSelected,
-  isRecommended,
-  onClick,
-  disabled,
-}: {
-  option: { id: string; label: string; description?: string | undefined };
-  isSelected?: boolean | undefined;
-  isRecommended?: boolean | undefined;
-  onClick: () => void;
-  disabled?: boolean | undefined;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`
-        w-full text-left p-3 rounded-lg border transition-all
-        ${
-          isSelected
-            ? 'border-primary bg-primary/10 dark:bg-primary/20'
-            : 'border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-800'
-        }
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-      `}
-    >
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-sm">{option.label}</span>
-        {isRecommended && (
-          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-            推荐
-          </span>
-        )}
-      </div>
-      {option.description && (
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{option.description}</p>
-      )}
-    </button>
-  );
-}
-
-/**
- * Render clarification_asked event (inline in timeline)
- */
-function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEvent }) {
-  const hasOptions = event.options && event.options.length > 0;
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [customAnswer, setCustomAnswer] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { respondToClarification } = useAgentV3Store();
-  const isAnswered = event.answered || false;
-
-  const handleSubmit = async () => {
-    const answer = hasOptions ? selectedOption || customAnswer : customAnswer;
-    if (!answer) return;
-
-    setIsSubmitting(true);
-    try {
-      await respondToClarification(event.requestId, answer);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const isSubmitDisabled = (() => {
-    if (isSubmitting) return true;
-    if (!hasOptions) return !customAnswer.trim();
-    return !selectedOption && !customAnswer;
-  })();
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-3">
-        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
-            help_outline
-          </span>
-        </div>
-        <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-              需要澄清
-            </span>
-            {isAnswered && (
-              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                已回答
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">{event.question}</p>
-
-          {!isAnswered ? (
-            <>
-              {hasOptions ? (
-                <div className="space-y-2 mb-3">
-                  {event.options.map((option: ClarificationOption, idx: number) => (
-                    <OptionButton
-                      key={option.id || `option-${idx}`}
-                      option={option}
-                      isSelected={selectedOption === option.id}
-                      isRecommended={option.recommended}
-                      onClick={() => {
-                        setSelectedOption(option.id);
-                        setCustomAnswer('');
-                      }}
-                      disabled={isSubmitting}
-                    />
-                  ))}
-                </div>
-              ) : event.allowCustom ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                  暂无预设选项，请直接输入
-                </p>
-              ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">暂无可选选项</p>
-              )}
-
-              {(event.allowCustom || !hasOptions) && (hasOptions || event.allowCustom) && (
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    placeholder="或输入自定义答案..."
-                    value={customAnswer}
-                    onChange={(e) => {
-                      setCustomAnswer(e.target.value);
-                      setSelectedOption(null);
-                    }}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  void handleSubmit();
-                }}
-                disabled={isSubmitDisabled}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSubmitting ? '提交中...' : '确认'}
-              </button>
-            </>
-          ) : (
-            <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">已选择:</span> {event.answer}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="pl-11">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render decision_asked event (inline in timeline)
- */
-function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
-  const [selectedOption, setSelectedOption] = useState<string | null>(event.defaultOption || null);
-  const [customDecision, setCustomDecision] = useState('');
-  const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { respondToDecision } = useAgentV3Store();
-  const isAnswered = event.answered || false;
-  const hasOptions = event.options && event.options.length > 0;
-  const isMultiSelect = event.selectionMode === 'multiple';
-
-  const toggleMultiSelect = (optionId: string) => {
-    setSelectedMultiple((prev) =>
-      prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]
-    );
-  };
-
-  const handleSubmit = async () => {
-    let decision: string | string[];
-    if (!hasOptions && customDecision) {
-      decision = customDecision;
-    } else if (isMultiSelect) {
-      decision = selectedMultiple;
-    } else if (customDecision) {
-      decision = customDecision;
-    } else if (selectedOption) {
-      decision = selectedOption;
-    } else {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await respondToDecision(event.requestId, decision);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const isSubmitDisabled = (() => {
-    if (isSubmitting) return true;
-    if (!hasOptions) return !customDecision;
-    if (isMultiSelect) return selectedMultiple.length === 0;
-    if (customDecision) return false;
-    return !selectedOption;
-  })();
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-3">
-        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-lg">
-            rule
-          </span>
-        </div>
-        <div className="flex-1 min-w-0 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wider">
-              {isMultiSelect ? '\u591A\u9009\u51B3\u7B56' : '\u9700\u8981\u51B3\u7B56'}
-            </span>
-            {isAnswered && (
-              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                \u5DF2\u51B3\u5B9A
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">{event.question}</p>
-
-          {!isAnswered ? (
-            <>
-              {hasOptions ? (
-                <>
-                  <div className="space-y-2 mb-3">
-                    {event.options.map((option: DecisionOption, idx: number) => (
-                      <OptionButton
-                        key={option.id || `option-${idx}`}
-                        option={option}
-                        isSelected={
-                          isMultiSelect
-                            ? selectedMultiple.includes(option.id)
-                            : selectedOption === option.id
-                        }
-                        isRecommended={option.recommended}
-                        onClick={() => {
-                          if (isMultiSelect) {
-                            toggleMultiSelect(option.id);
-                          } else {
-                            setSelectedOption(option.id);
-                            setCustomDecision('');
-                          }
-                        }}
-                        disabled={isSubmitting}
-                      />
-                    ))}
-                  </div>
-
-                  {event.allowCustom && !isMultiSelect && (
-                    <div className="mb-3">
-                      <input
-                        type="text"
-                        placeholder="\u6216\u8F93\u5165\u81EA\u5B9A\u4E49\u51B3\u7B56..."
-                        value={customDecision}
-                        onChange={(e) => {
-                          setCustomDecision(e.target.value);
-                          setSelectedOption(null);
-                        }}
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      />
-                    </div>
-                  )}
-                </>
-              ) : event.allowCustom ? (
-                <div className="mb-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                    \u6CA1\u6709\u9884\u8BBE\u9009\u9879\uFF0C\u8BF7\u76F4\u63A5\u8F93\u5165\u4F60\u7684\u51B3\u7B56\uFF1A
-                  </p>
-                  <input
-                    type="text"
-                    placeholder="\u8F93\u5165\u4F60\u7684\u51B3\u7B56..."
-                    value={customDecision}
-                    onChange={(e) => {
-                      setCustomDecision(e.target.value);
-                    }}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
-              ) : (
-                <div className="mb-3 text-xs text-slate-400 dark:text-slate-500 italic">
-                  \u6CA1\u6709\u53EF\u7528\u7684\u9009\u9879
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  void handleSubmit();
-                }}
-                disabled={isSubmitDisabled}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSubmitting
-                  ? '\u63D0\u4EA4\u4E2D...'
-                  : isMultiSelect
-                    ? `\u786E\u8BA4\u9009\u62E9 (${selectedMultiple.length})`
-                    : '\u786E\u8BA4\u51B3\u7B56'}
-              </button>
-            </>
-          ) : (
-            <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">\u5DF2\u51B3\u5B9A\uFF1A</span> {event.decision}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="pl-11">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render env_var_requested event (inline in timeline)
- */
-function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent }) {
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { respondToEnvVar } = useAgentV3Store();
-  const isAnswered = event.answered || false;
-
-  const handleChange = (name: string, value: string) => {
-    setValues((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async () => {
-    // Check required fields
-    const missingRequired = event.fields.filter((f: EnvVarField) => f.required && !values[f.name]);
-    if (missingRequired.length > 0) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await respondToEnvVar(event.requestId, values);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const requiredFilled = event.fields
-    .filter((f: EnvVarField) => f.required)
-    .every((f: EnvVarField) => values[f.name]);
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-3">
-        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
-            key
-          </span>
-        </div>
-        <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-              需要配置
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{event.toolName}</span>
-            {isAnswered && (
-              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                已提供
-              </span>
-            )}
-          </div>
-          {event.message && (
-            <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">{event.message}</p>
-          )}
-
-          {!isAnswered ? (
-            <>
-              <div className="space-y-3 mb-3">
-                {event.fields.map((field: EnvVarField) => (
-                  <div key={field.name}>
-                    <div className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
-                    </div>
-                    {field.description && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                        {field.description}
-                      </p>
-                    )}
-                    {field.input_type === 'textarea' ? (
-                      <textarea
-                        placeholder={field.placeholder || `请输入 ${field.label}`}
-                        value={values[field.name] || field.default_value || ''}
-                        onChange={(e) => {
-                          handleChange(field.name, e.target.value);
-                        }}
-                        disabled={isSubmitting}
-                        rows={3}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      />
-                    ) : (
-                      <input
-                        type={field.input_type === 'password' ? 'password' : 'text'}
-                        placeholder={field.placeholder || `请输入 ${field.label}`}
-                        value={values[field.name] || field.default_value || ''}
-                        onChange={(e) => {
-                          handleChange(field.name, e.target.value);
-                        }}
-                        disabled={isSubmitting}
-                        className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  void handleSubmit();
-                }}
-                disabled={isSubmitting || !requiredFilled}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSubmitting ? '保存中...' : '保存配置'}
-              </button>
-            </>
-          ) : (
-            <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">已配置:</span> {event.providedVariables?.join(', ')}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="pl-11">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Render artifact created event
- * 显示工具生成的文件（图片、视频、文档等）
- */
-function ArtifactCreatedItem({
-  event,
-}: {
-  event: ArtifactCreatedEvent & { error?: string | undefined };
-}) {
-  const { t } = useTranslation();
-  const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
-
-  // Subscribe to sandbox store for live URL updates (artifact_ready event)
-  const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
-  const artifactUrl = storeArtifact?.url || event.url;
-  const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
-  const artifactError = storeArtifact?.errorMessage || event.error;
-  const artifactStatus =
-    storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
-
-  // Check if this artifact can be opened in canvas (text-decodable content or previewable media/office)
-  const isCanvasCompatible =
-    ['code', 'document', 'data', 'image', 'video', 'audio'].includes(event.category) ||
-    event.mimeType.startsWith('text/') ||
-    event.mimeType.startsWith('image/') ||
-    event.mimeType.startsWith('video/') ||
-    event.mimeType.startsWith('audio/') ||
-    [
-      'application/json',
-      'application/xml',
-      'application/yaml',
-      'application/javascript',
-      'application/typescript',
-      'application/x-python',
-      'application/pdf',
-      'application/msword',
-      'application/vnd.ms-excel',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    ].includes(event.mimeType);
-
-  const handleOpenInCanvas = useCallback(async () => {
-    const url = artifactUrl || artifactPreviewUrl;
-    if (!url) return;
-
-    // Media and Office files: open directly with URL, no content fetch needed
-    const mime = event.mimeType.toLowerCase();
-    if (
-      mime.startsWith('image/') ||
-      mime.startsWith('video/') ||
-      mime.startsWith('audio/') ||
-      isOfficeMimeType(mime) ||
-      isOfficeExtension(event.filename)
-    ) {
-      useCanvasStore.getState().openTab({
-        id: event.artifactId,
-        title: event.filename,
-        type: 'preview',
-        content: url,
-        mimeType: event.mimeType,
-        artifactId: event.artifactId,
-        artifactUrl: url,
-      });
-      const currentMode = useLayoutModeStore.getState().mode;
-      if (currentMode !== 'canvas') {
-        useLayoutModeStore.getState().setMode('canvas');
-      }
-      return;
-    }
-
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
-      }
-      const responseType = response.headers.get('content-type')?.toLowerCase() || '';
-      if (responseType.includes('application/pdf')) {
-        useCanvasStore.getState().openTab({
-          id: event.artifactId,
-          title: event.filename,
-          type: 'preview',
-          content: url,
-          mimeType: 'application/pdf',
-          pdfVerified: true,
-          artifactId: event.artifactId,
-          artifactUrl: url,
-        });
-        const currentMode = useLayoutModeStore.getState().mode;
-        if (currentMode !== 'canvas') {
-          useLayoutModeStore.getState().setMode('canvas');
-        }
-        return;
-      }
-      const content = await response.text();
-
-      // Check if this is HTML content - should use preview mode with iframe
-      const isHtmlFile =
-        event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
-
-      if (isHtmlFile) {
-        // HTML files should be rendered in preview mode using iframe
-        useCanvasStore.getState().openTab({
-          id: event.artifactId,
-          title: event.filename,
-          type: 'preview',
-          content,
-          artifactId: event.artifactId,
-          artifactUrl: url,
-        });
-      } else {
-        // Determine canvas content type from artifact category
-        const typeMap: Record<string, CanvasContentType> = {
-          code: 'code',
-          document: 'markdown',
-          data: 'data',
-        };
-        const contentType: CanvasContentType = typeMap[event.category] || 'code';
-
-        // Extract language from filename extension
-        const ext = event.filename.split('.').pop()?.toLowerCase();
-        const langMap: Record<string, string> = {
-          py: 'python',
-          js: 'javascript',
-          ts: 'typescript',
-          tsx: 'tsx',
-          jsx: 'jsx',
-          rs: 'rust',
-          go: 'go',
-          java: 'java',
-          cpp: 'cpp',
-          c: 'c',
-          rb: 'ruby',
-          php: 'php',
-          sh: 'bash',
-          sql: 'sql',
-          html: 'html',
-          css: 'css',
-          json: 'json',
-          yaml: 'yaml',
-          yml: 'yaml',
-          xml: 'xml',
-          md: 'markdown',
-          toml: 'toml',
-          ini: 'ini',
-          csv: 'csv',
-        };
-
-        useCanvasStore.getState().openTab({
-          id: event.artifactId,
-          title: event.filename,
-          type: contentType,
-          content,
-          language: ext ? langMap[ext] : undefined,
-          artifactId: event.artifactId,
-          artifactUrl: url,
-        });
-      }
-
-      const currentMode = useLayoutModeStore.getState().mode;
-      if (currentMode !== 'canvas') {
-        useLayoutModeStore.getState().setMode('canvas');
-      }
-    } catch {
-      // Silently fail — user can still download
-    }
-  }, [
-    artifactUrl,
-    artifactPreviewUrl,
-    event.artifactId,
-    event.filename,
-    event.category,
-    event.mimeType,
-  ]);
-
-  // Determine icon based on category
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'image':
-        return 'image';
-      case 'video':
-        return 'movie';
-      case 'audio':
-        return 'audio_file';
-      case 'document':
-        return 'description';
-      case 'code':
-        return 'code';
-      case 'data':
-        return 'table_chart';
-      case 'archive':
-        return 'folder_zip';
-      default:
-        return 'attach_file';
-    }
-  };
-
-  // Format file size
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${String(bytes)} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const isImage = event.category === 'image';
-  const url = artifactUrl || artifactPreviewUrl;
-  const hasError = artifactStatus === 'error';
-
-  return (
-    <div className="flex flex-col gap-1">
-      {/* Custom agent section with dynamic icon */}
-      <div className="flex items-start gap-4">
-        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-          <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
-            {getCategoryIcon(event.category)}
-          </span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-700/50">
-            {/* Header */}
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
-                {getCategoryIcon(event.category)}
-              </span>
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                {t('agent.artifact.fileGenerated', 'File generated')}
-              </span>
-              {event.sourceTool && (
-                <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded">
-                  {event.sourceTool}
-                </span>
-              )}
-            </div>
-
-            {/* Image Preview */}
-            {isImage && url && !imageError && (
-              <div className="mb-3 relative">
-                {!imageLoaded && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg min-h-[100px]">
-                    <span className="material-symbols-outlined animate-spin text-slate-400">
-                      progress_activity
-                    </span>
-                  </div>
-                )}
-                <img
-                  src={url}
-                  alt={event.filename}
-                  className={`max-w-full max-h-75 rounded-lg shadow-sm object-contain ${
-                    imageLoaded ? 'opacity-100' : 'opacity-0'
-                  } transition-opacity duration-300`}
-                  onLoad={() => {
-                    setImageLoaded(true);
-                  }}
-                  onError={() => {
-                    setImageError(true);
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Error State */}
-            {hasError && (
-              <div className="mb-3 flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200/50 dark:border-red-700/50">
-                <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-base">
-                  error
-                </span>
-                <span className="text-xs text-red-600 dark:text-red-400">{artifactError}</span>
-              </div>
-            )}
-
-            {/* File Info */}
-            <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-base">
-                  insert_drive_file
-                </span>
-                <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
-                  {event.filename}
-                </span>
-              </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                {formatSize(event.sizeBytes)}
-              </span>
-              {url && (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
-                  download={event.filename}
-                >
-                  <span className="material-symbols-outlined text-base">download</span>
-                  {t('agent.artifact.download', 'Download')}
-                </a>
-              )}
-              {isCanvasCompatible && url && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleOpenInCanvas();
-                  }}
-                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
-                >
-                  <PanelRight size={14} />
-                  {t('agent.artifact.openInCanvas', 'Open in Canvas')}
-                </button>
-              )}
-              {!url && artifactStatus === 'uploading' && (
-                <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                  <Loader2 size={14} className="animate-spin" />
-                  {t('agent.artifact.uploading', 'Uploading...')}
-                </span>
-              )}
-            </div>
-
-            {/* Additional metadata */}
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span className="px-2 py-0.5 bg-white/50 dark:bg-slate-800/50 rounded">
-                {event.mimeType}
-              </span>
-              <span className="capitalize px-2 py-0.5 bg-white/50 dark:bg-slate-800/50 rounded">
-                {event.category}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="pl-12">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * TimelineEventItem component
- */
 export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
-  ({ event, isStreaming = false, allEvents }) => {
+  ({ event, isStreaming = false, allEvents, index }) => {
     const events = allEvents ?? [event];
+    const delayStyle = { animationDelay: `${Math.min(index ?? 0, 5) * 50}ms` };
 
     switch (event.type) {
       case 'user_message':
         return (
-          <div className="my-4 animate-slide-up">
+          <div className="my-4 animate-slide-up" style={delayStyle}>
             <div className="flex items-start justify-end gap-3">
               <div className="flex flex-col items-end gap-1 max-w-[80%]">
                 <UserMessage
@@ -1213,7 +74,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'assistant_message':
         return (
-          <div className="my-4 animate-slide-up">
+          <div className="my-4 animate-slide-up" style={delayStyle}>
             <div className="flex items-start gap-3">
               <div className="flex flex-col gap-1 flex-1">
                 <AssistantMessage
@@ -1231,28 +92,28 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'thought':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <ThoughtItem event={event} isStreaming={isStreaming} />
           </div>
         );
 
       case 'act':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <ActItem event={event} allEvents={events} />
           </div>
         );
 
       case 'observe':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <ObserveItem event={event} allEvents={events} />
           </div>
         );
 
       case 'work_plan':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <WorkPlanItem event={event} />
           </div>
         );
@@ -1263,7 +124,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
           return null;
         }
         return (
-          <div className="my-4 animate-slide-up">
+          <div className="my-4 animate-slide-up" style={delayStyle}>
             <TextDeltaItem event={event} />
           </div>
         );
@@ -1273,7 +134,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'text_end':
         return (
-          <div className="my-4 animate-slide-up">
+          <div className="my-4 animate-slide-up" style={delayStyle}>
             <TextEndItem event={event} />
           </div>
         );
@@ -1281,7 +142,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       // Human-in-the-loop events
       case 'clarification_asked':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <ClarificationAskedItem event={event} />
           </div>
         );
@@ -1292,7 +153,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'decision_asked':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <DecisionAskedItem event={event} />
           </div>
         );
@@ -1303,7 +164,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'env_var_requested':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <EnvVarRequestedItem event={event} />
           </div>
         );
@@ -1314,7 +175,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'artifact_created':
         return (
-          <div className="my-3 animate-slide-up">
+          <div className="my-3 animate-slide-up" style={delayStyle}>
             <ArtifactCreatedItem
               event={event as ArtifactCreatedEvent & { error?: string | undefined }}
             />
@@ -1329,14 +190,14 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'task_start':
         return (
-          <div className="animate-slide-up">
+          <div className="animate-slide-up" style={delayStyle}>
             <TaskStartItem event={event} />
           </div>
         );
 
       case 'task_complete':
         return (
-          <div className="animate-slide-up">
+          <div className="animate-slide-up" style={delayStyle}>
             <TaskCompleteItem event={event} />
           </div>
         );

@@ -57,7 +57,6 @@ import { estimateGroupedItemHeight } from './message/heightEstimation';
 import {
   MessageAreaContext,
   useMessageArea,
-  isNearBottom,
   LOADING_SYMBOL,
   EMPTY_SYMBOL,
   SCROLL_INDICATOR_SYMBOL,
@@ -72,6 +71,8 @@ import {
   StreamingContentMarker,
 } from './message/markers';
 import { StreamingToolPreparation } from './message/StreamingToolPreparation';
+import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
+import { useMessageAreaScroll } from './message/useMessageAreaScroll';
 import { MessageBubble } from './MessageBubble';
 import { MARKDOWN_PROSE_CLASSES } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
@@ -249,14 +250,19 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const isThinkingStreaming = storeIsThinkingStreaming;
 
     const containerRef = useRef<HTMLDivElement>(null);
-    const [showScrollButton, setShowScrollButton] = useState(false);
-    const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
     const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
     const { t } = useTranslation();
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(streamingContent);
 
     // Memoize grouped timeline items to avoid re-grouping on every render
     const groupedItems = useMemo(() => groupTimelineEvents(timeline), [timeline]);
+
+    const lastTimelineGroupIndex = useMemo(() => {
+      for (let i = groupedItems.length - 1; i >= 0; i--) {
+        if (groupedItems[i]?.kind === 'timeline') return i;
+      }
+      return -1;
+    }, [groupedItems]);
 
     const pinnedEventIds = useAgentV3Store((s) => s.pinnedEventIds);
     const togglePinEvent = useAgentV3Store((s) => s.togglePinEvent);
@@ -266,24 +272,33 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       [timeline, pinnedEventIds]
     );
 
-    // Parse children to detect sub-components
-    const childrenArray = Children.toArray(children);
-    // Helper to find a child with a given symbol marker
-    const findMarkerChild = <P,>(sym: symbol): React.ReactElement<P> | undefined =>
-      childrenArray.find(
-        (child): child is React.ReactElement<P> =>
-          isValidElement(child) &&
-          typeof child.type === 'function' &&
-          (child.type as unknown as _SymbolTagged)[sym] === true
-      );
-    const loadingChild = findMarkerChild<_MessageAreaLoadingProps>(LOADING_SYMBOL);
-    const emptyChild = findMarkerChild<_MessageAreaEmptyProps>(EMPTY_SYMBOL);
-    const scrollIndicatorChild =
-      findMarkerChild<_MessageAreaScrollIndicatorProps>(SCROLL_INDICATOR_SYMBOL);
-    const scrollButtonChild = findMarkerChild<_MessageAreaScrollButtonProps>(SCROLL_BUTTON_SYMBOL);
-    const contentChild = findMarkerChild<_MessageAreaContentProps>(CONTENT_SYMBOL);
-    const streamingContentChild =
-      findMarkerChild<_MessageAreaStreamingContentProps>(STREAMING_CONTENT_SYMBOL);
+    // Parse children to detect sub-components (memoized to avoid re-scanning on every render)
+    const markerChildren = useMemo(() => {
+      const arr = Children.toArray(children);
+      const find = <P,>(sym: symbol): React.ReactElement<P> | undefined =>
+        arr.find(
+          (child): child is React.ReactElement<P> =>
+            isValidElement(child) &&
+            typeof child.type === 'function' &&
+            (child.type as unknown as _SymbolTagged)[sym] === true
+        );
+      return {
+        loadingChild: find<_MessageAreaLoadingProps>(LOADING_SYMBOL),
+        emptyChild: find<_MessageAreaEmptyProps>(EMPTY_SYMBOL),
+        scrollIndicatorChild: find<_MessageAreaScrollIndicatorProps>(SCROLL_INDICATOR_SYMBOL),
+        scrollButtonChild: find<_MessageAreaScrollButtonProps>(SCROLL_BUTTON_SYMBOL),
+        contentChild: find<_MessageAreaContentProps>(CONTENT_SYMBOL),
+        streamingContentChild: find<_MessageAreaStreamingContentProps>(STREAMING_CONTENT_SYMBOL),
+      };
+    }, [children]);
+    const {
+      loadingChild,
+      emptyChild,
+      scrollIndicatorChild,
+      scrollButtonChild,
+      contentChild,
+      streamingContentChild,
+    } = markerChildren;
 
     // Determine if using compound mode
     const hasSubComponents =
@@ -303,283 +318,84 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const includeContent = hasSubComponents ? !!contentChild : true;
     const includeStreamingContent = hasSubComponents ? !!streamingContentChild : true;
 
-    // Pagination state refs
-    const prevTimelineLengthRef = useRef(timeline.length);
-    const previousScrollHeightRef = useRef(0);
-    const previousScrollTopRef = useRef(0);
-    const isLoadingEarlierRef = useRef(false);
-    const isInitialLoadRef = useRef(true);
-    const hasScrolledInitiallyRef = useRef(false);
-    const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const lastLoadTimeRef = useRef(0);
-    // Suppress scroll events during initial positioning to prevent scrollbar jitter
-    const isPositioningRef = useRef(false);
-
-    // Track if user has manually scrolled up during streaming
-    const userScrolledUpRef = useRef(false);
-
-    // Track conversation switch to prevent scroll jitter
-    const isSwitchingConversationRef = useRef(false);
-    const lastConversationIdRef = useRef(conversationId);
-
-    // Context value
-    const contextValue: _MessageAreaContextValue = {
+    // Scroll management and pagination (extracted to useMessageAreaScroll)
+    const {
+      showScrollButton,
+      showLoadingIndicator,
+      scrollToBottom,
+      handleScroll,
+      isInitialLoadRef,
+      hasScrolledInitiallyRef,
+      prevTimelineLengthRef,
+      previousScrollHeightRef,
+      previousScrollTopRef,
+      isLoadingEarlierRef,
+      userScrolledUpRef,
+      isSwitchingConversationRef,
+      isPositioningRef,
+      lastConversationIdRef,
+    } = useMessageAreaScroll({
+      containerRef,
       timeline,
+      isStreaming,
+      isLoading,
       streamingContent,
       streamingThought,
-      isStreaming,
-      isThinkingStreaming,
-      isLoading,
       hasEarlierMessages,
       onLoadEarlier,
-      isLoadingEarlier: propIsLoadingEarlier,
+      propIsLoadingEarlier,
       preloadItemCount,
-      conversationId,
-      scroll: {
+    });
+
+    const scrollState = useMemo(
+      () => ({
         showScrollButton,
         showLoadingIndicator,
-        scrollToBottom: useCallback(() => {
-          const container = containerRef.current;
-          if (!container) return;
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior: 'smooth',
-          });
-          setShowScrollButton(false);
-          userScrolledUpRef.current = false;
-        }, []),
+        scrollToBottom,
         containerRef,
-      },
-    };
+      }),
+      [showScrollButton, showLoadingIndicator, scrollToBottom]
+    );
 
-    // Save scroll position before loading earlier messages
-    const saveScrollPosition = useCallback(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      previousScrollHeightRef.current = container.scrollHeight;
-      previousScrollTopRef.current = container.scrollTop;
-    }, []);
-
-    // Restore scroll position after loading earlier messages
-    const restoreScrollPosition = useCallback(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      isPositioningRef.current = true;
-      const newScrollHeight = container.scrollHeight;
-      const heightDifference = newScrollHeight - previousScrollHeightRef.current;
-
-      const targetScrollTop = previousScrollTopRef.current + heightDifference;
-
-      container.scrollTop = targetScrollTop;
-
-      previousScrollHeightRef.current = 0;
-      previousScrollTopRef.current = 0;
-      // Release guard after layout settles
-      requestAnimationFrame(() => {
-        isPositioningRef.current = false;
-      });
-    }, []);
-
-    // Aggressive preload logic with screen height adaptation
-    const checkAndPreload = useCallback(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      if (
-        !isLoadingEarlierRef.current &&
-        !propIsLoadingEarlier &&
-        hasEarlierMessages &&
-        onLoadEarlier
-      ) {
-        const { scrollTop, scrollHeight, clientHeight } = container;
-
-        // If content doesn't fill the container (no scrollbar needed),
-        // trigger loading immediately to fill the screen
-        const contentFillsContainer = scrollHeight > clientHeight + 10; // 10px tolerance
-
-        const avgMessageHeight = 100;
-        const visibleItemsFromTop = Math.ceil(scrollTop / avgMessageHeight);
-
-        // Trigger load when:
-        // 1. Content doesn't fill container (need more messages to fill screen), OR
-        // 2. User has scrolled near the top (visibleItemsFromTop < threshold)
-        const shouldTriggerLoad = !contentFillsContainer || visibleItemsFromTop < preloadItemCount;
-
-        if (shouldTriggerLoad) {
-          const now = Date.now();
-          if (now - lastLoadTimeRef.current < 300) return;
-
-          saveScrollPosition();
-
-          isLoadingEarlierRef.current = true;
-          lastLoadTimeRef.current = now;
-
-          loadingIndicatorTimeoutRef.current = setTimeout(() => {
-            setShowLoadingIndicator(true);
-          }, 300);
-
-          onLoadEarlier();
-
-          setTimeout(() => {
-            isLoadingEarlierRef.current = false;
-          }, 500);
-        }
-      }
-    }, [
-      hasEarlierMessages,
-      onLoadEarlier,
-      preloadItemCount,
-      saveScrollPosition,
-      propIsLoadingEarlier,
-    ]);
-
-    // Handle scroll events
-    const handleScroll = useCallback(() => {
-      const container = containerRef.current;
-      if (!container || isLoading || isSwitchingConversationRef.current || isPositioningRef.current)
-        return;
-
-      checkAndPreload();
-
-      const atBottom = isNearBottom(container, 100);
-      setShowScrollButton(!atBottom && timeline.length > 0);
-
-      if (isStreaming && !atBottom) {
-        userScrolledUpRef.current = true;
-      } else if (isStreaming && atBottom) {
-        userScrolledUpRef.current = false;
-      }
-    }, [isLoading, timeline.length, checkAndPreload, isStreaming]);
-
-    // Handle timeline changes
-    useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      const currentTimelineLength = timeline.length;
-      const previousTimelineLength = prevTimelineLengthRef.current;
-      const hasNewMessages = currentTimelineLength > previousTimelineLength;
-      const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
-
-      // Handle initial load — also covers data arriving after conversation switch
-      if (isInitialLoad && !hasScrolledInitiallyRef.current) {
-        hasScrolledInitiallyRef.current = true;
-        isInitialLoadRef.current = false;
-        prevTimelineLengthRef.current = currentTimelineLength;
-        isPositioningRef.current = true;
-
-        // Double-rAF: first frame for virtualizer layout, second for scroll
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            if (groupedItems.length > 0) {
-              virtualizer.scrollToIndex(groupedItems.length - 1, { align: 'end' });
-            } else if (containerRef.current) {
-              containerRef.current.scrollTop = containerRef.current.scrollHeight;
-            }
-            // Allow scroll events after positioning settles
-            requestAnimationFrame(() => {
-              isPositioningRef.current = false;
-            });
-          });
-        });
-        return;
-      }
-
-      // Handle pagination scroll restoration (skip if switching conversation)
-      if (hasNewMessages && !isLoading && previousScrollHeightRef.current > 0) {
-        if (!isSwitchingConversationRef.current) {
-          restoreScrollPosition();
-        }
-        prevTimelineLengthRef.current = currentTimelineLength;
-
-        if (loadingIndicatorTimeoutRef.current) {
-          clearTimeout(loadingIndicatorTimeoutRef.current);
-          loadingIndicatorTimeoutRef.current = null;
-        }
-        setTimeout(() => {
-          setShowLoadingIndicator(false);
-        }, 0);
-        return;
-      }
-
-      // Handle new messages - clear switching flag and auto-scroll
-      if (hasNewMessages) {
-        // Clear switching flag when new messages arrive
-        isSwitchingConversationRef.current = false;
-
-        if (isStreaming || isNearBottom(container, 200)) {
-          requestAnimationFrame(() => {
-            if (containerRef.current) {
-              containerRef.current.scrollTop = containerRef.current.scrollHeight;
-            }
-          });
-          setTimeout(() => {
-            setShowScrollButton(false);
-          }, 0);
-        } else {
-          setTimeout(() => {
-            setShowScrollButton(true);
-          }, 0);
-        }
-      }
-
-      prevTimelineLengthRef.current = currentTimelineLength;
-      // virtualizer is intentionally excluded from deps: it creates a new reference every render
-      // and would cause this effect to fire continuously. It is always current via closure.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, groupedItems.length]);
-
-    // Auto-scroll when streaming content updates
-    useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      if (isStreaming && !userScrolledUpRef.current) {
-        // Clear switching flag during streaming (user is actively viewing this conversation)
-        isSwitchingConversationRef.current = false;
-
-        requestAnimationFrame(() => {
-          if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
-          }
-        });
-      }
-    }, [streamingContent, streamingThought, isStreaming]);
-
-    // Cleanup timeout on unmount
-    useEffect(() => {
-      return () => {
-        if (loadingIndicatorTimeoutRef.current) {
-          clearTimeout(loadingIndicatorTimeoutRef.current);
-        }
-      };
-    }, []);
-
-    // Clear loading indicator when hasEarlierMessages becomes false
-    useEffect(() => {
-      if (!hasEarlierMessages) {
-        setShowLoadingIndicator(false);
-        if (loadingIndicatorTimeoutRef.current) {
-          clearTimeout(loadingIndicatorTimeoutRef.current);
-          loadingIndicatorTimeoutRef.current = null;
-        }
-      }
-    }, [hasEarlierMessages]);
-
-    // Reset userScrolledUpRef when streaming ends
-    useEffect(() => {
-      if (!isStreaming) {
-        userScrolledUpRef.current = false;
-      }
-    }, [isStreaming]);
+    const contextValue: _MessageAreaContextValue = useMemo(
+      () => ({
+        timeline,
+        streamingContent,
+        streamingThought,
+        isStreaming,
+        isThinkingStreaming,
+        isLoading,
+        hasEarlierMessages,
+        onLoadEarlier,
+        isLoadingEarlier: propIsLoadingEarlier,
+        preloadItemCount,
+        conversationId,
+        scroll: scrollState,
+      }),
+      [
+        timeline,
+        streamingContent,
+        streamingThought,
+        isStreaming,
+        isThinkingStreaming,
+        isLoading,
+        hasEarlierMessages,
+        onLoadEarlier,
+        propIsLoadingEarlier,
+        preloadItemCount,
+        conversationId,
+        scrollState,
+      ]
+    );
 
     // Determine states
     const shouldShowLoading =
       (propIsLoadingEarlier && hasEarlierMessages) || (showLoadingIndicator && hasEarlierMessages);
     const showLoadingState = isLoading && timeline.length === 0;
     const showEmptyState = !isLoading && timeline.length === 0;
+
+    const timelineLen = timeline.length;
+    const lastEventIndex = timelineLen - 1;
 
     // Virtualizer setup
     const estimateSize = useCallback(
@@ -598,7 +414,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       paddingEnd: isStreaming ? 16 : 0,
     });
 
-    // Reset scroll state and virtualizer when conversation changes
+    // biome-ignore lint/correctness/useExhaustiveDependencies: refs from useMessageAreaScroll are stable MutableRefObject references that never change identity
     useEffect(() => {
       if (lastConversationIdRef.current === conversationId) return;
       lastConversationIdRef.current = conversationId;
@@ -646,81 +462,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       };
     }, [conversationId, virtualizer, groupedItems.length, timeline.length]);
 
-    // j/k keyboard navigation for messages
-    const focusedMsgRef = useRef<number>(-1);
-    const [focusedMsgIndex, setFocusedMsgIndex] = useState(-1);
-
-    // Build navigable indices (user_message and assistant_message only)
-    const navigableIndices = useCallback(() => {
-      const indices: number[] = [];
-      groupedItems.forEach((item, idx) => {
-        if (item.kind === 'event') {
-          const t = item.event.type;
-          if (t === 'user_message' || t === 'assistant_message') {
-            indices.push(idx);
-          }
-        }
-      });
-      return indices;
-    }, [groupedItems]);
-
-    useEffect(() => {
-      focusedMsgRef.current = focusedMsgIndex;
-    }, [focusedMsgIndex]);
-
-    useEffect(() => {
-      const handleNav = (e: KeyboardEvent) => {
-        const target = e.target as HTMLElement;
-        const isInput =
-          target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-        if (isInput) return;
-
-        if (e.key === 'j' || e.key === 'k') {
-          e.preventDefault();
-          const indices = navigableIndices();
-          if (indices.length === 0) return;
-
-          const current = focusedMsgRef.current;
-          let currentPos = indices.indexOf(current);
-
-          if (e.key === 'j') {
-            currentPos = currentPos < indices.length - 1 ? currentPos + 1 : currentPos;
-          } else {
-            currentPos = currentPos > 0 ? currentPos - 1 : 0;
-          }
-
-          const nextIndex = indices[currentPos] ?? 0;
-          setFocusedMsgIndex(nextIndex);
-
-          // Scroll to the focused message
-          const el = containerRef.current?.querySelector(`[data-msg-index="${String(nextIndex)}"]`);
-          if (el) {
-            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          }
-        }
-
-        // c to copy focused message content
-        if (e.key === 'c' && focusedMsgRef.current >= 0) {
-          const item = groupedItems[focusedMsgRef.current];
-          if (item?.kind === 'event') {
-            const ev = item.event;
-            if (ev.type === 'user_message' || ev.type === 'assistant_message') {
-              navigator.clipboard.writeText(ev.content).catch(() => {});
-            }
-          }
-        }
-
-        // Escape to clear focus
-        if (e.key === 'Escape' && focusedMsgRef.current >= 0) {
-          setFocusedMsgIndex(-1);
-        }
-      };
-
-      window.addEventListener('keydown', handleNav);
-      return () => {
-        window.removeEventListener('keydown', handleNav);
-      };
-    }, [navigableIndices, groupedItems]);
+    // Keyboard navigation (extracted to useMessageAreaKeyboard)
+    const { focusedMsgIndex } = useMessageAreaKeyboard({
+      containerRef,
+      groupedItems,
+    });
 
     return (
       <MessageAreaContext.Provider value={contextValue}>
@@ -852,8 +598,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                               steps={item.steps}
                               isStreaming={
                                 isStreaming &&
-                                item.startIndex + item.steps.length >= timeline.length
+                                item.startIndex + item.steps.length >= timelineLen
                               }
+                              defaultCollapsed={virtualRow.index !== lastTimelineGroupIndex}
                             />
                           </div>
                         </div>
@@ -882,7 +629,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                               group={item.group}
                               isStreaming={
                                 isStreaming &&
-                                item.startIndex + item.group.events.length >= timeline.length
+                                item.startIndex + item.group.events.length >= timelineLen
                               }
                             />
                           </div>
@@ -945,7 +692,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       <div className="pb-1.5">
                         <MessageBubble
                           event={event}
-                          isStreaming={isStreaming && index === timeline.length - 1}
+                          isStreaming={isStreaming && index === lastEventIndex}
                           allEvents={timeline}
                           isPinned={!!event.id && pinnedEventIds.has(event.id)}
                           onPin={

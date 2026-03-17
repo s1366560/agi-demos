@@ -27,6 +27,10 @@ import {
   clearDeltaBuffers,
   clearAllDeltaBuffers,
   deleteDeltaBuffer,
+  queueTimelineEvent as queueTimelineEventRaw,
+  flushTimelineBufferSync as flushTimelineBufferSyncRaw,
+  bindTimelineBufferDeps,
+  clearAllTimelineBuffers,
 } from './agent/deltaBuffers';
 import { createHITLActions } from './agent/hitlActions';
 import {
@@ -365,6 +369,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           // CRITICAL: Clear delta buffers when switching conversations
           // Prevents stale streaming content from previous conversation
           clearAllDeltaBuffers();
+          clearAllTimelineBuffers();
           resetCanvasForConversationScope();
 
           // Reset context status for the new conversation (async import for browser compatibility)
@@ -956,6 +961,12 @@ export const useAgentV3Store = create<AgentV3State>()(
                 await agentService.connect();
               }
 
+              // Bind timeline buffer deps for this conversation
+              bindTimelineBufferDeps(conversationId, {
+                getConversationState: get().getConversationState,
+                updateConversationState: get().updateConversationState,
+              });
+
               const streamHandler: AgentStreamHandler = createStreamEventHandlers(
                 conversationId,
                 undefined, // no additionalHandlers during recovery
@@ -968,6 +979,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                   timelineToMessages,
                   tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
                   thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+                  queueTimelineEvent: (event, stateUpdates) =>
+                    { queueTimelineEventRaw(conversationId, event, stateUpdates); },
+                  flushTimelineBufferSync: () =>
+                    { flushTimelineBufferSyncRaw(conversationId); },
                 }
               );
 
@@ -1066,6 +1081,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           // CRITICAL: Clear any stale delta buffers before starting new stream
           // This prevents duplicate content from previous sessions being flushed
           clearAllDeltaBuffers();
+          clearAllTimelineBuffers();
 
           // Check concurrent streaming limit
           const streamingCount = getStreamingConversationCount();
@@ -1181,7 +1197,11 @@ export const useAgentV3Store = create<AgentV3State>()(
           // the conversation they belong to, not the currently active one
           const handlerConversationId = conversationId;
 
-          // Define handler first (needed for both new and existing conversations)
+          bindTimelineBufferDeps(handlerConversationId, {
+            getConversationState: get().getConversationState,
+            updateConversationState: get().updateConversationState,
+          });
+
           const handler: AgentStreamHandler = createStreamEventHandlers(
             handlerConversationId,
             additionalHandlers,
@@ -1194,6 +1214,10 @@ export const useAgentV3Store = create<AgentV3State>()(
               timelineToMessages,
               tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
               thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+              queueTimelineEvent: (event, stateUpdates) =>
+                { queueTimelineEventRaw(handlerConversationId, event, stateUpdates); },
+              flushTimelineBufferSync: () =>
+                { flushTimelineBufferSyncRaw(handlerConversationId); },
             }
           );
 

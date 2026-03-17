@@ -1353,6 +1353,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                   timelineToMessages,
                   tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
                   thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+                  queueTimelineEvent: () => {},
+                  flushTimelineBufferSync: () => {},
                 }
               );
 
@@ -1578,6 +1580,8 @@ export const useAgentV3Store = create<AgentV3State>()(
               timelineToMessages,
               tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
               thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+              queueTimelineEvent: () => {},
+              flushTimelineBufferSync: () => {},
             }
           );
 

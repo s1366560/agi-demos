@@ -52,7 +52,7 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
           </div>
         </div>
         <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-          <div className="rounded-md border px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/40">
+          <div className="tool-prep-shimmer rounded-md border px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/40">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">
                 {toolName}

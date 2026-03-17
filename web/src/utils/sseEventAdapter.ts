@@ -901,10 +901,10 @@ export function appendSSEEventToTimeline(
   const timelineEvent = sseEventToTimeline(event);
 
   if (!timelineEvent) {
-    return existingTimeline; // Unsupported event type, no change
+    return existingTimeline;
   }
 
-  return [...existingTimeline, timelineEvent];
+  return existingTimeline.concat(timelineEvent);
 }
 
 /**
