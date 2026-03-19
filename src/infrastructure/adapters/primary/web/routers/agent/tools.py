@@ -9,6 +9,8 @@ from collections import Counter
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.tool_policy_debug_service import ToolPolicyDebugService
+from src.domain.model.agent.sandbox_scope import SandboxScope
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -19,9 +21,13 @@ from .schemas import (
     CapabilityDomainSummary,
     CapabilitySummaryResponse,
     PluginRuntimeCapabilitySummary,
+    PolicyLayerSummary,
     ToolCompositionResponse,
     ToolCompositionsListResponse,
     ToolInfo,
+    ToolPolicyDebugRequest,
+    ToolPolicyDebugResponse,
+    ToolPolicyReportItem,
     ToolsListResponse,
 )
 
@@ -215,3 +221,70 @@ async def get_tool_composition(
     except Exception as e:
         logger.error(f"Error getting tool composition: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get tool composition: {e!s}") from e
+
+
+@router.post("/debug/tool-policy", response_model=ToolPolicyDebugResponse)
+async def debug_tool_policy(
+    body: ToolPolicyDebugRequest,
+    current_user: User = Depends(get_current_user),
+) -> ToolPolicyDebugResponse:
+    """Evaluate tool access policies for a given agent context.
+
+    Answers "why was this tool denied?" by building the multi-layer
+    policy chain and reporting per-tool allow/deny with reasons.
+    """
+    try:
+        scope = SandboxScope(body.sandbox_scope)
+    except ValueError as exc:
+        valid = [s.value for s in SandboxScope]
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid sandbox_scope '{body.sandbox_scope}'. Valid: {valid}",
+        ) from exc
+
+    sandbox_allowed = frozenset(body.sandbox_allowed_tools) if body.sandbox_allowed_tools else None
+    sandbox_denied = frozenset(body.sandbox_denied_tools) if body.sandbox_denied_tools else None
+    agent_allowed = frozenset(body.agent_allowed_tools) if body.agent_allowed_tools else None
+    agent_denied = frozenset(body.agent_denied_tools) if body.agent_denied_tools else None
+
+    result = ToolPolicyDebugService.evaluate(
+        tool_names=body.tool_names,
+        depth=body.depth,
+        max_depth=body.max_depth,
+        sandbox_scope=scope,
+        sandbox_allowed_tools=sandbox_allowed,
+        sandbox_denied_tools=sandbox_denied,
+        agent_allowed_tools=agent_allowed,
+        agent_denied_tools=agent_denied,
+    )
+
+    policies = [
+        PolicyLayerSummary(
+            source=p.source,
+            precedence=p.precedence,
+            allowed=sorted(p.allowed) if p.allowed is not None else None,
+            denied=sorted(p.denied),
+        )
+        for p in result.policies
+    ]
+
+    tool_reports = [
+        ToolPolicyReportItem(
+            tool_name=r.tool_name,
+            allowed=r.allowed,
+            denial_reason=r.denial_reason,
+        )
+        for r in result.tool_reports
+    ]
+
+    return ToolPolicyDebugResponse(
+        role=result.role.value,
+        sandbox_scope=result.sandbox_scope.value,
+        can_spawn=result.role_capabilities.can_spawn,
+        denied_by_role=sorted(result.role_capabilities.denied_tools),
+        policies=policies,
+        tool_reports=tool_reports,
+        total_tools=result.total_tools,
+        allowed_count=result.allowed_count,
+        denied_count=result.denied_count,
+    )

@@ -114,6 +114,8 @@ class RedisSpawnManager:
         parent_session_id: str | None = None,
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        trace_id: str = "",
+        span_id: str = "",
     ) -> SpawnRecord:
         """Register a new parent-child spawn relationship.
 
@@ -136,6 +138,8 @@ class RedisSpawnManager:
             project_id=project_id,
             mode=mode,
             task_summary=task_summary,
+            trace_id=trace_id,
+            span_id=span_id,
         )
 
         try:

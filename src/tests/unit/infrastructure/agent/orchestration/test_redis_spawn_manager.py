@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -11,7 +11,6 @@ from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.model.agent.spawn_record import SpawnRecord
 from src.infrastructure.agent.orchestration.redis_spawn_manager import RedisSpawnManager
 from src.infrastructure.agent.orchestration.spawn_manager import SpawnDepthExceededError
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,15 +52,16 @@ def record_json(record: SpawnRecord) -> bytes:
 def mock_redis() -> AsyncMock:
     """Mocked async Redis client with safe defaults."""
     redis = AsyncMock()
-    pipe = AsyncMock()
-    redis.pipeline.return_value = pipe
-    pipe.__aenter__ = AsyncMock(return_value=pipe)
-    pipe.__aexit__ = AsyncMock(return_value=False)
+
+    # pipeline() is synchronous in redis-py -- use MagicMock so calling it
+    # returns the pipe object directly (not a coroutine).
+    pipe = MagicMock()
     pipe.execute = AsyncMock(return_value=[True, True, True])
-    pipe.setex = AsyncMock()
-    pipe.sadd = AsyncMock()
-    pipe.srem = AsyncMock()
-    pipe.delete = AsyncMock()
+    pipe.setex = MagicMock()
+    pipe.sadd = MagicMock()
+    pipe.srem = MagicMock()
+    pipe.delete = MagicMock()
+    redis.pipeline = MagicMock(return_value=pipe)
 
     redis.smembers = AsyncMock(return_value=set())
     redis.get = AsyncMock(return_value=None)
@@ -223,7 +223,7 @@ class TestRegisterSpawn:
         children_key_c = "agent:spawn:children:session-b"
         children_key_b = "agent:spawn:children:session-a"
 
-        def scan_side_effect(**kwargs: object) -> tuple:
+        def scan_side_effect(**kwargs: object) -> tuple[int, list[str]]:
             return (0, [children_key_b, children_key_c, children_key_d])
 
         mock_redis.scan.side_effect = scan_side_effect
@@ -233,9 +233,7 @@ class TestRegisterSpawn:
                 return True
             if key == children_key_c and member == "session-c":
                 return True
-            if key == children_key_d and member == "session-d":
-                return True
-            return False
+            return key == children_key_d and member == "session-d"
 
         mock_redis.sismember.side_effect = sismember_side_effect
 
@@ -548,9 +546,7 @@ class TestGetSpawnDepth:
         def sismember_side_effect(key: str, member: str) -> bool:
             if key == children_key_a and member == "session-b":
                 return True
-            if key == children_key_b and member == "session-c":
-                return True
-            return False
+            return key == children_key_b and member == "session-c"
 
         mock_redis.sismember.side_effect = sismember_side_effect
 

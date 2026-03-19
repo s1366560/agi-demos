@@ -81,6 +81,8 @@ class AgentOrchestrator:
         *,
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        trace_id: str = "",
+        span_id: str = "",
     ) -> SpawnResult:
         """Spawn a child agent session.
 
@@ -116,6 +118,8 @@ class AgentOrchestrator:
             parent_session_id=parent_session_id,
             conversation_id=conversation_id,
             metadata=enriched_metadata,
+            trace_id=trace_id,
+            span_id=span_id,
         )
 
         session = await self._session_registry.register(

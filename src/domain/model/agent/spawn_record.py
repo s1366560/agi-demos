@@ -21,6 +21,8 @@ class SpawnRecord:
         mode: SpawnMode (RUN or SESSION)
         task_summary: Brief description of what the child was asked to do
         status: Current lifecycle status
+        trace_id: Distributed tracing identifier propagated from parent
+        span_id: Span identifier for this specific spawn operation
         created_at: When the spawn occurred
     """
 
@@ -64,6 +66,8 @@ class SpawnRecord:
             mode=SpawnMode(data.get("mode", "run")),
             task_summary=data.get("task_summary", ""),
             status=data.get("status", "running"),
+            trace_id=data.get("trace_id", ""),
+            span_id=data.get("span_id", ""),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
             else datetime.now(UTC),

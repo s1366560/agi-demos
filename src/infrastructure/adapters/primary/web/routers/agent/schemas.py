@@ -477,3 +477,54 @@ class CommandsListResponse(BaseModel):
 
     commands: list[CommandInfo]
     total: int
+
+
+# === Tool Policy Debug Schemas ===
+
+
+class ToolPolicyDebugRequest(BaseModel):
+    """Request parameters for tool policy debug evaluation."""
+
+    tool_names: list[str] = Field(..., min_length=1, description="Tool names to evaluate")
+    depth: int = Field(0, ge=0, description="Agent depth in hierarchy (0 = root)")
+    max_depth: int = Field(3, ge=1, description="Maximum allowed depth")
+    sandbox_scope: str = Field("agent", description="Sandbox scope: session, agent, shared")
+    sandbox_allowed_tools: list[str] | None = Field(
+        None, description="Tools allowed by sandbox (None = unrestricted)"
+    )
+    sandbox_denied_tools: list[str] | None = Field(None, description="Tools denied by sandbox")
+    agent_allowed_tools: list[str] | None = Field(
+        None, description="Tools allowed by agent config (None = unrestricted)"
+    )
+    agent_denied_tools: list[str] | None = Field(None, description="Tools denied by agent config")
+
+
+class ToolPolicyReportItem(BaseModel):
+    """Per-tool policy evaluation result."""
+
+    tool_name: str
+    allowed: bool
+    denial_reason: str | None = None
+
+
+class PolicyLayerSummary(BaseModel):
+    """Summary of a single policy layer."""
+
+    source: str
+    precedence: int
+    allowed: list[str] | None = None
+    denied: list[str] = Field(default_factory=list)
+
+
+class ToolPolicyDebugResponse(BaseModel):
+    """Response for tool policy debug evaluation."""
+
+    role: str
+    sandbox_scope: str
+    can_spawn: bool
+    denied_by_role: list[str]
+    policies: list[PolicyLayerSummary]
+    tool_reports: list[ToolPolicyReportItem]
+    total_tools: int
+    allowed_count: int
+    denied_count: int

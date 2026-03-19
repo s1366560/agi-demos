@@ -78,6 +78,8 @@ class TestSpawnRecord:
             "task_summary",
             "status",
             "created_at",
+            "trace_id",
+            "span_id",
         }
         assert set(d.keys()) == expected_keys
 

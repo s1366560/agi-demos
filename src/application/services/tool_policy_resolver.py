@@ -35,6 +35,11 @@ class ToolPolicyResolver:
         """Initialize with empty policy list."""
         self._policies: list[ToolPolicy] = []
 
+    @property
+    def policies(self) -> list[ToolPolicy]:
+        """Return registered policies in precedence order (highest first)."""
+        return list(self._policies)
+
     def register_policy(self, policy: ToolPolicy) -> None:
         """Register a tool policy and maintain precedence order.
 
