@@ -47,14 +47,17 @@ __all__ = [
     "AgentSpawnedEvent",
     "AgentStoppedEvent",
     "AgentSuggestionsEvent",
+    "SubAgentAnnounceRetryEvent",
     "SubAgentCompletedEvent",
     "SubAgentDepthLimitedEvent",
     "SubAgentDoomLoopEvent",
     "SubAgentFailedEvent",
     "SubAgentKilledEvent",
+    "SubAgentOrphanDetectedEvent",
     "SubAgentQueuedEvent",
     "SubAgentRoutedEvent",
     "SubAgentSessionUpdateEvent",
+    "SubAgentSpawnRejectedEvent",
     "SubAgentSpawningEvent",
     "SubAgentStartedEvent",
     "SubAgentSteeredEvent",
@@ -1171,6 +1174,45 @@ class SubAgentSessionUpdateEvent(AgentDomainEvent):
     tool_calls_count: int = 0
 
 
+class SubAgentSpawnRejectedEvent(AgentDomainEvent):
+    """Event: SubAgent spawn refused by SpawnValidator (non-depth reasons)."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_SPAWN_REJECTED
+    subagent_name: str
+    rejection_code: str  # SpawnRejectionCode.value
+    rejection_reason: str
+    requester_id: str = ""
+    current_depth: int = 0
+    max_depth: int = 0
+    active_runs: int = 0
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class SubAgentAnnounceRetryEvent(AgentDomainEvent):
+    """Event: Child-to-parent announce is being retried."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_ANNOUNCE_RETRY
+    agent_id: str
+    session_id: str
+    attempt: int
+    max_retries: int
+    delay_ms: int
+    error: str = ""
+    error_category: str = ""  # "transient" | "permanent" | "unknown"
+
+
+class SubAgentOrphanDetectedEvent(AgentDomainEvent):
+    """Event: Orphaned SubAgent run detected during sweep."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_ORPHAN_DETECTED
+    run_id: str
+    subagent_name: str
+    conversation_id: str
+    reason: str  # "timeout" | "parent_gone" | "cancel_key" | "no_heartbeat"
+    age_seconds: float = 0.0
+    action_taken: str = ""  # "cancelled" | "marked_failed" | "ignored"
+
+
 class AgentSpawnedEvent(AgentDomainEvent):
     """Event: A parent agent spawned a child agent session."""
 
@@ -1308,6 +1350,9 @@ def get_event_type_docstring() -> str:
         SubAgentSteeredEvent,
         SubAgentDepthLimitedEvent,
         SubAgentSessionUpdateEvent,
+        SubAgentSpawnRejectedEvent,
+        SubAgentAnnounceRetryEvent,
+        SubAgentOrphanDetectedEvent,
         AgentSpawnedEvent,
         AgentCompletedEvent,
         AgentMessageSentEvent,

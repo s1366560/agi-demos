@@ -194,6 +194,9 @@ class AgentEventType(str, Enum):
     SUBAGENT_STEERED = "subagent_steered"
     SUBAGENT_DEPTH_LIMITED = "subagent_depth_limited"
     SUBAGENT_SESSION_UPDATE = "subagent_session_update"
+    SUBAGENT_SPAWN_REJECTED = "subagent_spawn_rejected"
+    SUBAGENT_ANNOUNCE_RETRY = "subagent_announce_retry"
+    SUBAGENT_ORPHAN_DETECTED = "subagent_orphan_detected"
 
     # =========================================================================
     # Control events (used by event bus)

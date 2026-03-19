@@ -35,6 +35,8 @@ class SubAgentRun:
     execution_time_ms: int | None = None
     tokens_used: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    frozen_result_text: str | None = None
+    frozen_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.run_id or not self.run_id.strip():
@@ -138,6 +140,25 @@ class SubAgentRun:
             error=reason,
         )
 
+    def freeze_result(self, result_text: str, now: datetime | None = None) -> "SubAgentRun":
+        """Freeze the final result text for durable capture.
+
+        Can only be called on COMPLETED or FAILED runs.
+        Once frozen, the result is immutable (calling again raises ValueError).
+        """
+        if self.status not in {SubAgentRunStatus.COMPLETED, SubAgentRunStatus.FAILED}:
+            raise ValueError(
+                f"Cannot freeze result in status {self.status.value}; must be completed or failed"
+            )
+        if self.frozen_result_text is not None:
+            raise ValueError("Result is already frozen")
+        timestamp = now or datetime.now(UTC)
+        return replace(
+            self,
+            frozen_result_text=result_text,
+            frozen_at=timestamp,
+        )
+
     def to_event_data(self) -> dict[str, Any]:
         """Serialize to stream-friendly event payload."""
         return {
@@ -154,4 +175,6 @@ class SubAgentRun:
             "execution_time_ms": self.execution_time_ms,
             "tokens_used": self.tokens_used,
             "metadata": dict(self.metadata),
+            "frozen_result_text": self.frozen_result_text,
+            "frozen_at": self.frozen_at.isoformat() if self.frozen_at else None,
         }

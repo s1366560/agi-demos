@@ -83,3 +83,106 @@ class TestSubAgentRunModel:
         assert event_data["subagent_name"] == "researcher"
         assert event_data["status"] == "completed"
         assert event_data["summary"] == "done"
+
+    def test_frozen_result_fields_default_to_none(self):
+        run = SubAgentRun(
+            conversation_id="conv-1",
+            subagent_name="researcher",
+            task="Find references",
+        )
+        assert run.frozen_result_text is None
+        assert run.frozen_at is None
+
+    def test_freeze_result_on_completed_run(self):
+        run = (
+            SubAgentRun(
+                conversation_id="conv-1",
+                subagent_name="researcher",
+                task="Find references",
+            )
+            .start()
+            .complete(summary="done")
+        )
+
+        frozen = run.freeze_result("The final output text")
+        assert frozen.frozen_result_text == "The final output text"
+        assert frozen.frozen_at is not None
+        # Original unchanged
+        assert run.frozen_result_text is None
+
+    def test_freeze_result_on_failed_run(self):
+        run = (
+            SubAgentRun(
+                conversation_id="conv-1",
+                subagent_name="researcher",
+                task="Find references",
+            )
+            .start()
+            .fail("boom")
+        )
+
+        frozen = run.freeze_result("Partial output before failure")
+        assert frozen.frozen_result_text == "Partial output before failure"
+        assert frozen.frozen_at is not None
+
+    def test_freeze_result_rejects_pending_status(self):
+        run = SubAgentRun(
+            conversation_id="conv-1",
+            subagent_name="researcher",
+            task="Find references",
+        )
+        with pytest.raises(ValueError, match="Cannot freeze result"):
+            run.freeze_result("text")
+
+    def test_freeze_result_rejects_running_status(self):
+        run = SubAgentRun(
+            conversation_id="conv-1",
+            subagent_name="researcher",
+            task="Find references",
+        ).start()
+        with pytest.raises(ValueError, match="Cannot freeze result"):
+            run.freeze_result("text")
+
+    def test_freeze_result_rejects_double_freeze(self):
+        run = (
+            SubAgentRun(
+                conversation_id="conv-1",
+                subagent_name="researcher",
+                task="Find references",
+            )
+            .start()
+            .complete(summary="done")
+            .freeze_result("first")
+        )
+
+        with pytest.raises(ValueError, match="already frozen"):
+            run.freeze_result("second")
+
+    def test_to_event_data_includes_frozen_fields(self):
+        run = (
+            SubAgentRun(
+                conversation_id="conv-1",
+                subagent_name="researcher",
+                task="Find references",
+            )
+            .start()
+            .complete(summary="done")
+            .freeze_result("Final text")
+        )
+        data = run.to_event_data()
+        assert data["frozen_result_text"] == "Final text"
+        assert data["frozen_at"] is not None  # ISO format string
+
+    def test_to_event_data_frozen_fields_none_when_not_frozen(self):
+        run = (
+            SubAgentRun(
+                conversation_id="conv-1",
+                subagent_name="researcher",
+                task="Find references",
+            )
+            .start()
+            .complete(summary="done")
+        )
+        data = run.to_event_data()
+        assert data["frozen_result_text"] is None
+        assert data["frozen_at"] is None
