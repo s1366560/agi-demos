@@ -30,7 +30,10 @@ logger = logging.getLogger(__name__)
 class SubAgentRunRegistry:
     """Tracks delegated SubAgent runs grouped by conversation."""
 
-    _ACTIVE_STATUSES: ClassVar[set[SubAgentRunStatus]] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
+    _ACTIVE_STATUSES: ClassVar[set[SubAgentRunStatus]] = {
+        SubAgentRunStatus.PENDING,
+        SubAgentRunStatus.RUNNING,
+    }
     _PERSIST_VERSION = 1
 
     def __init__(
@@ -354,6 +357,14 @@ class SubAgentRunRegistry:
             ]
         )
 
+    def count_all_active_runs(self) -> int:
+        """Count total active runs across ALL conversations."""
+        self._sync_from_disk()
+        total = 0
+        for conversation_id in list(self._runs_by_conversation.keys()):
+            total += self.count_active_runs(conversation_id)
+        return total
+
     def count_active_runs_for_lineage(
         self,
         conversation_id: str,
@@ -629,6 +640,10 @@ class SubAgentRunRegistry:
                 ),
                 tokens_used=SubAgentRunRegistry._optional_int(payload.get("tokens_used")),
                 metadata=metadata,
+                frozen_result_text=SubAgentRunRegistry._optional_str(
+                    payload.get("frozen_result_text")
+                ),
+                frozen_at=SubAgentRunRegistry._parse_datetime(payload.get("frozen_at")),
             )
         except Exception:
             return None

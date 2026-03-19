@@ -377,6 +377,8 @@ def _deserialize_run(payload: Any) -> SubAgentRun | None:
             execution_time_ms=_optional_int(payload.get("execution_time_ms")),
             tokens_used=_optional_int(payload.get("tokens_used")),
             metadata=metadata,
+            frozen_result_text=_optional_str(payload.get("frozen_result_text")),
+            frozen_at=_parse_datetime(payload.get("frozen_at")),
         )
     except Exception:
         return None
