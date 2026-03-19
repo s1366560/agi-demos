@@ -31,6 +31,7 @@ from .compression_engine import (
 from .compression_history import CompressionHistory, CompressionRecord
 from .compression_state import CompressionLevel, CompressionState, SummaryChunk
 from .context_facade import ContextFacade, ContextFacadeConfig
+from .default_context_engine import DefaultContextEngine
 from .window_manager import ContextWindowConfig, ContextWindowManager, ContextWindowResult
 
 __all__ = [
@@ -53,6 +54,8 @@ __all__ = [
     "ContextFacade",
     "ContextFacadeConfig",
     "ContextWindowConfig",
+    # Default ContextEngine implementation
+    "DefaultContextEngine",
     # Window Manager
     "ContextWindowManager",
     "ContextWindowResult",
