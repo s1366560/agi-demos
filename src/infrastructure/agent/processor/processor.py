@@ -60,6 +60,8 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.commands.types import CommandResult
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
 
+from src.domain.ports.agent.control_channel_port import ControlChannelPort
+
 
 from src.domain.model.agent.hitl_types import HITLType
 
@@ -184,6 +186,11 @@ class ProcessorConfig:
     message_bus: Any | None = None
     # Multi-agent: session ID for this processor (used as stream key for announce polling)
     session_id: str | None = None
+
+    # Multi-agent: control channel for receiving steer/kill/pause/resume from parent
+    control_channel: ControlChannelPort | None = None
+    # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
+    run_id: str | None = None
 
 
 @dataclass
@@ -312,6 +319,10 @@ class SessionProcessor:
         self._message_bus = config.message_bus
         self._announce_session_id: str | None = config.session_id
         self._last_announce_id: str | None = None
+
+        # Multi-agent control channel for steer/kill/pause/resume
+        self._control_channel = config.control_channel
+        self._run_id: str | None = config.run_id
 
         # Helper state for _execute_tool decomposition
         self.__resolve_errors: list[ProcessorEvent] = []
@@ -593,6 +604,12 @@ class SessionProcessor:
                     self._append_tool_results_to_messages(messages)
                     for evt in await self._check_agent_announcements(messages):
                         yield evt
+                    control_events = await self._check_control_channel(messages)
+                    for evt in control_events:
+                        yield evt
+                        if isinstance(evt, AgentErrorEvent):
+                            result = ProcessorResult.STOP
+                            break
 
             # Emit completion events
             async for event in self._emit_completion_events(result, session_id, messages):
@@ -672,6 +689,85 @@ class SessionProcessor:
         except Exception:
             logger.warning("Error polling agent announcements", exc_info=True)
             return []
+
+    async def _check_control_channel(self, messages: list[dict[str, Any]]) -> list[ProcessorEvent]:
+        """Poll control channel for steer/kill/pause/resume from parent agent."""
+        if self._control_channel is None or self._run_id is None:
+            return []
+
+        try:
+            from src.domain.model.agent.tool_policy import ControlMessageType
+
+            pending = await self._control_channel.consume_control(self._run_id)
+            if not pending:
+                return []
+
+            events: list[ProcessorEvent] = []
+            for msg in pending:
+                if msg.message_type == ControlMessageType.KILL:
+                    reason = msg.payload or "Killed by parent agent"
+                    logger.info(
+                        "Control KILL received for run %s: %s",
+                        self._run_id,
+                        reason,
+                    )
+                    if self._abort_event is not None:
+                        self._abort_event.set()
+                    events.append(AgentErrorEvent(message=reason, code="KILLED"))
+                    return events
+
+                if msg.message_type == ControlMessageType.STEER:
+                    steer_text = f"[Control] Parent agent instruction: {msg.payload}"
+                    messages.append({"role": "system", "content": steer_text})
+                    logger.info(
+                        "Control STEER injected for run %s: %s",
+                        self._run_id,
+                        msg.payload[:120],
+                    )
+
+                if msg.message_type == ControlMessageType.PAUSE:
+                    logger.info("Control PAUSE received for run %s", self._run_id)
+                    resumed = await self._wait_for_resume()
+                    if not resumed:
+                        events.append(
+                            AgentErrorEvent(
+                                message="Pause timed out without resume",
+                                code="PAUSE_TIMEOUT",
+                            )
+                        )
+                        return events
+
+            return events
+        except Exception:
+            logger.warning("Error polling control channel", exc_info=True)
+            return []
+
+    async def _wait_for_resume(self, timeout: float = 300.0) -> bool:
+        """Block until a RESUME control message arrives or timeout elapses."""
+        if self._control_channel is None or self._run_id is None:
+            return False
+
+        from src.domain.model.agent.tool_policy import ControlMessageType
+
+        poll_interval = 1.0
+        elapsed = 0.0
+        while elapsed < timeout:
+            pending = await self._control_channel.consume_control(self._run_id)
+            for msg in pending:
+                if msg.message_type == ControlMessageType.RESUME:
+                    logger.info("Control RESUME received for run %s", self._run_id)
+                    return True
+                if msg.message_type == ControlMessageType.KILL:
+                    logger.info(
+                        "Control KILL received during pause for run %s",
+                        self._run_id,
+                    )
+                    if self._abort_event is not None:
+                        self._abort_event.set()
+                    return False
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+        return False
 
     def _check_abort_and_limits(self) -> AgentErrorEvent | None:
         """Check abort signal and step limits. Returns error event or None."""

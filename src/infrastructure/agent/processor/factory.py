@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
+    from src.domain.ports.agent.control_channel_port import ControlChannelPort
     from src.infrastructure.agent.commands.interceptor import CommandInterceptor
     from src.infrastructure.agent.permission.manager import PermissionManager
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
@@ -61,6 +62,7 @@ class ProcessorFactory:
     tool_pipeline: ToolPipeline | None = None
     plugin_registry: object | None = None
     message_bus: object | None = None
+    control_channel: ControlChannelPort | None = None
 
     def create_for_subagent(
         self,
@@ -71,6 +73,7 @@ class ProcessorFactory:
         abort_signal: asyncio.Event | None = None,
         doom_loop_threshold: int | None = None,
         thinking_override: bool | None = None,
+        run_id: str | None = None,
     ) -> SessionProcessor:
         """Create a SessionProcessor configured for a SubAgent.
 
@@ -120,6 +123,8 @@ class ProcessorFactory:
             doom_loop_threshold=doom_loop_threshold if doom_loop_threshold is not None else 3,
             provider_options=_provider_opts,
             message_bus=self.message_bus,
+            control_channel=self.control_channel,
+            run_id=run_id,
         )
 
         return SessionProcessor(
