@@ -47,6 +47,9 @@ class SubAgentToolBuilderDeps:
     max_subagent_active_runs_per_lineage: int = 8
     max_subagent_children_per_requester: int = 8
 
+    # -- Spawn validation (optional, Phase 1 lifecycle hardening) --
+    spawn_validator: Any = None
+
     # -- SubAgent router (optional) --
     subagent_router: Any = None
 

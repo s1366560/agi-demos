@@ -186,6 +186,10 @@ class EventConverter:
                 "total_tasks": domain_event.total_tasks,
             }
 
+        # Lifecycle hardening events (SUBAGENT_SPAWN_REJECTED,
+        # SUBAGENT_ANNOUNCE_RETRY, SUBAGENT_ORPHAN_DETECTED) pass
+        # through without transformation -- their to_event_dict()
+        # output is already frontend-compatible.
         return event_dict
 
     def convert_plan_event(self, event: dict[str, Any]) -> SSEEventDict:

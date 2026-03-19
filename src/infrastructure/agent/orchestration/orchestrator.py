@@ -27,6 +27,7 @@ from src.infrastructure.agent.orchestration.session_registry import (
     AgentSessionRegistry,
 )
 from src.infrastructure.agent.orchestration.spawn_manager import SpawnManager
+from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +65,13 @@ class AgentOrchestrator:
         session_registry: AgentSessionRegistry,
         spawn_manager: SpawnManager,
         message_bus: AgentMessageBusPort,
+        spawn_validator: SpawnValidator | None = None,
     ) -> None:
         self._agent_registry = agent_registry
         self._session_registry = session_registry
         self._spawn_manager = spawn_manager
         self._message_bus = message_bus
+        self._spawn_validator = spawn_validator
 
     async def spawn_agent(
         self,
@@ -101,6 +104,19 @@ class AgentOrchestrator:
 
         parent_depth = await self._spawn_manager.get_spawn_depth(parent_session_id)
         child_depth = parent_depth + 1
+
+        if self._spawn_validator is not None:
+            validation = self._spawn_validator.validate(
+                subagent_name=target_agent_id,
+                current_depth=child_depth,
+                conversation_id=conversation_id or "",
+                requester_session_id=parent_session_id,
+            )
+            if not validation.allowed:
+                raise ValueError(
+                    f"Spawn rejected ({validation.rejection_code}): {validation.rejection_reason}"
+                )
+
         max_depth = self._spawn_manager.max_spawn_depth
         child_role = AgentRoleResolver.resolve(child_depth, max_depth)
 

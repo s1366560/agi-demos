@@ -165,6 +165,9 @@ class AgentContainer:
         self._agent_session_registry_instance: AgentSessionRegistry | None = None
         self._spawn_manager_instance: Any | None = None
         self._agent_orchestrator_instance: Any | None = None
+        self._subagent_run_registry_instance: Any | None = None
+        self._spawn_validator_instance: Any | None = None
+        self._announce_service_instance: Any | None = None
 
     # === Agent Repositories ===
 
@@ -430,6 +433,68 @@ class AgentContainer:
         self._spawn_manager_instance = SpawnManager()
         return self._spawn_manager_instance
 
+    def subagent_run_registry(self) -> Any:
+        """Get SubAgentRunRegistry singleton (in-memory run tracking)."""
+        if self._subagent_run_registry_instance is not None:
+            return self._subagent_run_registry_instance
+        from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+
+        self._subagent_run_registry_instance = SubAgentRunRegistry()
+        return self._subagent_run_registry_instance
+
+    def spawn_policy(self) -> Any:
+        """Create SpawnPolicy from application settings."""
+        from src.domain.model.agent.spawn_policy import SpawnPolicy
+
+        return SpawnPolicy.from_settings(self._settings) if self._settings else SpawnPolicy()
+
+    def spawn_validator(self) -> Any:
+        """Get SpawnValidator singleton."""
+        if self._spawn_validator_instance is not None:
+            return self._spawn_validator_instance
+        from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
+
+        self._spawn_validator_instance = SpawnValidator(
+            policy=self.spawn_policy(),
+            run_registry=self.subagent_run_registry(),
+        )
+        return self._spawn_validator_instance
+
+    def announce_service(self) -> Any:
+        """Get AnnounceService singleton."""
+        if self._announce_service_instance is not None:
+            return self._announce_service_instance
+        from src.domain.model.agent.announce_config import AnnounceConfig
+        from src.infrastructure.agent.subagent.announce_service import AnnounceService
+
+        assert self._redis_client is not None, "redis_client is required for AnnounceService"
+        config = (
+            AnnounceConfig.from_settings(self._settings) if self._settings else AnnounceConfig()
+        )
+        self._announce_service_instance = AnnounceService(
+            redis_client=self._redis_client,
+            config=config,
+        )
+        return self._announce_service_instance
+
+    def orphan_sweeper(self, tracker: Any = None) -> Any:
+        """Create OrphanSweeper for a given state tracker.
+
+        Not a singleton -- each BackgroundExecutor may have its own tracker.
+        """
+        from src.infrastructure.agent.subagent.orphan_sweeper import OrphanSweeper
+
+        timeout_seconds = (
+            getattr(self._settings, "AGENT_SUBAGENT_TERMINAL_RETENTION_SECONDS", 300)
+            if self._settings
+            else 300
+        )
+        return OrphanSweeper(
+            tracker=tracker,
+            redis_client=self._redis_client,
+            timeout_seconds=timeout_seconds,
+        )
+
     def agent_orchestrator(self) -> Any:
         """Get AgentOrchestrator singleton for multi-agent coordination."""
         if self._agent_orchestrator_instance is not None:
@@ -444,6 +509,7 @@ class AgentContainer:
             session_registry=self.agent_session_registry(),
             spawn_manager=self.spawn_manager(),
             message_bus=message_bus,
+            spawn_validator=self.spawn_validator(),
         )
         return self._agent_orchestrator_instance
 

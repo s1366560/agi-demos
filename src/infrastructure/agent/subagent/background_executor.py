@@ -28,6 +28,7 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.subagent import SubAgent
 
 from .context_bridge import ContextBridge
+from .orphan_sweeper import OrphanSweeper
 from .process import SubAgentProcess
 from .state_tracker import StateTracker
 
@@ -53,6 +54,7 @@ class BackgroundExecutor:
         on_event: Callable[[dict[str, Any]], None] | None = None,
         timeout_seconds: int = 300,
         redis_client: AsyncRedis | None = None,
+        orphan_sweeper: OrphanSweeper | None = None,
     ) -> None:
         """Initialize BackgroundExecutor.
 
@@ -62,6 +64,8 @@ class BackgroundExecutor:
                 SubAgents complete. Receives event dicts.
             timeout_seconds: Max allowed runtime per SubAgent task.
                 Tasks exceeding this are killed by the orphan sweep.
+            orphan_sweeper: Optional OrphanSweeper for delegated orphan
+                detection. Falls back to inline implementation when None.
         """
         self._tracker = state_tracker or StateTracker()
         self._on_event = on_event
@@ -69,6 +73,7 @@ class BackgroundExecutor:
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._sweep_task: asyncio.Task[Any] | None = None
         self._redis_client: AsyncRedis | None = redis_client
+        self._orphan_sweeper = orphan_sweeper
 
     @property
     def tracker(self) -> StateTracker:
@@ -393,6 +398,18 @@ class BackgroundExecutor:
         cancelled and a ``SubAgentKilledEvent`` is emitted.
         A ``SubAgentKilledEvent`` is emitted for each killed task.
         """
+        if self._orphan_sweeper is not None:
+            removed = await self._orphan_sweeper.sweep(self._tasks)
+            for eid in removed:
+                self._tasks.pop(eid, None)
+            for event in self._orphan_sweeper.consume_pending_events():
+                await self._emit(event)
+            return
+
+        await self._sweep_orphans_fallback()
+
+    async def _sweep_orphans_fallback(self) -> None:
+        """Original orphan sweep logic used when no OrphanSweeper is injected."""
         now = datetime.now(UTC)
         to_remove: list[str] = []
 

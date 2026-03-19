@@ -35,6 +35,7 @@ from src.infrastructure.agent.actor.types import ProjectChatRequest, ProjectChat
 from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
 from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateStore
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+from src.infrastructure.agent.subagent.announce_service import AnnounceService
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -286,7 +287,7 @@ async def _handle_chat_error(
 
     if agent_id and parent_session_id:
         _task = asyncio.create_task(
-            _publish_agent_announce(
+            _publish_announce_via_service(
                 agent_id=agent_id,
                 parent_session_id=parent_session_id,
                 child_session_id=conversation_id,
@@ -553,7 +554,7 @@ async def execute_project_chat(
 
         if request.agent_id and request.parent_session_id:
             _task2 = asyncio.create_task(
-                _publish_agent_announce(
+                _publish_announce_via_service(
                     agent_id=request.agent_id,
                     parent_session_id=request.parent_session_id,
                     child_session_id=request.conversation_id,
@@ -1029,6 +1030,42 @@ async def _get_redis_client() -> aioredis.Redis:
     return await get_redis_client()
 
 
+async def _get_announce_service() -> AnnounceService:
+    """Get or create module-level AnnounceService singleton."""
+    redis_client = await _get_redis_client()
+    return AnnounceService(redis_client=redis_client)
+
+
+async def _publish_announce_via_service(
+    agent_id: str,
+    parent_session_id: str,
+    child_session_id: str,
+    result_content: str,
+    success: bool,
+    event_count: int,
+    execution_time_ms: float,
+) -> None:
+    """Publish announce via AnnounceService (fire-and-forget wrapper)."""
+    try:
+        service = await _get_announce_service()
+        await service.publish_announce(
+            agent_id=agent_id,
+            parent_session_id=parent_session_id,
+            child_session_id=child_session_id,
+            result_content=result_content,
+            success=success,
+            event_count=event_count,
+            execution_time_ms=execution_time_ms,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to publish announce via service for agent=%s session=%s",
+            agent_id,
+            child_session_id,
+            exc_info=True,
+        )
+
+
 # ---------------------------------------------------------------------------
 # HITL response formatting (dispatch-dict pattern)
 # ---------------------------------------------------------------------------
@@ -1158,63 +1195,3 @@ async def _save_mcp_app_html(app_id: str, resource_uri: str, html_content: str) 
             )
     except Exception as e:
         logger.warning("[ActorExecution] Failed to persist MCPApp html: %s", e)
-
-
-async def _publish_agent_announce(
-    agent_id: str,
-    parent_session_id: str,
-    child_session_id: str,
-    result_content: str,
-    success: bool,
-    event_count: int,
-    execution_time_ms: float,
-) -> None:
-    """Publish announce message to parent session via Redis Streams.
-
-    Uses the same stream key format as RedisAgentMessageBusAdapter
-    so the parent can receive it via the standard message bus interface.
-    """
-    try:
-        redis_client = await _get_redis_client()
-
-        announce_payload = {
-            "agent_id": agent_id,
-            "session_id": child_session_id,
-            "result": result_content[:500] if result_content else "",
-            "artifacts": [],
-            "success": success,
-            "metadata": {
-                "event_count": event_count,
-                "execution_time_ms": round(execution_time_ms, 2),
-            },
-        }
-
-        message_data = {
-            "message_id": str(uuid.uuid4()),
-            "from_agent_id": agent_id,
-            "to_agent_id": "",
-            "session_id": parent_session_id,
-            "content": json.dumps(announce_payload),
-            "message_type": "announce",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "metadata": json.dumps({"announce_payload": announce_payload}),
-            "parent_message_id": "",
-        }
-
-        stream_key = f"agent:messages:{parent_session_id}"
-        await redis_client.xadd(stream_key, message_data)  # type: ignore[arg-type]
-
-        logger.info(
-            "Published announce: agent=%s child_session=%s parent_session=%s success=%s",
-            agent_id,
-            child_session_id,
-            parent_session_id,
-            success,
-        )
-    except Exception:
-        logger.warning(
-            "Failed to publish announce for agent=%s session=%s",
-            agent_id,
-            child_session_id,
-            exc_info=True,
-        )
