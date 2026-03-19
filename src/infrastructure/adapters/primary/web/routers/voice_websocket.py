@@ -107,8 +107,7 @@ async def voice_chat_endpoint(
             speech_access_token = db_cfg.get("speech_access_token") or speech_access_token
             speech_app_id = db_cfg.get("speech_app_id") or speech_app_id
             logger.info(
-                "[Voice WS] Resolved Speech credentials from DB: "
-                "access_token=%s app_id=%s",
+                "[Voice WS] Resolved Speech credentials from DB: access_token=%s app_id=%s",
                 bool(speech_access_token),
                 bool(speech_app_id),
             )
@@ -127,6 +126,8 @@ async def voice_chat_endpoint(
         await websocket.close(code=4000)
         return
 
+    speech_ws_proxy: str | None = settings.speech_ws_proxy
+
     from src.infrastructure.adapters.secondary.external.volcengine.asr_streaming_client import (
         AsyncASRStreamingClient,
     )
@@ -137,6 +138,7 @@ async def voice_chat_endpoint(
     asr_client = AsyncASRStreamingClient(
         speech_access_token,
         speech_app_id,
+        proxy=speech_ws_proxy,
     )
     tts_client: AsyncTTSStreamingClient | None = None
 
@@ -189,6 +191,7 @@ async def voice_chat_endpoint(
                     speech_app_id,
                     speaker,
                     shutdown_event,
+                    proxy=speech_ws_proxy,
                 ),
                 name="tts_sender",
             ),
@@ -294,6 +297,7 @@ async def _audio_receiver(
             pass
         shutdown.set()
 
+
 async def _asr_processor(
     websocket: WebSocket,
     asr_client: Any,
@@ -325,23 +329,15 @@ async def _asr_processor(
             # Use a short timeout so we can check silence even when no
             # new ASR messages arrive.
             try:
-                result = await asyncio.wait_for(
-                    asr_client.receive(), timeout=0.3
-                )
+                result = await asyncio.wait_for(asr_client.receive(), timeout=0.3)
             except asyncio.TimeoutError:
                 # No new ASR data -- check silence timeout
-                if (
-                    asr_buffer
-                    and (time.monotonic() - last_growth_time)
-                    > _ASR_SILENCE_THRESHOLD
-                ):
+                if asr_buffer and (time.monotonic() - last_growth_time) > _ASR_SILENCE_THRESHOLD:
                     logger.info(
                         "[Voice WS] ASR silence timeout, flushing: %s",
                         asr_buffer[:80],
                     )
-                    await _send_json(
-                        websocket, {"type": "asr_final", "text": asr_buffer}
-                    )
+                    await _send_json(websocket, {"type": "asr_final", "text": asr_buffer})
                     await asr_final_queue.put(asr_buffer)
                     asr_buffer = ""
                     pending_interim_sent = False
@@ -354,9 +350,7 @@ async def _asr_processor(
             asr_result = payload.get("result", {})
             text = asr_result.get("text", "")
             utterances = asr_result.get("utterances", [])
-            is_definite = any(
-                u.get("definite", False) for u in utterances
-            )
+            is_definite = any(u.get("definite", False) for u in utterances)
 
             logger.debug(
                 "[Voice WS] ASR recv text=%r definite=%s buf_len=%d",
@@ -413,9 +407,7 @@ async def _asr_processor(
                 "[Voice WS] ASR processor exiting, flushing remaining: %s",
                 asr_buffer[:80],
             )
-            await _send_json(
-                websocket, {"type": "asr_final", "text": asr_buffer}
-            )
+            await _send_json(websocket, {"type": "asr_final", "text": asr_buffer})
             await asr_final_queue.put(asr_buffer)
 
     except asyncio.CancelledError:
@@ -426,6 +418,7 @@ async def _asr_processor(
         logger.error("[Voice WS] ASR processor error: %s", e, exc_info=True)
     finally:
         shutdown.set()
+
 
 async def _agent_bridge(
     websocket: WebSocket,
@@ -496,7 +489,9 @@ async def _agent_bridge(
                                 "[Voice WS] Agent event #%d: type=%s data_keys=%s",
                                 event_count,
                                 event_type,
-                                list(event.get("data", {}).keys()) if isinstance(event.get("data"), dict) else "N/A",
+                                list(event.get("data", {}).keys())
+                                if isinstance(event.get("data"), dict)
+                                else "N/A",
                             )
                         if event_type == "error":
                             error_msg = event.get("data", {}).get("message", "Unknown agent error")
@@ -555,9 +550,7 @@ async def _agent_bridge(
                         inner_err,
                         exc_info=True,
                     )
-                    await _send_error(
-                        websocket, f"Agent error: {inner_err}"
-                    )
+                    await _send_error(websocket, f"Agent error: {inner_err}")
                     await tts_text_queue.put(None)
 
     except asyncio.CancelledError:
@@ -569,6 +562,7 @@ async def _agent_bridge(
         # Ensure TTS sender can exit
         await tts_text_queue.put(None)
 
+
 async def _tts_sender(
     websocket: WebSocket,
     tts_text_queue: asyncio.Queue[str | None],
@@ -576,6 +570,7 @@ async def _tts_sender(
     app_key: str,
     speaker: str,
     shutdown: asyncio.Event,
+    proxy: str | None = None,
 ) -> None:
     """Synthesize text chunks via TTS and send audio back to browser."""
     try:
@@ -597,7 +592,7 @@ async def _tts_sender(
                 AsyncTTSStreamingClient,
             )
 
-            tts_client = AsyncTTSStreamingClient(access_key, app_key, speaker=speaker)
+            tts_client = AsyncTTSStreamingClient(access_key, app_key, speaker=speaker, proxy=proxy)
 
             try:
                 await tts_client.connect()

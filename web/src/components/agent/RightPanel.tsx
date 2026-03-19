@@ -14,6 +14,7 @@ import { Filter, ListTodo, Route, X } from 'lucide-react';
 import { LazyButton } from '@/components/ui/lazyAntd';
 
 import { ResizeHandle } from './RightPanelComponents';
+import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { TaskList } from './TaskList';
 
 import type {
@@ -24,6 +25,7 @@ import type {
   SelectionTraceEventData,
   ToolsetChangedEventData,
 } from '../../types/agent';
+import type { AgentNode } from '../../types/multiAgent';
 
 export interface RightPanelProps {
   tasks?: AgentTask[] | undefined;
@@ -33,6 +35,7 @@ export interface RightPanelProps {
   policyFiltered?: PolicyFilteredEventData | null | undefined;
   executionNarrative?: ExecutionNarrativeEntry[] | undefined;
   latestToolsetChange?: ToolsetChangedEventData | null | undefined;
+  agentNodes?: Map<string, AgentNode> | undefined;
   onClose?: (() => void) | undefined;
   onFileClick?: ((filePath: string) => void) | undefined;
   collapsed?: boolean | undefined;
@@ -42,7 +45,7 @@ export interface RightPanelProps {
   maxWidth?: number | undefined;
 }
 
-type PanelTab = 'tasks' | 'insights';
+type PanelTab = 'tasks' | 'insights' | 'agents';
 
 interface ExecutionInsightsProps {
   executionPathDecision?: ExecutionPathDecidedEventData | null | undefined;
@@ -230,6 +233,7 @@ export const RightPanel = memo<RightPanelProps>(
     policyFiltered,
     executionNarrative,
     latestToolsetChange,
+    agentNodes,
     onClose,
     collapsed,
     width = 360,
@@ -239,16 +243,21 @@ export const RightPanel = memo<RightPanelProps>(
   }) => {
     const hasInsights = Boolean(
       executionPathDecision ||
-      selectionTrace ||
-      policyFiltered ||
-      latestToolsetChange ||
-      (executionNarrative && executionNarrative.length > 0)
+        selectionTrace ||
+        policyFiltered ||
+        latestToolsetChange ||
+        (executionNarrative && executionNarrative.length > 0)
     );
+    const hasAgents = Boolean(agentNodes && agentNodes.size > 0);
     const [preferredTab, setPreferredTab] = useState<PanelTab>(
       hasInsights && tasks.length === 0 ? 'insights' : 'tasks'
     );
     const activeTab: PanelTab =
-      preferredTab === 'insights' && !hasInsights ? 'tasks' : preferredTab;
+      preferredTab === 'insights' && !hasInsights
+        ? 'tasks'
+        : preferredTab === 'agents' && !hasAgents
+          ? 'tasks'
+          : preferredTab;
 
     const handleResize = useCallback(
       (delta: number) => {
@@ -316,6 +325,18 @@ export const RightPanel = memo<RightPanelProps>(
                 >
                   Insights
                 </button>
+                <button
+                  type="button"
+                  onClick={() => hasAgents && setPreferredTab('agents')}
+                  disabled={!hasAgents}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    activeTab === 'agents'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
+                      : 'text-slate-500 dark:text-slate-400'
+                  } ${!hasAgents ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  Agents
+                </button>
               </div>
 
               <div className="flex items-center gap-1">
@@ -342,6 +363,10 @@ export const RightPanel = memo<RightPanelProps>(
                 executionNarrative={executionNarrative}
                 latestToolsetChange={latestToolsetChange}
               />
+            </div>
+          ) : activeTab === 'agents' ? (
+            <div className="flex-1 overflow-y-auto">
+              <MultiAgentPanel agentNodes={agentNodes} />
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">

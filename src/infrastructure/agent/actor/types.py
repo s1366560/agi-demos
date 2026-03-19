@@ -15,7 +15,7 @@ class ProjectAgentActorConfig:
     api_key: str | None = None
     base_url: str | None = None
     temperature: float = 0.7
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments
     max_steps: int = 20
     persistent: bool = True
     idle_timeout_seconds: int = 3600
@@ -47,6 +47,10 @@ class ProjectChatRequest:
     app_model_context: dict[str, Any] | None = None
     # Image attachments (base64 data URLs from video frame capture)
     image_attachments: list[str] | None = None
+    # Multi-agent: resolved agent definition ID for routing
+    agent_id: str | None = None
+    # Multi-agent: parent conversation_id for child-to-parent announce
+    parent_session_id: str | None = None
 
 
 @dataclass(frozen=True)

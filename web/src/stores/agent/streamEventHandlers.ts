@@ -43,8 +43,12 @@ import type {
   SubAgentSteeredEventData,
   SubAgentDepthLimitedEventData,
   SubAgentSessionUpdateEventData,
+  AgentSpawnedEventData,
+  AgentCompletedEventData,
+  AgentStoppedEventData,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
+import type { AgentNode } from '../../types/multiAgent';
 
 // Re-export DeltaBufferState from canonical source for backward compatibility
 export type { DeltaBufferState } from './deltaBuffers';
@@ -1664,6 +1668,98 @@ export function createStreamEventHandlers(
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
+      });
+    },
+
+    // ===== Multi-Agent Spawn Tree Handlers =====
+
+    onAgentSpawned: (event: AgentEvent<AgentSpawnedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(
+        convState.timeline,
+        event
+      );
+      const data = event.data;
+      const agentNodes = new Map(convState.agentNodes);
+      const node: AgentNode = {
+        agentId: data.agent_id,
+        name: data.agent_name ?? null,
+        parentAgentId: data.parent_agent_id ?? null,
+        sessionId: data.child_session_id ?? null,
+        status: 'running',
+        taskSummary: data.task_summary ?? null,
+        result: null,
+        success: null,
+        artifacts: [],
+        children: [],
+        createdAt: Date.now(),
+        lastUpdateAt: Date.now(),
+      };
+      agentNodes.set(data.agent_id, node);
+      if (data.parent_agent_id && agentNodes.has(data.parent_agent_id)) {
+        const parent = agentNodes.get(data.parent_agent_id)!;
+        agentNodes.set(data.parent_agent_id, {
+          ...parent,
+          children: [...parent.children, data.agent_id],
+          lastUpdateAt: Date.now(),
+        });
+      }
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentNodes,
+      });
+    },
+
+    onAgentCompleted: (event: AgentEvent<AgentCompletedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(
+        convState.timeline,
+        event
+      );
+      const data = event.data;
+      const agentNodes = new Map(convState.agentNodes);
+      const existing = agentNodes.get(data.agent_id);
+      if (existing) {
+        agentNodes.set(data.agent_id, {
+          ...existing,
+          status: data.success ? 'completed' : 'failed',
+          result: data.result ?? null,
+          success: data.success ?? null,
+          artifacts: data.artifacts ?? [],
+          lastUpdateAt: Date.now(),
+        });
+      }
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentNodes,
+      });
+    },
+
+    onAgentStopped: (event: AgentEvent<AgentStoppedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(
+        convState.timeline,
+        event
+      );
+      const data = event.data;
+      const agentNodes = new Map(convState.agentNodes);
+      const existing = agentNodes.get(data.agent_id);
+      if (existing) {
+        agentNodes.set(data.agent_id, {
+          ...existing,
+          status: 'stopped',
+          lastUpdateAt: Date.now(),
+        });
+      }
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentNodes,
       });
     },
 

@@ -1612,12 +1612,8 @@ class CronJobModel(Base):
 
     state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
-    created_by: Mapped[str | None] = mapped_column(
-        String, ForeignKey("users.id"), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
@@ -1626,9 +1622,7 @@ class CronJobModel(Base):
         back_populates="job", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        Index("ix_cron_jobs_project_enabled", "project_id", "enabled"),
-    )
+    __table_args__ = (Index("ix_cron_jobs_project_enabled", "project_id", "enabled"),)
 
 
 class CronJobRunModel(Base):
@@ -1643,12 +1637,8 @@ class CronJobRunModel(Base):
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     trigger_type: Mapped[str] = mapped_column(String(50), default="scheduled")
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
@@ -1660,6 +1650,82 @@ class CronJobRunModel(Base):
         Index("ix_cron_job_runs_job_status", "job_id", "status"),
         Index("ix_cron_job_runs_project_started", "project_id", "started_at"),
     )
+
+
+class AgentDefinitionModel(Base):
+    __tablename__ = "agent_definitions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    project_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trigger_examples: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    trigger_keywords: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    model: Mapped[str] = mapped_column(String(50), default="inherit", nullable=False)
+    persona_files: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    allowed_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    allowed_skills: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    allowed_mcp_servers: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
+    temperature: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    max_iterations: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    workspace_dir: Mapped[str | None] = mapped_column(String, nullable=True)
+    workspace_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    can_spawn: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    max_spawn_depth: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    agent_to_agent_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    discoverable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="custom", nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    fallback_models: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    total_invocations: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    avg_execution_time_ms: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    success_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
+
+
+class AgentBindingModel(Base):
+    __tablename__ = "agent_bindings"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    agent_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("agent_definitions.id"),
+        nullable=False,
+        index=True,
+    )
+    channel_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    peer_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    agent: Mapped["AgentDefinitionModel"] = relationship(foreign_keys=[agent_id])
+
+    __table_args__ = (
+        Index(
+            "ix_agent_bindings_routing",
+            "tenant_id",
+            "channel_type",
+            "channel_id",
+        ),
+    )
+
 
 # Runtime import to register ChannelConfigModel on Base.metadata so that
 # SQLAlchemy can resolve the string reference in Project.channel_configs.

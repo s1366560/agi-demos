@@ -25,6 +25,7 @@ __all__ = [
     "AgentArtifactUpdateEvent",
     "AgentBackgroundLaunchedEvent",
     "AgentCanvasUpdatedEvent",
+    "AgentCompletedEvent",
     "AgentContextSummaryGeneratedEvent",
     "AgentDomainEvent",
     "AgentElicitationAnsweredEvent",
@@ -36,11 +37,15 @@ __all__ = [
     "AgentHttpServiceUpdatedEvent",
     "AgentMCPAppRegisteredEvent",
     "AgentMCPAppResultEvent",
+    "AgentMessageReceivedEvent",
+    "AgentMessageSentEvent",
     "AgentParallelCompletedEvent",
     "AgentParallelStartedEvent",
     "AgentPlanSuggestedEvent",
     "AgentPolicyFilteredEvent",
     "AgentSelectionTraceEvent",
+    "AgentSpawnedEvent",
+    "AgentStoppedEvent",
     "AgentSuggestionsEvent",
     "SubAgentCompletedEvent",
     "SubAgentDepthLimitedEvent",
@@ -1166,6 +1171,63 @@ class SubAgentSessionUpdateEvent(AgentDomainEvent):
     tool_calls_count: int = 0
 
 
+class AgentSpawnedEvent(AgentDomainEvent):
+    """Event: A parent agent spawned a child agent session."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_SPAWNED
+    agent_id: str
+    agent_name: str
+    parent_agent_id: str
+    child_session_id: str
+    mode: str = "run"
+    task_summary: str = ""
+
+
+class AgentCompletedEvent(AgentDomainEvent):
+    """Event: A child agent completed its task and announced results."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_COMPLETED
+    agent_id: str
+    agent_name: str
+    parent_agent_id: str
+    session_id: str
+    result: str = ""
+    success: bool = True
+    artifacts: list[str] = Field(default_factory=list)
+
+
+class AgentMessageSentEvent(AgentDomainEvent):
+    """Event: An agent sent a message to another agent."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_MESSAGE_SENT
+    from_agent_id: str
+    to_agent_id: str
+    from_agent_name: str = ""
+    to_agent_name: str = ""
+    message_preview: str = ""
+
+
+class AgentMessageReceivedEvent(AgentDomainEvent):
+    """Event: An agent received a message from another agent."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_MESSAGE_RECEIVED
+    agent_id: str
+    agent_name: str
+    from_agent_id: str
+    from_agent_name: str = ""
+    message_preview: str = ""
+
+
+class AgentStoppedEvent(AgentDomainEvent):
+    """Event: An agent was stopped."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_STOPPED
+    agent_id: str
+    agent_name: str
+    reason: str = ""
+    stopped_by: str = ""
+
+
 # Event Type Utilities
 # =========================================================================
 
@@ -1246,6 +1308,11 @@ def get_event_type_docstring() -> str:
         SubAgentSteeredEvent,
         SubAgentDepthLimitedEvent,
         SubAgentSessionUpdateEvent,
+        AgentSpawnedEvent,
+        AgentCompletedEvent,
+        AgentMessageSentEvent,
+        AgentMessageReceivedEvent,
+        AgentStoppedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

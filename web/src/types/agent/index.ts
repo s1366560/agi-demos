@@ -7,3 +7,4 @@ export * from './workflow';
 export * from './execution';
 export * from './streaming';
 export * from './service';
+export * from '../multiAgent';

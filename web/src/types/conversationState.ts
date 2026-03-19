@@ -24,6 +24,7 @@ import type {
   ExecutionNarrativeEntry,
   ToolsetChangedEventData,
 } from './agent';
+import type { AgentNode } from './multiAgent';
 // Re-export CostUpdateEventData for consumers that need to map to CostTrackingState
 export type { CostUpdateEventData } from './agent';
 
@@ -183,6 +184,10 @@ export interface ConversationState {
   // ===== SubAgent Streaming Previews =====
   /** Live status messages from running SubAgents (subagentId -> status_message) */
   subagentPreviews: Map<string, string>;
+
+  // ===== Multi-Agent Spawn Tree =====
+  /** Agent nodes for multi-agent spawn tree visualization (agentId -> AgentNode) */
+  agentNodes: Map<string, AgentNode>;
 }
 
 /**
@@ -243,6 +248,9 @@ export function createDefaultConversationState(): ConversationState {
 
     // SubAgent previews
     subagentPreviews: new Map(),
+
+    // Multi-Agent spawn tree
+    agentNodes: new Map(),
   };
 }
 

@@ -59,7 +59,7 @@ class SubAgentTemplate:
     model_preference: str = "inherit"
     temperature: float = 0.7
     max_iterations: int = 15
-    max_tokens: int = 4096
+    max_tokens: int = 8192  # SubAgents typically handle smaller tasks
     trigger_keywords: list[str] = field(default_factory=list)
     trigger_description: str = ""
     trigger_examples: list[str] = field(default_factory=list)
@@ -105,7 +105,7 @@ class SubAgentTemplate:
             model_preference=getattr(subagent, "model", "inherit"),
             temperature=getattr(subagent, "temperature", 0.7),
             max_iterations=getattr(subagent, "max_iterations", 15),
-            max_tokens=getattr(subagent, "max_tokens", 4096),
+            max_tokens=getattr(subagent, "max_tokens", 8192),
             trigger_keywords=keywords,
             trigger_description=description,
             trigger_examples=examples,
@@ -197,7 +197,7 @@ class SubAgentTemplate:
             model_preference=data.get("model_preference", "inherit"),
             temperature=data.get("temperature", 0.7),
             max_iterations=data.get("max_iterations", 15),
-            max_tokens=data.get("max_tokens", 4096),
+            max_tokens=data.get("max_tokens", 8192),
             trigger_keywords=data.get("trigger_keywords", []),
             trigger_description=data.get("trigger_description", ""),
             trigger_examples=data.get("trigger_examples", []),

@@ -215,7 +215,7 @@ class PooledAgentSessionAdapter:
             agent_mode=request.agent_mode,
             model=request.model,
             temperature=request.temperature or 0.7,
-            max_tokens=request.max_tokens or 4096,
+            max_tokens=request.max_tokens or 16384,
             max_steps=request.max_steps or 20,
         )
 
@@ -242,7 +242,7 @@ class PooledAgentSessionAdapter:
             tier=ProjectTier.COLD,  # 传统模式使用 COLD tier
             model=request.model,
             temperature=request.temperature or 0.7,
-            max_tokens=request.max_tokens or 4096,
+            max_tokens=request.max_tokens or 16384,
             max_steps=request.max_steps or 20,
         )
 

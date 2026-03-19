@@ -13,6 +13,10 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from src.domain.model.agent.agent_role import (
+    ROLE_DEFAULTS,
+    AgentRole,
+)
 from src.domain.model.agent.subagent import SubAgent
 
 from .processor import ToolDefinition
@@ -45,6 +49,9 @@ class SubAgentToolBuilderDeps:
 
     # -- SubAgent router (optional) --
     subagent_router: Any = None
+
+    # -- Role-based capabilities (optional, set by orchestrator) --
+    agent_role: AgentRole | None = None
 
     # -- Callbacks to ReActAgent / Runner (set after init) --
     get_current_tools_fn: Callable[..., tuple[dict[str, Any], list[ToolDefinition]]] | None = None
@@ -85,8 +92,37 @@ class SubAgentToolBuilder:
             filtered_tools = list(convert_tools(filtered_raw))
         else:
             filtered_tools = list(current_tool_definitions)
+
+        role_denied = self._get_role_denied_tools()
+        if role_denied:
+            filtered_tools = [t for t in filtered_tools if t.name not in role_denied]
+
         existing_tool_names = {tool.name for tool in filtered_tools}
         return filtered_tools, existing_tool_names
+
+    # ------------------------------------------------------------------
+    # Role-based capability helpers
+    # ------------------------------------------------------------------
+
+    def _get_role_denied_tools(self) -> frozenset[str]:
+        """Return denied tools for the current agent role, or empty frozenset."""
+        role = self.deps.agent_role
+        if role is None:
+            return frozenset()
+        capabilities = ROLE_DEFAULTS.get(role)
+        if capabilities is None:
+            return frozenset()
+        return capabilities.denied_tools
+
+    def _role_can_spawn(self) -> bool:
+        """Check if the current agent role allows spawning sub-agents."""
+        role = self.deps.agent_role
+        if role is None:
+            return True
+        capabilities = ROLE_DEFAULTS.get(role)
+        if capabilities is None:
+            return True
+        return capabilities.can_spawn
 
     # ------------------------------------------------------------------
     # Nested tool injection
@@ -114,6 +150,7 @@ class SubAgentToolBuilder:
             self.deps.subagents
             and self.deps.enable_subagent_as_tool
             and delegation_depth < max_delegation_depth
+            and self._role_can_spawn()
         ):
             return
 
@@ -346,6 +383,7 @@ class SubAgentToolBuilder:
             max_active_runs=self.deps.max_subagent_active_runs,
             include_parallel=(len(nested_candidates) >= 2),
         )
+
     # ------------------------------------------------------------------
     # Top-level tool definitions builder
     # ------------------------------------------------------------------
@@ -395,15 +433,9 @@ class SubAgentToolBuilder:
             conversation_id=conversation_id,
             requester_session_key=conversation_id,
             delegation_depth=0,
-            max_delegation_depth=(
-                self.deps.max_subagent_delegation_depth
-            ),
-            max_active_runs_per_lineage=(
-                self.deps.max_subagent_active_runs_per_lineage
-            ),
-            max_children_per_requester=(
-                self.deps.max_subagent_children_per_requester
-            ),
+            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
+            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
+            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
             visibility_default="tree",
         )
         configure_sessions_overview(
@@ -411,9 +443,7 @@ class SubAgentToolBuilder:
             conversation_id=conversation_id,
             requester_session_key=conversation_id,
             visibility_default="tree",
-            observability_provider=(
-                self.deps.get_observability_stats_fn
-            ),
+            observability_provider=(self.deps.get_observability_stats_fn),
         )
         configure_sessions_wait(
             run_registry=self.deps.subagent_run_registry,
@@ -428,20 +458,12 @@ class SubAgentToolBuilder:
             run_registry=self.deps.subagent_run_registry,
             conversation_id=conversation_id,
             spawn_callback=spawn_callback,
-            max_active_runs=(
-                self.deps.max_subagent_active_runs
-            ),
-            max_active_runs_per_lineage=(
-                self.deps.max_subagent_active_runs_per_lineage
-            ),
-            max_children_per_requester=(
-                self.deps.max_subagent_children_per_requester
-            ),
+            max_active_runs=(self.deps.max_subagent_active_runs),
+            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
+            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
             requester_session_key=conversation_id,
             delegation_depth=0,
-            max_delegation_depth=(
-                self.deps.max_subagent_delegation_depth
-            ),
+            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
         )
         configure_subagents_control(
             run_registry=self.deps.subagent_run_registry,
@@ -450,20 +472,12 @@ class SubAgentToolBuilder:
             subagent_descriptions=subagent_descriptions,
             cancel_callback=cancel_callback,
             restart_callback=spawn_callback,
-            max_active_runs=(
-                self.deps.max_subagent_active_runs
-            ),
-            max_active_runs_per_lineage=(
-                self.deps.max_subagent_active_runs_per_lineage
-            ),
-            max_children_per_requester=(
-                self.deps.max_subagent_children_per_requester
-            ),
+            max_active_runs=(self.deps.max_subagent_active_runs),
+            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
+            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
             requester_session_key=conversation_id,
             delegation_depth=0,
-            max_delegation_depth=(
-                self.deps.max_subagent_delegation_depth
-            ),
+            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
         )
 
         # Look up all @tool_define tools (delegate + session) from the registry
@@ -484,9 +498,7 @@ class SubAgentToolBuilder:
         for tool_name in _all_tool_names:
             tool_info = registry.get(tool_name)
             if tool_info is None:
-                logger.warning(
-                    "Tool %r not found in registry", tool_name
-                )
+                logger.warning("Tool %r not found in registry", tool_name)
                 continue
             tools_dict[tool_name] = tool_info
         tools_to_use.extend(convert_tools(tools_dict))
@@ -495,12 +507,8 @@ class SubAgentToolBuilder:
         if len(enabled_subagents) >= 2:
             parallel_info = registry.get("parallel_delegate_subagents")
             if parallel_info is not None:
-                tools_to_use.extend(
-                    convert_tools({"parallel_delegate_subagents": parallel_info})
-                )
+                tools_to_use.extend(convert_tools({"parallel_delegate_subagents": parallel_info}))
             else:
-                logger.warning(
-                    "Tool 'parallel_delegate_subagents' not found in registry"
-                )
+                logger.warning("Tool 'parallel_delegate_subagents' not found in registry")
 
         return tools_to_use

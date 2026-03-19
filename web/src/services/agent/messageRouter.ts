@@ -85,6 +85,9 @@ import type {
   SelectionTraceEventData,
   PolicyFilteredEventData,
   ToolsetChangedEventData,
+  AgentSpawnedEventData,
+  AgentCompletedEventData,
+  AgentStoppedEventData,
 } from '../../types/agent';
 
 export function routeSubagentLifecycleMessage(
@@ -611,6 +614,16 @@ export function routeToHandler(
     // A2UI interactive action events
     case 'a2ui_action_asked':
       handler.onA2UIActionAsked?.(event as AgentEvent<A2UIActionAskedEventData>);
+      break;
+    // Multi-agent lifecycle events (L4 layer)
+    case 'agent_spawned':
+      handler.onAgentSpawned?.(event as AgentEvent<AgentSpawnedEventData>);
+      break;
+    case 'agent_completed':
+      handler.onAgentCompleted?.(event as AgentEvent<AgentCompletedEventData>);
+      break;
+    case 'agent_stopped':
+      handler.onAgentStopped?.(event as AgentEvent<AgentStoppedEventData>);
       break;
   }
 }

@@ -5,7 +5,11 @@ These ports define contracts that infrastructure adapters implement.
 Following hexagonal architecture, domain depends on ports (not implementations).
 """
 
+from src.domain.ports.agent.agent_registry import AgentRegistryPort
 from src.domain.ports.agent.agent_tool_port import AgentToolBase
+from src.domain.ports.agent.binding_repository import (
+    AgentBindingRepositoryPort,
+)
 from src.domain.ports.agent.context_manager_port import (
     AttachmentContent,
     AttachmentInjectorPort,
@@ -40,7 +44,8 @@ from src.domain.ports.agent.tool_executor_port import (
 )
 
 __all__ = [
-    # Agent Tool Base
+    "AgentBindingRepositoryPort",
+    "AgentRegistryPort",
     "AgentToolBase",
     "AttachmentContent",
     "AttachmentInjectorPort",

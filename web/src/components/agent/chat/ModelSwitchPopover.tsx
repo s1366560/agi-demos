@@ -4,9 +4,11 @@ import { Popover, Select } from 'antd';
 import { Bot } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { agentService } from '@/services/agentService';
 import { useAgentV3Store } from '@/stores/agentV3';
 import { useProviderStore } from '@/stores/provider';
+
+import { agentService } from '@/services/agentService';
+
 import { findModelInCatalog, normalizeProviderType } from '@/utils/modelCatalog';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';

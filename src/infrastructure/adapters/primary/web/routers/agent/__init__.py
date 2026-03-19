@@ -7,9 +7,11 @@ All endpoints have been fully migrated from agent_legacy.py.
 from fastapi import APIRouter
 
 from . import (
+    binding_router,
     commands,
     config,
     conversations,
+    definitions_router,
     events,
     hitl,
     messages,
@@ -70,6 +72,8 @@ router.include_router(events.router)
 router.include_router(templates.router)
 router.include_router(plans.router)
 router.include_router(subagent_router.router)
+router.include_router(binding_router.router)
+router.include_router(definitions_router.router)
 
 __all__ = [
     "CapabilityDomainSummary",

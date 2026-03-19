@@ -235,7 +235,7 @@ class ReActAgent:
         api_key: str | None = None,
         base_url: str | None = None,
         temperature: float = 0.0,
-        max_tokens: int = 4096,
+        max_tokens: int = 16384,  # Increased from 4096 to support larger tool arguments
         max_steps: int = 20,
         permission_manager: PermissionManager | None = None,
         skills: list[Skill] | None = None,
@@ -1848,6 +1848,7 @@ class ReActAgent:
             ),
             skill_names=list(config.skill_names),
             provider_options=dict(config.provider_options),
+            message_bus=config.message_bus,
         )
         if tool_provider is not None:
             logger.debug(
@@ -1862,6 +1863,7 @@ class ReActAgent:
         langfuse_context: dict[str, Any],
         abort_signal: asyncio.Event | None,
         matched_skill: Skill | None,
+        agent_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process events from SessionProcessor and yield converted events.
 
@@ -1877,13 +1879,14 @@ class ReActAgent:
                 conversation_id=langfuse_context.get("conversation_id")
                 if langfuse_context
                 else None,
+                agent_id=agent_id,
             )
             async for domain_event in processor.process(
                 session_id=langfuse_context["conversation_id"],
                 messages=messages,
                 run_ctx=run_ctx,
             ):
-                event = self._convert_domain_event(domain_event)
+                event = self._convert_domain_event(domain_event, agent_id=agent_id)
                 if event:
                     if event.get("type") == "text_delta":
                         self._stream_final_content += event.get("data", {}).get("delta", "")
@@ -2106,6 +2109,7 @@ class ReActAgent:
         plan_mode: bool = False,
         llm_overrides: dict[str, Any] | None = None,
         model_override: str | None = None,
+        agent_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -2207,9 +2211,7 @@ class ReActAgent:
                         for mcp_tool in mcp_tools:
                             if not mcp_tool.schema.is_model_visible:
                                 continue
-                            client = self._skill_mcp_manager.get_active_client(
-                                mcp_tool.server_name
-                            )
+                            client = self._skill_mcp_manager.get_active_client(mcp_tool.server_name)
 
                             async def _make_mcp_exec(
                                 _client: Any,
@@ -2346,6 +2348,8 @@ class ReActAgent:
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(self.config, selection_context)
+        # Set session_id for announce message polling (P0.5)
+        config.session_id = conversation_id
         # Pass forced skill context to processor for loop reinforcement (Fix 4)
         if is_forced and matched_skill:
             config.forced_skill_name = matched_skill.name
@@ -2548,6 +2552,7 @@ class ReActAgent:
             langfuse_context=langfuse_context,
             abort_signal=abort_signal,
             matched_skill=matched_skill,
+            agent_id=agent_id,
         ):
             yield event
 
@@ -3124,7 +3129,9 @@ class ReActAgent:
         return None
 
     def _convert_domain_event(
-        self, domain_event: AgentDomainEvent | dict[str, Any]
+        self,
+        domain_event: AgentDomainEvent | dict[str, Any],
+        agent_id: str | None = None,
     ) -> dict[str, Any] | None:
         """
         Convert AgentDomainEvent to event dictionary format.
@@ -3133,6 +3140,7 @@ class ReActAgent:
 
         Args:
             domain_event: AgentDomainEvent from processor
+            agent_id: Optional agent ID to inject into event data
 
         Returns:
             Event dict or None to skip
@@ -3141,7 +3149,10 @@ class ReActAgent:
             return domain_event
 
         # Delegate to EventConverter
-        return cast(dict[str, Any] | None, self._event_converter.convert(domain_event))
+        return cast(
+            dict[str, Any] | None,
+            self._event_converter.convert(domain_event, agent_id=agent_id),
+        )
 
     async def astream_multi_level(
         self,

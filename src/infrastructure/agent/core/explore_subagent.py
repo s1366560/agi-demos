@@ -109,7 +109,7 @@ def create_explore_subagent(
         allowed_tools=allowed_tools,
         allowed_skills=[],
         allowed_mcp_servers=[],
-        max_tokens=4096,
+        max_tokens=8192,  # Explore agent handles smaller tasks
         temperature=0.3,  # Lower temperature for more consistent exploration
         max_iterations=20,
         enabled=True,

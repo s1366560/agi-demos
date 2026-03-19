@@ -173,6 +173,8 @@ export interface ChatRequest {
   app_model_context?: Record<string, unknown> | undefined;
   /** Base64 image data URLs captured from video frames for vision LLM */
   image_attachments?: string[] | undefined;
+  /** Target agent ID for multi-agent routing */
+  agent_id?: string | undefined;
 }
 
 /**

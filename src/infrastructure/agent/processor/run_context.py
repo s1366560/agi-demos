@@ -27,6 +27,8 @@ class RunContext:
     Attributes:
         abort_signal: Cancellation signal for this run.
         conversation_id: Conversation scope for this run.
+        agent_id: Agent identity for multi-agent isolation (Phase 3).
+            When set, scopes workspace files and events to a specific agent.
         trace_id: Distributed tracing identifier.
         start_time: Run start timestamp (epoch seconds).
         langfuse_context: Optional observability context for Langfuse tracing.
@@ -35,6 +37,7 @@ class RunContext:
 
     abort_signal: asyncio.Event | None = None
     conversation_id: str | None = None
+    agent_id: str | None = None
     trace_id: str | None = None
     start_time: float = field(default_factory=time.time)
     langfuse_context: dict[str, Any] | None = None

@@ -731,7 +731,7 @@ class ChannelMessageRouter:
             if session_ctx is None:
                 return
 
-            _session, agent_service, conversation = session_ctx
+            _session, agent_service, conversation, resolved_agent_id = session_ctx
 
             await self._run_agent_stream(
                 message=message,
@@ -739,6 +739,7 @@ class ChannelMessageRouter:
                 conversation=conversation,
                 agent_service=agent_service,
                 file_metadata=file_metadata,
+                agent_id=resolved_agent_id,
             )
 
         except Exception as e:
@@ -746,11 +747,15 @@ class ChannelMessageRouter:
 
     async def _setup_agent_session(
         self, message: Message, conversation_id: str
-    ) -> tuple[Any, Any, Any] | None:
+    ) -> tuple[Any, Any, Any, str | None] | None:
         """Set up agent session: validate text, load conversation, create service.
 
-        Returns (session, agent_service, conversation) or None if setup fails.
+        Returns ``(session, agent_service, conversation, agent_id)`` or
+        *None* if setup fails.  ``agent_id`` is resolved via
+        :class:`BindingRouter` when ``MULTI_AGENT_ENABLED`` is true;
+        otherwise it is *None*.
         """
+        from src.configuration.config import get_settings
         from src.configuration.factories import create_llm_client
         from src.infrastructure.adapters.primary.web.startup.container import get_app_container
         from src.infrastructure.adapters.secondary.persistence.database import (
@@ -782,7 +787,26 @@ class ChannelMessageRouter:
         container = app_container.with_db(db_session)
         agent_service = container.agent_service(llm)
 
-        return db_session, agent_service, conversation
+        resolved_agent_id: str | None = None
+        if get_settings().multi_agent_enabled:
+            try:
+                binding_router = container.binding_router()
+                agent = await binding_router.resolve_agent(
+                    tenant_id=conversation.tenant_id or "",
+                    channel_type=(str(message.channel.value) if message.channel else None),
+                    channel_id=self._extract_channel_config_id(message),
+                    account_id=(message.sender.id if message.sender else None),
+                )
+                if agent is not None:
+                    resolved_agent_id = str(agent.id)
+            except Exception:
+                logger.warning(
+                    "[MessageRouter] BindingRouter resolution failed, "
+                    "falling back to default agent",
+                    exc_info=True,
+                )
+
+        return db_session, agent_service, conversation, resolved_agent_id
 
     async def _run_agent_stream(
         self,
@@ -791,6 +815,7 @@ class ChannelMessageRouter:
         conversation: Any,
         agent_service: Any,
         file_metadata: list[dict[str, Any]] | None = None,
+        agent_id: str | None = None,
     ) -> None:
         """Consume agent stream, manage card updates, and send final response."""
 
@@ -827,6 +852,7 @@ class ChannelMessageRouter:
                     tenant_id=conversation.tenant_id,
                     file_metadata=file_metadata,
                     app_model_context=self._build_app_model_context(message),
+                    agent_id=agent_id,
                 ):
                     event_type = event.get("type")
                     event_data = event.get("data") or {}

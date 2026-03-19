@@ -94,6 +94,12 @@ const McpServerList = lazy(() =>
     default: m.McpServerListV2,
   }))
 );
+const AgentDefinitions = lazy(() =>
+  import('./pages/tenant/AgentDefinitions').then((m) => ({ default: m.AgentDefinitions }))
+);
+const AgentBindings = lazy(() =>
+  import('./pages/tenant/AgentBindings').then((m) => ({ default: m.AgentBindings }))
+);
 const AgentWorkspace = lazy(() =>
   import('./pages/tenant/AgentWorkspace').then((m) => ({
     default: m.AgentWorkspace,
@@ -360,6 +366,22 @@ function App() {
                 }
               />
               <Route
+                path="agent-definitions"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AgentDefinitions />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="agent-bindings"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AgentBindings />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="skills"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -518,6 +540,22 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <SubAgentList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/agent-definitions"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AgentDefinitions />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/agent-bindings"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AgentBindings />
                   </Suspense>
                 }
               />

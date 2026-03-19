@@ -37,66 +37,31 @@ import {
 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useVoiceCallStore } from '@/stores/voiceCallStore';
 
 import type { MentionItem } from '@/services/mentionService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
+import { useFrameCapture } from '@/hooks/rtc/useFrameCapture';
 import { useActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
+import { useVoiceTranscribe } from '@/hooks/useVoiceTranscribe';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import { LlmOverridePopover } from './chat/LlmOverridePopover';
-import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
 import { MentionPopover } from './chat/MentionPopover';
+import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
 import { PromptTemplateLibrary } from './chat/PromptTemplateLibrary';
-import { VoiceWaveform } from './chat/VoiceWaveform';
 import { VoiceCallPanel } from './chat/VoiceCallPanel';
+import { VoiceWaveform } from './chat/VoiceWaveform';
 import { useFileUpload, type PendingAttachment } from './FileUploader';
-import { useFrameCapture } from '@/hooks/rtc/useFrameCapture';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
 import type { SkillResponse, SlashItem } from '@/types/agent';
-import { useVoiceCallStore } from '@/stores/voiceCallStore';
+
 
 import type { MentionPopoverHandle } from './chat/MentionPopover';
 import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
-
-// Web Speech API types (not in default TS lib)
-interface SpeechRecognitionEvent extends Event {
-  readonly resultIndex: number;
-  readonly results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  readonly length: number;
-  readonly isFinal: boolean;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: Event) => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-interface SpeechRecognitionConstructor {
-  new (): SpeechRecognition;
-}
 
 interface InputBarProps {
   onSend: (
@@ -140,7 +105,6 @@ export const InputBar = memo<InputBarProps>(
     const [slashQuery, setSlashQuery] = useState('');
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const [templateLibraryVisible, setTemplateLibraryVisible] = useState(false);
-    const [isListening, setIsListening] = useState(false);
     const [mentionVisible, setMentionVisible] = useState(false);
     const [mentionQuery, setMentionQuery] = useState('');
     const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
@@ -149,8 +113,8 @@ export const InputBar = memo<InputBarProps>(
     const fileInputRef = useRef<HTMLInputElement>(null);
     const slashDropdownRef = useRef<SlashCommandDropdownHandle>(null);
     const dragCounter = useRef(0);
-    const recognitionRef = useRef<SpeechRecognition | null>(null);
-
+    const contentRef = useRef(content);
+    contentRef.current = content;
 
     const activeConversationId = useAgentV3Store((state) => state.activeConversationId);
     const activeModelOverride = useAgentV3Store((state) => {
@@ -184,6 +148,26 @@ export const InputBar = memo<InputBarProps>(
     }, [voiceCallStatus, activeConversationId, projectId]);
 
     const capabilities = useActiveModelCapabilities(activeModelOverride);
+
+    const voicePrefixRef = useRef('');
+    const { isListening, toggle: rawToggleVoice } = useVoiceTranscribe({
+      projectId,
+      conversationId: activeConversationId ?? undefined,
+      onInterim: useCallback((text: string) => {
+        setContent(voicePrefixRef.current + text);
+      }, []),
+      onFinal: useCallback((text: string) => {
+        const prefix = voicePrefixRef.current;
+        voicePrefixRef.current = prefix + text;
+        setContent(prefix + text);
+      }, []),
+    });
+    const toggleVoiceInput = useCallback(async () => {
+      if (!isListening) {
+        voicePrefixRef.current = contentRef.current;
+      }
+      await rawToggleVoice();
+    }, [isListening, rawToggleVoice]);
 
     const { attachments, addFiles, removeAttachment, retryAttachment, clearAll } = useFileUpload({
       projectId,
@@ -318,67 +302,6 @@ export const InputBar = memo<InputBarProps>(
       },
       [content]
     );
-
-    // Voice input via Web Speech API
-    const speechSupported =
-      typeof window !== 'undefined' &&
-      ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
-
-    const toggleVoiceInput = useCallback(() => {
-      if (isListening) {
-        recognitionRef.current?.stop();
-        setIsListening(false);
-        return;
-      }
-
-      const win = window as unknown as Record<string, unknown>;
-      const SpeechRecognitionCtor = (win.SpeechRecognition ?? win.webkitSpeechRecognition) as
-        | SpeechRecognitionConstructor
-        | undefined;
-      if (!SpeechRecognitionCtor) return;
-
-      const recognition = new SpeechRecognitionCtor();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = document.documentElement.lang || 'en-US';
-
-      let finalTranscript = '';
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result && result.length > 0) {
-            const alt = result[0];
-            if (!alt) continue;
-            const transcript = alt.transcript;
-            if (result.isFinal) {
-              finalTranscript += transcript;
-            } else {
-              interim += transcript;
-            }
-          }
-        }
-        setContent((prev) => {
-          const base = prev.endsWith(finalTranscript) ? prev : prev + finalTranscript;
-          return interim ? base + interim : base;
-        });
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-        recognitionRef.current = null;
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-        recognitionRef.current = null;
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-      setIsListening(true);
-    }, [isListening]);
 
     const handleSlashSelect = useCallback(
       (item: SlashItem) => {
@@ -859,33 +782,30 @@ export const InputBar = memo<InputBarProps>(
                 />
               </LazyTooltip>
 
-              {speechSupported && (
-                <>
-                  <LazyTooltip
-                    title={
+              <LazyTooltip
+                title={
+                  isListening
+                    ? t('agent.inputBar.stopVoice', 'Stop voice input')
+                    : t('agent.inputBar.startVoice', 'Voice input')
+                }
+              >
+                <LazyButton
+                  type="text"
+                  size="small"
+                  icon={isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                  onClick={toggleVoiceInput}
+                  disabled={voiceCallStatus !== 'idle'}
+                  className={`
+                    rounded-lg h-8 w-8 flex items-center justify-center transition-all
+                    ${
                       isListening
-                        ? t('agent.inputBar.stopVoice', 'Stop voice input')
-                        : t('agent.inputBar.startVoice', 'Voice input')
+                        ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
                     }
-                  >
-                    <LazyButton
-                      type="text"
-                      size="small"
-                      icon={isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                      onClick={toggleVoiceInput}
-                      className={`
-                        rounded-lg h-8 w-8 flex items-center justify-center transition-all
-                        ${
-                          isListening
-                            ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
-                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                        }
-                      `}
-                    />
-                  </LazyTooltip>
-                  <VoiceWaveform active={isListening} />
-                </>
-              )}
+                  `}
+                />
+              </LazyTooltip>
+              <VoiceWaveform active={isListening} />
 
               <LazyTooltip title={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}>
                 <LazyButton
@@ -893,7 +813,7 @@ export const InputBar = memo<InputBarProps>(
                   size="small"
                   icon={voiceCallStatus !== 'idle' ? <PhoneOff size={18} /> : <Phone size={18} />}
                   onClick={handleVoiceCall}
-                  disabled={!!(isStreaming || disabled)}
+                  disabled={!!(isStreaming || disabled || isListening)}
                   className={`
                     rounded-lg h-8 w-8 flex items-center justify-center transition-all
                     ${

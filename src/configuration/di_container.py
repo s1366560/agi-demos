@@ -173,6 +173,7 @@ class DIContainer:
             sandbox_orchestrator_factory=self._sandbox.sandbox_orchestrator,
             sandbox_event_publisher_factory=self._infra.sandbox_event_publisher,
             sequence_service_factory=self._infra.sequence_service,
+            agent_message_bus_factory=self._infra.agent_message_bus,
         )
 
     def with_db(self, db: AsyncSession) -> "DIContainer":
@@ -276,6 +277,7 @@ class DIContainer:
 
     def cron_job_service(self) -> CronJobService:
         return self._cron.cron_job_service()
+
     # === Project Container delegates ===
 
     def project_repository(self) -> ProjectRepository:
@@ -297,6 +299,9 @@ class DIContainer:
 
     def hitl_message_bus(self) -> HITLMessageBusPort | None:
         return self._infra.hitl_message_bus()
+
+    def agent_message_bus(self) -> Any:
+        return self._infra.agent_message_bus()
 
     def storage_service(self) -> Any:
         return self._infra.storage_service()
@@ -341,6 +346,7 @@ class DIContainer:
 
     def dependency_orchestrator(self) -> Any:
         return self._sandbox.dependency_orchestrator()
+
     # === Agent Container delegates ===
 
     def conversation_repository(self) -> SqlConversationRepository:
@@ -391,6 +397,15 @@ class DIContainer:
     def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
         return self._agent.subagent_template_repository()
 
+    def agent_registry(self) -> Any:
+        return self._agent.agent_registry()
+
+    def agent_binding_repository(self) -> Any:
+        return self._agent.agent_binding_repository()
+
+    def binding_router(self) -> Any:
+        return self._agent.binding_router()
+
     def attachment_repository(self) -> Any:
         return self._agent.attachment_repository()
 
@@ -406,12 +421,20 @@ class DIContainer:
     def workspace_manager(self) -> Any:
         return self._agent.workspace_manager()
 
+    def agent_session_registry(self) -> Any:
+        return self._agent.agent_session_registry()
+
+    def spawn_manager(self) -> Any:
+        return self._agent.spawn_manager()
+
+    def agent_orchestrator(self) -> Any:
+        return self._agent.agent_orchestrator()
+
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 
     def event_converter(self) -> Any:
         return self._agent.event_converter()
-
 
     def attachment_processor(self) -> Any:
         return self._agent.attachment_processor()

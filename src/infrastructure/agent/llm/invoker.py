@@ -148,7 +148,7 @@ class InvocationConfig:
     api_key: str
     base_url: str | None = None
     temperature: float = 0.7
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments
     max_attempts: int = 3
     llm_client: Any | None = None  # Optional LiteLLMClient for unified resilience
     provider_options: dict[str, Any] = field(default_factory=dict)  # Provider-specific options

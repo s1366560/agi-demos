@@ -79,6 +79,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repo
     SqlWorkflowPatternRepository,
 )
 from src.infrastructure.agent.context.window_manager import ContextWindowManager
+from src.infrastructure.agent.orchestration import AgentSessionRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ class AgentContainer:
         sandbox_orchestrator_factory: Callable[..., Any] | None = None,
         sandbox_event_publisher_factory: Callable[..., Any] | None = None,
         sequence_service_factory: Callable[..., Any] | None = None,
+        agent_message_bus_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._db = db
         self._graph_service = graph_service
@@ -157,8 +159,12 @@ class AgentContainer:
         self._sandbox_orchestrator_factory = sandbox_orchestrator_factory
         self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
         self._sequence_service_factory = sequence_service_factory
+        self._agent_message_bus_factory = agent_message_bus_factory
         self._skill_service_instance: SkillService | None = None
         self._workspace_manager_instance: Any | None = None
+        self._agent_session_registry_instance: AgentSessionRegistry | None = None
+        self._spawn_manager_instance: Any | None = None
+        self._agent_orchestrator_instance: Any | None = None
 
     # === Agent Repositories ===
 
@@ -250,6 +256,35 @@ class AgentContainer:
         """Get SqlSubAgentTemplateRepository for template marketplace."""
         assert self._db is not None
         return SqlSubAgentTemplateRepository(self._db)
+
+    def agent_registry(self) -> Any:
+        """Get SqlAgentRegistryRepository for agent definition persistence."""
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
+            SqlAgentRegistryRepository,
+        )
+
+        assert self._db is not None
+        return SqlAgentRegistryRepository(self._db)
+
+    def agent_binding_repository(self) -> Any:
+        """Get SqlAgentBindingRepository for agent binding persistence."""
+        from src.infrastructure.adapters.secondary.persistence.sql_binding_repository import (
+            SqlAgentBindingRepository,
+        )
+
+        assert self._db is not None
+        return SqlAgentBindingRepository(self._db)
+
+    def binding_router(self) -> Any:
+        """Get BindingRouter for agent-aware channel routing."""
+        from src.infrastructure.agent.channels.channel_router import ChannelRouter
+        from src.infrastructure.agent.routing.binding_router import BindingRouter
+
+        return BindingRouter(
+            binding_repository=self.agent_binding_repository(),
+            agent_registry=self.agent_registry(),
+            channel_router=ChannelRouter(),
+        )
 
     # === Attachment & Artifact ===
 
@@ -376,6 +411,41 @@ class AgentContainer:
             enabled=enabled,
         )
         return self._workspace_manager_instance
+
+    def agent_session_registry(self) -> AgentSessionRegistry:
+        """Get AgentSessionRegistry singleton (in-memory, no DB dependency)."""
+        if self._agent_session_registry_instance is not None:
+            return self._agent_session_registry_instance
+        self._agent_session_registry_instance = AgentSessionRegistry()
+        return self._agent_session_registry_instance
+
+    def spawn_manager(self) -> Any:
+        """Get SpawnManager singleton (in-memory, no DB dependency)."""
+        if self._spawn_manager_instance is not None:
+            return self._spawn_manager_instance
+        from src.infrastructure.agent.orchestration.spawn_manager import (
+            SpawnManager,
+        )
+
+        self._spawn_manager_instance = SpawnManager()
+        return self._spawn_manager_instance
+
+    def agent_orchestrator(self) -> Any:
+        """Get AgentOrchestrator singleton for multi-agent coordination."""
+        if self._agent_orchestrator_instance is not None:
+            return self._agent_orchestrator_instance
+        from src.infrastructure.agent.orchestration.orchestrator import (
+            AgentOrchestrator,
+        )
+
+        message_bus = self._agent_message_bus_factory() if self._agent_message_bus_factory else None
+        self._agent_orchestrator_instance = AgentOrchestrator(
+            agent_registry=self.agent_registry(),
+            session_registry=self.agent_session_registry(),
+            spawn_manager=self.spawn_manager(),
+            message_bus=message_bus,
+        )
+        return self._agent_orchestrator_instance
 
     # === Agent Service ===
 

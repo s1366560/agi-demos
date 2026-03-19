@@ -32,6 +32,7 @@ class AgentServicePort(ABC):
         forced_skill_name: str | None = None,
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
+        agent_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using self-developed ReAct core.

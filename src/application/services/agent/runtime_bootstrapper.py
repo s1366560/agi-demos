@@ -47,6 +47,7 @@ class AgentRuntimeBootstrapper:
         context_summary_data: dict[str, Any] | None = None,
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
+        agent_id: str | None = None,
     ) -> str:
         """Start agent execution using configured runtime mode."""
         from src.configuration.config import get_settings
@@ -100,6 +101,7 @@ class AgentRuntimeBootstrapper:
             plan_mode=conversation.is_in_plan_mode,
             app_model_context=app_model_context,
             image_attachments=image_attachments,
+            agent_id=agent_id,
         )
 
         if runtime_mode == "local":

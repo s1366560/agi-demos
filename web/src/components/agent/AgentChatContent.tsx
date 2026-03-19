@@ -232,6 +232,11 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       return state.conversationStates.get(convId)?.tasks;
     });
     const tasks = rawTasks ?? EMPTY_TASKS;
+    const rawAgentNodes = useAgentV3Store((state) => {
+      const convId = state.activeConversationId;
+      if (!convId) return undefined;
+      return state.conversationStates.get(convId)?.agentNodes;
+    });
     const {
       executionPathDecision,
       selectionTrace,
@@ -837,6 +842,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
                 policyFiltered={policyFiltered}
                 executionNarrative={executionNarrative}
                 latestToolsetChange={latestToolsetChange}
+                agentNodes={rawAgentNodes}
                 collapsed={false}
               />
             </div>

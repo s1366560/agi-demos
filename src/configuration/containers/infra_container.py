@@ -57,6 +57,16 @@ class InfraContainer:
 
         return RedisHITLMessageBusAdapter(self._redis_client)
 
+    def agent_message_bus(self) -> Any:
+        """Get the inter-agent message bus for agent-to-agent communication."""
+        if not self._redis_client:
+            return None
+        from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
+            RedisAgentMessageBusAdapter,
+        )
+
+        return RedisAgentMessageBusAdapter(self._redis_client)
+
     def storage_service(self) -> Any:
         """Get StorageServicePort for file storage operations (S3/MinIO)."""
         from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import (

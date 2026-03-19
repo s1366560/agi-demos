@@ -263,6 +263,8 @@ export const TenantLayout: React.FC = memo(() => {
     'skills',
     'profile',
     'mcp-servers',
+    'agent-definitions',
+    'agent-bindings',
   ];
   const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
   const isAgentWorkspacePath =

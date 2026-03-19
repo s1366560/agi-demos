@@ -128,7 +128,11 @@ export type TimelineEventType =
   | 'memory_recalled'
   | 'memory_captured'
   // Canvas events
-  | 'canvas_updated';
+  | 'canvas_updated'
+  // Multi-Agent events (L4 layer)
+  | 'agent_spawned'
+  | 'agent_completed'
+  | 'agent_stopped';
 
 /**
  * Base timeline event (all events share these fields)
@@ -484,7 +488,11 @@ export type TimelineEvent =
   | MemoryRecalledTimelineEvent
   | MemoryCapturedTimelineEvent
   // Canvas events
-  | CanvasUpdatedTimelineEvent;
+  | CanvasUpdatedTimelineEvent
+  // Multi-Agent events (L4 layer)
+  | AgentSpawnedTimelineEvent
+  | AgentCompletedTimelineEvent
+  | AgentStoppedTimelineEvent;
 
 // ============================================
 // SubAgent Timeline Event Interfaces (L3 layer)
@@ -607,6 +615,37 @@ export interface BackgroundLaunchedTimelineEvent extends BaseTimelineEvent {
   executionId: string;
   subagentName: string;
   task: string;
+}
+
+// Multi-Agent Timeline Event Interfaces (L4 layer)
+
+export interface AgentSpawnedTimelineEvent extends BaseTimelineEvent {
+  type: 'agent_spawned';
+  agentId: string;
+  agentName: string | null;
+  parentAgentId: string | null;
+  childSessionId: string | null;
+  mode: string;
+  taskSummary: string | null;
+}
+
+export interface AgentCompletedTimelineEvent extends BaseTimelineEvent {
+  type: 'agent_completed';
+  agentId: string;
+  agentName: string | null;
+  parentAgentId: string | null;
+  sessionId: string | null;
+  result: string | null;
+  success: boolean;
+  artifacts: string[];
+}
+
+export interface AgentStoppedTimelineEvent extends BaseTimelineEvent {
+  type: 'agent_stopped';
+  agentId: string;
+  agentName: string | null;
+  reason: string | null;
+  stoppedBy: string | null;
 }
 
 /**

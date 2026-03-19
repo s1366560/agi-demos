@@ -120,6 +120,9 @@ __all__ = [  # noqa: RUF022
     "set_hitl_response_listener",
     # MCP Sandbox Adapter
     "set_mcp_sandbox_adapter",
+    # Multi-Agent Orchestrator
+    "set_agent_orchestrator",
+    "get_agent_orchestrator",
     # Pool Manager (new 3-tier architecture)
     "set_pool_adapter",
     "sync_mcp_sandbox_adapter_from_docker",
@@ -134,6 +137,7 @@ _redis_pool: redis.ConnectionPool | None = None
 _mcp_sandbox_adapter: Any | None = None
 _pool_adapter: Any | None = None  # PooledAgentSessionAdapter (when enabled)
 _hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
+_agent_orchestrator: Any | None = None  # AgentOrchestrator (multi-agent)
 
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
@@ -243,6 +247,16 @@ def get_mcp_sandbox_adapter() -> Any | None:
         The MCPSandboxAdapter instance or None if not initialized
     """
     return _mcp_sandbox_adapter
+
+
+def set_agent_orchestrator(orchestrator: Any) -> None:
+    global _agent_orchestrator
+    _agent_orchestrator = orchestrator
+    logger.info("Agent Worker: AgentOrchestrator registered for Activities")
+
+
+def get_agent_orchestrator() -> Any | None:
+    return _agent_orchestrator
 
 
 # ============================================================================
@@ -439,6 +453,9 @@ async def get_or_create_tools(
 
     # 15. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
+
+    # 16. Add Multi-Agent tools (behind feature flag)
+    _add_agent_tools(tools, project_id)
 
     return tools
 
@@ -660,6 +677,54 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
         logger.info(f"Agent Worker: Todo tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
+
+
+def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
+    try:
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        if not settings.multi_agent_enabled:
+            return
+
+        orchestrator = get_agent_orchestrator()
+        if orchestrator is None:
+            logger.debug("Agent Worker: AgentOrchestrator not set, skipping agent tools")
+            return
+
+        from src.infrastructure.agent.tools.agent_history import configure_agent_history
+        from src.infrastructure.agent.tools.agent_list import configure_agent_list
+        from src.infrastructure.agent.tools.agent_send import configure_agent_send
+        from src.infrastructure.agent.tools.agent_sessions import (
+            configure_agent_sessions,
+        )
+        from src.infrastructure.agent.tools.agent_spawn import configure_agent_spawn
+        from src.infrastructure.agent.tools.agent_stop import configure_agent_stop
+        from src.infrastructure.agent.tools.define import get_registered_tools
+
+        configure_agent_spawn(orchestrator=orchestrator)
+        configure_agent_list(orchestrator=orchestrator)
+        configure_agent_send(orchestrator=orchestrator)
+        configure_agent_sessions(orchestrator=orchestrator)
+        configure_agent_history(orchestrator=orchestrator)
+        configure_agent_stop(orchestrator=orchestrator)
+
+        registry = get_registered_tools()
+        agent_tool_names = (
+            "agent_spawn",
+            "agent_list",
+            "agent_send",
+            "agent_sessions",
+            "agent_history",
+            "agent_stop",
+        )
+        for name in agent_tool_names:
+            if name in registry:
+                tools[name] = registry[name]
+
+        logger.info(f"Agent Worker: Multi-agent tools configured for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to configure agent tools: {e}")
 
 
 def _add_model_awareness_tools(
@@ -3245,7 +3310,7 @@ async def prewarm_agent_session(
             api_key="",
             base_url=None,
             temperature=0.7,
-            max_tokens=4096,
+            max_tokens=16384,  # Increased from 4096 to support larger tool arguments
             max_steps=20,
         )
 

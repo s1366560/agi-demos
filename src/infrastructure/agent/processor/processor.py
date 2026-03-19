@@ -136,7 +136,7 @@ class ProcessorConfig:
     api_key: str | None = None
     base_url: str | None = None
     temperature: float = 0.0
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments (e.g., write)
 
     # Processing limits
     max_steps: int = 50  # Maximum steps before forcing stop
@@ -179,6 +179,11 @@ class ProcessorConfig:
     # Provider-specific options (reasoning config, etc.)
     # Passed through to StreamConfig.provider_options -> to_litellm_kwargs()
     provider_options: dict[str, Any] = field(default_factory=dict)
+
+    # Multi-agent: message bus for polling child agent announcements
+    message_bus: Any | None = None
+    # Multi-agent: session ID for this processor (used as stream key for announce polling)
+    session_id: str | None = None
 
 
 @dataclass
@@ -302,6 +307,11 @@ class SessionProcessor:
         self._forced_skill_tools: set[str] | None = (
             set(config.forced_skill_tools) if config.forced_skill_tools else None
         )
+
+        # Multi-agent announce polling state
+        self._message_bus = config.message_bus
+        self._announce_session_id: str | None = config.session_id
+        self._last_announce_id: str | None = None
 
         # Helper state for _execute_tool decomposition
         self.__resolve_errors: list[ProcessorEvent] = []
@@ -581,6 +591,8 @@ class SessionProcessor:
                 # Append tool results to messages for next iteration
                 if result == ProcessorResult.CONTINUE:
                     self._append_tool_results_to_messages(messages)
+                    for evt in await self._check_agent_announcements(messages):
+                        yield evt
 
             # Emit completion events
             async for event in self._emit_completion_events(result, session_id, messages):
@@ -606,6 +618,60 @@ class SessionProcessor:
             )
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR
+
+    async def _check_agent_announcements(
+        self, messages: list[dict[str, Any]]
+    ) -> list[ProcessorEvent]:
+        """Poll message bus for child agent announce messages, inject into context."""
+        if self._message_bus is None or self._announce_session_id is None:
+            return []
+
+        try:
+            from src.domain.model.agent.announce_payload import AnnouncePayload
+            from src.domain.ports.services.agent_message_bus_port import (
+                AgentMessageType,
+            )
+
+            raw_messages: list[Any] = await self._message_bus.receive_messages(
+                agent_id="",
+                session_id=self._announce_session_id,
+                since_id=self._last_announce_id,
+                limit=10,
+            )
+
+            events: list[ProcessorEvent] = []
+            for msg in raw_messages:
+                if msg.message_type != AgentMessageType.ANNOUNCE:
+                    self._last_announce_id = msg.message_id
+                    continue
+
+                import json
+
+                try:
+                    payload = AnnouncePayload.from_dict(json.loads(msg.content))
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    logger.warning("Failed to parse announce payload from %s", msg.message_id)
+                    self._last_announce_id = msg.message_id
+                    continue
+
+                status = "completed successfully" if payload.success else "failed"
+                result_summary = payload.result or "(no result)"
+                announce_text = (
+                    f"[Agent Announce] Agent '{payload.agent_id}' "
+                    f"(session {payload.session_id}) {status}: {result_summary}"
+                )
+                messages.append({"role": "system", "content": announce_text})
+                logger.info(
+                    "Injected announce from agent %s session %s (success=%s)",
+                    payload.agent_id,
+                    payload.session_id,
+                    payload.success,
+                )
+                self._last_announce_id = msg.message_id
+            return events
+        except Exception:
+            logger.warning("Error polling agent announcements", exc_info=True)
+            return []
 
     def _check_abort_and_limits(self) -> AgentErrorEvent | None:
         """Check abort signal and step limits. Returns error event or None."""
@@ -1660,9 +1726,8 @@ class SessionProcessor:
 
         # Handle truncated arguments
         if "_error" in arguments and arguments.get("_error") == "truncated":
-            error_msg = arguments.get(
-                "_message",
-                "Tool arguments were truncated. The content may be too large.",
+            error_msg = self._build_truncation_error_message(
+                tool_name, arguments.get("_message", "")
             )
             logger.error("[Processor] Tool arguments truncated for %s", tool_name)
             tool_part.status = ToolState.ERROR
@@ -1707,6 +1772,54 @@ class SessionProcessor:
         # functions do not accept session_id as a parameter.
 
         return arguments
+
+    @staticmethod
+    def _build_truncation_error_message(tool_name: str, original_message: str) -> str:
+        """Build tool-specific truncation error message with recovery suggestions.
+
+        Provides actionable recovery strategies based on the tool type.
+        """
+        # Tool-specific recovery suggestions
+        tool_recovery_hints: dict[str, str] = {
+            "write": (
+                "The file content is too large to write in a single call. "
+                "RECOVERY OPTIONS: "
+                "(1) Write the file in smaller chunks using multiple write calls with append mode, "
+                "(2) Use the 'edit' tool to add content incrementally, "
+                "(3) Split the content into multiple smaller files. "
+                "Consider reducing the content size to under ~10KB per write call."
+            ),
+            "edit": (
+                "The edit content is too large. "
+                "RECOVERY OPTIONS: "
+                "(1) Break the edit into smaller chunks, "
+                "(2) Use multiple edit calls with smaller old_string/new_string pairs. "
+                "Consider making edits under ~5KB each."
+            ),
+            "todowrite": (
+                "The task list is too large. "
+                "RECOVERY OPTIONS: "
+                "(1) Use 'replace' mode with fewer tasks, "
+                "(2) Split tasks into multiple todowrite calls using 'add' mode."
+            ),
+        }
+
+        # Normalize tool name (remove prefixes like mcp_, handle aliases)
+        normalized_name = tool_name.lower().replace("_", "").replace("-", "")
+
+        # Check for matching recovery hint
+        for key, hint in tool_recovery_hints.items():
+            if key in normalized_name or normalized_name in key:
+                return f"{original_message}\n\n{hint}"
+
+        # Default message for unknown tools
+        return (
+            f"{original_message}\n\n"
+            f"RECOVERY OPTIONS: "
+            f"(1) Reduce the content size, "
+            f"(2) Break the operation into smaller steps, "
+            f"(3) Request increased max_tokens from the user."
+        )
 
     @staticmethod
     def _try_parse_raw_arguments(
@@ -2148,14 +2261,14 @@ class SessionProcessor:
                                                     inject_discovered_mcp_tools_into_cache,
                                                 )
 
-                                                injected = await inject_discovered_mcp_tools_into_cache(
-                                                    project_id=event_data.get(
-                                                        "project_id", ""
-                                                    ),
-                                                    server_name=event_data.get(
-                                                        "server_name", ""
-                                                    ),
-                                                    discovered_tools=disc,
+                                                injected = (
+                                                    await inject_discovered_mcp_tools_into_cache(
+                                                        project_id=event_data.get("project_id", ""),
+                                                        server_name=event_data.get(
+                                                            "server_name", ""
+                                                        ),
+                                                        discovered_tools=disc,
+                                                    )
                                                 )
                                                 if injected > 0:
                                                     final_count = self._refresh_tools()
@@ -2163,9 +2276,9 @@ class SessionProcessor:
                                                         event_data["refresh_status"] = (
                                                             "success_injection"
                                                         )
-                                                        event_data[
-                                                            "refreshed_tool_count"
-                                                        ] = final_count
+                                                        event_data["refreshed_tool_count"] = (
+                                                            final_count
+                                                        )
                                                         logger.info(
                                                             "[Processor] Cache injection + refresh "
                                                             "loaded %d tools for %s",

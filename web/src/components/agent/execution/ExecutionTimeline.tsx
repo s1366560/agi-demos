@@ -18,7 +18,7 @@
  * State Management: useReducer instead of multiple useState
  */
 
-import { useEffect, useRef, useCallback, useReducer, createContext, useContext } from 'react';
+import { useEffect, useRef, useCallback, useReducer, useMemo, createContext, useContext } from 'react';
 
 import { MaterialIcon } from '../shared';
 
@@ -163,14 +163,12 @@ export function getDisplayMode(
 // Compound Components
 // ============================================
 
-interface HeaderProps {
-  children?: React.ReactNode | undefined;
-}
-
-export const Header: React.FC<HeaderProps> = ({ children }) => {
-  const { workPlan: _workPlan, steps, isStreaming, matchedPattern } = useExecutionTimelineContext();
-  // _workPlan kept for potential future use
-  void _workPlan;
+/**
+ * Shared header internals: title row, status badges, and progress bar.
+ * Used by both the Header compound component and the full-timeline render.
+ */
+const HeaderContent: React.FC = () => {
+  const { steps, isStreaming, matchedPattern } = useExecutionTimelineContext();
 
   const completedSteps = steps.filter((s) => s.status === 'completed').length;
   const totalSteps = steps.length;
@@ -178,57 +176,66 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
 
   return (
     <>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <MaterialIcon name="checklist" size={20} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
+            <p className="text-sm text-slate-500">
+              {completedSteps}/{totalSteps} 步骤已完成
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {matchedPattern && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+              匹配模式 ({Math.round(matchedPattern.similarity * 100)}%)
+            </span>
+          )}
+
+          <span
+            className={`px-2 py-1 rounded-full text-xs font-semibold ${
+              completedSteps === totalSteps
+                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                : isStreaming
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            {completedSteps === totalSteps ? '已完成' : isStreaming ? '执行中' : '等待中'}
+          </span>
+        </div>
+      </div>
+
+      <div
+        className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3"
+        role="progressbar"
+        aria-valuenow={progressPercent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className="h-full bg-primary transition-all duration-500 ease-out"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+    </>
+  );
+};
+
+interface HeaderProps {
+  children?: React.ReactNode | undefined;
+}
+
+export const Header: React.FC<HeaderProps> = ({ children }) => {
+  return (
+    <>
       {children || (
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <MaterialIcon name="checklist" size={20} className="text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
-                <p className="text-sm text-slate-500">
-                  {completedSteps}/{totalSteps} 步骤已完成
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* Pattern Match Badge */}
-              {matchedPattern && (
-                <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                  匹配模式 ({Math.round(matchedPattern.similarity * 100)}%)
-                </span>
-              )}
-
-              {/* Status Badge */}
-              <span
-                className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                  completedSteps === totalSteps
-                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                    : isStreaming
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                {completedSteps === totalSteps ? '已完成' : isStreaming ? '执行中' : '等待中'}
-              </span>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div
-            className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3"
-            role="progressbar"
-            aria-valuenow={progressPercent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className="h-full bg-primary transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+          <HeaderContent />
         </div>
       )}
     </>
@@ -554,31 +561,41 @@ function ExecutionTimelineImpl({
     dispatch({ type: 'COLLAPSE_ALL', payload: steps.map((s) => s.stepNumber) });
   }, [steps]);
 
-  const contextValue: ExecutionTimelineContextValue = {
-    workPlan,
-    steps,
-    toolExecutionHistory,
-    isStreaming,
-    currentStepNumber,
-    matchedPattern,
-    expansionState,
-    dispatch,
-    toggleStep,
-    expandAll,
-    collapseAll,
-    isStepExpanded,
-  };
+  const contextValue: ExecutionTimelineContextValue = useMemo(
+    () => ({
+      workPlan,
+      steps,
+      toolExecutionHistory,
+      isStreaming,
+      currentStepNumber,
+      matchedPattern,
+      expansionState,
+      dispatch,
+      toggleStep,
+      expandAll,
+      collapseAll,
+      isStepExpanded,
+    }),
+     
+    [
+      workPlan,
+      steps,
+      toolExecutionHistory,
+      isStreaming,
+      currentStepNumber,
+      matchedPattern,
+      expansionState,
+      toggleStep,
+      expandAll,
+      collapseAll,
+      isStepExpanded,
+    ]
+  );
 
-  // Direct mode - nothing to show (handled by parent)
   if (displayMode === 'direct') {
     return null;
   }
 
-  const completedSteps = steps.filter((s) => s.status === 'completed').length;
-  const totalSteps = steps.length;
-  const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-
-  // Simple timeline mode
   if (displayMode === 'simple-timeline') {
     return (
       <ExecutionTimelineContext.Provider value={contextValue}>
@@ -593,71 +610,18 @@ function ExecutionTimelineImpl({
     );
   }
 
-  // Full timeline mode
   return (
     <ExecutionTimelineContext.Provider value={contextValue}>
       <div className="w-full mb-4" ref={timelineRef}>
         {workPlan && (
-          <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <MaterialIcon name="checklist" size={20} className="text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
-                  <p className="text-sm text-slate-500">
-                    {completedSteps}/{totalSteps} 步骤已完成
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Pattern Match Badge */}
-                {matchedPattern && (
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                    匹配模式 ({Math.round(matchedPattern.similarity * 100)}%)
-                  </span>
-                )}
-
-                {/* Status Badge */}
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                    completedSteps === totalSteps
-                      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                      : isStreaming
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  {completedSteps === totalSteps ? '已完成' : isStreaming ? '执行中' : '等待中'}
-                </span>
-              </div>
+          <Header>
+            <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 mb-4">
+              <HeaderContent />
+              <Checklist />
+              <Controls />
             </div>
-
-            {/* Progress Bar */}
-            <div
-              className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3"
-              role="progressbar"
-              aria-valuenow={progressPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className="h-full bg-primary transition-all duration-500 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-
-            {/* Checklist Items */}
-            <Checklist />
-
-            {/* Expand/Collapse Controls */}
-            <Controls />
-          </div>
+          </Header>
         )}
-
-        {/* Timeline Nodes */}
         <Timeline />
       </div>
     </ExecutionTimelineContext.Provider>

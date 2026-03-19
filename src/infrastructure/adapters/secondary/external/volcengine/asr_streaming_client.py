@@ -68,6 +68,10 @@ class AsyncASRStreamingClient:
         app_key: Application key for the ASR resource.
         ws_url: WebSocket endpoint URL.  Defaults to the BigModel ASR V3
             endpoint.
+        proxy: Optional proxy URL for the WebSocket connection.  Supports
+            ``socks5://``, ``socks4://``, and ``http://`` schemes.
+            When ``None`` (default), the ``websockets`` library falls back to
+            auto-detection from environment variables.
     """
 
     def __init__(
@@ -75,11 +79,13 @@ class AsyncASRStreamingClient:
         access_key: str,
         app_key: str,
         ws_url: str = _DEFAULT_WS_URL,
+        proxy: str | None = None,
     ) -> None:
         super().__init__()
         self._access_key = access_key
         self._app_key = app_key
         self._ws_url = ws_url
+        self._proxy: str | bool = proxy if proxy is not None else True
         self._ws: ClientConnection | None = None
         self._request_id = str(uuid.uuid4())
         self._sequence = 1
@@ -113,7 +119,7 @@ class AsyncASRStreamingClient:
                 additional_headers=headers,
                 max_size=None,
                 open_timeout=10,
-                proxy=None,
+                proxy=self._proxy,
             )
         except Exception as exc:
             raise ASRConnectionError(f"Failed to connect to ASR endpoint: {exc}") from exc
@@ -201,7 +207,6 @@ class AsyncASRStreamingClient:
             self._ws = None
             return None
 
-
         parsed = parse_response(raw)
         payload: dict[str, Any] = parsed.get("payload_msg", {})
         result: dict[str, Any] = payload.get("result", {})
@@ -264,7 +269,6 @@ class AsyncASRStreamingClient:
             raw_resp = await self._ws.recv(decode=False)
         except ConnectionClosed as exc:
             raise ASRConnectionError("Connection closed during ASR handshake") from exc
-
 
         resp = parse_response(raw_resp)
         payload_msg: dict[str, Any] = resp.get("payload_msg", {})

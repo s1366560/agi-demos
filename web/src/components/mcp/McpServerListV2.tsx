@@ -16,10 +16,10 @@ import { mcpAPI } from '@/services/mcpService';
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { McpAppsTabV2 } from './McpAppsTabV2';
+import { McpLogsTabV2 } from './McpLogsTabV2';
+import { McpPromptsTabV2 } from './McpPromptsTabV2';
 import { McpServerTabV2 } from './McpServerTabV2';
 import { McpToolsTabV2 } from './McpToolsTabV2';
-import { McpPromptsTabV2 } from './McpPromptsTabV2';
-import { McpLogsTabV2 } from './McpLogsTabV2';
 import { getRuntimeStatus } from './types';
 
 import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';

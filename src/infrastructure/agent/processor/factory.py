@@ -60,6 +60,7 @@ class ProcessorFactory:
     base_url: str | None = None
     tool_pipeline: ToolPipeline | None = None
     plugin_registry: object | None = None
+    message_bus: object | None = None
 
     def create_for_subagent(
         self,
@@ -118,6 +119,7 @@ class ProcessorFactory:
             plugin_registry=self.plugin_registry,
             doom_loop_threshold=doom_loop_threshold if doom_loop_threshold is not None else 3,
             provider_options=_provider_opts,
+            message_bus=self.message_bus,
         )
 
         return SessionProcessor(

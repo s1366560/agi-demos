@@ -64,6 +64,9 @@ import type {
   TaskCompleteEventData,
   MemoryRecalledEventData,
   MemoryCapturedEventData,
+  AgentSpawnedEventData,
+  AgentCompletedEventData,
+  AgentStoppedEventData,
 } from '../types/agent';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
@@ -843,6 +846,56 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'mcp_app_registered':
     case 'canvas_updated':
       return null;
+
+    case 'agent_spawned': {
+      const data = event.data as AgentSpawnedEventData;
+      return {
+        id: generateTimelineEventId('agent_spawned'),
+        type: 'agent_spawned' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        agentId: data.agent_id ?? '',
+        agentName: data.agent_name ?? null,
+        parentAgentId: data.parent_agent_id ?? null,
+        childSessionId: data.child_session_id ?? null,
+        mode: data.mode ?? 'autonomous',
+        taskSummary: data.task_summary ?? null,
+      };
+    }
+
+    case 'agent_completed': {
+      const data = event.data as AgentCompletedEventData;
+      return {
+        id: generateTimelineEventId('agent_completed'),
+        type: 'agent_completed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        agentId: data.agent_id ?? '',
+        agentName: data.agent_name ?? null,
+        parentAgentId: data.parent_agent_id ?? null,
+        sessionId: data.session_id ?? null,
+        result: data.result ?? null,
+        success: data.success ?? false,
+        artifacts: data.artifacts ?? [],
+      };
+    }
+
+    case 'agent_stopped': {
+      const data = event.data as AgentStoppedEventData;
+      return {
+        id: generateTimelineEventId('agent_stopped'),
+        type: 'agent_stopped' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        agentId: data.agent_id ?? '',
+        agentName: data.agent_name ?? null,
+        reason: data.reason ?? null,
+        stoppedBy: data.stopped_by ?? null,
+      };
+    }
 
     default:
       // Unknown event type - return null for type safety

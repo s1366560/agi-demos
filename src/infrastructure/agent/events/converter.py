@@ -55,7 +55,11 @@ class EventConverter:
         """
         self._debug_logging = debug_logging
 
-    def convert(self, domain_event: AgentDomainEvent) -> SSEEventDict | None:
+    def convert(
+        self,
+        domain_event: AgentDomainEvent,
+        agent_id: str | None = None,
+    ) -> SSEEventDict | None:
         """
         Convert AgentDomainEvent to SSE event dictionary format.
 
@@ -63,6 +67,7 @@ class EventConverter:
 
         Args:
             domain_event: AgentDomainEvent from processor
+            agent_id: Optional agent ID to inject into event data
 
         Returns:
             Event dict compatible with SSE streaming, or None to skip
@@ -76,7 +81,15 @@ class EventConverter:
         event_dict = domain_event.to_event_dict()
 
         # Apply backward compatibility transformations
-        return self._apply_transformations(event_type, domain_event, event_dict)
+        result = self._apply_transformations(event_type, domain_event, event_dict)
+
+        # Inject agent_id into event data when present
+        if result is not None and agent_id is not None:
+            data = result.get("data")
+            if isinstance(data, dict):
+                data["agent_id"] = agent_id
+
+        return result
 
     def _apply_transformations(
         self,

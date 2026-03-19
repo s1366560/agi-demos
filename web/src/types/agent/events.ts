@@ -275,7 +275,13 @@ export type AgentEventType =
   | 'memory_recalled' // Memories recalled for context injection
   | 'memory_captured' // New memories captured from conversation
   | 'canvas_updated' // Canvas block created/updated/deleted by agent (A2UI)
-  | 'a2ui_action_asked'; // A2UI interactive surface waiting for user action (HITL)
+  | 'a2ui_action_asked' // A2UI interactive surface waiting for user action (HITL)
+  // Multi-agent lifecycle events (L4 layer)
+  | 'agent_spawned' // New agent instance spawned by orchestrator
+  | 'agent_completed' // Agent finished execution
+  | 'agent_stopped' // Agent stopped (manually or by policy)
+  | 'agent_message_sent' // Inter-agent message sent
+  | 'agent_message_received'; // Inter-agent message received
 
 /**
  * Base SSE event from agent
@@ -1417,4 +1423,50 @@ export interface A2UIActionAskedEventData {
   title?: string | undefined;
   timeout_seconds?: number | undefined;
   surface_data?: Record<string, unknown> | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-agent lifecycle event data (L4 layer)
+// ---------------------------------------------------------------------------
+
+export interface AgentSpawnedEventData {
+  agent_id: string;
+  agent_name: string;
+  parent_agent_id: string;
+  child_session_id: string;
+  mode: string;
+  task_summary: string;
+}
+
+export interface AgentCompletedEventData {
+  agent_id: string;
+  agent_name: string;
+  parent_agent_id: string;
+  session_id: string;
+  result: string;
+  success: boolean;
+  artifacts: string[];
+}
+
+export interface AgentStoppedEventData {
+  agent_id: string;
+  agent_name: string;
+  reason: string;
+  stopped_by: string;
+}
+
+export interface AgentMessageSentEventData {
+  from_agent_id: string;
+  to_agent_id: string;
+  from_agent_name: string;
+  to_agent_name: string;
+  message_preview: string;
+}
+
+export interface AgentMessageReceivedEventData {
+  agent_id: string;
+  agent_name: string;
+  from_agent_id: string;
+  from_agent_name: string;
+  message_preview: string;
 }

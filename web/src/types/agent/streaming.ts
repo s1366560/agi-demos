@@ -72,6 +72,9 @@ import type {
   MemoryCapturedEventData,
   CanvasUpdatedEventData,
   A2UIActionAskedEventData,
+  AgentSpawnedEventData,
+  AgentCompletedEventData,
+  AgentStoppedEventData,
   CompleteEventData,
   ErrorEventData,
   RetryEventData,
@@ -179,6 +182,10 @@ export interface AgentStreamHandler {
   onChainStepCompleted?: ((event: AgentEvent<ChainStepCompletedEventData>) => void) | undefined;
   onChainCompleted?: ((event: AgentEvent<ChainCompletedEventData>) => void) | undefined;
   onBackgroundLaunched?: ((event: AgentEvent<BackgroundLaunchedEventData>) => void) | undefined;
+  // Multi-agent lifecycle handlers (L4 layer)
+  onAgentSpawned?: ((event: AgentEvent<AgentSpawnedEventData>) => void) | undefined;
+  onAgentCompleted?: ((event: AgentEvent<AgentCompletedEventData>) => void) | undefined;
+  onAgentStopped?: ((event: AgentEvent<AgentStoppedEventData>) => void) | undefined;
   onExecutionPathDecided?: ((event: AgentEvent<ExecutionPathDecidedEventData>) => void) | undefined;
   onSelectionTrace?: ((event: AgentEvent<SelectionTraceEventData>) => void) | undefined;
   onPolicyFiltered?: ((event: AgentEvent<PolicyFilteredEventData>) => void) | undefined;
@@ -190,7 +197,9 @@ export interface AgentStreamHandler {
   onTaskStart?: ((event: AgentEvent<TaskStartEventData>) => void) | undefined;
   onTaskComplete?: ((event: AgentEvent<TaskCompleteEventData>) => void) | undefined;
   onModelSwitchRequested?: ((event: AgentEvent<ModelSwitchRequestedEventData>) => void) | undefined;
-  onModelOverrideRejected?: ((event: AgentEvent<ModelOverrideRejectedEventData>) => void) | undefined;
+  onModelOverrideRejected?:
+    | ((event: AgentEvent<ModelOverrideRejectedEventData>) => void)
+    | undefined;
   // MCP App handlers
   onMCPAppResult?: ((event: AgentEvent) => void) | undefined;
   onMCPAppRegistered?: ((event: AgentEvent) => void) | undefined;

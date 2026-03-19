@@ -26,6 +26,8 @@ import {
   Cable,
   ToyBrick,
   MoreHorizontal,
+  Network,
+  Link2,
   User,
   Settings,
   CreditCard,
@@ -89,6 +91,18 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         label: t('nav.subagents', 'Agents'),
         path: `${basePath}/subagents`,
         icon: <Bot size={16} />,
+      },
+      {
+        id: 'agent-definitions',
+        label: t('nav.agentDefinitions', 'Definitions'),
+        path: `${basePath}/agent-definitions`,
+        icon: <Network size={16} />,
+      },
+      {
+        id: 'agent-bindings',
+        label: t('nav.agentBindings', 'Bindings'),
+        path: `${basePath}/agent-bindings`,
+        icon: <Link2 size={16} />,
       },
       {
         id: 'mcp-servers',

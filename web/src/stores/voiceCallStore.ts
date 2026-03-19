@@ -111,7 +111,7 @@ export const useVoiceCallStore = create<VoiceCallState>()(
 			startCall: async (
 				conversationId: string,
 				projectId: string,
-				mode: CallMode = "audio",
+				mode: CallMode,
 			) => {
 				set({
 					status: "connecting",
@@ -135,49 +135,49 @@ export const useVoiceCallStore = create<VoiceCallState>()(
 			},
 
 			setConnected: () =>
-				set({
+				{ set({
 					status: "connected",
 					callStartTime: Date.now(),
-				}),
+				}); },
 
-			toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
-			toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
-			setAiSpeaking: (speaking: boolean) => set({ aiSpeaking: speaking }),
-			setCallMode: (mode: CallMode) => set({ callMode: mode }),
-			setMinimized: (minimized: boolean) => set({ isMinimized: minimized }),
+			toggleMute: () => { set((state) => ({ isMuted: !state.isMuted })); },
+			toggleCamera: () => { set((state) => ({ isCameraOn: !state.isCameraOn })); },
+			setAiSpeaking: (speaking: boolean) => { set({ aiSpeaking: speaking }); },
+			setCallMode: (mode: CallMode) => { set({ callMode: mode }); },
+			setMinimized: (minimized: boolean) => { set({ isMinimized: minimized }); },
 			setShowDeviceSettings: (show: boolean) =>
-				set({ showDeviceSettings: show }),
+				{ set({ showDeviceSettings: show }); },
 
 			setDevices: (devices) =>
-				set({
+				{ set({
 					audioInputs: devices.audioInputs,
 					audioOutputs: devices.audioOutputs,
 					videoInputs: devices.videoInputs,
-				}),
+				}); },
 
-			selectMicrophone: (deviceId: string) => set({ selectedMicId: deviceId }),
-			selectSpeaker: (deviceId: string) => set({ selectedSpeakerId: deviceId }),
-			selectCamera: (deviceId: string) => set({ selectedCameraId: deviceId }),
+			selectMicrophone: (deviceId: string) => { set({ selectedMicId: deviceId }); },
+			selectSpeaker: (deviceId: string) => { set({ selectedSpeakerId: deviceId }); },
+			selectCamera: (deviceId: string) => { set({ selectedCameraId: deviceId }); },
 
-			setAsrInterimText: (text: string) => set({ asrInterimText: text }),
-			setAsrFinalText: (text: string) => set({ asrFinalText: text }),
+			setAsrInterimText: (text: string) => { set({ asrInterimText: text }); },
+			setAsrFinalText: (text: string) => { set({ asrFinalText: text }); },
 			appendAgentToken: (token: string) =>
-				set((state) => ({
+				{ set((state) => ({
 					agentResponseText: state.agentResponseText + token,
-				})),
+				})); },
 			setAgentComplete: (content: string) =>
-				set({ agentResponseText: content, isAgentStreaming: false }),
+				{ set({ agentResponseText: content, isAgentStreaming: false }); },
 			setAgentStreaming: (streaming: boolean) =>
-				set({ isAgentStreaming: streaming }),
+				{ set({ isAgentStreaming: streaming }); },
 			clearTranscript: () =>
-				set({
+				{ set({
 					asrInterimText: "",
 					asrFinalText: "",
 					agentResponseText: "",
 					isAgentStreaming: false,
-				}),
+				}); },
 
-			reset: () => set({ ...initialState }),
+			reset: () => { set({ ...initialState }); },
 		}),
 		{ name: "voice-call-store" },
 	),

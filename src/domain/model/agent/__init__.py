@@ -16,7 +16,13 @@ All symbols are re-exported here for backward compatibility.
 """
 
 from src.domain.events.agent_events import AgentEventType
+
+# Multi-Agent System (L4 layer)
+from src.domain.model.agent.agent_binding import AgentBinding
+from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_mode import AgentMode
+from src.domain.model.agent.agent_source import AgentSource
+from src.domain.model.agent.announce_payload import AnnouncePayload
 
 # Config bounded context
 from src.domain.model.agent.config import TenantAgentConfig
@@ -70,22 +76,30 @@ from src.domain.model.agent.skill import (
     TriggerPattern,
     TriggerType,
 )
+from src.domain.model.agent.spawn_mode import SpawnMode
+from src.domain.model.agent.spawn_record import SpawnRecord
 
 # Core concepts (kept at agent/ level)
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
+from src.domain.model.agent.workspace_config import WorkspaceConfig
 
 __all__ = [
     # Reflection Result
     "AdjustmentType",
+    # Multi-Agent System (L4 layer)
+    "Agent",
+    "AgentBinding",
     "AgentEventType",
     "AgentExecution",
     "AgentExecutionEvent",
     # Agent Mode
     "AgentMode",
     "AgentModel",
+    "AgentSource",
     "AgentTrigger",
+    "AnnouncePayload",
     "CheckpointType",
     "Conversation",
     "ConversationStatus",
@@ -109,6 +123,8 @@ __all__ = [
     # Skill System (L2 layer)
     "Skill",
     "SkillStatus",
+    "SpawnMode",
+    "SpawnRecord",
     "StepAdjustment",
     # Step Result
     "StepOutcome",
@@ -128,4 +144,5 @@ __all__ = [
     "TriggerPattern",
     "TriggerType",
     "WorkflowPattern",
+    "WorkspaceConfig",
 ]

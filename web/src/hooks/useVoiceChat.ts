@@ -13,6 +13,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
 import { createWebSocketUrl } from '@/services/client/urlUtils';
+
 import { getAuthToken } from '@/utils/tokenResolver';
 
 export interface UseVoiceChatOptions {

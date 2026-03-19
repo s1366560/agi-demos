@@ -90,7 +90,13 @@ class WorkspaceFiles:
     @property
     def has_persona(self) -> bool:
         """Check if any persona/soul files were loaded."""
-        return bool(self.soul_text or self.identity_text or self.user_profile or self.agents_text or self.tools_text)
+        return bool(
+            self.soul_text
+            or self.identity_text
+            or self.user_profile
+            or self.agents_text
+            or self.tools_text
+        )
 
 
 def trim_bootstrap_content(
@@ -170,6 +176,7 @@ class WorkspaceManager:
         max_chars_total: int = DEFAULT_BOOTSTRAP_TOTAL_MAX_CHARS,
         templates_dir: Path | None = None,
         enabled: bool = True,
+        agent_id: str | None = None,
     ) -> None:
         """Initialize WorkspaceManager.
 
@@ -184,6 +191,9 @@ class WorkspaceManager:
             templates_dir: Directory containing default template files.
                 Defaults to prompts/workspace/ relative to this module.
             enabled: Whether workspace loading is enabled.
+            agent_id: Optional agent ID for per-agent workspace isolation.
+                When set, an agent-specific workspace directory is checked
+                first (tier-0) before the project workspace.
         """
         self._workspace_dir = workspace_dir or Path("/workspace/.memstack/workspace")
         self._tenant_workspace_dir = tenant_workspace_dir
@@ -193,6 +203,14 @@ class WorkspaceManager:
             Path(__file__).parent.parent / "prompts" / "workspace"
         )
         self._enabled = enabled
+        self._agent_id = agent_id
+
+        # Per-agent workspace: workspace_dir/../agents/<agent_id>/workspace
+        self._agent_workspace_dir: Path | None = None
+        if agent_id and self._workspace_dir:
+            self._agent_workspace_dir = (
+                self._workspace_dir.parent / "agents" / agent_id / "workspace"
+            )
 
         # Cache: filename -> (content, mtime_ns)
         self._cache: dict[str, tuple[str, int]] = {}
@@ -317,10 +335,7 @@ class WorkspaceManager:
         workspace_path = self._workspace_dir / filename
         if workspace_path.exists():
             source = PersonaSource.WORKSPACE
-        elif (
-            self._tenant_workspace_dir
-            and (self._tenant_workspace_dir / filename).exists()
-        ):
+        elif self._tenant_workspace_dir and (self._tenant_workspace_dir / filename).exists():
             source = PersonaSource.TENANT
         else:
             source = PersonaSource.TEMPLATE
@@ -353,10 +368,17 @@ class WorkspaceManager:
         Returns:
             File content (possibly truncated) or None if not found.
         """
+        # Tier 0: per-agent workspace (highest priority)
+        if self._agent_workspace_dir is not None:
+            agent_content = self._load_from_dir(
+                self._agent_workspace_dir, filename, max_chars, cache_prefix="agent:"
+            )
+            if agent_content is not None:
+                return agent_content
+
         file_path = self._workspace_dir / filename
 
         if not file_path.exists():
-            # Try tenant-level workspace as fallback
             return self._load_tenant_or_template(filename, max_chars)
 
         try:
@@ -387,6 +409,61 @@ class WorkspaceManager:
             return None
         except OSError as e:
             logger.warning("Failed to read workspace file %s: %s", file_path, e)
+            return None
+
+    def _load_from_dir(
+        self,
+        directory: Path,
+        filename: str,
+        max_chars: int,
+        cache_prefix: str = "",
+    ) -> str | None:
+        """Load a file from a specific directory with caching and truncation.
+
+        Args:
+            directory: Directory to load from.
+            filename: Name of the file to load.
+            max_chars: Character limit for this file.
+            cache_prefix: Prefix for cache key to avoid collisions.
+
+        Returns:
+            File content (possibly truncated) or None if not found.
+        """
+        file_path = directory / filename
+        if not file_path.exists():
+            return None
+
+        try:
+            stat = file_path.stat()
+            mtime_ns = stat.st_mtime_ns
+            cache_key = f"{cache_prefix}{filename}"
+
+            cached = self._cache.get(cache_key)
+            if cached is not None and cached[1] == mtime_ns:
+                self._cache[filename] = cached
+                return cached[0]
+
+            raw_content = file_path.read_text(encoding="utf-8")
+            truncation = trim_bootstrap_content(raw_content, filename, max_chars)
+
+            if truncation.truncated:
+                logger.debug(
+                    "Truncated %s%s: %d -> %d chars",
+                    cache_prefix,
+                    filename,
+                    truncation.original_length,
+                    len(truncation.content),
+                )
+
+            self._cache[cache_key] = (truncation.content, mtime_ns)
+            self._cache[filename] = (truncation.content, mtime_ns)
+            return truncation.content
+
+        except PermissionError:
+            logger.warning("Permission denied reading %s%s", cache_prefix, file_path)
+            return None
+        except OSError as e:
+            logger.warning("Failed to read %s%s: %s", cache_prefix, file_path, e)
             return None
 
     def _load_tenant_or_template(self, filename: str, max_chars: int) -> str | None:

@@ -241,6 +241,15 @@ class AgentEventType(str, Enum):
     PARALLEL_COMPLETED = "parallel_completed"
     BACKGROUND_LAUNCHED = "background_launched"
 
+    # =========================================================================
+    # Multi-agent inter-agent communication events
+    # =========================================================================
+    AGENT_SPAWNED = "agent_spawned"
+    AGENT_COMPLETED = "agent_completed"
+    AGENT_MESSAGE_SENT = "agent_message_sent"
+    AGENT_MESSAGE_RECEIVED = "agent_message_received"
+    AGENT_STOPPED = "agent_stopped"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -369,6 +378,12 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.SUBAGENT_STEERED: EventCategory.AGENT,
     AgentEventType.SUBAGENT_DEPTH_LIMITED: EventCategory.AGENT,
     AgentEventType.SUBAGENT_SESSION_UPDATE: EventCategory.AGENT,
+    # Multi-agent inter-agent communication
+    AgentEventType.AGENT_SPAWNED: EventCategory.AGENT,
+    AgentEventType.AGENT_COMPLETED: EventCategory.AGENT,
+    AgentEventType.AGENT_MESSAGE_SENT: EventCategory.AGENT,
+    AgentEventType.AGENT_MESSAGE_RECEIVED: EventCategory.AGENT,
+    AgentEventType.AGENT_STOPPED: EventCategory.AGENT,
 }
 
 

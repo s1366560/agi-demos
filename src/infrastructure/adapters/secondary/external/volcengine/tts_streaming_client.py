@@ -168,12 +168,14 @@ class AsyncTTSStreamingClient:
         app_key: str,
         speaker: str = DEFAULT_SPEAKER,
         ws_url: str = _DEFAULT_WS_URL,
+        proxy: str | None = None,
     ) -> None:
         super().__init__()
         self._access_key = access_key
         self._app_key = app_key
         self._speaker = speaker
         self._ws_url = ws_url
+        self._proxy: str | bool = proxy if proxy is not None else True
         self._ws: ClientConnection | None = None
         self._connect_id = str(uuid.uuid4())
         self._session_id = ""
@@ -214,7 +216,7 @@ class AsyncTTSStreamingClient:
                 additional_headers=headers,
                 max_size=None,
                 open_timeout=10,
-                proxy=None,
+                proxy=self._proxy,
             )
         except Exception as exc:
             raise TTSConnectionError(f"Failed to connect to TTS endpoint: {exc}") from exc

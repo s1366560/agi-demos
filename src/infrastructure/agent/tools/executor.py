@@ -495,8 +495,9 @@ class ToolExecutor:
         """
         # Handle truncated arguments
         if "_error" in arguments and arguments.get("_error") == "truncated":
-            error_msg = arguments.get(
-                "_message", "Tool arguments were truncated. The content may be too large."
+            error_msg = self._build_truncation_error_message(
+                tool_name,
+                arguments.get("_message", "Tool arguments were truncated. The content may be too large."),
             )
             return arguments, error_msg
 
@@ -519,6 +520,54 @@ class ToolExecutor:
                 )
 
         return arguments, None
+
+    @staticmethod
+    def _build_truncation_error_message(tool_name: str, original_message: str) -> str:
+        """Build tool-specific truncation error message with recovery suggestions.
+
+        Provides actionable recovery strategies based on the tool type.
+        """
+        # Tool-specific recovery suggestions
+        tool_recovery_hints: dict[str, str] = {
+            "write": (
+                "The file content is too large to write in a single call. "
+                "RECOVERY OPTIONS: "
+                "(1) Write the file in smaller chunks using multiple write calls with append mode, "
+                "(2) Use the 'edit' tool to add content incrementally, "
+                "(3) Split the content into multiple smaller files. "
+                "Consider reducing the content size to under ~10KB per write call."
+            ),
+            "edit": (
+                "The edit content is too large. "
+                "RECOVERY OPTIONS: "
+                "(1) Break the edit into smaller chunks, "
+                "(2) Use multiple edit calls with smaller old_string/new_string pairs. "
+                "Consider making edits under ~5KB each."
+            ),
+            "todowrite": (
+                "The task list is too large. "
+                "RECOVERY OPTIONS: "
+                "(1) Use 'replace' mode with fewer tasks, "
+                "(2) Split tasks into multiple todowrite calls using 'add' mode."
+            ),
+        }
+
+        # Normalize tool name (remove prefixes like mcp_, handle aliases)
+        normalized_name = tool_name.lower().replace("_", "").replace("-", "")
+
+        # Check for matching recovery hint
+        for key, hint in tool_recovery_hints.items():
+            if key in normalized_name or normalized_name in key:
+                return f"{original_message}\n\n{hint}"
+
+        # Default message for unknown tools
+        return (
+            f"{original_message}\n\n"
+            f"RECOVERY OPTIONS: "
+            f"(1) Reduce the content size, "
+            f"(2) Break the operation into smaller steps, "
+            f"(3) Request increased max_tokens from the user."
+        )
 
     async def _do_execute(
         self,

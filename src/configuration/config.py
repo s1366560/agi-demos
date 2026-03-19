@@ -269,6 +269,11 @@ class Settings(BaseSettings):
         default=30, alias="AGENT_POOL_HEALTH_CHECK_INTERVAL"
     )  # Health check interval
 
+    # Multi-Agent System
+    multi_agent_enabled: bool = Field(
+        default=False, alias="MULTI_AGENT_ENABLED"
+    )  # Enable multi-agent routing and workspace isolation
+
     # Monitoring
     enable_metrics: bool = Field(default=True, alias="ENABLE_METRICS")
     metrics_port: int = Field(default=9090, alias="METRICS_PORT")
@@ -455,6 +460,24 @@ class Settings(BaseSettings):
     volc_app_id: str | None = Field(default=None, alias="VOLC_APP_ID")
     speech_app_id: str | None = Field(default=None, alias="SPEECH_APP_ID")
     speech_access_token: str | None = Field(default=None, alias="SPEECH_ACCESS_TOKEN")
+    speech_ws_proxy: str | None = Field(
+        default=None,
+        alias="SPEECH_WS_PROXY",
+        description=(
+            "Optional proxy URL for Volcengine Speech WebSocket connections. "
+            "Supports socks5://, socks4://, http:// schemes. "
+            "Example: socks5://127.0.0.1:1080"
+        ),
+    )
+
+    @field_validator("speech_ws_proxy", mode="before")
+    @classmethod
+    def coerce_empty_proxy_to_none(cls, value: str | None) -> str | None:
+        """Treat empty or whitespace-only SPEECH_WS_PROXY as None."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     volc_asr_cluster: str = Field(default="volcano_asr", alias="VOLC_ASR_CLUSTER")
     volc_tts_cluster: str = Field(default="volcano_tts", alias="VOLC_TTS_CLUSTER")
     volc_tts_resource_id: str = Field(default="volc.speech.dialog", alias="VOLC_TTS_RESOURCE_ID")

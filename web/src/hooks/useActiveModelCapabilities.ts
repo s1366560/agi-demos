@@ -16,6 +16,7 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useProviderStore } from '@/stores/provider';
+
 import { findModelInCatalog, resolveCatalogProviderHint } from '@/utils/modelCatalog';
 
 import type { ModelCatalogEntry, ProviderConfig } from '@/types/memory';

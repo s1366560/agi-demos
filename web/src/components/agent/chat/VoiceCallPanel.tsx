@@ -9,6 +9,12 @@
  * - Device settings drawer (microphone, speaker, camera selection)
  */
 
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+
 import {
 	Camera,
 	CameraOff,
@@ -22,15 +28,12 @@ import {
 	Video,
 	X,
 } from "lucide-react";
-import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
+
+import { type DeviceInfo, useVoiceCallStore } from "@/stores/voiceCallStore";
 
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 import { useVoiceChat } from "@/hooks/useVoiceChat";
-import { type DeviceInfo, useVoiceCallStore } from "@/stores/voiceCallStore";
 
 import { VoiceWaveform } from "./VoiceWaveform";
 
@@ -143,7 +146,7 @@ const DeviceSettingsPanel: React.FC<{ onClose: () => void }> = ({
 				{labelText}
 				<select
 					value={selectedId ?? ""}
-					onChange={(e) => onChange(e.target.value)}
+					onChange={(e) => { onChange(e.target.value); }}
 					className="mt-1 w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-white focus:outline-none focus:border-blue-500"
 				>
 					{devices.length === 0 && (
@@ -301,18 +304,18 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 	} = useVoiceChat({
 		projectId: projectId || "",
 		conversationId: conversationId || "",
-		onAsrInterim: (text) => setAsrInterimText(text),
-		onAsrFinal: (text) => setAsrFinalText(text),
+		onAsrInterim: (text) => { setAsrInterimText(text); },
+		onAsrFinal: (text) => { setAsrFinalText(text); },
 		onAgentToken: (token) => {
 			appendAgentToken(token);
 			setAgentStreaming(true);
 		},
-		onAgentComplete: (content) => setAgentComplete(content),
-		onTtsStart: () => setAiSpeaking(true),
-		onTtsEnd: () => setAiSpeaking(false),
+		onAgentComplete: (content) => { setAgentComplete(content); },
+		onTtsStart: () => { setAiSpeaking(true); },
+		onTtsEnd: () => { setAiSpeaking(false); },
 		onTtsAudio: (data) => enqueueChunk(data),
 		onError: (err) =>
-			useVoiceCallStore.setState({ status: "error", error: err }),
+			{ useVoiceCallStore.setState({ status: "error", error: err }); },
 	});
 
 	// Keep disconnectRef in sync so the cleanup effect always calls the latest version.
@@ -383,7 +386,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 		if (!isConnected) return;
 		if (isMuted) {
 			stopRecording();
-		} else if (isRecording === false) {
+		} else if (!isRecording) {
 			startRecording();
 		}
 	}, [isMuted, isConnected, isRecording, stopRecording, startRecording]);
@@ -432,7 +435,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 				setDuration(Math.floor((Date.now() - callStartTime) / 1000));
 			}, 1000);
 		}
-		return () => clearInterval(interval);
+		return () => { clearInterval(interval); };
 	}, [status, callStartTime]);
 
 	const handleEndCall = useCallback(() => {
@@ -473,7 +476,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 					{isMuted && <MicOff size={14} className="text-red-400" />}
 					<button
 						type="button"
-						onClick={() => setMinimized(false)}
+						onClick={() => { setMinimized(false); }}
 						className="p-1 text-slate-400 hover:text-white transition-colors"
 					>
 						<Maximize2 size={14} />
@@ -526,7 +529,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 					<div className="flex items-center gap-1">
 						<button
 							type="button"
-							onClick={() => setMinimized(true)}
+							onClick={() => { setMinimized(true); }}
 							className="p-1.5 text-slate-400 hover:text-white transition-colors rounded"
 						>
 							<Minimize2 size={14} />
@@ -659,7 +662,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 					{/* Device settings */}
 					<button
 						type="button"
-						onClick={() => setShowDeviceSettings(!showDeviceSettings)}
+						onClick={() => { setShowDeviceSettings(!showDeviceSettings); }}
 						title="Device settings"
 						className={`
               w-11 h-11 rounded-full flex items-center justify-center transition-all
@@ -682,7 +685,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 
 				{/* Device Settings Panel (positioned below controls) */}
 				<div className="relative">
-					<DeviceSettingsPanel onClose={() => setShowDeviceSettings(false)} />
+					<DeviceSettingsPanel onClose={() => { setShowDeviceSettings(false); }} />
 				</div>
 			</div>
 		</div>,

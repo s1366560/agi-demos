@@ -103,7 +103,7 @@ class ProjectAgentConfig:
     api_key: str | None = None
     base_url: str | None = None
     temperature: float = 0.7
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments
     max_steps: int = 20
 
     # Session Configuration
@@ -238,6 +238,9 @@ class ProjectReActAgent:
         self._plan_repo: Any | None = None
         self._artifact_service: Any | None = None
 
+        # Multi-agent: message bus for child announce polling
+        self._message_bus: Any | None = None
+
     @property
     def is_initialized(self) -> bool:
         """Check if agent is initialized."""
@@ -361,6 +364,16 @@ class ProjectReActAgent:
             raise RuntimeError("Graph service not available")
 
         redis_client = await get_redis_client()
+
+        try:
+            from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
+                RedisAgentMessageBusAdapter,
+            )
+
+            self._message_bus = RedisAgentMessageBusAdapter(redis_client)
+        except Exception as e:
+            logger.warning(f"Could not initialize agent message bus: {e}")
+            self._message_bus = None
 
         try:
             container = Container(redis_client=redis_client)
@@ -528,6 +541,7 @@ class ProjectReActAgent:
             max_steps=self.config.max_steps,
             llm_client=llm_client,
             provider_options=_provider_opts,
+            message_bus=self._message_bus,
         )
 
         self._artifact_service = artifact_service
@@ -891,6 +905,7 @@ class ProjectReActAgent:
         llm_overrides: dict[str, Any] | None = None,
         model_override: str | None = None,
         image_attachments: list[str] | None = None,
+        agent_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -965,6 +980,7 @@ class ProjectReActAgent:
                 plan_mode=plan_mode,
                 llm_overrides=llm_overrides,
                 model_override=model_override,
+                agent_id=agent_id,
                 attachment_content=(
                     [
                         {
