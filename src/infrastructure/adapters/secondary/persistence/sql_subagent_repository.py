@@ -10,7 +10,17 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
+from src.domain.model.agent.subagent import (
+    AgentModel,
+    AgentTrigger,
+    SubAgent,
+    deserialize_identity,
+    deserialize_spawn_policy,
+    deserialize_tool_policy,
+    serialize_identity,
+    serialize_spawn_policy,
+    serialize_tool_policy,
+)
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
@@ -60,6 +70,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
             avg_execution_time_ms=subagent.avg_execution_time_ms,
             success_rate=subagent.success_rate,
             metadata_json=subagent.metadata,
+            spawn_policy_json=serialize_spawn_policy(subagent.spawn_policy),
+            tool_policy_json=serialize_tool_policy(subagent.tool_policy),
+            identity_json=serialize_identity(subagent.identity),
             created_at=subagent.created_at,
             updated_at=subagent.updated_at,
         )
@@ -126,6 +139,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         db_subagent.avg_execution_time_ms = subagent.avg_execution_time_ms
         db_subagent.success_rate = subagent.success_rate
         db_subagent.metadata_json = subagent.metadata
+        db_subagent.spawn_policy_json = serialize_spawn_policy(subagent.spawn_policy)
+        db_subagent.tool_policy_json = serialize_tool_policy(subagent.tool_policy)
+        db_subagent.identity_json = serialize_identity(subagent.identity)
         db_subagent.updated_at = subagent.updated_at
 
         await self._session.flush()
@@ -141,6 +157,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"SubAgent not found: {subagent_id}")
         return True
+
     async def list_by_tenant(
         self,
         tenant_id: str,
@@ -300,4 +317,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
             created_at=db_subagent.created_at,
             updated_at=db_subagent.updated_at or db_subagent.created_at,
             metadata=db_subagent.metadata_json,
+            spawn_policy=deserialize_spawn_policy(db_subagent.spawn_policy_json),
+            tool_policy=deserialize_tool_policy(db_subagent.tool_policy_json),
+            identity=deserialize_identity(db_subagent.identity_json),
         )

@@ -1012,6 +1012,9 @@ class SubAgent(Base):
     avg_execution_time_ms: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     success_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    spawn_policy_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    tool_policy_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    identity_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True

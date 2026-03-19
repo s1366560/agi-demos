@@ -14,12 +14,19 @@ Attributes:
     allowed_skills: Skills this subagent can use
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from src.domain.model.agent.spawn_policy import SpawnPolicy
 from src.domain.model.agent.subagent_source import SubAgentSource
+from src.domain.model.agent.tool_policy import ToolPolicy
+
+if TYPE_CHECKING:
+    from src.domain.model.agent.identity import AgentIdentity
 
 
 class AgentModel(str, Enum):
@@ -80,6 +87,93 @@ class AgentTrigger:
             examples=data.get("examples", []),
             keywords=data.get("keywords", []),
         )
+
+
+def serialize_spawn_policy(policy: SpawnPolicy | None) -> dict[str, Any] | None:
+    if policy is None:
+        return None
+    allowed = list(policy.allowed_subagents) if policy.allowed_subagents is not None else None
+    return {
+        "max_depth": policy.max_depth,
+        "max_active_runs": policy.max_active_runs,
+        "max_children_per_requester": policy.max_children_per_requester,
+        "allowed_subagents": allowed,
+    }
+
+
+def deserialize_spawn_policy(data: dict[str, Any] | None) -> SpawnPolicy | None:
+    if data is None:
+        return None
+    raw_allowed = data.get("allowed_subagents")
+    allowed = frozenset(raw_allowed) if raw_allowed is not None else None
+    return SpawnPolicy(
+        max_depth=data.get("max_depth", 2),
+        max_active_runs=data.get("max_active_runs", 16),
+        max_children_per_requester=data.get("max_children_per_requester", 8),
+        allowed_subagents=allowed,
+    )
+
+
+def serialize_tool_policy(policy: ToolPolicy | None) -> dict[str, Any] | None:
+    if policy is None:
+        return None
+    return {
+        "allow": list(policy.allow),
+        "deny": list(policy.deny),
+        "precedence": policy.precedence.value,
+    }
+
+
+def deserialize_tool_policy(data: dict[str, Any] | None) -> ToolPolicy | None:
+    if data is None:
+        return None
+    from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
+
+    return ToolPolicy(
+        allow=tuple(data.get("allow", ())),
+        deny=tuple(data.get("deny", ())),
+        precedence=ToolPolicyPrecedence(data.get("precedence", "deny_first")),
+    )
+
+
+def serialize_identity(identity: AgentIdentity | None) -> dict[str, Any] | None:
+    if identity is None:
+        return None
+    return {
+        "agent_id": identity.agent_id,
+        "name": identity.name,
+        "description": identity.description,
+        "system_prompt": identity.system_prompt,
+        "model": identity.model.value,
+        "allowed_tools": list(identity.allowed_tools),
+        "allowed_skills": list(identity.allowed_skills),
+        "spawn_policy": serialize_spawn_policy(identity.spawn_policy),
+        "tool_policy": serialize_tool_policy(identity.tool_policy),
+        "metadata": dict(identity.metadata) if identity.metadata else {},
+    }
+
+
+def deserialize_identity(data: dict[str, Any] | None) -> AgentIdentity | None:
+    if data is None:
+        return None
+    from src.domain.model.agent.identity import AgentIdentity as _AgentIdentity
+
+    sp = deserialize_spawn_policy(data.get("spawn_policy"))
+    tp = deserialize_tool_policy(data.get("tool_policy"))
+    raw_meta = data.get("metadata", {})
+    meta_tuple = tuple((k, v) for k, v in raw_meta.items()) if raw_meta else ()
+    return _AgentIdentity(
+        agent_id=data["agent_id"],
+        name=data["name"],
+        description=data.get("description", ""),
+        system_prompt=data.get("system_prompt", ""),
+        model=AgentModel(data.get("model", "inherit")),
+        allowed_tools=tuple(data.get("allowed_tools", ())),
+        allowed_skills=tuple(data.get("allowed_skills", ())),
+        spawn_policy=sp if sp is not None else SpawnPolicy(),
+        tool_policy=tp if tp is not None else ToolPolicy(),
+        metadata=meta_tuple,
+    )
 
 
 @dataclass
@@ -147,6 +241,9 @@ class SubAgent:
     file_path: str | None = None
     max_retries: int = 0
     fallback_models: list[str] = field(default_factory=list)
+    spawn_policy: SpawnPolicy | None = None
+    tool_policy: ToolPolicy | None = None
+    identity: AgentIdentity | None = None
 
     def __post_init__(self) -> None:
         """Validate the subagent."""
@@ -288,11 +385,14 @@ class SubAgent:
             file_path=self.file_path,
             max_retries=self.max_retries,
             fallback_models=list(self.fallback_models),
+            spawn_policy=self.spawn_policy,
+            tool_policy=self.tool_policy,
+            identity=self.identity,
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
-        return {
+        result: dict[str, Any] = {
             "id": self.id,
             "tenant_id": self.tenant_id,
             "project_id": self.project_id,
@@ -319,7 +419,11 @@ class SubAgent:
             "file_path": self.file_path,
             "max_retries": self.max_retries,
             "fallback_models": list(self.fallback_models),
+            "spawn_policy": serialize_spawn_policy(self.spawn_policy),
+            "tool_policy": serialize_tool_policy(self.tool_policy),
+            "identity": serialize_identity(self.identity),
         }
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SubAgent":
@@ -361,6 +465,9 @@ class SubAgent:
             file_path=data.get("file_path"),
             max_retries=data.get("max_retries", 0),
             fallback_models=data.get("fallback_models", []),
+            spawn_policy=deserialize_spawn_policy(data.get("spawn_policy")),
+            tool_policy=deserialize_tool_policy(data.get("tool_policy")),
+            identity=deserialize_identity(data.get("identity")),
         )
 
     @classmethod
@@ -385,6 +492,9 @@ class SubAgent:
         metadata: dict[str, Any] | None = None,
         max_retries: int = 0,
         fallback_models: list[str] | None = None,
+        spawn_policy: SpawnPolicy | None = None,
+        tool_policy: ToolPolicy | None = None,
+        identity: AgentIdentity | None = None,
     ) -> "SubAgent":
         """
         Create a new subagent.
@@ -407,6 +517,11 @@ class SubAgent:
             max_iterations: Maximum ReAct iterations
             project_id: Optional project ID
             metadata: Optional metadata
+            max_retries: Maximum retries on failure
+            fallback_models: Fallback model list
+            spawn_policy: Optional spawn policy
+            tool_policy: Optional tool policy
+            identity: Optional agent identity
 
         Returns:
             New subagent instance
@@ -438,6 +553,9 @@ class SubAgent:
             metadata=metadata,
             max_retries=max_retries,
             fallback_models=fallback_models or [],
+            spawn_policy=spawn_policy,
+            tool_policy=tool_policy,
+            identity=identity,
         )
 
 
