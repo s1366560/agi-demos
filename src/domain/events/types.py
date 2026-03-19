@@ -254,6 +254,13 @@ class AgentEventType(str, Enum):
     AGENT_MESSAGE_RECEIVED = "agent_message_received"
     AGENT_STOPPED = "agent_stopped"
 
+    # =========================================================================
+    # Context engine & session lifecycle events (Phase 3)
+    # =========================================================================
+    CONTEXT_COMPACTED = "context_compacted"
+    SESSION_FORKED = "session_forked"
+    SESSION_MERGED = "session_merged"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -392,6 +399,10 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.AGENT_MESSAGE_SENT: EventCategory.AGENT,
     AgentEventType.AGENT_MESSAGE_RECEIVED: EventCategory.AGENT,
     AgentEventType.AGENT_STOPPED: EventCategory.AGENT,
+    # Context engine & session lifecycle events (Phase 3)
+    AgentEventType.CONTEXT_COMPACTED: EventCategory.SYSTEM,
+    AgentEventType.SESSION_FORKED: EventCategory.AGENT,
+    AgentEventType.SESSION_MERGED: EventCategory.AGENT,
 }
 
 

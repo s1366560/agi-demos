@@ -47,6 +47,9 @@ __all__ = [
     "AgentSpawnedEvent",
     "AgentStoppedEvent",
     "AgentSuggestionsEvent",
+    "ContextCompactedEvent",
+    "SessionForkedEvent",
+    "SessionMergedEvent",
     "SubAgentAnnounceRetryEvent",
     "SubAgentCompletedEvent",
     "SubAgentDepthLimitedEvent",
@@ -1279,6 +1282,35 @@ class AgentStoppedEvent(AgentDomainEvent):
     stopped_by: str = ""
 
 
+# === Context Engine & Session Lifecycle Events (Phase 3) ===
+
+
+class ContextCompactedEvent(AgentDomainEvent):
+    """Event: Context window was compacted to fit token budget."""
+
+    event_type: AgentEventType = AgentEventType.CONTEXT_COMPACTED
+    conversation_id: str
+    before_tokens: int
+    after_tokens: int
+
+
+class SessionForkedEvent(AgentDomainEvent):
+    """Event: A conversation session was forked into a child session."""
+
+    event_type: AgentEventType = AgentEventType.SESSION_FORKED
+    parent_conversation_id: str
+    child_conversation_id: str
+
+
+class SessionMergedEvent(AgentDomainEvent):
+    """Event: A child session was merged back into the parent session."""
+
+    event_type: AgentEventType = AgentEventType.SESSION_MERGED
+    parent_conversation_id: str
+    child_conversation_id: str
+    merge_strategy: str
+
+
 # Event Type Utilities
 # =========================================================================
 
@@ -1367,6 +1399,9 @@ def get_event_type_docstring() -> str:
         AgentMessageSentEvent,
         AgentMessageReceivedEvent,
         AgentStoppedEvent,
+        ContextCompactedEvent,
+        SessionForkedEvent,
+        SessionMergedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

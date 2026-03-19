@@ -14,6 +14,7 @@ from src.domain.ports.agent.control_channel_port import (
 from src.domain.ports.agent.binding_repository import (
     AgentBindingRepositoryPort,
 )
+from src.domain.ports.agent.context_engine_port import ContextEnginePort
 from src.domain.ports.agent.context_manager_port import (
     AttachmentContent,
     AttachmentInjectorPort,
@@ -31,6 +32,7 @@ from src.domain.ports.agent.llm_invoker_port import (
     LLMInvokerPort,
     StreamChunk,
 )
+from src.domain.ports.agent.message_router_port import MessageRouterPort
 from src.domain.ports.agent.react_loop_port import (
     ReActLoopConfig,
     ReActLoopContext,
@@ -57,6 +59,8 @@ __all__ = [
     "CompressionStrategy",
     "ContextBuildRequest",
     "ContextBuildResult",
+    # Context Engine
+    "ContextEnginePort",
     # Control Channel
     "ControlChannelPort",
     "ControlMessage",
@@ -68,6 +72,8 @@ __all__ = [
     "LLMInvokerPort",
     "MessageBuilderPort",
     "MessageInput",
+    # Message Router
+    "MessageRouterPort",
     "ReActLoopConfig",
     "ReActLoopContext",
     # ReAct Loop

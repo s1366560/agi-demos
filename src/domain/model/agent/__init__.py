@@ -70,6 +70,7 @@ from src.domain.model.agent.hitl import (
 )
 from src.domain.model.agent.merge_strategy import MergeStrategy
 from src.domain.model.agent.message_binding import MessageBinding
+from src.domain.model.agent.routing_context import RoutingContext
 
 # Skill bounded context
 from src.domain.model.agent.skill import (
@@ -133,6 +134,7 @@ __all__ = [
     "MessageType",
     "ReflectionAssessment",
     "ReflectionResult",
+    "RoutingContext",
     # Skill System (L2 layer)
     "Skill",
     "SkillStatus",
