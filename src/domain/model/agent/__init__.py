@@ -23,9 +23,12 @@ from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_mode import AgentMode
 from src.domain.model.agent.agent_source import AgentSource
 from src.domain.model.agent.announce_payload import AnnouncePayload
+from src.domain.model.agent.assembled_context import AssembledContext
+from src.domain.model.agent.binding_scope import BindingScope
 
 # Config bounded context
 from src.domain.model.agent.config import TenantAgentConfig
+from src.domain.model.agent.context_segment import ContextSegment
 
 # Conversation bounded context
 from src.domain.model.agent.conversation import (
@@ -37,6 +40,7 @@ from src.domain.model.agent.conversation import (
     ToolCall,
     ToolResult,
 )
+from src.domain.model.agent.dependency_type import DependencyType
 
 # Execution bounded context
 from src.domain.model.agent.execution import (
@@ -64,6 +68,8 @@ from src.domain.model.agent.hitl import (
     HITLRequestStatus,
     HITLRequestType,
 )
+from src.domain.model.agent.merge_strategy import MergeStrategy
+from src.domain.model.agent.message_binding import MessageBinding
 
 # Skill bounded context
 from src.domain.model.agent.skill import (
@@ -100,9 +106,14 @@ __all__ = [
     "AgentSource",
     "AgentTrigger",
     "AnnouncePayload",
+    # Phase 3: Context & Routing
+    "AssembledContext",
+    "BindingScope",
     "CheckpointType",
+    "ContextSegment",
     "Conversation",
     "ConversationStatus",
+    "DependencyType",
     "EnvVarScope",
     "ExecutionCheckpoint",
     # Execution Plan (Enhanced)
@@ -115,7 +126,9 @@ __all__ = [
     "HITLRequest",
     "HITLRequestStatus",
     "HITLRequestType",
+    "MergeStrategy",
     "Message",
+    "MessageBinding",
     "MessageRole",
     "MessageType",
     "ReflectionAssessment",
