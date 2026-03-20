@@ -132,21 +132,21 @@ async def get_tenant(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TenantResponse:
-    """Get tenant by ID."""
-    # Check if user has access to tenant
+    """Get tenant by ID or slug."""
+    result = await db.execute(
+        select(Tenant).where(or_(Tenant.id == tenant_id, Tenant.slug == tenant_id))
+    )
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
     user_tenant_result = await db.execute(
         select(UserTenant).where(
-            and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id)
+            and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant.id)
         )
     )
     if not user_tenant_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to tenant")
-
-    # Get tenant
-    result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
-    tenant = result.scalar_one_or_none()
-    if not tenant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
 
     return TenantResponse.from_orm(tenant)
 
@@ -603,7 +603,9 @@ async def _get_memory_count(db: AsyncSession, project_id: str) -> int:
     return result.scalar() or 0
 
 
-async def _get_memory_growth_by_day(db: AsyncSession, project_ids: list[str], days: int) -> list[Any]:
+async def _get_memory_growth_by_day(
+    db: AsyncSession, project_ids: list[str], days: int
+) -> list[Any]:
     """Get memory creation counts by day for the last N days."""
     if not project_ids:
         return []

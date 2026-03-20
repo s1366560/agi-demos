@@ -62,6 +62,7 @@ class TenantResponse(BaseModel):
 
     id: str = Field(..., description="Tenant unique identifier")
     name: str = Field(..., description="Tenant name")
+    slug: str = Field(..., description="URL-friendly tenant identifier")
     description: str | None = Field(default=None, description="Tenant description")
     owner_id: str = Field(..., description="Owner user ID")
     plan: str = Field(default="free", description="Tenant plan")
@@ -77,6 +78,7 @@ class TenantResponse(BaseModel):
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "name": "Acme Corporation",
+                "slug": "acme-corporation",
                 "description": "Enterprise knowledge management platform",
                 "owner_id": "user_123",
                 "plan": "premium",
