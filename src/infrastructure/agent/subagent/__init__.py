@@ -16,6 +16,7 @@ from .run_repository import (
     RedisRunSnapshotCache,
     SqliteSubAgentRunRepository,
 )
+from .session_fork_merge_service import SessionForkMergeService
 from .state_tracker import StateTracker, SubAgentState, SubAgentStatus
 from .task_decomposer import DecompositionResult, SubTask, TaskDecomposer
 from .template_registry import SubAgentTemplate, TemplateRegistry
@@ -37,6 +38,7 @@ __all__ = [
     "PostgresSubAgentRunRepository",
     "RedisRunSnapshotCache",
     "ResultAggregator",
+    "SessionForkMergeService",
     "SqliteSubAgentRunRepository",
     "StateTracker",
     "SubAgentChain",
