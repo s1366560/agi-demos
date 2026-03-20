@@ -644,6 +644,8 @@ class SubAgentRunRegistry:
                     payload.get("frozen_result_text")
                 ),
                 frozen_at=SubAgentRunRegistry._parse_datetime(payload.get("frozen_at")),
+                trace_id=SubAgentRunRegistry._optional_str(payload.get("trace_id")),
+                parent_span_id=SubAgentRunRegistry._optional_str(payload.get("parent_span_id")),
             )
         except Exception:
             return None
