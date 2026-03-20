@@ -171,3 +171,52 @@ export interface AgentNode {
   createdAt: number;
   lastUpdateAt: number;
 }
+
+// ---------------------------------------------------------------------------
+// Trace API response types (matches backend Pydantic schemas in schemas.py)
+// ---------------------------------------------------------------------------
+
+export interface SubAgentRunDTO {
+  run_id: string;
+  conversation_id: string;
+  subagent_name: string;
+  task: string;
+  status: string;
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  summary: string | null;
+  error: string | null;
+  execution_time_ms: number | null;
+  tokens_used: number | null;
+  metadata: Record<string, string | number | boolean | null>;
+  frozen_result_text: string | null;
+  frozen_at: string | null;
+  trace_id: string | null;
+  parent_span_id: string | null;
+}
+
+export interface SubAgentRunListDTO {
+  conversation_id: string;
+  runs: SubAgentRunDTO[];
+  total: number;
+}
+
+export interface TraceChainDTO {
+  trace_id: string;
+  conversation_id: string;
+  runs: SubAgentRunDTO[];
+  total: number;
+}
+
+export interface DescendantTreeDTO {
+  parent_run_id: string;
+  conversation_id: string;
+  descendants: SubAgentRunDTO[];
+  total: number;
+}
+
+export interface ActiveRunCountDTO {
+  active_count: number;
+  conversation_id: string | null;
+}

@@ -1,4 +1,4 @@
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, memo, useCallback, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -15,7 +15,19 @@ import {
   CheckCircle,
   Puzzle,
   Plus,
+  Activity,
+  Loader2,
 } from 'lucide-react';
+
+import { TraceTimeline } from '../../components/agent/multiAgent/TraceTimeline';
+import {
+  useTraceRuns,
+  useActiveRunCount,
+  useTraceLoading,
+  useTraceStore,
+} from '../../stores/traceStore';
+
+import type { SubAgentRunDTO } from '../../types/multiAgent';
 
 interface SubAgent {
   id: string;
@@ -35,7 +47,6 @@ interface Skill {
   icon: React.ElementType;
 }
 
-// Hoist static data to module scope to avoid re-creation on each render
 const DEFAULT_SUB_AGENTS: SubAgent[] = [
   {
     id: 'code-architect',
@@ -93,7 +104,6 @@ const SKILLS: Skill[] = [
 
 type AgentDashboardProps = Record<string, never>;
 
-// Sub-component: SubAgentCard with memo for performance optimization
 const SubAgentCard = memo<{
   agent: SubAgent;
   onToggle: (id: string) => void;
@@ -116,6 +126,7 @@ const SubAgentCard = memo<{
           </div>
         ) : (
           <button
+            type="button"
             onClick={() => {
               onToggle(agent.id);
             }}
@@ -147,7 +158,6 @@ const SubAgentCard = memo<{
 });
 SubAgentCard.displayName = 'SubAgentCard';
 
-// Sub-component: SkillCard with memo for performance optimization
 const SkillCard = memo<{ skill: Skill }>(({ skill }) => {
   return (
     <div className="flex items-center gap-3">
@@ -164,7 +174,6 @@ const SkillCard = memo<{ skill: Skill }>(({ skill }) => {
 });
 SkillCard.displayName = 'SkillCard';
 
-// Sub-component: EngineConfigCard with memo for performance optimization
 interface EngineConfigCardProps {
   label: string;
   description: string;
@@ -199,7 +208,6 @@ const EngineConfigCard = memo<EngineConfigCardProps>(
 );
 EngineConfigCard.displayName = 'EngineConfigCard';
 
-// Main component with React.memo for performance optimization
 export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
   const { t: _t } = useTranslation();
 
@@ -207,10 +215,24 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
   const [autoLearning, setAutoLearning] = useState(true);
   const [browserAccess, setBrowserAccess] = useState(true);
 
+  const runs = useTraceRuns();
+  const activeRunCount = useActiveRunCount();
+  const isTraceLoading = useTraceLoading();
+
+  const [selectedRun, setSelectedRun] = useState<SubAgentRunDTO | null>(null);
+
+  useEffect(() => {
+    void useTraceStore.getState().fetchActiveRunCount();
+  }, []);
+
   const toggleAgent = useCallback((id: string) => {
     setSubAgents((prev) =>
       prev.map((agent) => (agent.id === id ? { ...agent, active: !agent.active } : agent))
     );
+  }, []);
+
+  const handleSelectRun = useCallback((run: SubAgentRunDTO) => {
+    setSelectedRun(run);
   }, []);
 
   return (
@@ -223,6 +245,12 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
           <h1 className="text-xl font-black tracking-tight uppercase text-slate-900 dark:text-white">
             SubAgent Platform
           </h1>
+          {activeRunCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-full">
+              <Activity size={12} className="animate-pulse" />
+              {activeRunCount} active
+            </span>
+          )}
         </div>
         <div className="max-w-2xl">
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
@@ -236,9 +264,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
       </header>
 
       <div className="grid grid-cols-12 gap-8">
-        {/* Main Content */}
         <div className="col-span-12 lg:col-span-8 space-y-8">
-          {/* Available SubAgents */}
           <section>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
@@ -255,7 +281,24 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
             </div>
           </section>
 
-          {/* Global Engine Configuration */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                Execution Traces
+              </h3>
+              {isTraceLoading && (
+                <Loader2 size={14} className="text-blue-500 animate-spin" />
+              )}
+            </div>
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+              <TraceTimeline
+                runs={runs}
+                selectedRunId={selectedRun?.run_id ?? null}
+                onSelectRun={handleSelectRun}
+              />
+            </div>
+          </section>
+
           <section className="space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
               Global Engine Configuration
@@ -277,7 +320,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
           </section>
         </div>
 
-        {/* Sidebar: Skill Registry */}
         <div className="col-span-12 lg:col-span-4">
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden sticky top-6">
             <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
@@ -296,7 +338,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                 ))}
               </div>
               <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-                <button className="w-full py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2">
+                <button type="button" className="w-full py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2">
                   <Plus className="h-3 w-3" />
                   Add Custom Skills
                 </button>
@@ -310,5 +352,4 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
 });
 AgentDashboard.displayName = 'AgentDashboard';
 
-// Export static data for testing
 export { DEFAULT_SUB_AGENTS, SKILLS };
