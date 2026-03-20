@@ -37,6 +37,8 @@ class SubAgentRun:
     metadata: dict[str, Any] = field(default_factory=dict)
     frozen_result_text: str | None = None
     frozen_at: datetime | None = None
+    trace_id: str | None = None
+    parent_span_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.run_id or not self.run_id.strip():
@@ -159,6 +161,27 @@ class SubAgentRun:
             frozen_at=timestamp,
         )
 
+    def with_trace_context(
+        self,
+        trace_id: str,
+        parent_span_id: str | None = None,
+    ) -> "SubAgentRun":
+        """Attach distributed tracing context to this run.
+
+        Can only be called on PENDING runs (before execution starts).
+        """
+        if self.status is not SubAgentRunStatus.PENDING:
+            raise ValueError(
+                f"Cannot set trace context in status {self.status.value}; must be pending"
+            )
+        if not trace_id or not trace_id.strip():
+            raise ValueError("trace_id cannot be empty")
+        return replace(
+            self,
+            trace_id=trace_id,
+            parent_span_id=parent_span_id,
+        )
+
     def to_event_data(self) -> dict[str, Any]:
         """Serialize to stream-friendly event payload."""
         return {
@@ -177,4 +200,6 @@ class SubAgentRun:
             "metadata": dict(self.metadata),
             "frozen_result_text": self.frozen_result_text,
             "frozen_at": self.frozen_at.isoformat() if self.frozen_at else None,
+            "trace_id": self.trace_id,
+            "parent_span_id": self.parent_span_id,
         }
