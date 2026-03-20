@@ -84,7 +84,7 @@ router.include_router(plans.router)
 router.include_router(subagent_router.router)
 router.include_router(binding_router.router)
 router.include_router(definitions_router.router)
-router.include_router(trace_router.router)
+router.include_router(trace_router.router, prefix="/trace")
 
 __all__ = [
     "ActiveRunCountResponse",
