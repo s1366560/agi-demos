@@ -308,6 +308,8 @@ class ReActAgent:
         tool_selection_semantic_backend: str = "embedding_vector",
         router_mode_tool_count_threshold: int = 100,
         tool_policy_layers: Mapping[str, Any] | None = None,
+        span_service: Any | None = None,
+        fork_merge_service: Any | None = None,
     ) -> None:
         """
         Initialize ReAct Agent.
@@ -443,6 +445,8 @@ class ReActAgent:
             subagent_run_redis_cache_url,
             subagent_run_redis_cache_ttl_seconds,
             subagent_terminal_retention_seconds,
+            span_service=span_service,
+            fork_merge_service=fork_merge_service,
         )
         self._init_orchestrators()
         self._init_background_services(llm_client)
@@ -681,6 +685,8 @@ class ReActAgent:
         subagent_run_redis_cache_url: str | None,
         subagent_run_redis_cache_ttl_seconds: int,
         subagent_terminal_retention_seconds: int,
+        span_service: Any | None = None,
+        fork_merge_service: Any | None = None,
     ) -> None:
         """Initialize SubAgent System (L3 layer)."""
         self.subagents = subagents or []
@@ -697,6 +703,8 @@ class ReActAgent:
         self._subagent_lane_semaphore = asyncio.Semaphore(self._max_subagent_lane_concurrency)
         self._subagent_lifecycle_hook = subagent_lifecycle_hook
         self._subagent_lifecycle_hook_failures = [0]
+        self._span_service = span_service
+        self._fork_merge_service = fork_merge_service
         self._init_subagent_router(subagents, execution_config, cached_subagent_router)
         self._init_subagent_run_registry(
             subagent_run_registry_path,
@@ -774,7 +782,10 @@ class ReActAgent:
         from ..subagent.task_decomposer import TaskDecomposer
         from ..subagent.template_registry import TemplateRegistry
 
-        self._background_executor = BackgroundExecutor()
+        self._background_executor = BackgroundExecutor(
+            span_service=self._span_service,
+            fork_merge_service=self._fork_merge_service,
+        )
         self._template_registry = TemplateRegistry()
 
         agent_names = [sa.name for sa in self.subagents] if self.subagents else []

@@ -427,7 +427,7 @@ test-backend: ## Run backend tests
 
 test-unit: ## Run unit tests only
 	@echo " Running unit tests..."
-	uv run pytest src/tests/ -m "not integration" -v --tb=short
+	uv run pytest src/tests/ -m "not integration and not performance" -v --tb=short
 
 test-integration: ## Run integration tests only
 	@echo " Running integration tests..."

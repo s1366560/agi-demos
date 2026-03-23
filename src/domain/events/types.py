@@ -197,6 +197,9 @@ class AgentEventType(str, Enum):
     SUBAGENT_SPAWN_REJECTED = "subagent_spawn_rejected"
     SUBAGENT_ANNOUNCE_RETRY = "subagent_announce_retry"
     SUBAGENT_ORPHAN_DETECTED = "subagent_orphan_detected"
+    SUBAGENT_ANNOUNCE_SENT = "subagent_announce_sent"
+    SUBAGENT_ANNOUNCE_RECEIVED = "subagent_announce_received"
+    SUBAGENT_ANNOUNCE_EXPIRED = "subagent_announce_expired"
     TOOL_POLICY_DENIED = "tool_policy_denied"
 
     # =========================================================================
@@ -260,6 +263,19 @@ class AgentEventType(str, Enum):
     CONTEXT_COMPACTED = "context_compacted"
     SESSION_FORKED = "session_forked"
     SESSION_MERGED = "session_merged"
+
+    # =========================================================================
+    # Graph orchestration events (multi-agent DAG execution)
+    # =========================================================================
+    GRAPH_RUN_STARTED = "graph_run_started"
+    GRAPH_RUN_COMPLETED = "graph_run_completed"
+    GRAPH_RUN_FAILED = "graph_run_failed"
+    GRAPH_RUN_CANCELLED = "graph_run_cancelled"
+    GRAPH_NODE_STARTED = "graph_node_started"
+    GRAPH_NODE_COMPLETED = "graph_node_completed"
+    GRAPH_NODE_FAILED = "graph_node_failed"
+    GRAPH_NODE_SKIPPED = "graph_node_skipped"
+    GRAPH_HANDOFF = "graph_handoff"
 
 
 # =============================================================================
@@ -392,6 +408,9 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.SUBAGENT_SPAWN_REJECTED: EventCategory.AGENT,
     AgentEventType.SUBAGENT_ANNOUNCE_RETRY: EventCategory.AGENT,
     AgentEventType.SUBAGENT_ORPHAN_DETECTED: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_ANNOUNCE_SENT: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_ANNOUNCE_RECEIVED: EventCategory.AGENT,
+    AgentEventType.SUBAGENT_ANNOUNCE_EXPIRED: EventCategory.AGENT,
     AgentEventType.TOOL_POLICY_DENIED: EventCategory.AGENT,
     # Multi-agent inter-agent communication
     AgentEventType.AGENT_SPAWNED: EventCategory.AGENT,
@@ -403,6 +422,16 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.CONTEXT_COMPACTED: EventCategory.SYSTEM,
     AgentEventType.SESSION_FORKED: EventCategory.AGENT,
     AgentEventType.SESSION_MERGED: EventCategory.AGENT,
+    # Graph orchestration events (multi-agent DAG execution)
+    AgentEventType.GRAPH_RUN_STARTED: EventCategory.AGENT,
+    AgentEventType.GRAPH_RUN_COMPLETED: EventCategory.AGENT,
+    AgentEventType.GRAPH_RUN_FAILED: EventCategory.AGENT,
+    AgentEventType.GRAPH_RUN_CANCELLED: EventCategory.AGENT,
+    AgentEventType.GRAPH_NODE_STARTED: EventCategory.AGENT,
+    AgentEventType.GRAPH_NODE_COMPLETED: EventCategory.AGENT,
+    AgentEventType.GRAPH_NODE_FAILED: EventCategory.AGENT,
+    AgentEventType.GRAPH_NODE_SKIPPED: EventCategory.AGENT,
+    AgentEventType.GRAPH_HANDOFF: EventCategory.AGENT,
 }
 
 

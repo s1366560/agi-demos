@@ -1755,6 +1755,113 @@ class MessageBindingModel(Base):
     __table_args__ = (Index("ix_message_bindings_scope", "scope", "scope_id"),)
 
 
+# ---------------------------------------------------------------------------
+# Multi-Agent Graph Orchestration Models
+# ---------------------------------------------------------------------------
+
+
+class AgentGraphModel(Base, IdGeneratorMixin):
+    """Persisted DAG definition for multi-agent orchestration."""
+
+    __tablename__ = "agent_graphs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    pattern: Mapped[str] = mapped_column(String(30), nullable=False)
+    nodes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    edges_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    shared_context_keys: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    max_total_steps: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
+    runs: Mapped[list["GraphRunModel"]] = relationship(
+        back_populates="graph", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "project_id", "name", name="uq_agent_graphs_tenant_project_name"
+        ),
+        Index("ix_agent_graphs_project_active", "project_id", "is_active"),
+    )
+
+
+class GraphRunModel(Base, IdGeneratorMixin):
+    """Persisted execution instance of an AgentGraph."""
+
+    __tablename__ = "graph_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    graph_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agent_graphs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    shared_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    current_node_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    total_steps: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_total_steps: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    graph: Mapped["AgentGraphModel"] = relationship(back_populates="runs")
+    node_executions: Mapped[list["NodeExecutionModel"]] = relationship(
+        back_populates="graph_run", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_graph_runs_conversation_status", "conversation_id", "status"),
+        Index("ix_graph_runs_graph_status", "graph_id", "status"),
+    )
+
+
+class NodeExecutionModel(Base, IdGeneratorMixin):
+    """Persisted execution record for a single node within a graph run."""
+
+    __tablename__ = "node_executions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    graph_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("graph_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    node_id: Mapped[str] = mapped_column(String, nullable=False)
+    agent_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    input_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    output_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    graph_run: Mapped["GraphRunModel"] = relationship(back_populates="node_executions")
+
+    __table_args__ = (
+        Index("ix_node_executions_run_node", "graph_run_id", "node_id"),
+        Index("ix_node_executions_status", "graph_run_id", "status"),
+    )
+
+
 # Runtime import to register ChannelConfigModel on Base.metadata so that
 # SQLAlchemy can resolve the string reference in Project.channel_configs.
 # This must come after Base and all models above are defined to avoid

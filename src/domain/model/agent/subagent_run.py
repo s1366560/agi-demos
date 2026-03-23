@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+from src.domain.model.agent.announce_config import AnnounceState
+
 
 class SubAgentRunStatus(str, Enum):
     """Execution status for a SubAgent run."""
@@ -39,6 +41,7 @@ class SubAgentRun:
     frozen_at: datetime | None = None
     trace_id: str | None = None
     parent_span_id: str | None = None
+    announce_state: AnnounceState | None = None
 
     def __post_init__(self) -> None:
         if not self.run_id or not self.run_id.strip():
@@ -202,4 +205,5 @@ class SubAgentRun:
             "frozen_at": self.frozen_at.isoformat() if self.frozen_at else None,
             "trace_id": self.trace_id,
             "parent_span_id": self.parent_span_id,
+            "announce_state": self.announce_state.value if self.announce_state else None,
         }

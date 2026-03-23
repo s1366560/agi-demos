@@ -49,6 +49,7 @@ import type {
   SubAgentQueuedEventData,
   SubAgentKilledEventData,
   SubAgentSteeredEventData,
+  ToolPolicyDeniedEventData,
   SubAgentDepthLimitedEventData,
   SubAgentSessionUpdateEventData,
   ParallelStartedEventData,
@@ -75,6 +76,15 @@ import type {
   AgentSpawnedEventData,
   AgentCompletedEventData,
   AgentStoppedEventData,
+  GraphRunStartedEventData,
+  GraphRunCompletedEventData,
+  GraphRunFailedEventData,
+  GraphRunCancelledEventData,
+  GraphNodeStartedEventData,
+  GraphNodeCompletedEventData,
+  GraphNodeFailedEventData,
+  GraphNodeSkippedEventData,
+  GraphHandoffEventData,
   CompleteEventData,
   ErrorEventData,
   RetryEventData,
@@ -171,6 +181,7 @@ export interface AgentStreamHandler {
   onSubAgentQueued?: ((event: AgentEvent<SubAgentQueuedEventData>) => void) | undefined;
   onSubAgentKilled?: ((event: AgentEvent<SubAgentKilledEventData>) => void) | undefined;
   onSubAgentSteered?: ((event: AgentEvent<SubAgentSteeredEventData>) => void) | undefined;
+  onToolPolicyDenied?: ((event: AgentEvent<ToolPolicyDeniedEventData>) => void) | undefined;
   onSubAgentDepthLimited?: ((event: AgentEvent<SubAgentDepthLimitedEventData>) => void) | undefined;
   onSubAgentSessionUpdate?:
     | ((event: AgentEvent<SubAgentSessionUpdateEventData>) => void)
@@ -186,6 +197,16 @@ export interface AgentStreamHandler {
   onAgentSpawned?: ((event: AgentEvent<AgentSpawnedEventData>) => void) | undefined;
   onAgentCompleted?: ((event: AgentEvent<AgentCompletedEventData>) => void) | undefined;
   onAgentStopped?: ((event: AgentEvent<AgentStoppedEventData>) => void) | undefined;
+  // Graph orchestration handlers (multi-agent DAG)
+  onGraphRunStarted?: ((event: AgentEvent<GraphRunStartedEventData>) => void) | undefined;
+  onGraphRunCompleted?: ((event: AgentEvent<GraphRunCompletedEventData>) => void) | undefined;
+  onGraphRunFailed?: ((event: AgentEvent<GraphRunFailedEventData>) => void) | undefined;
+  onGraphRunCancelled?: ((event: AgentEvent<GraphRunCancelledEventData>) => void) | undefined;
+  onGraphNodeStarted?: ((event: AgentEvent<GraphNodeStartedEventData>) => void) | undefined;
+  onGraphNodeCompleted?: ((event: AgentEvent<GraphNodeCompletedEventData>) => void) | undefined;
+  onGraphNodeFailed?: ((event: AgentEvent<GraphNodeFailedEventData>) => void) | undefined;
+  onGraphNodeSkipped?: ((event: AgentEvent<GraphNodeSkippedEventData>) => void) | undefined;
+  onGraphHandoff?: ((event: AgentEvent<GraphHandoffEventData>) => void) | undefined;
   onExecutionPathDecided?: ((event: AgentEvent<ExecutionPathDecidedEventData>) => void) | undefined;
   onSelectionTrace?: ((event: AgentEvent<SelectionTraceEventData>) => void) | undefined;
   onPolicyFiltered?: ((event: AgentEvent<PolicyFilteredEventData>) => void) | undefined;

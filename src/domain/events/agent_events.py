@@ -48,9 +48,21 @@ __all__ = [
     "AgentStoppedEvent",
     "AgentSuggestionsEvent",
     "ContextCompactedEvent",
+    "GraphHandoffEvent",
+    "GraphNodeCompletedEvent",
+    "GraphNodeFailedEvent",
+    "GraphNodeSkippedEvent",
+    "GraphNodeStartedEvent",
+    "GraphRunCancelledEvent",
+    "GraphRunCompletedEvent",
+    "GraphRunFailedEvent",
+    "GraphRunStartedEvent",
     "SessionForkedEvent",
     "SessionMergedEvent",
+    "SubAgentAnnounceExpiredEvent",
+    "SubAgentAnnounceReceivedEvent",
     "SubAgentAnnounceRetryEvent",
+    "SubAgentAnnounceSentEvent",
     "SubAgentCompletedEvent",
     "SubAgentDepthLimitedEvent",
     "SubAgentDoomLoopEvent",
@@ -1217,6 +1229,37 @@ class SubAgentOrphanDetectedEvent(AgentDomainEvent):
     action_taken: str = ""  # "cancelled" | "marked_failed" | "ignored"
 
 
+class SubAgentAnnounceSentEvent(AgentDomainEvent):
+    """Event: Child SubAgent sent result announcement to parent."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_ANNOUNCE_SENT
+    agent_id: str
+    session_id: str
+    parent_agent_id: str
+    result_preview: str = ""
+
+
+class SubAgentAnnounceReceivedEvent(AgentDomainEvent):
+    """Event: Parent agent received result announcement from child."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_ANNOUNCE_RECEIVED
+    agent_id: str
+    session_id: str
+    from_agent_id: str
+    from_agent_name: str = ""
+    result_preview: str = ""
+
+
+class SubAgentAnnounceExpiredEvent(AgentDomainEvent):
+    """Event: SubAgent announce operation expired after exhausting retries."""
+
+    event_type: AgentEventType = AgentEventType.SUBAGENT_ANNOUNCE_EXPIRED
+    agent_id: str
+    session_id: str
+    attempts: int
+    last_error: str = ""
+
+
 class ToolPolicyDeniedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TOOL_POLICY_DENIED
     agent_id: str
@@ -1311,6 +1354,108 @@ class SessionMergedEvent(AgentDomainEvent):
     merge_strategy: str
 
 
+# =========================================================================
+# Graph Orchestration Events (multi-agent DAG execution)
+# =========================================================================
+
+
+class GraphRunStartedEvent(AgentDomainEvent):
+    """Event: A graph orchestration run was started."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_RUN_STARTED
+    graph_run_id: str
+    graph_id: str
+    graph_name: str
+    pattern: str
+    entry_node_ids: list[str] = Field(default_factory=list)
+
+
+class GraphRunCompletedEvent(AgentDomainEvent):
+    """Event: A graph orchestration run completed successfully."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_RUN_COMPLETED
+    graph_run_id: str
+    graph_id: str
+    graph_name: str
+    total_steps: int
+    duration_seconds: float | None = None
+
+
+class GraphRunFailedEvent(AgentDomainEvent):
+    """Event: A graph orchestration run failed."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_RUN_FAILED
+    graph_run_id: str
+    graph_id: str
+    graph_name: str
+    error_message: str
+    failed_node_id: str | None = None
+
+
+class GraphRunCancelledEvent(AgentDomainEvent):
+    """Event: A graph orchestration run was cancelled."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_RUN_CANCELLED
+    graph_run_id: str
+    graph_id: str
+    graph_name: str
+    reason: str = ""
+
+
+class GraphNodeStartedEvent(AgentDomainEvent):
+    """Event: A node in the graph started execution."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_NODE_STARTED
+    graph_run_id: str
+    node_id: str
+    node_label: str
+    agent_definition_id: str
+    agent_session_id: str | None = None
+
+
+class GraphNodeCompletedEvent(AgentDomainEvent):
+    """Event: A node in the graph completed execution."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_NODE_COMPLETED
+    graph_run_id: str
+    node_id: str
+    node_label: str
+    output_keys: list[str] = Field(default_factory=list)
+    duration_seconds: float | None = None
+
+
+class GraphNodeFailedEvent(AgentDomainEvent):
+    """Event: A node in the graph failed execution."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_NODE_FAILED
+    graph_run_id: str
+    node_id: str
+    node_label: str
+    error_message: str
+
+
+class GraphNodeSkippedEvent(AgentDomainEvent):
+    """Event: A node in the graph was skipped."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_NODE_SKIPPED
+    graph_run_id: str
+    node_id: str
+    node_label: str
+    reason: str = ""
+
+
+class GraphHandoffEvent(AgentDomainEvent):
+    """Event: An agent handed off execution to another agent in a Swarm pattern."""
+
+    event_type: AgentEventType = AgentEventType.GRAPH_HANDOFF
+    graph_run_id: str
+    from_node_id: str
+    to_node_id: str
+    from_label: str = ""
+    to_label: str = ""
+    context_summary: str = ""
+
+
 # Event Type Utilities
 # =========================================================================
 
@@ -1394,6 +1539,9 @@ def get_event_type_docstring() -> str:
         SubAgentSpawnRejectedEvent,
         SubAgentAnnounceRetryEvent,
         SubAgentOrphanDetectedEvent,
+        SubAgentAnnounceSentEvent,
+        SubAgentAnnounceReceivedEvent,
+        SubAgentAnnounceExpiredEvent,
         AgentSpawnedEvent,
         AgentCompletedEvent,
         AgentMessageSentEvent,
@@ -1402,6 +1550,15 @@ def get_event_type_docstring() -> str:
         ContextCompactedEvent,
         SessionForkedEvent,
         SessionMergedEvent,
+        GraphRunStartedEvent,
+        GraphRunCompletedEvent,
+        GraphRunFailedEvent,
+        GraphRunCancelledEvent,
+        GraphNodeStartedEvent,
+        GraphNodeCompletedEvent,
+        GraphNodeFailedEvent,
+        GraphNodeSkippedEvent,
+        GraphHandoffEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

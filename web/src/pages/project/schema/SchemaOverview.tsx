@@ -15,6 +15,9 @@ import {
   Share2,
 } from 'lucide-react';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
+
 import { useSchemaData } from '../../../hooks/useSwr';
 
 // Memoized entity card component to prevent unnecessary re-renders
@@ -211,6 +214,7 @@ EdgeAttributes.displayName = 'EdgeAttributes';
 export default function SchemaOverview() {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
+  const { projectBasePath } = useProjectBasePath();
   const { entities = [], edges = [], mappings = [], isLoading } = useSchemaData(projectId);
 
   if (isLoading) {
@@ -281,7 +285,7 @@ export default function SchemaOverview() {
                   </span>
                 </div>
                 <Link
-                  to={`/project/${projectId}/schema/entities`}
+                  to={`${projectBasePath}/schema/entities`}
                   className="text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white text-sm font-medium flex items-center gap-1 transition-colors"
                 >
                   <Plus className="w-5 h-5" /> {t('project.schema.overview.entity_types.new')}
@@ -316,7 +320,7 @@ export default function SchemaOverview() {
                   </span>
                 </div>
                 <Link
-                  to={`/project/${projectId}/schema/edges`}
+                  to={`${projectBasePath}/schema/edges`}
                   className="text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white text-sm font-medium flex items-center gap-1 transition-colors"
                 >
                   <Plus className="w-5 h-5" /> {t('project.schema.overview.relationship_types.new')}

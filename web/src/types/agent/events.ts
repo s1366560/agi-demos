@@ -1305,6 +1305,13 @@ export interface SubAgentSteeredEventData {
   instruction: string;
 }
 
+export interface ToolPolicyDeniedEventData {
+  agent_id: string;
+  tool_name: string;
+  policy_layer?: string | undefined;
+  denial_reason?: string | undefined;
+}
+
 export interface SubAgentDepthLimitedEventData {
   subagent_name: string;
   current_depth: number;
@@ -1469,4 +1476,78 @@ export interface AgentMessageReceivedEventData {
   from_agent_id: string;
   from_agent_name: string;
   message_preview: string;
+}
+
+// ---------------------------------------------------------------------------
+// Graph orchestration event data (multi-agent DAG coordination)
+// ---------------------------------------------------------------------------
+
+export interface GraphRunStartedEventData {
+  graph_run_id: string;
+  graph_id: string;
+  graph_name: string;
+  pattern: string;
+  entry_node_ids: string[];
+}
+
+export interface GraphRunCompletedEventData {
+  graph_run_id: string;
+  graph_id: string;
+  graph_name: string;
+  total_steps: number;
+  duration_seconds?: number | undefined;
+}
+
+export interface GraphRunFailedEventData {
+  graph_run_id: string;
+  graph_id: string;
+  graph_name: string;
+  error_message: string;
+  failed_node_id?: string | undefined;
+}
+
+export interface GraphRunCancelledEventData {
+  graph_run_id: string;
+  graph_id: string;
+  graph_name: string;
+  reason: string;
+}
+
+export interface GraphNodeStartedEventData {
+  graph_run_id: string;
+  node_id: string;
+  node_label: string;
+  agent_definition_id: string;
+  agent_session_id?: string | undefined;
+}
+
+export interface GraphNodeCompletedEventData {
+  graph_run_id: string;
+  node_id: string;
+  node_label: string;
+  output_keys: string[];
+  duration_seconds?: number | undefined;
+}
+
+export interface GraphNodeFailedEventData {
+  graph_run_id: string;
+  node_id: string;
+  node_label: string;
+  error_message: string;
+}
+
+export interface GraphNodeSkippedEventData {
+  graph_run_id: string;
+  node_id: string;
+  node_label: string;
+  reason: string;
+}
+
+export interface GraphHandoffEventData {
+  graph_run_id: string;
+  from_node_id: string;
+  to_node_id: string;
+  from_label: string;
+  to_label: string;
+  context_summary: string;
 }

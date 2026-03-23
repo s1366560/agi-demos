@@ -35,6 +35,7 @@ def mock_embedding_service():
     """Create mock embedding service."""
     service = MagicMock()
     service.embed_text = AsyncMock(return_value=[0.1] * 768)
+    service.embed_text_safe = AsyncMock(return_value=[0.1] * 768)
     service.embedding_dim = 768
     return service
 
@@ -255,7 +256,7 @@ class TestHybridSearch:
         mock_neo4j_client.execute_query.return_value = mock_result
 
         await hybrid_search.vector_search("test query")
-        mock_embedding_service.embed_text.assert_called_once_with("test query")
+        mock_embedding_service.embed_text_safe.assert_called_once_with("test query")
 
     @pytest.mark.unit
     async def test_search_limits_results(self, hybrid_search):

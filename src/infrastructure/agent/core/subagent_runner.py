@@ -25,9 +25,11 @@ from src.domain.events.agent_events import (
     SubAgentKilledEvent,
     SubAgentQueuedEvent,
     SubAgentSpawningEvent,
+    SubAgentSpawnRejectedEvent,
 )
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
+from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
 
 from .processor import ProcessorConfig, ToolDefinition
 
@@ -98,6 +100,9 @@ class SubAgentRunnerDeps:
 
     # -- Plugin registry (P1-C) --
     plugin_registry: Any = None  # AgentPluginRegistry | None
+
+    # -- Spawn validation --
+    spawn_validator: SpawnValidator | None = None
 
 
 # Mapping from SubAgent lifecycle event ``type`` values to
@@ -973,6 +978,37 @@ class SubAgentSessionRunner:
             result_error,
         )
 
+    async def _check_spawn_rejected(
+        self,
+        subagent: SubAgent,
+        run_id: str,
+        conversation_id: str,
+    ) -> bool:
+        """Validate spawn and emit rejection event if denied. Returns True if rejected."""
+        assert self.deps.spawn_validator is not None
+        validation = self.deps.spawn_validator.validate(
+            subagent_name=subagent.display_name,
+            current_depth=0,
+            conversation_id=conversation_id,
+            requester_session_id=run_id,
+        )
+        if validation.allowed:
+            return False
+        logger.warning(
+            "[SubAgentRunner] Spawn rejected for %s (run=%s): %s",
+            subagent.display_name,
+            run_id,
+            validation.rejection_reason,
+        )
+        event = SubAgentSpawnRejectedEvent(
+            subagent_name=subagent.display_name,
+            rejection_code=(validation.rejection_code.value if validation.rejection_code else ""),
+            rejection_reason=validation.rejection_reason or "",
+            context=validation.context,
+        )
+        await self.emit_subagent_lifecycle_hook(dict(event.to_event_dict()))
+        return True
+
     async def launch_subagent_session(  # noqa: PLR0913
         self,
         run_id: str,
@@ -1004,6 +1040,16 @@ class SubAgentSessionRunner:
             model_override,
             thinking_override,
         )
+
+        if self.deps.spawn_validator is not None:
+            rejected = await self._check_spawn_rejected(
+                subagent,
+                run_id,
+                conversation_id,
+            )
+            if rejected:
+                return
+
         start_gate = asyncio.Event()
 
         async def _runner() -> None:

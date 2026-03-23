@@ -19,6 +19,7 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
+
 import { GripHorizontal, Download, ChevronDown, GitCompareArrows } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -29,6 +30,7 @@ import { useSandboxStore } from '@/stores/sandbox';
 
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
 import { useLazyNotification } from '@/components/ui/lazyAntd';
@@ -90,6 +92,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     }>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const { projectBasePath: resolvedProjectBasePath } = useProjectBasePath();
 
     // Use external project ID if provided, otherwise fall back to URL param
     const queryProjectId = searchParams.get('projectId');
@@ -98,9 +101,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Determine base path for navigation
     const basePath = useMemo(() => {
       if (customBasePath) return customBasePath;
-      if (urlProjectId) return `/project/${urlProjectId}/agent`;
-      return `/project/${projectId ?? ''}/agent`;
-    }, [customBasePath, urlProjectId, projectId]);
+      return `${resolvedProjectBasePath}/agent`;
+    }, [customBasePath, resolvedProjectBasePath]);
 
     // Store state - single useShallow selector to avoid infinite re-renders
     // NOTE: streamingAssistantContent, streamingThought, isThinkingStreaming are

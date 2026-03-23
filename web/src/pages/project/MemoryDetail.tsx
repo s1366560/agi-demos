@@ -3,6 +3,8 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
 import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { EditMemoryModal } from '@/components/project/EditMemoryModal';
@@ -25,6 +27,7 @@ export const MemoryDetail: React.FC = () => {
   const message = useLazyMessage();
   const { projectId, memoryId } = useParams();
   const navigate = useNavigate();
+  const { projectBasePath } = useProjectBasePath();
   const [memory, setMemory] = useState<Memory | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'content' | 'metadata' | 'history' | 'raw' | 'tasks'>(
@@ -141,7 +144,7 @@ export const MemoryDetail: React.FC = () => {
     setIsDeleting(true);
     try {
       await memoryAPI.delete(projectId, memoryId);
-      navigate(`/project/${projectId}/memories`);
+      navigate(`${projectBasePath}/memories`);
     } catch (error) {
       console.error('Failed to delete memory:', error);
       alert(t('project.memories.detail.delete_failed'));
@@ -208,14 +211,14 @@ export const MemoryDetail: React.FC = () => {
           {/* Breadcrumbs */}
           <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
             <Link
-              to={`/project/${projectId}`}
+              to={projectBasePath}
               className="text-slate-500 hover:text-primary text-sm font-medium transition-colors"
             >
               {t('common.project')}
             </Link>
             <span className="text-slate-400 text-sm">/</span>
             <Link
-              to={`/project/${projectId}/memories`}
+              to={`${projectBasePath}/memories`}
               className="text-slate-500 hover:text-primary text-sm font-medium transition-colors"
             >
               {t('project.memories.title')}

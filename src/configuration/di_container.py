@@ -433,6 +433,15 @@ class DIContainer:
     def agent_orchestrator(self) -> Any:
         return self._agent.agent_orchestrator()
 
+    def graph_repository(self) -> Any:
+        return self._agent.graph_repository()
+
+    def graph_run_repository(self) -> Any:
+        return self._agent.graph_run_repository()
+
+    def graph_orchestrator(self) -> Any:
+        return self._agent.graph_orchestrator()
+
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 
@@ -492,3 +501,32 @@ class DIContainer:
 
     def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
         return self._agent.compose_tools_use_case(llm)
+
+    # === Multi-Agent Services (Phase 1-4) ===
+
+    def span_service(self) -> Any:
+        return self._agent.span_service()
+
+    def fork_merge_service(self) -> Any:
+        return self._agent.fork_merge_service()
+
+    def layered_tool_policy_service(self) -> Any:
+        return self._agent.layered_tool_policy_service()
+
+    def default_message_router(self) -> Any:
+        return self._agent.default_message_router()
+
+    def message_binding_repository(self) -> Any:
+        return self._agent.message_binding_repository()
+
+    def agent_router_service(self) -> Any:
+        return self._agent.agent_router_service()
+
+    def redis_agent_namespace(self) -> Any:
+        return self._agent.redis_agent_namespace()
+
+    def redis_agent_credential_scope(self) -> Any:
+        return self._agent.redis_agent_credential_scope()
+
+    def default_context_engine(self, window_manager: Any | None = None) -> Any:
+        return self._agent.default_context_engine(window_manager)

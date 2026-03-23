@@ -21,10 +21,13 @@ import React, { useState, useEffect } from 'react';
 
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 
+
 import { Search, History, GitBranch } from 'lucide-react';
 
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
+
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { AgentSidebar } from '@/components/layout/AppSidebar';
@@ -51,6 +54,7 @@ export const AgentLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { projectBasePath } = useProjectBasePath();
 
   // Sync project data
   useEffect(() => {
@@ -81,7 +85,7 @@ export const AgentLayout: React.FC = () => {
 
   const handleTabClick = (tab: { id: string; path: string }) => {
     if (projectId) {
-      const agentBasePath = `/project/${projectId}/agent`;
+      const agentBasePath = `${projectBasePath}/agent`;
       navigate(tab.path ? `${agentBasePath}/${tab.path}` : agentBasePath);
     }
   };
@@ -106,7 +110,7 @@ export const AgentLayout: React.FC = () => {
             {/* Breadcrumbs */}
             <nav className="flex items-center gap-2 text-sm">
               <Link
-                to={`/project/${projectId}`}
+                to={projectBasePath}
                 className="text-slate-400 hover:text-primary transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">home</span>
@@ -115,7 +119,7 @@ export const AgentLayout: React.FC = () => {
                 chevron_right
               </span>
               <Link
-                to={`/project/${projectId}`}
+                to={projectBasePath}
                 className="text-slate-500 hover:text-primary transition-colors font-medium"
               >
                 {currentProject?.name || 'Project'}
@@ -198,7 +202,7 @@ export const AgentLayout: React.FC = () => {
 
         {/* Page Content */}
         <div className="flex-1 overflow-hidden">
-          <RouteErrorBoundary context="Agent" fallbackPath={`/project/${projectId}/agent`}>
+          <RouteErrorBoundary context="Agent" fallbackPath={`${projectBasePath}/agent`}>
             <Outlet />
           </RouteErrorBoundary>
         </div>

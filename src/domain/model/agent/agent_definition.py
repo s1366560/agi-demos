@@ -14,7 +14,10 @@ from typing import Any
 
 from src.domain.model.agent.agent_binding import AgentBinding
 from src.domain.model.agent.agent_source import AgentSource
+from src.domain.model.agent.identity import AgentIdentity
+from src.domain.model.agent.spawn_policy import SpawnPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
+from src.domain.model.agent.tool_policy import ToolPolicy
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 
 
@@ -98,6 +101,11 @@ class Agent:
     agent_to_agent_enabled: bool = False
     discoverable: bool = True
 
+    # Policy VOs (multi-agent governance)
+    spawn_policy: SpawnPolicy | None = None
+    tool_policy: ToolPolicy | None = None
+    identity: AgentIdentity | None = None
+
     # Runtime
     source: AgentSource = AgentSource.DATABASE
     enabled: bool = True
@@ -167,6 +175,70 @@ class Agent:
             return list(available_tools)
         return [t for t in available_tools if t in self.allowed_tools]
 
+    def to_identity(self) -> AgentIdentity:
+        """Build an AgentIdentity snapshot from this Agent's current state."""
+        return AgentIdentity(
+            agent_id=self.id,
+            name=self.name,
+            description=self.display_name,
+            system_prompt=self.system_prompt,
+            model=self.model,
+            allowed_tools=tuple(self.allowed_tools),
+            allowed_skills=tuple(self.allowed_skills),
+            spawn_policy=self.spawn_policy or SpawnPolicy(),
+            tool_policy=self.tool_policy or ToolPolicy(),
+            metadata=tuple((k, str(v)) for k, v in (self.metadata or {}).items()),
+        )
+
+    def _spawn_policy_to_dict(self) -> dict[str, Any] | None:
+        if self.spawn_policy is None:
+            return None
+        sp = self.spawn_policy
+        return {
+            "max_depth": sp.max_depth,
+            "max_active_runs": sp.max_active_runs,
+            "max_children_per_requester": sp.max_children_per_requester,
+            "allowed_subagents": (
+                sorted(sp.allowed_subagents) if sp.allowed_subagents is not None else None
+            ),
+        }
+
+    def _tool_policy_to_dict(self) -> dict[str, Any] | None:
+        if self.tool_policy is None:
+            return None
+        tp = self.tool_policy
+        return {
+            "allow": list(tp.allow),
+            "deny": list(tp.deny),
+            "precedence": tp.precedence.value,
+        }
+
+    @staticmethod
+    def _spawn_policy_from_dict(data: dict[str, Any] | None) -> SpawnPolicy | None:
+        if data is None or not isinstance(data, dict):
+            return None
+        raw_allowed = data.get("allowed_subagents")
+        return SpawnPolicy(
+            max_depth=data.get("max_depth", 2),
+            max_active_runs=data.get("max_active_runs", 16),
+            max_children_per_requester=data.get("max_children_per_requester", 8),
+            allowed_subagents=(frozenset(raw_allowed) if raw_allowed is not None else None),
+        )
+
+    @staticmethod
+    def _tool_policy_from_dict(data: dict[str, Any] | None) -> ToolPolicy | None:
+        if data is None or not isinstance(data, dict):
+            return None
+        from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
+
+        return ToolPolicy(
+            allow=tuple(data.get("allow", ())),
+            deny=tuple(data.get("deny", ())),
+            precedence=ToolPolicyPrecedence(
+                data.get("precedence", ToolPolicyPrecedence.DENY_FIRST.value)
+            ),
+        )
+
     def record_execution(self, execution_time_ms: float, success: bool) -> "Agent":
         """Record an execution and return updated agent."""
         new_invocations = self.total_invocations + 1
@@ -209,6 +281,9 @@ class Agent:
             max_spawn_depth=self.max_spawn_depth,
             agent_to_agent_enabled=(self.agent_to_agent_enabled),
             discoverable=self.discoverable,
+            spawn_policy=self.spawn_policy,
+            tool_policy=self.tool_policy,
+            identity=self.identity,
             source=self.source,
             enabled=self.enabled,
             max_retries=self.max_retries,
@@ -246,6 +321,8 @@ class Agent:
             "max_spawn_depth": self.max_spawn_depth,
             "agent_to_agent_enabled": (self.agent_to_agent_enabled),
             "discoverable": self.discoverable,
+            "spawn_policy": self._spawn_policy_to_dict(),
+            "tool_policy": self._tool_policy_to_dict(),
             "source": (self.source.value if isinstance(self.source, AgentSource) else self.source),
             "enabled": self.enabled,
             "max_retries": self.max_retries,
@@ -275,6 +352,9 @@ class Agent:
             WorkspaceConfig.from_dict(ws_data) if isinstance(ws_data, dict) else ws_data
         )
 
+        spawn_policy = cls._spawn_policy_from_dict(data.get("spawn_policy"))
+        tool_policy_vo = cls._tool_policy_from_dict(data.get("tool_policy"))
+
         return cls(
             id=data["id"],
             tenant_id=data["tenant_id"],
@@ -298,6 +378,8 @@ class Agent:
             max_spawn_depth=data.get("max_spawn_depth", 3),
             agent_to_agent_enabled=data.get("agent_to_agent_enabled", False),
             discoverable=data.get("discoverable", True),
+            spawn_policy=spawn_policy,
+            tool_policy=tool_policy_vo,
             source=(AgentSource(data["source"]) if "source" in data else AgentSource.DATABASE),
             enabled=data.get("enabled", True),
             max_retries=data.get("max_retries", 0),
@@ -347,6 +429,8 @@ class Agent:
         max_retries: int = 0,
         fallback_models: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        spawn_policy: SpawnPolicy | None = None,
+        tool_policy: ToolPolicy | None = None,
     ) -> "Agent":
         """Create a new agent with generated ID."""
         import uuid
@@ -380,6 +464,8 @@ class Agent:
             max_spawn_depth=max_spawn_depth,
             agent_to_agent_enabled=(agent_to_agent_enabled),
             discoverable=discoverable,
+            spawn_policy=spawn_policy,
+            tool_policy=tool_policy,
             max_retries=max_retries,
             fallback_models=fallback_models or [],
             metadata=metadata,

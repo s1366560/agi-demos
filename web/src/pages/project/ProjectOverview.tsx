@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
 import { formatDateOnly } from '@/utils/date';
 
 import { LazyDropdown, Modal, message } from '@/components/ui/lazyAntd';
@@ -14,6 +16,7 @@ export const ProjectOverview: React.FC = () => {
   const { t } = useTranslation();
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { projectBasePath } = useProjectBasePath();
   const [stats, setStats] = useState<any>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -267,12 +270,12 @@ export const ProjectOverview: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               {t('project.overview.activeMemories')}
             </h3>
-            <Link
-              to={`/project/${projectId}/memories`}
-              className="text-sm text-primary font-medium hover:text-primary/80"
-            >
-              {t('common.actions.viewAll')}
-            </Link>
+             <Link
+               to={`${projectBasePath}/memories`}
+               className="text-sm text-primary font-medium hover:text-primary/80"
+             >
+               {t('common.actions.viewAll')}
+             </Link>
           </div>
           <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -305,11 +308,11 @@ export const ProjectOverview: React.FC = () => {
                     memories.map((memory: Memory) => {
                       const status = getMemoryStatus(memory);
                       return (
-                        <tr
-                          key={memory.id}
-                          onClick={() => navigate(`/project/${projectId}/memory/${memory.id}`)}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
-                        >
+                       <tr
+                           key={memory.id}
+                           onClick={() => navigate(`${projectBasePath}/memory/${memory.id}`)}
+                           className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
+                         >
                           <td className="px-6 py-3">
                             <div className="flex items-center gap-3">
                               <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">

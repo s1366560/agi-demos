@@ -11,6 +11,7 @@ import { tabSync } from '../../utils/tabSync';
 import { useBackgroundStore } from '../backgroundStore';
 import { useCanvasStore } from '../canvasStore';
 import { useContextStore } from '../contextStore';
+import { useGraphStore } from '../graphStore';
 import { useUnifiedHITLStore } from '../hitlStore.unified';
 import { useLayoutModeStore } from '../layoutMode';
 
@@ -43,9 +44,19 @@ import type {
   SubAgentSteeredEventData,
   SubAgentDepthLimitedEventData,
   SubAgentSessionUpdateEventData,
+  ToolPolicyDeniedEventData,
   AgentSpawnedEventData,
   AgentCompletedEventData,
   AgentStoppedEventData,
+  GraphRunStartedEventData,
+  GraphRunCompletedEventData,
+  GraphRunFailedEventData,
+  GraphRunCancelledEventData,
+  GraphNodeStartedEventData,
+  GraphNodeCompletedEventData,
+  GraphNodeFailedEventData,
+  GraphNodeSkippedEventData,
+  GraphHandoffEventData,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AgentNode } from '../../types/multiAgent';
@@ -1271,6 +1282,15 @@ export function createStreamEventHandlers(
       });
     },
 
+    onToolPolicyDenied: (event: AgentEvent<ToolPolicyDeniedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
     onSubAgentDepthLimited: (event: AgentEvent<SubAgentDepthLimitedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
@@ -1761,6 +1781,117 @@ export function createStreamEventHandlers(
         timeline: updatedTimeline,
         agentNodes,
       });
+    },
+
+    onGraphRunStarted: (event: AgentEvent<GraphRunStartedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore
+        .getState()
+        .runStarted(d.graph_run_id, d.graph_id, d.graph_name, d.pattern, d.entry_node_ids);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphRunCompleted: (event: AgentEvent<GraphRunCompletedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore.getState().runCompleted(d.graph_run_id, d.total_steps, d.duration_seconds);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphRunFailed: (event: AgentEvent<GraphRunFailedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore.getState().runFailed(d.graph_run_id, d.error_message, d.failed_node_id);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphRunCancelled: (event: AgentEvent<GraphRunCancelledEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore.getState().runCancelled(d.graph_run_id, d.reason);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphNodeStarted: (event: AgentEvent<GraphNodeStartedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore
+        .getState()
+        .nodeStarted(
+          d.graph_run_id,
+          d.node_id,
+          d.node_label,
+          d.agent_definition_id,
+          d.agent_session_id
+        );
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphNodeCompleted: (event: AgentEvent<GraphNodeCompletedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore
+        .getState()
+        .nodeCompleted(d.graph_run_id, d.node_id, d.output_keys, d.duration_seconds);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphNodeFailed: (event: AgentEvent<GraphNodeFailedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore.getState().nodeFailed(d.graph_run_id, d.node_id, d.error_message);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphNodeSkipped: (event: AgentEvent<GraphNodeSkippedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore.getState().nodeSkipped(d.graph_run_id, d.node_id, d.reason);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onGraphHandoff: (event: AgentEvent<GraphHandoffEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const d = event.data;
+      useGraphStore
+        .getState()
+        .handoff(
+          d.graph_run_id,
+          d.from_node_id,
+          d.to_node_id,
+          d.from_label,
+          d.to_label,
+          d.context_summary
+        );
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
     },
 
     onComplete: (event) => {

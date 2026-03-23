@@ -162,7 +162,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   </div>
                   <div>
                     <Link
-                      to={`/project/${project.id}`}
+                      to={`/tenant/${currentTenant.id}/project/${project.id}`}
                       className="text-base font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors hover:underline"
                     >
                       {project.name}
@@ -316,7 +316,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                         </div>
                         <div>
                           <Link
-                            to={`/project/${project.id}`}
+                            to={`/tenant/${currentTenant.id}/project/${project.id}`}
                             className="font-bold text-slate-900 dark:text-white hover:text-primary transition-colors"
                           >
                             {project.name}

@@ -7,6 +7,7 @@ All endpoints have been fully migrated from agent_legacy.py.
 from fastapi import APIRouter
 
 from . import (
+    agent_graph_router,
     binding_router,
     commands,
     config,
@@ -85,6 +86,7 @@ router.include_router(subagent_router.router)
 router.include_router(binding_router.router)
 router.include_router(definitions_router.router)
 router.include_router(trace_router.router, prefix="/trace")
+router.include_router(agent_graph_router.router)
 
 __all__ = [
     "ActiveRunCountResponse",

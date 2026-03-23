@@ -553,6 +553,7 @@ class SubAgentRunResponse(BaseModel):
     frozen_at: str | None = None
     trace_id: str | None = None
     parent_span_id: str | None = None
+    announce_state: str | None = None
 
 
 class SubAgentRunListResponse(BaseModel):

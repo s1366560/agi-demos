@@ -5,7 +5,6 @@ import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LazySpin } from './components/ui/lazyAntd';
 import './i18n/config';
-import { ProjectLayout } from './layouts/ProjectLayout';
 import { SchemaLayout } from './layouts/SchemaLayout';
 import { TenantLayout } from './layouts/TenantLayout';
 import { Login } from './pages/Login';
@@ -189,6 +188,17 @@ const ProjectChannelsRedirect: React.FC = () => {
   const projectQuery = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
 
   return <Navigate to={`${basePath}${projectQuery}`} replace />;
+};
+
+const LegacyProjectRedirect: React.FC = () => {
+  const { projectId, '*': rest } = useParams();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const user = useAuthStore((state) => state.user);
+  const tenantId = currentTenant?.id || user?.tenant_id;
+  const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
+  const subPath = rest ? `/${rest}` : '';
+
+  return <Navigate to={`${basePath}/project/${projectId ?? ''}${subPath}`} replace />;
 };
 
 function App() {
@@ -414,6 +424,150 @@ function App() {
                 }
               />
 
+              {/* Project routes (generic, no tenantId in URL) */}
+              <Route path="project/:projectId">
+                <Route
+                  index
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ProjectOverview />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="memories"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <MemoryList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="memories/new"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <NewMemory />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="memory/:memoryId"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <MemoryDetail />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="graph"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <MemoryGraph />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="entities"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <EntitiesList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="communities"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <CommunitiesList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="advanced-search"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <EnhancedSearch />
+                    </Suspense>
+                  }
+                />
+                <Route path="search" element={<Navigate to="advanced-search" replace />} />
+                <Route
+                  path="maintenance"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Maintenance />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="cron-jobs"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <CronJobs />
+                    </Suspense>
+                  }
+                />
+                <Route path="schema" element={<SchemaLayout />}>
+                  <Route
+                    index
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <SchemaOverview />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="entities"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <EntityTypeList />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="edges"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <EdgeTypeList />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="mapping"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <EdgeMapList />
+                      </Suspense>
+                    }
+                  />
+                </Route>
+                <Route path="channels" element={<ProjectChannelsRedirect />} />
+                <Route
+                  path="team"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Team />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="settings"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ProjectSettings />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="support"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Support />
+                    </Suspense>
+                  }
+                />
+              </Route>
+
               {/* Tenant specific routes */}
               <Route
                 path=":tenantId"
@@ -599,101 +753,46 @@ function App() {
                   </Suspense>
                 }
               />
-            </Route>
 
-            {/* Project Workbench */}
-            <Route
-              path="/project/:projectId"
-              element={isAuthenticated ? <ProjectLayout /> : <Navigate to="/login" replace />}
-            >
-              <Route
-                index
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ProjectOverview />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="memories"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <MemoryList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="memories/new"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <NewMemory />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="memory/:memoryId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <MemoryDetail />
-                  </Suspense>
-                }
-              />
-              {/* <Route path="search" element={<SearchPage />} /> */}
-              <Route
-                path="graph"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <MemoryGraph />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="entities"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <EntitiesList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="communities"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <CommunitiesList />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="advanced-search"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <EnhancedSearch />
-                  </Suspense>
-                }
-              />
-              <Route path="search" element={<Navigate to="advanced-search" replace />} />
-              <Route
-                path="maintenance"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Maintenance />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="cron-jobs"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <CronJobs />
-                  </Suspense>
-                }
-              />
-              <Route path="schema" element={<SchemaLayout />}>
+              {/* Project routes (tenantId-prefixed) */}
+              <Route path=":tenantId/project/:projectId">
                 <Route
                   index
                   element={
                     <Suspense fallback={<PageLoader />}>
-                      <SchemaOverview />
+                      <ProjectOverview />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="memories"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <MemoryList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="memories/new"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <NewMemory />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="memory/:memoryId"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <MemoryDetail />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="graph"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <MemoryGraph />
                     </Suspense>
                   }
                 />
@@ -701,53 +800,112 @@ function App() {
                   path="entities"
                   element={
                     <Suspense fallback={<PageLoader />}>
-                      <EntityTypeList />
+                      <EntitiesList />
                     </Suspense>
                   }
                 />
                 <Route
-                  path="edges"
+                  path="communities"
                   element={
                     <Suspense fallback={<PageLoader />}>
-                      <EdgeTypeList />
+                      <CommunitiesList />
                     </Suspense>
                   }
                 />
                 <Route
-                  path="mapping"
+                  path="advanced-search"
                   element={
                     <Suspense fallback={<PageLoader />}>
-                      <EdgeMapList />
+                      <EnhancedSearch />
+                    </Suspense>
+                  }
+                />
+                <Route path="search" element={<Navigate to="advanced-search" replace />} />
+                <Route
+                  path="maintenance"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Maintenance />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="cron-jobs"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <CronJobs />
+                    </Suspense>
+                  }
+                />
+                <Route path="schema" element={<SchemaLayout />}>
+                  <Route
+                    index
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <SchemaOverview />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="entities"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <EntityTypeList />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="edges"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <EdgeTypeList />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="mapping"
+                    element={
+                      <Suspense fallback={<PageLoader />}>
+                        <EdgeMapList />
+                      </Suspense>
+                    }
+                  />
+                </Route>
+                <Route path="channels" element={<ProjectChannelsRedirect />} />
+                <Route
+                  path="team"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Team />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="settings"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ProjectSettings />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="support"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Support />
                     </Suspense>
                   }
                 />
               </Route>
-              <Route path="channels" element={<ProjectChannelsRedirect />} />
-              <Route
-                path="team"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Team />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="settings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ProjectSettings />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="support"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <Support />
-                  </Suspense>
-                }
-              />
             </Route>
+
+            {/* Legacy /project/:projectId redirect to tenant-scoped route */}
+            <Route
+              path="/project/:projectId/*"
+              element={
+                isAuthenticated ? <LegacyProjectRedirect /> : <Navigate to="/login" replace />
+              }
+            />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

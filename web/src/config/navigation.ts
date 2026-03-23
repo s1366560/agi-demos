@@ -173,6 +173,18 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'mcp-servers', icon: 'cable', label: 'nav.mcpServers', path: '/mcp-servers' },
         { id: 'patterns', icon: 'account_tree', label: 'Workflow Patterns', path: '/patterns' },
         { id: 'providers', icon: 'model_training', label: 'nav.providers', path: '/providers' },
+        {
+          id: 'agent-definitions',
+          icon: 'hub',
+          label: 'nav.agentDefinitions',
+          path: '/agent-definitions',
+        },
+        {
+          id: 'agent-bindings',
+          icon: 'link',
+          label: 'nav.agentBindings',
+          path: '/agent-bindings',
+        },
       ],
     },
     {
@@ -299,6 +311,25 @@ const SCHEMA_TABS: TabItem[] = [
   { id: 'mapping', label: 'Mapping', path: 'mapping' },
 ];
 
+/**
+ * Project header tabs - contextual navigation shown in TenantHeader
+ * when a project is active. Derived from PROJECT_SIDEBAR_CONFIG groups.
+ */
+const PROJECT_HEADER_TABS: TabItem[] = [
+  { id: 'overview', label: 'nav.overview', path: '' },
+  { id: 'memories', label: 'nav.memories', path: 'memories' },
+  { id: 'entities', label: 'nav.entities', path: 'entities' },
+  { id: 'communities', label: 'nav.communities', path: 'communities' },
+  { id: 'graph', label: 'nav.knowledgeGraph', path: 'graph' },
+  { id: 'search', label: 'nav.deepSearch', path: 'advanced-search' },
+  { id: 'schema', label: 'nav.schema', path: 'schema' },
+  { id: 'channels', label: 'nav.channels', path: 'channels' },
+  { id: 'maintenance', label: 'nav.maintenance', path: 'maintenance' },
+  { id: 'cron-jobs', label: 'nav.cronJobs', path: 'cron-jobs' },
+  { id: 'team', label: 'nav.team', path: 'team' },
+  { id: 'settings', label: 'nav.settings', path: 'settings' },
+];
+
 // ============================================================================
 // EXPORT FUNCTIONS
 // ============================================================================
@@ -344,4 +375,11 @@ export function getAgentConfig(): { sidebar: SidebarConfig; tabs: TabItem[] } {
  */
 export function getSchemaTabs(): TabItem[] {
   return SCHEMA_TABS;
+}
+
+/**
+ * Get project header tabs for contextual navigation in TenantHeader
+ */
+export function getProjectHeaderTabs(): TabItem[] {
+  return PROJECT_HEADER_TABS;
 }

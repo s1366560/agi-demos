@@ -16,8 +16,11 @@ import React, { useCallback, useEffect, useState, useMemo, useContext, useRef, m
 
 import { useParams, Link } from 'react-router-dom';
 
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDebounce } from 'use-debounce';
+
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { formatDateOnly } from '@/utils/date';
 
@@ -345,19 +348,18 @@ interface HeaderProps {
   projectId?: string | undefined;
 }
 
-const HeaderInternal: React.FC<HeaderProps> = ({ className = '', projectId: propProjectId }) => {
-  const context = useMemoryListContextOptional();
-  const projectId = propProjectId ?? context?.projectId ?? 'test-project-1';
+const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
+  const { projectBasePath } = useProjectBasePath();
 
   return (
     <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+         <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
           {TEXTS.title}
         </h1>
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
       </div>
-      <Link to={`/project/${projectId}/memories/new`}>
+      <Link to={`${projectBasePath}/memories/new`}>
         <button className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-all active:scale-95">
           <span className="material-symbols-outlined text-lg">add</span>
           <span>{TEXTS.addMemory}</span>
@@ -553,11 +555,11 @@ interface MemoryRowProps {
 }
 
 const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
-  ({ memory, index, onDelete: propOnDelete, projectId: propProjectId }) => {
+  ({ memory, index, onDelete: propOnDelete }) => {
     const context = useMemoryListContextOptional();
     const state = context?.state;
     const actions = context?.actions;
-    const projectId = propProjectId ?? context?.projectId ?? 'test-project-1';
+    const { projectBasePath } = useProjectBasePath();
     const onDelete = propOnDelete ?? actions?.confirmDelete;
     const progress = state?.taskProgress[memory.id]?.progress;
 
@@ -582,7 +584,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
             </div>
             <div>
               <Link
-                to={`/project/${projectId}/memory/${memory.id}`}
+                to={`${projectBasePath}/memory/${memory.id}`}
                 className="font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               >
                 {memory.title || 'Untitled'}

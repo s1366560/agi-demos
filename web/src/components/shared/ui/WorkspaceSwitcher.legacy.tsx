@@ -5,6 +5,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
 import { Tenant, Project } from '@/types/memory';
 
 interface WorkspaceSwitcherProps {
@@ -15,6 +17,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
   const navigate = useNavigate();
   const { projectId } = useParams();
   const [isOpen, setIsOpen] = useState(false);
+  const { tenantBasePath } = useProjectBasePath();
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
@@ -160,15 +163,14 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
 
     // Check current location to decide where to navigate
     const currentPath = window.location.pathname;
-    const projectPathPrefix = `/project/${projectId}`;
 
-    if (projectId && currentPath.startsWith(projectPathPrefix)) {
+    if (projectId && currentPath.includes(`/project/${projectId}`)) {
       // If we are already in a project context, preserve the sub-path
-      const subPath = currentPath.substring(projectPathPrefix.length);
-      navigate(`/project/${project.id}${subPath}`);
+      const subPath = currentPath.substring(currentPath.indexOf(`/project/${projectId}`) + `/project/${projectId}`.length);
+      navigate(`${tenantBasePath}/project/${project.id}${subPath}`);
     } else {
       // Default to overview
-      navigate(`/project/${project.id}`);
+      navigate(`${tenantBasePath}/project/${project.id}`);
     }
   };
 

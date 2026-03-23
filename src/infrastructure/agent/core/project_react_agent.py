@@ -602,6 +602,14 @@ class ProjectReActAgent:
                 event=event,
             )
 
+        from src.infrastructure.agent.subagent.session_fork_merge_service import (
+            SessionForkMergeService,
+        )
+        from src.infrastructure.agent.subagent.span_service import SubAgentSpanService
+
+        _span_service = SubAgentSpanService(component_name="subagent")
+        _fork_merge_service = SessionForkMergeService()
+
         self._react_agent = ReActAgent(
             model=provider_config.llm_model,
             tools=self._tools,
@@ -634,6 +642,8 @@ class ProjectReActAgent:
             subagent_announce_max_retries=app_settings.agent_subagent_announce_max_retries,
             subagent_announce_retry_delay_ms=(app_settings.agent_subagent_announce_retry_delay_ms),
             subagent_lifecycle_hook=_subagent_lifecycle_hook,
+            span_service=_span_service,
+            fork_merge_service=_fork_merge_service,
             _cached_tool_definitions=self._session_context.tool_definitions,
             _cached_system_prompt_manager=self._session_context.system_prompt_manager,
             _cached_subagent_router=self._session_context.subagent_router,

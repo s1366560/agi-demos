@@ -37,17 +37,25 @@ import {
   Monitor,
   Languages,
   Activity,
+  ArrowLeft,
+  ChevronRight,
 } from 'lucide-react';
 
-import { useUser, useAuthActions } from '@/stores/auth';
-import { useRunningCount, useBackgroundStore } from '@/stores/backgroundStore';
+import { useAuthActions, useUser } from '@/stores/auth';
+import { useBackgroundStore, useRunningCount } from '@/stores/backgroundStore';
+import { useProjectStore } from '@/stores/project';
 import { useThemeStore } from '@/stores/theme';
+
+import { getProjectHeaderTabs } from '@/config/navigation';
+
+import type { TabItem } from '@/config/navigation';
 
 interface TenantHeaderProps {
   tenantId: string;
   sidebarCollapsed: boolean;
   onSidebarToggle: () => void;
   onMobileMenuOpen: () => void;
+  projectId?: string | undefined;
 }
 
 interface NavItem {
@@ -62,9 +70,14 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   sidebarCollapsed,
   onSidebarToggle,
   onMobileMenuOpen,
+  projectId,
 }) => {
   const { t } = useTranslation();
   const basePath = `/tenant/${tenantId}`;
+
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const projectBasePath = projectId ? `${basePath}/project/${projectId}` : null;
+  const projectTabs = getProjectHeaderTabs();
 
   const allNav: NavItem[] = useMemo(
     () => [
@@ -131,65 +144,129 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   const overflowNav = allNav.slice(MAX_VISIBLE_NAV_ITEMS);
 
   return (
-    <header className="h-14 px-3 sm:px-4 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex items-center flex-none shrink-0">
-      <div className="h-full w-full flex items-center gap-1 sm:gap-3">
-        {/* Left: Mobile menu + Sidebar toggle + Brand */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            type="button"
-            onClick={onMobileMenuOpen}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors md:hidden"
-            aria-label="Menu"
-          >
-            <Menu size={18} className="text-slate-500" />
-          </button>
-          <button
-            type="button"
-            onClick={onSidebarToggle}
-            className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500"
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {sidebarCollapsed ? <PanelRight size={18} /> : <PanelLeft size={18} />}
-          </button>
-          <Link
-            to={basePath}
-            className="text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors hidden sm:block ml-1"
-          >
-            MemStack
-          </Link>
-        </div>
-
-        {/* Center: Nav tabs */}
-        <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0 ml-4">
-          {visibleNav.map((item) => (
-            <NavLink
-              key={item.id}
-              to={item.path}
-              className={({ isActive }) =>
-                `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
-                }`
-              }
+    <>
+      <header className="h-14 px-3 sm:px-4 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex items-center flex-none shrink-0">
+        <div className="h-full w-full flex items-center gap-1 sm:gap-3">
+          {/* Left: Mobile menu + Sidebar toggle + Brand */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={onMobileMenuOpen}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors md:hidden"
+              aria-label="Menu"
             >
-              {item.label}
-            </NavLink>
-          ))}
-          {overflowNav.length > 0 && <OverflowMenu items={overflowNav} />}
-        </nav>
+              <Menu size={18} className="text-slate-500" />
+            </button>
+            <button
+              type="button"
+              onClick={onSidebarToggle}
+              className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <PanelRight size={18} /> : <PanelLeft size={18} />}
+            </button>
+            <Link
+              to={basePath}
+              className="text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors hidden sm:block ml-1"
+            >
+              MemStack
+            </Link>
+          </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
-          <SearchButton />
-          <BackgroundTasksButton />
-          <NotificationButton />
-          <HeaderUserMenu tenantId={tenantId} />
+          {/* Center: Nav tabs */}
+          <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0 ml-4">
+            {visibleNav.map((item) => (
+              <NavLink
+                key={item.id}
+                to={item.path}
+                className={({ isActive }) =>
+                  `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+            {overflowNav.length > 0 && <OverflowMenu items={overflowNav} />}
+          </nav>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
+            <SearchButton />
+            <BackgroundTasksButton />
+            <NotificationButton />
+            <HeaderUserMenu tenantId={tenantId} />
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+      {projectId && projectBasePath && (
+        <ProjectSubNav
+          projectName={currentProject?.name}
+          projectBasePath={projectBasePath}
+          tenantBasePath={basePath}
+          tabs={projectTabs}
+        />
+      )}
+    </>
   );
 };
+
+function ProjectSubNav({
+  projectName,
+  projectBasePath,
+  tenantBasePath,
+  tabs,
+}: {
+  projectName?: string | undefined;
+  projectBasePath: string;
+  tenantBasePath: string;
+  tabs: TabItem[];
+}) {
+  const { t } = useTranslation();
+  const location = useLocation();
+
+  return (
+    <div className="h-10 px-3 sm:px-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark flex items-center gap-3 flex-none shrink-0 overflow-x-auto">
+      <Link
+        to={`${tenantBasePath}/projects`}
+        className="flex items-center gap-1 text-sm text-slate-500 hover:text-primary transition-colors flex-shrink-0"
+      >
+        <ArrowLeft size={14} />
+        <span className="hidden sm:inline">{t('nav.projects', 'Projects')}</span>
+      </Link>
+      <ChevronRight size={14} className="text-slate-300 dark:text-slate-600 flex-shrink-0" />
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate max-w-[150px] flex-shrink-0">
+        {projectName || 'Project'}
+      </span>
+      <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 flex-shrink-0 mx-1" />
+
+      <nav className="flex items-center gap-0.5 overflow-x-auto">
+        {tabs.map((tab) => {
+          const fullPath = tab.path ? `${projectBasePath}/${tab.path}` : projectBasePath;
+          const isActive = tab.path
+            ? location.pathname.startsWith(fullPath)
+            : location.pathname === projectBasePath || location.pathname === `${projectBasePath}/`;
+          return (
+            <NavLink
+              key={tab.id}
+              to={fullPath}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                isActive
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              {t(tab.label, tab.label)}
+            </NavLink>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
 
 /**
  * Overflow "More" dropdown for secondary nav items

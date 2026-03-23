@@ -68,9 +68,11 @@ class TestAgentListTool:
         mock_agent = Mock()
         mock_agent.id = "agent-1"
         mock_agent.name = "test-worker"
+        mock_agent.display_name = "Test Worker"
         mock_agent.description = "A test agent"
         mock_agent.can_spawn = True
         mock_agent.agent_to_agent_enabled = True
+        mock_agent.discoverable = True
         mock_agent.tags = ["worker"]
 
         orchestrator = Mock()
@@ -154,8 +156,13 @@ class TestAgentSpawnTool:
             mode=SpawnMode.RUN,
             status="running",
         )
+        mock_agent = Mock()
+        mock_agent.display_name = "Target Agent"
+        mock_agent.name = "target-agent"
+
         mock_result = Mock()
         mock_result.spawn_record = mock_record
+        mock_result.agent = mock_agent
 
         orchestrator = Mock()
         orchestrator.spawn_agent = AsyncMock(return_value=mock_result)
@@ -312,7 +319,7 @@ class TestAgentHistoryTool:
         import src.infrastructure.agent.tools.agent_history as mod
 
         mock_msg = Mock()
-        mock_msg.id = "msg-1"
+        mock_msg.message_id = "msg-1"
         mock_msg.from_agent_id = "agent-a"
         mock_msg.to_agent_id = "agent-b"
         mock_msg.content = "hello"

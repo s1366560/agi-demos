@@ -120,7 +120,7 @@ function RouteErrorFallback({
  * export const ProjectLayout: React.FC = () => {
  *   const { projectId } = useParams()
  *   return (
- *     <RouteErrorBoundary context="Project" fallbackPath={`/project/${projectId}`}>
+ *     <RouteErrorBoundary context="Project" fallbackPath={`/tenant/${tenantId}/project/${projectId}`}>
  *       <Outlet />
  *     </RouteErrorBoundary>
  *   )

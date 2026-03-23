@@ -45,6 +45,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_conversation_reposito
 from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
     SqlExecutionCheckpointRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_graph_repository import (
+    SqlAgentGraphRepository,
+    SqlGraphRunRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
@@ -169,6 +173,12 @@ class AgentContainer:
         self._spawn_validator_instance: Any | None = None
         self._announce_service_instance: Any | None = None
         self._control_channel_instance: Any | None = None
+        self._graph_orchestrator_instance: Any | None = None
+        self._span_service_instance: Any | None = None
+        self._fork_merge_service_instance: Any | None = None
+        self._layered_tool_policy_service_instance: Any | None = None
+        self._redis_agent_namespace_instance: Any | None = None
+        self._redis_agent_credential_scope_instance: Any | None = None
 
     # === Agent Repositories ===
 
@@ -431,7 +441,9 @@ class AgentContainer:
             SpawnManager,
         )
 
-        self._spawn_manager_instance = SpawnManager()
+        self._spawn_manager_instance = SpawnManager(
+            session_registry=self.agent_session_registry(),
+        )
         return self._spawn_manager_instance
 
     def subagent_run_registry(self) -> Any:
@@ -519,6 +531,9 @@ class AgentContainer:
         )
 
         message_bus = self._agent_message_bus_factory() if self._agent_message_bus_factory else None
+        assert message_bus is not None, (
+            "agent_message_bus_factory must be set for AgentOrchestrator"
+        )
         self._agent_orchestrator_instance = AgentOrchestrator(
             agent_registry=self.agent_registry(),
             session_registry=self.agent_session_registry(),
@@ -527,6 +542,33 @@ class AgentContainer:
             spawn_validator=self.spawn_validator(),
         )
         return self._agent_orchestrator_instance
+
+    # === Graph Orchestration ===
+
+    def graph_repository(self) -> SqlAgentGraphRepository:
+        """Get SqlAgentGraphRepository for agent graph persistence."""
+        assert self._db is not None
+        return SqlAgentGraphRepository(self._db)
+
+    def graph_run_repository(self) -> SqlGraphRunRepository:
+        """Get SqlGraphRunRepository for graph run persistence."""
+        assert self._db is not None
+        return SqlGraphRunRepository(self._db)
+
+    def graph_orchestrator(self) -> Any:
+        """Get GraphOrchestrator singleton for graph-based multi-agent coordination."""
+        if self._graph_orchestrator_instance is not None:
+            return self._graph_orchestrator_instance
+        from src.infrastructure.agent.orchestration.graph_orchestrator import (
+            GraphOrchestrator,
+        )
+
+        self._graph_orchestrator_instance = GraphOrchestrator(
+            agent_orchestrator=self.agent_orchestrator(),
+            graph_repo=self.graph_repository(),
+            run_repo=self.graph_run_repository(),
+        )
+        return self._graph_orchestrator_instance
 
     # === Agent Service ===
 
@@ -615,6 +657,87 @@ class AgentContainer:
 
         return AttachmentInjector()
 
+    def span_service(self) -> Any:
+        if self._span_service_instance is not None:
+            return self._span_service_instance
+        from src.infrastructure.agent.subagent.span_service import SubAgentSpanService
+
+        self._span_service_instance = SubAgentSpanService()
+        return self._span_service_instance
+
+    def fork_merge_service(self) -> Any:
+        if self._fork_merge_service_instance is not None:
+            return self._fork_merge_service_instance
+        from src.infrastructure.agent.subagent.session_fork_merge_service import (
+            SessionForkMergeService,
+        )
+
+        self._fork_merge_service_instance = SessionForkMergeService()
+        return self._fork_merge_service_instance
+
+    def layered_tool_policy_service(self) -> Any:
+        if self._layered_tool_policy_service_instance is not None:
+            return self._layered_tool_policy_service_instance
+        from src.application.services.layered_tool_policy_service import (
+            LayeredToolPolicyService,
+        )
+
+        self._layered_tool_policy_service_instance = LayeredToolPolicyService()
+        return self._layered_tool_policy_service_instance
+
+    def default_message_router(self) -> Any:
+        from src.infrastructure.agent.routing.default_message_router import (
+            DefaultMessageRouter,
+        )
+
+        return DefaultMessageRouter(binding_repo=self.message_binding_repository())
+
+    def message_binding_repository(self) -> Any:
+        from src.infrastructure.adapters.secondary.persistence.sql_message_binding_repository import (
+            SqlMessageBindingRepository,
+        )
+
+        assert self._db is not None
+        return SqlMessageBindingRepository(self._db)
+
+    def agent_router_service(self) -> Any:
+        from src.application.services.agent_router_service import AgentRouterService
+
+        return AgentRouterService(
+            binding_repository=self.agent_binding_repository(),
+            agent_registry=self.agent_registry(),
+        )
+
+    def redis_agent_namespace(self) -> Any:
+        if self._redis_agent_namespace_instance is not None:
+            return self._redis_agent_namespace_instance
+        from src.infrastructure.adapters.secondary.cache.redis_agent_namespace import (
+            RedisAgentNamespaceAdapter,
+        )
+
+        assert self._redis_client is not None
+        self._redis_agent_namespace_instance = RedisAgentNamespaceAdapter(
+            redis=self._redis_client,
+        )
+        return self._redis_agent_namespace_instance
+
+    def redis_agent_credential_scope(self) -> Any:
+        if self._redis_agent_credential_scope_instance is not None:
+            return self._redis_agent_credential_scope_instance
+        from src.infrastructure.adapters.secondary.cache.redis_agent_credential_scope import (
+            RedisAgentCredentialScopeAdapter,
+        )
+        from src.infrastructure.security.encryption_service import EncryptionService
+
+        assert self._redis_client is not None
+        encryption_key = self._settings.llm_encryption_key if self._settings else ""
+        encryption_service = EncryptionService(encryption_key)
+        self._redis_agent_credential_scope_instance = RedisAgentCredentialScopeAdapter(
+            redis=self._redis_client,
+            encryption_service=encryption_service,
+        )
+        return self._redis_agent_credential_scope_instance
+
     def context_facade(self, window_manager: ContextWindowManager | None = None) -> Any:
         """Get ContextFacade for unified context management."""
         from src.infrastructure.agent.context import ContextFacade
@@ -623,6 +746,15 @@ class AgentContainer:
             message_builder=self.message_builder(),
             attachment_injector=self.attachment_injector(),
             window_manager=window_manager,
+        )
+
+    def default_context_engine(self, window_manager: ContextWindowManager | None = None) -> Any:
+        from src.infrastructure.agent.context.default_context_engine import (
+            DefaultContextEngine,
+        )
+
+        return DefaultContextEngine(
+            context_facade=self.context_facade(window_manager),
         )
 
     # === Agent Use Cases ===
@@ -674,6 +806,10 @@ class AgentContainer:
         configure_web_scrape()
         configure_desktop(sandbox_orchestrator=sandbox_orchestrator)
         configure_terminal(sandbox_orchestrator=sandbox_orchestrator)
+
+        from src.infrastructure.agent.tools.handoff_tool import configure_handoff
+
+        configure_handoff(graph_orchestrator=self.graph_orchestrator())
 
         # Pass empty tools dict; ExecuteStepUseCase is a placeholder
         tools: dict[str, AgentToolBase] = {}

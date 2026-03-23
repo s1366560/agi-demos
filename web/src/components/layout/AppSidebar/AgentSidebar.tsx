@@ -10,6 +10,9 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '@/stores/auth';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
+
 import { getAgentConfig } from '@/config/navigation';
 
 import { AppSidebar } from './AppSidebar';
@@ -39,9 +42,10 @@ export function AgentSidebar({
   const { t: useT } = useTranslation();
   const { user: authUser, logout: authLogout } = useAuthStore();
   const navigate = useNavigate();
+  const { projectBasePath: resolvedBasePath } = useProjectBasePath();
 
   // Agent sidebar basePath is the project level
-  const basePath = projectId ? `/project/${projectId}` : '/project';
+  const basePath = projectId ? resolvedBasePath : '/project';
 
   const handleLogout =
     externalLogout ??

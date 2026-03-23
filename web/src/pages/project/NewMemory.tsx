@@ -3,6 +3,8 @@ import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
 import { memoryAPI } from '../../services/api';
 import { createApiUrl } from '../../services/client/urlUtils';
 import { graphService } from '../../services/graphService';
@@ -19,6 +21,7 @@ export const NewMemory: React.FC = () => {
   const { t } = useTranslation();
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { projectBasePath } = useProjectBasePath();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -74,7 +77,7 @@ export const NewMemory: React.FC = () => {
         // Close connection and navigate after a short delay
         setTimeout(() => {
           eventSource.close();
-          navigate(`/project/${projectId}/memories`);
+          navigate(`${projectBasePath}/memories`);
         }, 1500);
       });
 
@@ -99,7 +102,7 @@ export const NewMemory: React.FC = () => {
         }
       };
     },
-    [navigate, projectId, t]
+    [navigate, projectBasePath, t]
   );
 
   const handleAddTag = (e: React.KeyboardEvent) => {
@@ -178,7 +181,7 @@ export const NewMemory: React.FC = () => {
         streamTaskStatus(response.task_id);
       } else {
         // Fallback: no task ID, navigate directly
-        navigate(`/project/${projectId}/memories`);
+        navigate(`${projectBasePath}/memories`);
         setIsSaving(false);
       }
     } catch (err: any) {
@@ -194,7 +197,7 @@ export const NewMemory: React.FC = () => {
       <div className="flex shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark px-6 py-3">
         <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link
-            to={`/project/${projectId}/memories`}
+            to={`${projectBasePath}/memories`}
             className="hover:text-primary transition-colors"
           >
             {t('project.memories.title')}

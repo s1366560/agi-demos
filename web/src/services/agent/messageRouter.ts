@@ -62,6 +62,7 @@ import type {
   SubAgentQueuedEventData,
   SubAgentKilledEventData,
   SubAgentSteeredEventData,
+  ToolPolicyDeniedEventData,
   SubAgentDepthLimitedEventData,
   SubAgentSessionUpdateEventData,
   ParallelStartedEventData,
@@ -88,6 +89,15 @@ import type {
   AgentSpawnedEventData,
   AgentCompletedEventData,
   AgentStoppedEventData,
+  GraphRunStartedEventData,
+  GraphRunCompletedEventData,
+  GraphRunFailedEventData,
+  GraphRunCancelledEventData,
+  GraphNodeStartedEventData,
+  GraphNodeCompletedEventData,
+  GraphNodeFailedEventData,
+  GraphNodeSkippedEventData,
+  GraphHandoffEventData,
 } from '../../types/agent';
 
 export function routeSubagentLifecycleMessage(
@@ -526,6 +536,9 @@ export function routeToHandler(
     case 'subagent_steered':
       handler.onSubAgentSteered?.(event as AgentEvent<SubAgentSteeredEventData>);
       break;
+    case 'tool_policy_denied':
+      handler.onToolPolicyDenied?.(event as AgentEvent<ToolPolicyDeniedEventData>);
+      break;
     case 'subagent_queued':
       handler.onSubAgentQueued?.(event as AgentEvent<SubAgentQueuedEventData>);
       break;
@@ -624,6 +637,34 @@ export function routeToHandler(
       break;
     case 'agent_stopped':
       handler.onAgentStopped?.(event as AgentEvent<AgentStoppedEventData>);
+      break;
+    // Graph orchestration events (multi-agent DAG)
+    case 'graph_run_started':
+      handler.onGraphRunStarted?.(event as AgentEvent<GraphRunStartedEventData>);
+      break;
+    case 'graph_run_completed':
+      handler.onGraphRunCompleted?.(event as AgentEvent<GraphRunCompletedEventData>);
+      break;
+    case 'graph_run_failed':
+      handler.onGraphRunFailed?.(event as AgentEvent<GraphRunFailedEventData>);
+      break;
+    case 'graph_run_cancelled':
+      handler.onGraphRunCancelled?.(event as AgentEvent<GraphRunCancelledEventData>);
+      break;
+    case 'graph_node_started':
+      handler.onGraphNodeStarted?.(event as AgentEvent<GraphNodeStartedEventData>);
+      break;
+    case 'graph_node_completed':
+      handler.onGraphNodeCompleted?.(event as AgentEvent<GraphNodeCompletedEventData>);
+      break;
+    case 'graph_node_failed':
+      handler.onGraphNodeFailed?.(event as AgentEvent<GraphNodeFailedEventData>);
+      break;
+    case 'graph_node_skipped':
+      handler.onGraphNodeSkipped?.(event as AgentEvent<GraphNodeSkippedEventData>);
+      break;
+    case 'graph_handoff':
+      handler.onGraphHandoff?.(event as AgentEvent<GraphHandoffEventData>);
       break;
   }
 }

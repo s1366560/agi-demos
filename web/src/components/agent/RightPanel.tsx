@@ -13,8 +13,8 @@ import { Filter, ListTodo, Route, X } from 'lucide-react';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
 
-import { ResizeHandle } from './RightPanelComponents';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
+import { ResizeHandle } from './RightPanelComponents';
 import { TaskList } from './TaskList';
 
 import type {

@@ -1,10 +1,10 @@
 import { memo, useState, useCallback } from 'react';
+import type { FC } from 'react';
 
 import { Bot, ChevronRight, ChevronDown, Circle } from 'lucide-react';
 
 import type { AgentNode } from '../../../types/multiAgent';
 
-import type { FC } from 'react';
 
 interface MultiAgentPanelProps {
   agentNodes: Map<string, AgentNode> | undefined;

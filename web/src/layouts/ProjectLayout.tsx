@@ -1,17 +1,14 @@
 /**
- * ProjectLayout - Layout for project-level pages
+ * @deprecated This layout is no longer used. Project pages are now rendered
+ * inside TenantLayout with contextual sub-navigation in TenantHeader.
+ * Routes were migrated to `/tenant/:tenantId/project/:projectId/*` in App.tsx.
+ * Kept temporarily for reference; safe to delete once migration is fully verified.
  *
- * Design Reference: design-prototype/project_workbench_-_overview/
+ * Original Design Reference: design-prototype/project_workbench_-_overview/
  *
- * Layout Structure:
+ * Layout Structure (legacy):
  * - Left sidebar: Project navigation
  * - Main area: Header with breadcrumbs/search, scrollable content
- *
- * Features:
- * - Project navigation sidebar
- * - Quick action button (New Memory)
- * - Workspace switcher
- * - Theme/language toggle
  */
 
 import React, { useEffect, memo } from 'react';

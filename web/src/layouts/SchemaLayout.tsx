@@ -1,13 +1,15 @@
 import React from 'react';
 
-import { NavLink, Outlet, useParams } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 
 import { LayoutDashboard, Box, Network, GitMerge } from 'lucide-react';
+
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { RouteErrorBoundary } from '../components/common/RouteErrorBoundary';
 
 export const SchemaLayout: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectBasePath } = useProjectBasePath();
 
   const tabs = [
     { name: 'Overview', path: '', icon: LayoutDashboard, exact: true },
@@ -27,8 +29,8 @@ export const SchemaLayout: React.FC = () => {
                 key={tab.name}
                 to={
                   tab.path === ''
-                    ? `/project/${projectId}/schema`
-                    : `/project/${projectId}/schema/${tab.path}`
+                    ? `${projectBasePath}/schema`
+                    : `${projectBasePath}/schema/${tab.path}`
                 }
                 end={tab.exact ?? false}
                 className={({ isActive }) => `
@@ -48,10 +50,10 @@ export const SchemaLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-hidden min-h-0 relative">
-        <RouteErrorBoundary context="Schema" fallbackPath={`/project/${projectId}/schema`}>
-          <Outlet />
+       {/* Content Area */}
+       <div className="flex-1 overflow-hidden min-h-0 relative">
+         <RouteErrorBoundary context="Schema" fallbackPath={`${projectBasePath}/schema`}>
+           <Outlet />
         </RouteErrorBoundary>
       </div>
     </div>

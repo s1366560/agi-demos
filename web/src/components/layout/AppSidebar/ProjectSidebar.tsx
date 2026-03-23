@@ -12,6 +12,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '@/stores/auth';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
 import { getProjectSidebarConfig } from '@/config/navigation';
 
 import { AppSidebar } from './AppSidebar';
@@ -23,7 +25,7 @@ import type { NavUser } from '@/config/navigation';
  * Project sidebar component with configuration and state management
  */
 export function ProjectSidebar({
-  projectId = '',
+  projectId: _projectId = '',
   defaultCollapsed = false,
   collapsed: controlledCollapsed,
   onCollapseToggle,
@@ -44,6 +46,7 @@ export function ProjectSidebar({
   const { t: useT } = useTranslation();
   const { user: authUser, logout: authLogout } = useAuthStore();
   const navigate = useNavigate();
+  const { projectBasePath: resolvedBasePath } = useProjectBasePath();
 
   // Use external callbacks if provided, otherwise use internal state
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
@@ -66,7 +69,7 @@ export function ProjectSidebar({
       setInternalOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
     });
 
-  const basePath = `/project/${projectId}`;
+  const basePath = resolvedBasePath;
 
   const handleLogout =
     externalLogout ??

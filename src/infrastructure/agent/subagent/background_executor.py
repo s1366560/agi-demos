@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -20,19 +21,27 @@ if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.agent.processor.factory import ProcessorFactory
 
-
 from src.domain.events.agent_events import (
     SubAgentKilledEvent,
     SubAgentSessionUpdateEvent,
+    SubAgentSpawnRejectedEvent,
 )
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.agent.subagent.span_service import SubAgentSpanService
 
 from .context_bridge import ContextBridge
 from .orphan_sweeper import OrphanSweeper
 from .process import SubAgentProcess
+from .spawn_validator import SpawnValidator
 from .state_tracker import StateTracker
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _noop_span_ctx() -> AsyncIterator[None]:
+    """No-op async context manager used when span_service is None."""
+    yield None
 
 
 class BackgroundExecutor:
@@ -55,6 +64,9 @@ class BackgroundExecutor:
         timeout_seconds: int = 300,
         redis_client: AsyncRedis | None = None,
         orphan_sweeper: OrphanSweeper | None = None,
+        spawn_validator: SpawnValidator | None = None,
+        span_service: SubAgentSpanService | None = None,
+        fork_merge_service: object | None = None,
     ) -> None:
         """Initialize BackgroundExecutor.
 
@@ -66,6 +78,11 @@ class BackgroundExecutor:
                 Tasks exceeding this are killed by the orphan sweep.
             orphan_sweeper: Optional OrphanSweeper for delegated orphan
                 detection. Falls back to inline implementation when None.
+            spawn_validator: Optional SpawnValidator for pre-launch policy
+                checks. When set, rejects spawns that violate spawn policy.
+            span_service: Optional SubAgentSpanService for tracing runs.
+            fork_merge_service: Optional SessionForkMergeService for
+                forking/merging sessions across SubAgent boundaries.
         """
         self._tracker = state_tracker or StateTracker()
         self._on_event = on_event
@@ -74,6 +91,9 @@ class BackgroundExecutor:
         self._sweep_task: asyncio.Task[Any] | None = None
         self._redis_client: AsyncRedis | None = redis_client
         self._orphan_sweeper = orphan_sweeper
+        self._spawn_validator = spawn_validator
+        self._span_service = span_service
+        self._fork_merge_service = fork_merge_service
 
     @property
     def tracker(self) -> StateTracker:
@@ -119,6 +139,31 @@ class BackgroundExecutor:
             execution_id for tracking the background task.
         """
         execution_id = f"bg-{uuid.uuid4().hex[:12]}"
+
+        if self._spawn_validator is not None:
+            result = self._spawn_validator.validate(
+                subagent_name=subagent.display_name,
+                current_depth=0,
+                conversation_id=conversation_id,
+                requester_session_id=None,
+            )
+            if not result.allowed:
+                logger.warning(
+                    "[BackgroundExecutor] Spawn rejected for %s: %s",
+                    subagent.display_name,
+                    result.rejection_reason,
+                )
+                if self._on_event:
+                    event = SubAgentSpawnRejectedEvent(
+                        subagent_name=subagent.display_name,
+                        rejection_code=(
+                            result.rejection_code.value if result.rejection_code else ""
+                        ),
+                        rejection_reason=result.rejection_reason or "",
+                        context=result.context,
+                    )
+                    self._on_event(dict(event.to_event_dict()))
+                return execution_id
 
         # Register in state tracker
         self._tracker.register(
@@ -229,94 +274,122 @@ class BackgroundExecutor:
             }
         )
 
-        try:
-            # Build context
-            bridge = ContextBridge()
-            context = bridge.build_subagent_context(
-                user_message=user_message,
-                subagent_system_prompt=subagent.system_prompt,
-                conversation_context=conversation_context or [],
-                main_token_budget=main_token_budget,
-                project_id=project_id,
-                tenant_id=tenant_id,
+        span_ctx: Any
+        if self._span_service is not None:
+            from src.domain.model.agent.subagent_run import SubAgentRun
+
+            sa_run = SubAgentRun(
                 conversation_id=conversation_id,
+                subagent_name=subagent.display_name,
+                task=user_message[:200],
+                run_id=execution_id,
             )
+            trace_info = self._span_service.extract_trace_context()
+            if trace_info is not None:
+                sa_run.with_trace_context(trace_info[0], trace_info[1])
+            span_ctx = self._span_service.trace_run(sa_run)
+        else:
+            span_ctx = _noop_span_ctx()
 
-            # Create and execute process
-            process = SubAgentProcess(
-                subagent=subagent,
-                context=context,
-                tools=tools,
-                base_model=base_model,
-                base_api_key=base_api_key,
-                base_url=base_url,
-                llm_client=llm_client,
-                factory=factory,
-            )
+        try:
+            async with span_ctx as span:
+                bridge = ContextBridge()
+                context = bridge.build_subagent_context(
+                    user_message=user_message,
+                    subagent_system_prompt=subagent.system_prompt,
+                    conversation_context=conversation_context or [],
+                    main_token_budget=main_token_budget,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    conversation_id=conversation_id,
+                )
 
-            # Consume events (we don't yield them since this is background)
-            async for event in process.execute():
-                # Optionally relay progress events
-                if event.get("type") in ("subagent.act", "subagent.observe"):
-                    new_progress = min(
-                        95,
-                        self._tracker.get_state(execution_id, conversation_id).progress + 10,  # type: ignore[union-attr]
-                    )
-                    self._tracker.update_progress(
+                process = SubAgentProcess(
+                    subagent=subagent,
+                    context=context,
+                    tools=tools,
+                    base_model=base_model,
+                    base_api_key=base_api_key,
+                    base_url=base_url,
+                    llm_client=llm_client,
+                    factory=factory,
+                )
+
+                async for event in process.execute():
+                    if event.get("type") in ("subagent.act", "subagent.observe"):
+                        new_progress = min(
+                            95,
+                            self._tracker.get_state(execution_id, conversation_id).progress + 10,  # type: ignore[union-attr]
+                        )
+                        self._tracker.update_progress(
+                            execution_id,
+                            conversation_id,
+                            new_progress,
+                        )
+                        await self._emit(
+                            dict(
+                                SubAgentSessionUpdateEvent(
+                                    subagent_id=subagent.id,
+                                    subagent_name=subagent.display_name,
+                                    progress=new_progress,
+                                    status_message="Processing",
+                                ).to_event_dict(),
+                            ),
+                        )
+
+                result = process.result
+
+                if result and result.success:
+                    self._tracker.complete(
                         execution_id,
                         conversation_id,
-                        new_progress,
+                        summary=result.final_content[:500],
+                        tokens_used=result.tokens_used,
+                        tool_calls_count=result.tool_calls_count,
                     )
+
+                    _ss = self._span_service
+                    if span is not None and _ss is not None:
+                        _ss.mark_span_completed(
+                            span,
+                            summary=result.final_content[:500],
+                            tokens_used=result.tokens_used,
+                        )
+
                     await self._emit(
-                        dict(
-                            SubAgentSessionUpdateEvent(
-                                subagent_id=subagent.id,
-                                subagent_name=subagent.display_name,
-                                progress=new_progress,
-                                status_message="Processing",
-                            ).to_event_dict(),
-                        ),
+                        {
+                            "type": "subagent_completed",
+                            "data": {
+                                "execution_id": execution_id,
+                                "subagent_name": subagent.display_name,
+                                "conversation_id": conversation_id,
+                                "result": result.to_event_data() if result else None,
+                            },
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        }
+                    )
+                else:
+                    error = result.error if result else "No result produced"
+                    self._tracker.fail(
+                        execution_id, conversation_id, error=error or "Unknown error"
                     )
 
-            result = process.result
+                    _ss2 = self._span_service
+                    if span is not None and _ss2 is not None:
+                        _ss2.mark_span_failed(span, error=error or "Unknown error")
 
-            if result and result.success:
-                self._tracker.complete(
-                    execution_id,
-                    conversation_id,
-                    summary=result.final_content[:500],
-                    tokens_used=result.tokens_used,
-                    tool_calls_count=result.tool_calls_count,
-                )
-
-                await self._emit(
-                    {
-                        "type": "subagent_completed",
-                        "data": {
-                            "execution_id": execution_id,
-                            "subagent_name": subagent.display_name,
-                            "conversation_id": conversation_id,
-                            "result": result.to_event_data() if result else None,
-                        },
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                )
-            else:
-                error = result.error if result else "No result produced"
-                self._tracker.fail(execution_id, conversation_id, error=error or "Unknown error")
-
-                await self._emit(
-                    {
-                        "type": "subagent_failed",
-                        "data": {
-                            "execution_id": execution_id,
-                            "subagent_name": subagent.display_name,
-                            "conversation_id": conversation_id,
-                            "error": error,
-                        },
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                )
+                    await self._emit(
+                        {
+                            "type": "subagent_failed",
+                            "data": {
+                                "execution_id": execution_id,
+                                "subagent_name": subagent.display_name,
+                                "conversation_id": conversation_id,
+                                "error": error,
+                            },
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        }
+                    )
 
         except asyncio.CancelledError:
             self._tracker.cancel(execution_id, conversation_id)

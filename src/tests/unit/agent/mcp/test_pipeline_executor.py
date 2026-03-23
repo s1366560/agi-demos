@@ -89,8 +89,9 @@ class TestPipelineMCPExecutor:
         inner.call_tool = slow_call
         executor = PipelineMCPExecutor(inner, default_timeout=30.0)
 
-        with pytest.raises(asyncio.TimeoutError):
-            await executor.call_tool("srv", "tool", {}, timeout=0.01)
+        result = await executor.call_tool("srv", "tool", {}, timeout=0.01)
+        assert result.is_error is True
+        assert "TIMEOUT" in result.content
 
     async def test_abort_signal_propagated(self) -> None:
         inner = AsyncMock()

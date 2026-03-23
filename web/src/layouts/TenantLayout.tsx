@@ -220,6 +220,7 @@ export const TenantLayout: React.FC = memo(() => {
 
           <div className="flex flex-col gap-4 w-full">
             <button
+              type="button"
               onClick={() => {
                 setIsCreateModalOpen(true);
               }}
@@ -227,7 +228,7 @@ export const TenantLayout: React.FC = memo(() => {
             >
               {t('tenant.create')}
             </button>
-            <button onClick={handleLogout} className="btn-secondary w-full py-3">
+            <button type="button" onClick={handleLogout} className="btn-secondary w-full py-3">
               {t('common.logout')}
             </button>
           </div>
@@ -265,6 +266,9 @@ export const TenantLayout: React.FC = memo(() => {
     'mcp-servers',
     'agent-definitions',
     'agent-bindings',
+    'plugins',
+    'templates',
+    'project',
   ];
   const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
   const isAgentWorkspacePath =
@@ -304,6 +308,7 @@ export const TenantLayout: React.FC = memo(() => {
             onMobileMenuOpen={() => {
               setMobileSidebarOpen(true);
             }}
+            projectId={projectId}
           />
 
           {/* Page Content */}
