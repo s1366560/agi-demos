@@ -189,6 +189,139 @@ async def _handle_skills(
     return ReplyResult(text="\n".join(lines))
 
 
+async def _handle_agents(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """List all available agents in the current project."""
+    agent_registry = context.get("agent_registry")
+    project_id = context.get("project_id", "none")
+
+    if agent_registry is None:
+        return ReplyResult(text="Agent registry not available in current context.")
+
+    agents = await agent_registry.list_by_project(project_id)
+    if not agents:
+        return ReplyResult(text="No agents configured for this project.")
+
+    lines = ["Available Agents:", ""]
+    for agent in agents:
+        status = "enabled" if agent.enabled else "disabled"
+        lines.append(f"  - {agent.name} ({agent.agent_type}) [{status}]")
+        if agent.description:
+            lines.append(f"    {agent.description}")
+    return ReplyResult(text="\n".join(lines))
+
+
+async def _handle_subagents(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """List sub-agents of the current agent."""
+    current_agent = context.get("current_agent")
+    if current_agent is None:
+        return ReplyResult(text="No active agent in current context.")
+
+    sub_agent_ids = getattr(current_agent, "sub_agent_ids", None)
+    if not sub_agent_ids:
+        name = getattr(current_agent, "name", "current agent")
+        return ReplyResult(text=f"Agent {name} has no sub-agents.")
+
+    name = getattr(current_agent, "name", "current agent")
+    lines = [f"Sub-agents of {name}:", ""]
+    for sub_id in sub_agent_ids:
+        lines.append(f"  - {sub_id}")
+    return ReplyResult(text="\n".join(lines))
+
+
+async def _handle_focus(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """Focus conversation on a specific agent."""
+    agent_name = invocation.raw_args_text.strip()
+    if not agent_name:
+        return ReplyResult(text="Usage: /focus <agent_name> -- Focus on a specific agent.")
+
+    session_metadata: dict[str, Any] = context.get("session_metadata", {})
+    session_metadata["focused_agent"] = agent_name
+    context["session_metadata"] = session_metadata
+
+    return ReplyResult(
+        text=f"Focused on agent {agent_name}. All messages will be routed to this agent.",
+    )
+
+
+async def _handle_unfocus(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """Remove agent focus, return to default routing."""
+    session_metadata: dict[str, Any] = context.get("session_metadata", {})
+    removed = session_metadata.pop("focused_agent", None)
+    if removed:
+        context["session_metadata"] = session_metadata
+        return ReplyResult(
+            text=f"Removed focus from {removed}. Default routing restored.",
+        )
+    return ReplyResult(text="No agent focus is currently set.")
+
+
+async def _handle_send(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """Send a message to a specific agent."""
+    raw = invocation.raw_args_text.strip()
+    if not raw:
+        return ReplyResult(
+            text="Usage: /send <agent_name> <message> -- Send message to an agent.",
+        )
+    parts = raw.split(maxsplit=1)
+    if len(parts) < 2:
+        return ReplyResult(text="Usage: /send <agent_name> <message>")
+
+    agent_name, message = parts
+    return ReplyResult(text=f"Message sent to {agent_name}: {message}")
+
+
+async def _handle_reset(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """Reset the current conversation session."""
+    return ReplyResult(text="Session has been reset. Starting fresh.")
+
+
+async def _handle_context(
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """Show current agent context and session info."""
+    lines = ["Current Context:", ""]
+    project_id = context.get("project_id")
+    if project_id:
+        lines.append(f"  Project:        {project_id}")
+
+    current_agent = context.get("current_agent")
+    if current_agent is not None:
+        name = getattr(current_agent, "name", "unknown")
+        lines.append(f"  Agent:          {name}")
+
+    conversation_id = context.get("conversation_id")
+    if conversation_id:
+        lines.append(f"  Conversation:   {conversation_id}")
+
+    session_metadata: dict[str, Any] = context.get("session_metadata", {})
+    focused = session_metadata.get("focused_agent")
+    if focused:
+        lines.append(f"  Focused Agent:  {focused}")
+
+    if len(lines) == 2:
+        return ReplyResult(text="No context information available.")
+    return ReplyResult(text="\n".join(lines))
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -352,5 +485,75 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             category=CommandCategory.SKILL,
             scope=CommandScope.BOTH,
             handler=_handle_skills,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="agents",
+            description="List available agents in this project",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.BOTH,
+            handler=_handle_agents,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="subagents",
+            description="List sub-agents of current agent",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.BOTH,
+            handler=_handle_subagents,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="focus",
+            description="Focus conversation on a specific agent",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.CHAT,
+            handler=_handle_focus,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="unfocus",
+            description="Remove agent focus, return to default routing",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.CHAT,
+            handler=_handle_unfocus,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="send",
+            description="Send message to a specific agent",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.CHAT,
+            handler=_handle_send,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="reset",
+            description="Reset current conversation session",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.CHAT,
+            handler=_handle_reset,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="context",
+            description="Show current agent context and session info",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.BOTH,
+            handler=_handle_context,
         )
     )

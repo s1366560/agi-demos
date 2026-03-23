@@ -1689,6 +1689,7 @@ class AgentDefinitionModel(Base):
     can_spawn: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     max_spawn_depth: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     agent_to_agent_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    agent_to_agent_allowlist: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     discoverable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     source: Mapped[str] = mapped_column(String(20), default="custom", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -1698,6 +1699,8 @@ class AgentDefinitionModel(Base):
     avg_execution_time_ms: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     success_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    session_policy: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    delegate_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
@@ -1721,6 +1724,7 @@ class AgentBindingModel(Base):
     channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
     account_id: Mapped[str | None] = mapped_column(String, nullable=True)
     peer_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    group_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -15,6 +15,7 @@ from . import (
     definitions_router,
     events,
     hitl,
+    marketplace_router,
     messages,
     patterns,
     plans,
@@ -87,6 +88,7 @@ router.include_router(binding_router.router)
 router.include_router(definitions_router.router)
 router.include_router(trace_router.router, prefix="/trace")
 router.include_router(agent_graph_router.router)
+router.include_router(marketplace_router.router)
 
 __all__ = [
     "ActiveRunCountResponse",

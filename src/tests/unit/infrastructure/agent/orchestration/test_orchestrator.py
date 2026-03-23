@@ -424,16 +424,17 @@ class TestSendMessage:
     async def test_send_message_target_a2a_disabled_raises_value_error(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Target with agent_to_agent_enabled=False raises ValueError."""
+        """Target that rejects sender via accepts_messages_from raises ValueError."""
         # Arrange
         from_agent = _make_agent()
-        to_agent = _make_agent(agent_to_agent_enabled=False)
+        to_agent = _make_agent()
+        to_agent.accepts_messages_from = Mock(return_value=False)
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
 
         # Act / Assert
         with pytest.raises(
             ValueError,
-            match="Target agent does not accept agent-to-agent messages: agent-b",
+            match="does not accept messages from sender",
         ):
             await fx.orchestrator.send_message(
                 from_agent_id="agent-a",

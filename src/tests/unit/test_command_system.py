@@ -688,9 +688,7 @@ class TestSkillAsCommandInterception:
         assert result.skill_id == "code-review"
         assert result.text_override == "fix bug"
 
-    async def test_skill_match_case_insensitive(
-        self, interceptor: CommandInterceptor
-    ) -> None:
+    async def test_skill_match_case_insensitive(self, interceptor: CommandInterceptor) -> None:
         """/Code-Review matches skill 'code-review' case-insensitively."""
         result = await interceptor.try_intercept(
             "/Code-Review fix bug", {"skills": ["code-review"]}
@@ -699,44 +697,28 @@ class TestSkillAsCommandInterception:
         assert result.skill_id == "code-review"
         assert result.text_override == "fix bug"
 
-    async def test_unknown_skill_returns_error(
-        self, interceptor: CommandInterceptor
-    ) -> None:
+    async def test_unknown_skill_returns_error(self, interceptor: CommandInterceptor) -> None:
         """/unknown-thing returns error when not in skills list."""
-        result = await interceptor.try_intercept(
-            "/unknown-thing", {"skills": ["code-review"]}
-        )
+        result = await interceptor.try_intercept("/unknown-thing", {"skills": ["code-review"]})
         assert isinstance(result, ReplyResult)
         assert result.level == "error"
 
-    async def test_skill_match_without_args(
-        self, interceptor: CommandInterceptor
-    ) -> None:
+    async def test_skill_match_without_args(self, interceptor: CommandInterceptor) -> None:
         """/code-review with no args returns SkillTriggerResult with None override."""
-        result = await interceptor.try_intercept(
-            "/code-review", {"skills": ["code-review"]}
-        )
+        result = await interceptor.try_intercept("/code-review", {"skills": ["code-review"]})
         assert isinstance(result, SkillTriggerResult)
         assert result.skill_id == "code-review"
         assert result.text_override is None
 
-    async def test_empty_skills_returns_error(
-        self, interceptor: CommandInterceptor
-    ) -> None:
+    async def test_empty_skills_returns_error(self, interceptor: CommandInterceptor) -> None:
         """/code-review returns error when skills list is empty."""
-        result = await interceptor.try_intercept(
-            "/code-review fix bug", {"skills": []}
-        )
+        result = await interceptor.try_intercept("/code-review fix bug", {"skills": []})
         assert isinstance(result, ReplyResult)
         assert result.level == "error"
 
-    async def test_builtin_takes_priority_over_skill(
-        self, interceptor: CommandInterceptor
-    ) -> None:
+    async def test_builtin_takes_priority_over_skill(self, interceptor: CommandInterceptor) -> None:
         """/help returns builtin ReplyResult, not SkillTriggerResult."""
-        result = await interceptor.try_intercept(
-            "/help", {"skills": ["help"]}
-        )
+        result = await interceptor.try_intercept("/help", {"skills": ["help"]})
         # Builtin takes priority, so should be ReplyResult, not SkillTriggerResult
         assert isinstance(result, ReplyResult)
         assert "Available Commands:" in result.text
@@ -769,6 +751,7 @@ class TestSkillAsCommandInterception:
         # Image part should remain unchanged
         assert messages[0]["content"][1]["type"] == "image_url"
 
+
 # ============================================================================
 # Built-in Commands Integration Tests
 # ============================================================================
@@ -781,7 +764,7 @@ class TestBuiltinCommands:
     def test_register_builtin_commands_count(self, registry_with_builtins: CommandRegistry) -> None:
         """register_builtin_commands() registers all 12 commands."""
         all_cmds = registry_with_builtins.list_commands(include_hidden=True)
-        assert len(all_cmds) == 12
+        assert len(all_cmds) == 19
 
     def test_all_builtin_names_present(self, registry_with_builtins: CommandRegistry) -> None:
         """All expected built-in command names are registered."""
@@ -798,6 +781,13 @@ class TestBuiltinCommands:
             "clear",
             "tools",
             "skills",
+            "agents",
+            "subagents",
+            "focus",
+            "unfocus",
+            "send",
+            "reset",
+            "context",
         }
         names = {c.name for c in registry_with_builtins.list_commands(include_hidden=True)}
         assert expected == names

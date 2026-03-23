@@ -29,6 +29,7 @@ class CommandCategory(str, Enum):
     CONFIG = "config"
     DEBUG = "debug"
     HELP = "help"
+    AGENT = "agent"
 
 
 class CommandArgType(str, Enum):

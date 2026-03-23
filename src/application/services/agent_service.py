@@ -396,7 +396,7 @@ class AgentService(AgentServicePort):
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
-    async def _start_chat_actor(
+    async def _start_chat_actor(  # noqa: PLR0913
         self,
         conversation: Conversation,
         message_id: str,
@@ -410,6 +410,7 @@ class AgentService(AgentServicePort):
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
+        model_override: str | None = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -425,6 +426,7 @@ class AgentService(AgentServicePort):
             app_model_context=app_model_context,
             image_attachments=image_attachments,
             agent_id=agent_id,
+            model_override=model_override,
         )
 
     async def _get_stream_events(

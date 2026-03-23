@@ -2,7 +2,7 @@
   "id": "wecom-channel-plugin",
   "kind": "channel",
   "name": "WeCom Channel Plugin",
-  "description": "WeCom (企业微信) IM platform integration providing messaging, media, and card capabilities via Webhook mode.",
+  "description": "WeCom (Enterprise WeChat) channel integration template.",
   "version": "1.0.0",
   "channels": ["wecom"],
   "providers": [],

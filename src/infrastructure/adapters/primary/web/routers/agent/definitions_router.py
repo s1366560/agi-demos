@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.agent_definition import Agent, AgentModel
+from src.domain.model.agent.delegate_config import DelegateConfig
+from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.subagent import AgentTrigger
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.domain.model.auth.user import User
@@ -50,10 +52,13 @@ class CreateDefinitionBody(BaseModel):
     can_spawn: bool = False
     max_spawn_depth: int = 3
     agent_to_agent_enabled: bool = False
+    agent_to_agent_allowlist: list[str] | None = None
     discoverable: bool = True
     max_retries: int = 0
     fallback_models: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
+    session_policy: dict[str, Any] | None = None
+    delegate_config: dict[str, Any] | None = None
 
 
 class UpdateDefinitionBody(BaseModel):
@@ -77,10 +82,13 @@ class UpdateDefinitionBody(BaseModel):
     can_spawn: bool | None = None
     max_spawn_depth: int | None = None
     agent_to_agent_enabled: bool | None = None
+    agent_to_agent_allowlist: list[str] | None = None
     discoverable: bool | None = None
     max_retries: int | None = None
     fallback_models: list[str] | None = None
     metadata: dict[str, Any] | None = None
+    session_policy: dict[str, Any] | None = None
+    delegate_config: dict[str, Any] | None = None
 
 
 class SetEnabledBody(BaseModel):
@@ -102,6 +110,10 @@ async def create_definition(
         ws_config = (
             WorkspaceConfig.from_dict(body.workspace_config) if body.workspace_config else None
         )
+
+        sp = SessionPolicy.from_dict(body.session_policy) if body.session_policy else None
+
+        dc = DelegateConfig.from_dict(body.delegate_config) if body.delegate_config else None
 
         agent = Agent.create(
             tenant_id=tenant_id,
@@ -125,10 +137,13 @@ async def create_definition(
             can_spawn=body.can_spawn,
             max_spawn_depth=body.max_spawn_depth,
             agent_to_agent_enabled=body.agent_to_agent_enabled,
+            agent_to_agent_allowlist=body.agent_to_agent_allowlist,
             discoverable=body.discoverable,
             max_retries=body.max_retries,
             fallback_models=body.fallback_models,
             metadata=body.metadata,
+            session_policy=sp,
+            delegate_config=dc,
         )
 
         created = await registry.create(agent)
@@ -378,6 +393,10 @@ def _apply_updates(
             continue
         if key == "workspace_config" and isinstance(value, dict):
             agent.workspace_config = WorkspaceConfig.from_dict(value)
+        elif key == "session_policy" and isinstance(value, dict):
+            agent.session_policy = SessionPolicy.from_dict(value)
+        elif key == "delegate_config" and isinstance(value, dict):
+            agent.delegate_config = DelegateConfig.from_dict(value)
         elif hasattr(agent, key):
             setattr(agent, key, value)
 

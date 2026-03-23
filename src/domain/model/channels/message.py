@@ -144,6 +144,7 @@ class ChannelConfig(ValueObject):
     webhook_port: int | None = None
     webhook_path: str | None = None
     domain: str | None = None  # feishu, lark, or custom
+    model_override: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 

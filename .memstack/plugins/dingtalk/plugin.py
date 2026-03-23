@@ -1,6 +1,6 @@
-"""WeCom channel plugin template.
+"""DingTalk channel plugin template.
 
-Registers the ``wecom`` channel type with the MemStack plugin runtime.
+Registers the ``dingtalk`` channel type with the MemStack plugin runtime.
 """
 
 from __future__ import annotations
@@ -22,10 +22,10 @@ MessageHandler = Callable[[Message], None]
 ErrorHandler = Callable[[Exception], None]
 
 
-class WeComAdapter:
-    """WeCom channel adapter (stub).
+class DingTalkAdapter:
+    """DingTalk channel adapter (stub).
 
-    Implements the ChannelAdapter protocol for WeCom.
+    Implements the ChannelAdapter protocol for DingTalk.
     """
 
     def __init__(self, config: ChannelConfig) -> None:
@@ -36,26 +36,26 @@ class WeComAdapter:
 
     @property
     def id(self) -> str:
-        return "wecom"
+        return "dingtalk"
 
     @property
     def name(self) -> str:
-        return "WeCom"
+        return "DingTalk"
 
     @property
     def connected(self) -> bool:
         return self._connected
 
     async def connect(self) -> None:
-        """Connect to WeCom webhook."""
-        logger.info("[WeCom] Connecting via webhook (stub)...")
+        """Connect to DingTalk webhook."""
+        logger.info("[DingTalk] Connecting via webhook (stub)...")
         self._connected = True
-        logger.info("[WeCom] Connected successfully")
+        logger.info("[DingTalk] Connected successfully")
 
     async def disconnect(self) -> None:
-        """Disconnect from WeCom."""
+        """Disconnect from DingTalk."""
         self._connected = False
-        logger.info("[WeCom] Disconnected")
+        logger.info("[DingTalk] Disconnected")
 
     def on_message(self, handler: MessageHandler) -> None:
         """Register message handler."""
@@ -68,13 +68,13 @@ class WeComAdapter:
     async def send_message(
         self, to: str, content: MessageContent, reply_to: str | None = None
     ) -> str:
-        """Send a message to WeCom."""
-        logger.info(f"[WeCom] send_message stub called -- to={to} type={content.type}")
+        """Send a message to DingTalk."""
+        logger.info(f"[DingTalk] send_message stub called -- to={to} type={content.type}")
         return "msg_stub_id"
 
     async def send_text(self, to: str, text: str, reply_to: str | None = None) -> str:
         """Send a text message."""
-        logger.info(f"[WeCom] send_text stub called -- to={to}")
+        logger.info(f"[DingTalk] send_text stub called -- to={to}")
         return "msg_stub_id"
 
     async def send_card(
@@ -84,59 +84,57 @@ class WeComAdapter:
         reply_to: str | None = None,
     ) -> str:
         """Send an interactive card message."""
-        logger.info(f"[WeCom] send_card stub called -- to={to}")
+        logger.info(f"[DingTalk] send_card stub called -- to={to}")
         return "msg_stub_id"
 
-    def verify_webhook(self, signature: str, timestamp: str, nonce: str, echostr: str) -> str:
-        """Verify WeCom webhook signature and decode echostr.
+    def verify_webhook(self, signature: str, timestamp: str, body: str) -> bool:
+        """Verify DingTalk webhook signature.
 
-        TODO: Implement actual message verification and decryption using token and encoding_aes_key.
+        TODO: Implement actual HMAC-SHA256 signature verification using sign_token.
         """
-        logger.info("[WeCom] Verifying webhook signature")
-        return echostr
+        logger.info("[DingTalk] Verifying webhook signature")
+        return True
 
     def handle_webhook_event(self, event_data: dict[str, Any]) -> None:
         """Handle incoming webhook event.
 
         TODO: Parse event_data into Message object and notify handlers.
         """
-        logger.info("[WeCom] Handling webhook event")
+        logger.info("[DingTalk] Handling webhook event")
 
 
-class WeComChannelPlugin:
-    name = "wecom-channel-plugin"
+class DingTalkChannelPlugin:
+    name = "dingtalk-channel-plugin"
 
     def setup(self, api: PluginRuntimeApi) -> None:
         def _factory(context: ChannelAdapterBuildContext) -> object:
-            return WeComAdapter(context.channel_config)
+            return DingTalkAdapter(context.channel_config)
 
         api.register_channel_type(
-            "wecom",
+            "dingtalk",
             _factory,
             config_schema={
                 "type": "object",
                 "properties": {
-                    "corp_id": {"type": "string", "title": "Corp ID", "minLength": 1},
+                    "app_key": {"type": "string", "title": "App Key", "minLength": 1},
+                    "app_secret": {"type": "string", "title": "App Secret", "minLength": 1},
                     "agent_id": {"type": "string", "title": "Agent ID", "minLength": 1},
-                    "secret": {"type": "string", "title": "Secret", "minLength": 1},
-                    "token": {"type": "string", "title": "Token"},
-                    "encoding_aes_key": {"type": "string", "title": "Encoding AES Key"},
                     "webhook_url": {"type": "string", "title": "Webhook URL"},
+                    "sign_token": {"type": "string", "title": "Sign Token"},
                 },
-                "required": ["corp_id", "agent_id", "secret"],
+                "required": ["app_key", "app_secret", "agent_id"],
                 "additionalProperties": False,
             },
             config_ui_hints={
-                "secret": {"sensitive": True},
-                "token": {"sensitive": True, "advanced": True},
-                "encoding_aes_key": {"sensitive": True, "advanced": True},
+                "app_secret": {"sensitive": True},
+                "sign_token": {"sensitive": True, "advanced": True},
                 "webhook_url": {"advanced": True},
             },
             defaults={
-                "webhook_url": "/api/v1/channels/events/wecom",
+                "webhook_url": "/api/v1/channels/events/dingtalk",
             },
-            secret_paths=["secret", "encoding_aes_key"],
+            secret_paths=["app_secret", "sign_token"],
         )
 
 
-plugin = WeComChannelPlugin()
+plugin = DingTalkChannelPlugin()

@@ -183,8 +183,10 @@ class AgentOrchestrator:
         to_agent = await self._agent_registry.get_by_id(to_agent_id)
         if to_agent is None:
             raise ValueError(f"Target agent not found: {to_agent_id}")
-        if not to_agent.agent_to_agent_enabled:
-            raise ValueError(f"Target agent does not accept agent-to-agent messages: {to_agent_id}")
+        if not to_agent.accepts_messages_from(from_agent_id):
+            raise ValueError(
+                f"Target agent {to_agent_id} does not accept messages from sender: {from_agent_id}"
+            )
 
         resolved_session_id = session_id
         if resolved_session_id is None:

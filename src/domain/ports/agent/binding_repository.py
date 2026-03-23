@@ -139,3 +139,20 @@ class AgentBindingRepositoryPort(ABC):
         Raises:
             ValueError: If binding not found
         """
+
+    @abstractmethod
+    async def find_by_group(
+        self,
+        tenant_id: str,
+        group_id: str,
+    ) -> list[AgentBinding]:
+        """
+        Find all bindings in a broadcast group.
+
+        Args:
+            tenant_id: Tenant ID for scoping
+            group_id: Broadcast group identifier
+
+        Returns:
+            List of bindings sharing the group_id
+        """

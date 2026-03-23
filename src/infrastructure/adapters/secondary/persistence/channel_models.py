@@ -95,6 +95,12 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
         comment="Max messages per minute per chat (0 = unlimited)",
     )
 
+    model_override: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="LLM model override for this channel config",
+    )
+
     # Channel-specific settings
     domain: Mapped[str | None] = mapped_column(
         String, default="feishu", comment="Domain: feishu, lark, or custom"

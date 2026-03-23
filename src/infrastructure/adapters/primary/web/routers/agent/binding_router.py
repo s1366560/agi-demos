@@ -33,6 +33,7 @@ class CreateBindingRequest(BaseModel):
     channel_id: str | None = None
     account_id: str | None = None
     peer_id: str | None = None
+    group_id: str | None = None
     priority: int = 0
 
 
@@ -60,6 +61,7 @@ async def create_binding(
             channel_id=body.channel_id,
             account_id=body.account_id,
             peer_id=body.peer_id,
+            group_id=body.group_id,
             priority=body.priority,
         )
 
@@ -179,4 +181,31 @@ async def set_binding_enabled(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to update binding: {e!s}",
+        ) from e
+
+
+@router.get("/bindings/groups/{group_id}")
+async def list_group_bindings(
+    group_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    try:
+        container = get_container_with_db(request, db)
+        repo = container.agent_binding_repository()
+
+        bindings = await repo.find_by_group(
+            tenant_id=tenant_id,
+            group_id=group_id,
+        )
+
+        return [b.to_dict() for b in bindings]
+
+    except Exception as e:
+        logger.error("Error listing group bindings: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list group bindings: {e!s}",
         ) from e

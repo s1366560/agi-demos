@@ -46,6 +46,7 @@ class SqlAgentBindingRepository(
             channel_id=binding.channel_id,
             account_id=binding.account_id,
             peer_id=binding.peer_id,
+            group_id=binding.group_id,
             priority=binding.priority,
             enabled=binding.enabled,
             created_at=binding.created_at,
@@ -191,6 +192,27 @@ class SqlAgentBindingRepository(
         assert domain is not None
         return domain
 
+    async def find_by_group(
+        self,
+        tenant_id: str,
+        group_id: str,
+    ) -> list[AgentBinding]:
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            AgentBindingModel,
+        )
+
+        query = (
+            select(AgentBindingModel)
+            .where(AgentBindingModel.tenant_id == tenant_id)
+            .where(AgentBindingModel.group_id == group_id)
+            .order_by(AgentBindingModel.priority.desc())
+        )
+
+        result = await self._session.execute(query)
+        db_bindings = result.scalars().all()
+
+        return [d for b in db_bindings if (d := self._to_domain(b)) is not None]
+
     def _to_domain(self, db_binding: AgentBindingModel | None) -> AgentBinding | None:
         if db_binding is None:
             return None
@@ -203,6 +225,7 @@ class SqlAgentBindingRepository(
             channel_id=db_binding.channel_id,
             account_id=db_binding.account_id,
             peer_id=db_binding.peer_id,
+            group_id=db_binding.group_id,
             priority=db_binding.priority,
             enabled=db_binding.enabled,
             created_at=db_binding.created_at,

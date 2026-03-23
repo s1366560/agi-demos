@@ -1,0 +1,10 @@
+{
+  "id": "dingtalk-channel-plugin",
+  "kind": "channel",
+  "name": "DingTalk Channel Plugin",
+  "description": "DingTalk channel integration template.",
+  "version": "1.0.0",
+  "channels": ["dingtalk"],
+  "providers": [],
+  "skills": []
+}

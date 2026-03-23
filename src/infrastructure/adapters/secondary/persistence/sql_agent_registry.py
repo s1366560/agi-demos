@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_source import AgentSource
+from src.domain.model.agent.delegate_config import DelegateConfig
+from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.domain.ports.agent.agent_registry import AgentRegistryPort
@@ -63,6 +65,7 @@ class SqlAgentRegistryRepository(
             can_spawn=agent.can_spawn,
             max_spawn_depth=agent.max_spawn_depth,
             agent_to_agent_enabled=agent.agent_to_agent_enabled,
+            agent_to_agent_allowlist=agent.agent_to_agent_allowlist,
             discoverable=agent.discoverable,
             source=(agent.source.value if isinstance(agent.source, AgentSource) else agent.source),
             enabled=agent.enabled,
@@ -72,6 +75,8 @@ class SqlAgentRegistryRepository(
             avg_execution_time_ms=agent.avg_execution_time_ms,
             success_rate=agent.success_rate,
             metadata_json=agent.metadata,
+            session_policy=(agent.session_policy.to_dict() if agent.session_policy else None),
+            delegate_config=(agent.delegate_config.to_dict() if agent.delegate_config else None),
             created_at=agent.created_at,
             updated_at=agent.updated_at,
         )
@@ -141,6 +146,7 @@ class SqlAgentRegistryRepository(
         db_agent.can_spawn = agent.can_spawn
         db_agent.max_spawn_depth = agent.max_spawn_depth
         db_agent.agent_to_agent_enabled = agent.agent_to_agent_enabled
+        db_agent.agent_to_agent_allowlist = agent.agent_to_agent_allowlist
         db_agent.discoverable = agent.discoverable
         db_agent.source = (
             agent.source.value if isinstance(agent.source, AgentSource) else agent.source
@@ -152,6 +158,10 @@ class SqlAgentRegistryRepository(
         db_agent.avg_execution_time_ms = agent.avg_execution_time_ms
         db_agent.success_rate = agent.success_rate
         db_agent.metadata_json = agent.metadata
+        db_agent.session_policy = agent.session_policy.to_dict() if agent.session_policy else None
+        db_agent.delegate_config = (
+            agent.delegate_config.to_dict() if agent.delegate_config else None
+        )
         db_agent.updated_at = agent.updated_at
 
         await self._session.flush()
@@ -303,6 +313,12 @@ class SqlAgentRegistryRepository(
             WorkspaceConfig.from_dict(ws_data) if isinstance(ws_data, dict) else WorkspaceConfig()
         )
 
+        sp_data = db_agent.session_policy
+        session_policy = SessionPolicy.from_dict(sp_data) if isinstance(sp_data, dict) else None
+
+        dc_data = db_agent.delegate_config
+        delegate_config = DelegateConfig.from_dict(dc_data) if isinstance(dc_data, dict) else None
+
         return Agent(
             id=db_agent.id,
             tenant_id=db_agent.tenant_id,
@@ -324,6 +340,7 @@ class SqlAgentRegistryRepository(
             can_spawn=db_agent.can_spawn,
             max_spawn_depth=db_agent.max_spawn_depth,
             agent_to_agent_enabled=(db_agent.agent_to_agent_enabled),
+            agent_to_agent_allowlist=db_agent.agent_to_agent_allowlist,
             discoverable=db_agent.discoverable,
             source=AgentSource(db_agent.source),
             enabled=db_agent.enabled,
@@ -335,4 +352,6 @@ class SqlAgentRegistryRepository(
             created_at=db_agent.created_at,
             updated_at=(db_agent.updated_at or db_agent.created_at),
             metadata=db_agent.metadata_json,
+            session_policy=session_policy,
+            delegate_config=delegate_config,
         )

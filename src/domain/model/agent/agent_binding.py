@@ -29,6 +29,9 @@ class AgentBinding:
         channel_id: Channel instance filter (None = wildcard)
         account_id: User account filter (None = wildcard)
         peer_id: Peer identity filter (None = wildcard)
+        group_id: Broadcast group identifier. Bindings sharing the same
+            group_id form a broadcast group where messages are delivered
+            to ALL agents in the group (None = not in any group)
         priority: Explicit priority override (higher = more specific)
         enabled: Whether this binding is active
         created_at: When this binding was created
@@ -41,12 +44,18 @@ class AgentBinding:
     channel_id: str | None = None
     account_id: str | None = None
     peer_id: str | None = None
+    group_id: str | None = None
     priority: int = 0
     enabled: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
-        """Validate the binding."""
+        """Validate the binding.
+
+        Checks required fields (id, tenant_id, agent_id) and ensures
+        priority is non-negative. group_id is optional and enables
+        broadcast group routing when set.
+        """
         if not self.id:
             raise ValueError("id cannot be empty")
         if not self.tenant_id:
@@ -84,6 +93,7 @@ class AgentBinding:
             "channel_id": self.channel_id,
             "account_id": self.account_id,
             "peer_id": self.peer_id,
+            "group_id": self.group_id,
             "priority": self.priority,
             "enabled": self.enabled,
             "created_at": self.created_at.isoformat(),
@@ -101,6 +111,7 @@ class AgentBinding:
             channel_id=data.get("channel_id"),
             account_id=data.get("account_id"),
             peer_id=data.get("peer_id"),
+            group_id=data.get("group_id"),
             priority=data.get("priority", 0),
             enabled=data.get("enabled", True),
             created_at=datetime.fromisoformat(data["created_at"])

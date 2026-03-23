@@ -34,7 +34,7 @@ class AgentRuntimeBootstrapper:
             return normalized
         return "auto"
 
-    async def start_chat_actor(
+    async def start_chat_actor(  # noqa: PLR0913
         self,
         conversation: Conversation,
         message_id: str,
@@ -48,6 +48,7 @@ class AgentRuntimeBootstrapper:
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
+        model_override: str | None = None,
     ) -> str:
         """Start agent execution using configured runtime mode."""
         from src.configuration.config import get_settings
@@ -74,7 +75,7 @@ class AgentRuntimeBootstrapper:
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
             agent_mode=agent_mode,
-            model=provider_config.llm_model,
+            model=model_override or provider_config.llm_model,
             api_key=api_key,
             base_url=provider_config.base_url,
             temperature=0.7,

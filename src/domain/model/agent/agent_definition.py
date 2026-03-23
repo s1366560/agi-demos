@@ -14,7 +14,9 @@ from typing import Any
 
 from src.domain.model.agent.agent_binding import AgentBinding
 from src.domain.model.agent.agent_source import AgentSource
+from src.domain.model.agent.delegate_config import DelegateConfig
 from src.domain.model.agent.identity import AgentIdentity
+from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.spawn_policy import SpawnPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.domain.model.agent.tool_policy import ToolPolicy
@@ -99,11 +101,14 @@ class Agent:
     can_spawn: bool = False
     max_spawn_depth: int = 3
     agent_to_agent_enabled: bool = False
+    agent_to_agent_allowlist: list[str] | None = None
     discoverable: bool = True
 
     # Policy VOs (multi-agent governance)
     spawn_policy: SpawnPolicy | None = None
     tool_policy: ToolPolicy | None = None
+    session_policy: SessionPolicy | None = None
+    delegate_config: DelegateConfig | None = None
     identity: AgentIdentity | None = None
 
     # Runtime
@@ -175,6 +180,20 @@ class Agent:
             return list(available_tools)
         return [t for t in available_tools if t in self.allowed_tools]
 
+    def accepts_messages_from(self, sender_agent_id: str) -> bool:
+        """Check if this agent accepts messages from a given sender.
+
+        Resolution order:
+        1. If agent_to_agent_enabled is False -> reject all.
+        2. If allowlist is None -> allow all (backward compatible).
+        3. Otherwise check membership.
+        """
+        if not self.agent_to_agent_enabled:
+            return False
+        if self.agent_to_agent_allowlist is None:
+            return True
+        return sender_agent_id in self.agent_to_agent_allowlist
+
     def to_identity(self) -> AgentIdentity:
         """Build an AgentIdentity snapshot from this Agent's current state."""
         return AgentIdentity(
@@ -213,6 +232,27 @@ class Agent:
             "precedence": tp.precedence.value,
         }
 
+    def _session_policy_to_dict(self) -> dict[str, Any] | None:
+        if self.session_policy is None:
+            return None
+        return self.session_policy.to_dict()
+
+    def _delegate_config_to_dict(self) -> dict[str, Any] | None:
+        if self.delegate_config is None:
+            return None
+        return self.delegate_config.to_dict()
+
+    def _agent_allowlist_to_dict(self) -> list[str] | None:
+        return (
+            list(self.agent_to_agent_allowlist)
+            if self.agent_to_agent_allowlist is not None
+            else None
+        )
+
+    @staticmethod
+    def _agent_allowlist_from_dict(data: list[str] | None) -> list[str] | None:
+        return list(data) if data is not None else None
+
     @staticmethod
     def _spawn_policy_from_dict(data: dict[str, Any] | None) -> SpawnPolicy | None:
         if data is None or not isinstance(data, dict):
@@ -238,6 +278,18 @@ class Agent:
                 data.get("precedence", ToolPolicyPrecedence.DENY_FIRST.value)
             ),
         )
+
+    @staticmethod
+    def _session_policy_from_dict(data: dict[str, Any] | None) -> SessionPolicy | None:
+        if data is None or not isinstance(data, dict):
+            return None
+        return SessionPolicy.from_dict(data)
+
+    @staticmethod
+    def _delegate_config_from_dict(data: dict[str, Any] | None) -> DelegateConfig | None:
+        if data is None or not isinstance(data, dict):
+            return None
+        return DelegateConfig.from_dict(data)
 
     def record_execution(self, execution_time_ms: float, success: bool) -> "Agent":
         """Record an execution and return updated agent."""
@@ -280,9 +332,16 @@ class Agent:
             can_spawn=self.can_spawn,
             max_spawn_depth=self.max_spawn_depth,
             agent_to_agent_enabled=(self.agent_to_agent_enabled),
+            agent_to_agent_allowlist=(
+                list(self.agent_to_agent_allowlist)
+                if self.agent_to_agent_allowlist is not None
+                else None
+            ),
             discoverable=self.discoverable,
             spawn_policy=self.spawn_policy,
             tool_policy=self.tool_policy,
+            session_policy=self.session_policy,
+            delegate_config=self.delegate_config,
             identity=self.identity,
             source=self.source,
             enabled=self.enabled,
@@ -320,9 +379,12 @@ class Agent:
             "can_spawn": self.can_spawn,
             "max_spawn_depth": self.max_spawn_depth,
             "agent_to_agent_enabled": (self.agent_to_agent_enabled),
+            "agent_to_agent_allowlist": self._agent_allowlist_to_dict(),
             "discoverable": self.discoverable,
             "spawn_policy": self._spawn_policy_to_dict(),
             "tool_policy": self._tool_policy_to_dict(),
+            "session_policy": self._session_policy_to_dict(),
+            "delegate_config": self._delegate_config_to_dict(),
             "source": (self.source.value if isinstance(self.source, AgentSource) else self.source),
             "enabled": self.enabled,
             "max_retries": self.max_retries,
@@ -354,6 +416,8 @@ class Agent:
 
         spawn_policy = cls._spawn_policy_from_dict(data.get("spawn_policy"))
         tool_policy_vo = cls._tool_policy_from_dict(data.get("tool_policy"))
+        session_policy_vo = cls._session_policy_from_dict(data.get("session_policy"))
+        delegate_config_vo = cls._delegate_config_from_dict(data.get("delegate_config"))
 
         return cls(
             id=data["id"],
@@ -377,9 +441,14 @@ class Agent:
             can_spawn=data.get("can_spawn", False),
             max_spawn_depth=data.get("max_spawn_depth", 3),
             agent_to_agent_enabled=data.get("agent_to_agent_enabled", False),
+            agent_to_agent_allowlist=cls._agent_allowlist_from_dict(
+                data.get("agent_to_agent_allowlist")
+            ),
             discoverable=data.get("discoverable", True),
             spawn_policy=spawn_policy,
             tool_policy=tool_policy_vo,
+            session_policy=session_policy_vo,
+            delegate_config=delegate_config_vo,
             source=(AgentSource(data["source"]) if "source" in data else AgentSource.DATABASE),
             enabled=data.get("enabled", True),
             max_retries=data.get("max_retries", 0),
@@ -425,12 +494,15 @@ class Agent:
         can_spawn: bool = False,
         max_spawn_depth: int = 3,
         agent_to_agent_enabled: bool = False,
+        agent_to_agent_allowlist: list[str] | None = None,
         discoverable: bool = True,
         max_retries: int = 0,
         fallback_models: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         spawn_policy: SpawnPolicy | None = None,
         tool_policy: ToolPolicy | None = None,
+        session_policy: SessionPolicy | None = None,
+        delegate_config: DelegateConfig | None = None,
     ) -> "Agent":
         """Create a new agent with generated ID."""
         import uuid
@@ -463,9 +535,12 @@ class Agent:
             can_spawn=can_spawn,
             max_spawn_depth=max_spawn_depth,
             agent_to_agent_enabled=(agent_to_agent_enabled),
+            agent_to_agent_allowlist=agent_to_agent_allowlist,
             discoverable=discoverable,
             spawn_policy=spawn_policy,
             tool_policy=tool_policy,
+            session_policy=session_policy,
+            delegate_config=delegate_config,
             max_retries=max_retries,
             fallback_models=fallback_models or [],
             metadata=metadata,
