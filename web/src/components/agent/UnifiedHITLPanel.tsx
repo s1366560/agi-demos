@@ -30,6 +30,8 @@ import {
   CodeOutlined,
 } from '@ant-design/icons';
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import {
   Modal,
   Form,
@@ -66,35 +68,34 @@ const { TextArea } = Input;
 // Type-specific configurations
 // =============================================================================
 
-const TYPE_CONFIG: Record<
-  HITLType,
-  {
-    icon: React.ReactNode;
-    title: string;
-    color: string;
-    submitText: string;
-  }
-> = {
+interface TypeConfigEntry {
+  icon: React.ReactNode;
+  title: string;
+  color: string;
+  submitText: string;
+}
+
+const TYPE_CONFIG: Record<HITLType, TypeConfigEntry> = {
   clarification: {
-    icon: <QuestionCircleOutlined style={{ color: '#1890ff' }} />,
+    icon: <QuestionCircleOutlined style={{ color: 'var(--color-info)' }} />,
     title: '需要澄清',
     color: 'blue',
     submitText: '确认回答',
   },
   decision: {
-    icon: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
+    icon: <ExclamationCircleOutlined style={{ color: 'var(--color-warning)' }} />,
     title: '需要决策',
     color: 'gold',
     submitText: '确认决策',
   },
   env_var: {
-    icon: <KeyOutlined style={{ color: '#52c41a' }} />,
+    icon: <KeyOutlined style={{ color: 'var(--color-success)' }} />,
     title: '配置环境变量',
     color: 'green',
     submitText: '保存配置',
   },
   permission: {
-    icon: <SafetyOutlined style={{ color: '#722ed1' }} />,
+    icon: <SafetyOutlined style={{ color: 'var(--color-tile-purple)' }} />,
     title: '权限请求',
     color: 'purple',
     submitText: '授权执行',
@@ -118,13 +119,21 @@ const DECISION_TYPE_LABELS: Record<string, string> = {
 };
 
 const RISK_LEVEL_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  low: { label: '低风险', color: 'green', icon: <SafetyOutlined style={{ color: '#52c41a' }} /> },
+  low: {
+    label: '低风险',
+    color: 'green',
+    icon: <SafetyOutlined style={{ color: 'var(--color-success)' }} />,
+  },
   medium: {
     label: '中等风险',
     color: 'gold',
-    icon: <WarningOutlined style={{ color: '#faad14' }} />,
+    icon: <WarningOutlined style={{ color: 'var(--color-warning)' }} />,
   },
-  high: { label: '高风险', color: 'red', icon: <WarningOutlined style={{ color: '#f5222d' }} /> },
+  high: {
+    label: '高风险',
+    color: 'red',
+    icon: <WarningOutlined style={{ color: 'var(--color-error)' }} />,
+  },
 };
 
 // =============================================================================
@@ -140,6 +149,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
   const submitResponse = useUnifiedHITLStore((state) => state.submitResponse);
   const cancelRequest = useUnifiedHITLStore((state) => state.cancelRequest);
   const isSubmitting = useIsSubmitting(request.requestId);
+  const tc = useThemeColors({ error: '--color-error', success: '--color-success' });
 
   const [remainingTime, setRemainingTime] = useState<number | null>(
     getRemainingTimeSeconds(request)
@@ -207,7 +217,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
               <Badge
                 count={`${Math.floor(remainingTime)}s`}
                 style={{
-                  backgroundColor: progressPercent <= 20 ? '#f5222d' : '#52c41a',
+                  backgroundColor: progressPercent <= 20 ? tc.error : tc.success,
                   marginRight: 8,
                 }}
               >
@@ -576,7 +586,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
                 setSelectedOption('custom');
               }}
               className={`
-                p-4 rounded-lg border-2 cursor-pointer transition-all
+                p-4 rounded-lg border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform]
                 ${
                   selectedOption === 'custom'
                     ? 'border-primary-500 bg-primary-50' + ' dark:bg-primary-900/20'
@@ -660,7 +670,7 @@ const DecisionOptionCard: React.FC<{
     <div
       onClick={onSelect}
       className={`
-        p-4 rounded-lg border-2 cursor-pointer transition-all
+        p-4 rounded-lg border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform]
         ${
           selected
             ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'

@@ -246,7 +246,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
       <div className="p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+            <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="text-center py-8">

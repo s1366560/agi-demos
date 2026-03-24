@@ -19,7 +19,6 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-
 import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -53,6 +52,7 @@ import { groupTimelineEvents, getSubAgentSummaries } from './message/groupTimeli
 import { Resizer } from './Resizer';
 import { RightPanel } from './RightPanel';
 import { SandboxSection } from './SandboxSection';
+import { LAYOUT_BG_CLASSES } from './styles';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
@@ -450,7 +450,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
         let finalContent = content;
         if (forcedSubAgentName) {
-          finalContent = `[System Instruction: Delegate this task strictly to SubAgent "${forcedSubAgentName}"]\n${content}`;
+          finalContent = `[System Instruction: Delegate this task strictly to SubAgent "${forcedSubAgentName}"]
+${content}`;
         }
 
         const newId = await sendMessage(finalContent, projectId, {
@@ -594,6 +595,21 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       [layoutMode, splitRatio, setSplitRatio]
     );
 
+    // Keyboard handler for split drag handles (a11y)
+    const handleSplitKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        const step = e.shiftKey ? 0.05 : 0.02;
+        let newRatio = splitRatio;
+        if (e.key === 'ArrowRight') newRatio = splitRatio + step;
+        else if (e.key === 'ArrowLeft') newRatio = splitRatio - step;
+        else return;
+        e.preventDefault();
+        setSplitRatio(Math.max(0.2, Math.min(0.8, newRatio)));
+      },
+      [splitRatio, setSplitRatio]
+    );
+
+
     // Plan Mode toggle
     const isPlanMode = useAgentV3Store((s) => s.isPlanMode);
 
@@ -632,7 +648,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const chatColumn = (
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         {headerExtra && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2 flex items-center gap-2">
+          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 px-4 py-2 flex items-center gap-2">
             {headerExtra}
           </div>
         )}
@@ -658,7 +674,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           />
         </div>
         <div
-          className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
+          className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
           style={{ height: inputHeight }}
         >
           <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
@@ -725,7 +741,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Status bar with layout mode selector
     const statusBarWithLayout = (
-      <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm min-w-0">
+      <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
         <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
         <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
           {activeConversationId && timeline.length > 0 && (
@@ -834,22 +850,28 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
       return (
         <div
-          className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+          className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
         >
           <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
             {/* Left: Chat */}
             <div
               className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent, willChange: 'width' }}
+              style={{ width: leftPercent }}
             >
               {chatColumn}
             </div>
 
             {/* Drag handle */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: drag handle for split pane resizing */}
             <div
               className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
               hover:bg-purple-500/20 active:bg-purple-500/30 transition-colors z-10 mobile-hidden"
+              role="separator"
+              aria-valuenow={Math.round(splitRatio * 100)}
+              aria-valuemin={20}
+              aria-valuemax={80}
+              tabIndex={0}
+              aria-label="Resize panels"
+              onKeyDown={handleSplitKeyDown}
               onMouseDown={handleSplitDrag}
             >
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-purple-500/70 transition-colors" />
@@ -858,7 +880,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Right: Task Panel */}
             <div
               className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
-              style={{ width: rightPercent, willChange: 'width' }}
+              style={{ width: rightPercent }}
             >
               <RightPanel
                 tasks={tasks}
@@ -886,22 +908,28 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
       return (
         <div
-          className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+          className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
         >
           <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
             {/* Left: Chat */}
             <div
               className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent, willChange: 'width' }}
+              style={{ width: leftPercent }}
             >
               {chatColumn}
             </div>
 
             {/* Drag handle */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: drag handle for split pane resizing */}
             <div
               className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
               hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors z-10 mobile-hidden"
+              role="separator"
+              aria-valuenow={Math.round(splitRatio * 100)}
+              aria-valuemin={20}
+              aria-valuemax={80}
+              tabIndex={0}
+              aria-label="Resize panels"
+              onKeyDown={handleSplitKeyDown}
               onMouseDown={handleSplitDrag}
             >
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-blue-500/70 transition-colors" />
@@ -910,7 +938,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Right: Sandbox Terminal */}
             <div
               className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900 mobile-full"
-              style={{ width: rightPercent, willChange: 'width' }}
+              style={{ width: rightPercent }}
             >
               {sandboxContent}
             </div>
@@ -928,22 +956,28 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
       return (
         <div
-          className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+          className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
         >
           <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
             {/* Left: Chat */}
             <div
               className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent, minWidth: '280px', willChange: 'width' }}
+              style={{ width: leftPercent, minWidth: '280px' }}
             >
               {chatColumn}
             </div>
 
             {/* Drag handle */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: drag handle for split pane resizing */}
             <div
               className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
               hover:bg-violet-500/20 active:bg-violet-500/30 transition-colors z-10 mobile-hidden"
+              role="separator"
+              aria-valuenow={Math.round(splitRatio * 100)}
+              aria-valuemin={20}
+              aria-valuemax={80}
+              tabIndex={0}
+              aria-label="Resize panels"
+              onKeyDown={handleSplitKeyDown}
               onMouseDown={handleSplitDrag}
             >
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-violet-500/70 transition-colors" />
@@ -952,7 +986,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             {/* Right: Canvas Panel */}
             <div
               className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
-              style={{ width: rightPercent, minWidth: '320px', willChange: 'width' }}
+              style={{ width: rightPercent, minWidth: '320px' }}
             >
               <CanvasPanel
                 onSendPrompt={(prompt) => {
@@ -988,7 +1022,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Chat mode (default): classic layout
     return (
       <div
-        className={`flex h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+        className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
       >
         {/* Keyboard shortcut overlay (Cmd+/) */}
         <ShortcutOverlay />

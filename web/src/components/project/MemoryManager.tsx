@@ -116,7 +116,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
     return (
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8">
         <div className="flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+          <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
         </div>
       </div>
     );
@@ -244,7 +244,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             {memories.map((memory) => (
               <div
                 key={memory.id}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                className={`p-4 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                   currentMemory?.id === memory.id
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'

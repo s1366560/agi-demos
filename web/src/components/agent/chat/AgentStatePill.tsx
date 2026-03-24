@@ -38,7 +38,7 @@ function getStateConfig(
   switch (state) {
     case 'thinking':
       return {
-        icon: <Brain size={14} className="animate-pulse" />,
+        icon: <Brain size={14} className="animate-pulse motion-reduce:animate-none" />,
         label: t('agent.state.thinking', 'Thinking'),
         color: 'text-slate-600 dark:text-slate-400',
         bgColor: 'bg-slate-50 dark:bg-slate-800/50',
@@ -46,7 +46,7 @@ function getStateConfig(
       };
     case 'preparing':
       return {
-        icon: <Loader2 size={14} className="animate-spin" />,
+        icon: <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />,
         label: t('agent.state.preparing', 'Preparing'),
         color: 'text-blue-600 dark:text-blue-400',
         bgColor: 'bg-blue-50 dark:bg-blue-900/20',
@@ -70,7 +70,7 @@ function getStateConfig(
       };
     case 'awaiting_input':
       return {
-        icon: <MessageCircle size={14} className="animate-pulse" />,
+        icon: <MessageCircle size={14} className="animate-pulse motion-reduce:animate-none" />,
         label: t('agent.state.awaitingInput', 'Waiting for input'),
         color: 'text-slate-600 dark:text-slate-400',
         bgColor: 'bg-slate-50 dark:bg-slate-800/50',
@@ -78,7 +78,7 @@ function getStateConfig(
       };
     case 'retrying':
       return {
-        icon: <RotateCcw size={14} className="animate-spin" />,
+        icon: <RotateCcw size={14} className="animate-spin motion-reduce:animate-none" />,
         label: t('agent.state.retrying', 'Retrying'),
         color: 'text-red-600 dark:text-red-400',
         bgColor: 'bg-red-50 dark:bg-red-900/20',
@@ -136,7 +136,7 @@ export const AgentStatePill: React.FC<AgentStatePillProps> = memo(({ className =
           inline-flex items-center gap-2 px-3 py-1.5
           rounded-full border
           ${config.bgColor} ${config.borderColor}
-          transition-all duration-300 ease-out
+          transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-out
           shadow-sm
         `}
       >
@@ -166,7 +166,7 @@ const PhaseDot: React.FC<{ active: boolean; completed: boolean }> = memo(
   ({ active, completed }) => (
     <span
       className={`
-      w-1.5 h-1.5 rounded-full transition-all duration-300
+      w-1.5 h-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
       ${active ? 'bg-current scale-125' : completed ? 'bg-current opacity-40' : 'bg-slate-300 dark:bg-slate-600'}
     `}
     />

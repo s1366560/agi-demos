@@ -4,6 +4,8 @@
  * Displays execution activity over time with count, success, and failure metrics.
  */
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import { formatDateTime } from '@/utils/date';
 
 import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
@@ -18,6 +20,11 @@ interface ExecutionTimelineChartProps {
 
 export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
   const { timeline_data } = stats;
+  const colors = useThemeColors({
+    success: '--color-success',
+    error: '--color-error',
+    info: '--color-info',
+  });
 
   if (!timeline_data || timeline_data.length === 0) {
     return (
@@ -65,22 +72,22 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
                     {/* Completed */}
                     {item.completed > 0 && (
                       <div
-                        className="bg-emerald-500 dark:bg-emerald-600 transition-all"
-                        style={{ height: `${completedHeight}px`, backgroundColor: '#10b981' }}
+                        className="bg-emerald-500 dark:bg-emerald-600 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                        style={{ height: `${completedHeight}px`, backgroundColor: colors.success }}
                       />
                     )}
                     {/* Failed */}
                     {item.failed > 0 && (
                       <div
-                        className="bg-red-500 dark:bg-red-600 transition-all"
-                        style={{ height: `${failedHeight}px`, backgroundColor: '#ef4444' }}
+                        className="bg-red-500 dark:bg-red-600 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                        style={{ height: `${failedHeight}px`, backgroundColor: colors.error }}
                       />
                     )}
                     {/* Other statuses */}
                     {otherHeight > 0 && (
                       <div
-                        className="bg-blue-500 dark:bg-blue-600 transition-all"
-                        style={{ height: `${otherHeight}px`, backgroundColor: '#3b82f6' }}
+                        className="bg-blue-500 dark:bg-blue-600 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                        style={{ height: `${otherHeight}px`, backgroundColor: colors.info }}
                       />
                     )}
                   </div>
@@ -104,15 +111,15 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
       {/* Legend */}
       <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10b981' }} />
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: colors.success }} />
           <span className="text-sm text-slate-600 dark:text-slate-400">Completed</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }} />
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: colors.error }} />
           <span className="text-sm text-slate-600 dark:text-slate-400">Failed</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ backgroundColor: '#3b82f6' }} />
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: colors.info }} />
           <span className="text-sm text-slate-600 dark:text-slate-400">Other</span>
         </div>
       </div>

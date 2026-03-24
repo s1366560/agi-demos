@@ -6,17 +6,11 @@
  */
 
 import { memo, useEffect, useMemo, useState, useCallback } from 'react';
+import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  CheckCircle,
-  Puzzle,
-  RefreshCw,
-  Search,
-  XCircle,
-  Zap,
-} from 'lucide-react';
+import { CheckCircle, Puzzle, RefreshCw, Search, XCircle, Zap } from 'lucide-react';
 
 import {
   useSkills,
@@ -27,7 +21,6 @@ import {
 } from '../../../stores/skill';
 
 import type { SkillResponse } from '../../../types/agent';
-import type { FC } from 'react';
 
 // ============================================================================
 // Skill Card Component
@@ -54,12 +47,8 @@ const SkillCard: FC<SkillCardProps> = memo(({ skill }) => {
             <Puzzle size={18} />
           </div>
           <div>
-            <h4 className="font-medium text-sm text-slate-900 dark:text-white">
-              {skill.name}
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {skill.trigger_type}
-            </p>
+            <h4 className="font-medium text-sm text-slate-900 dark:text-white">{skill.name}</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{skill.trigger_type}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -99,9 +88,7 @@ const SkillCard: FC<SkillCardProps> = memo(({ skill }) => {
 
       {/* Tools */}
       <div className="mb-3">
-        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-          Tools
-        </p>
+        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Tools</p>
         <div className="flex flex-wrap gap-1">
           {skill.tools.slice(0, 4).map((tool, idx) => (
             <span
@@ -125,9 +112,7 @@ const SkillCard: FC<SkillCardProps> = memo(({ skill }) => {
           <Zap size={12} />
           {skill.usage_count} uses
         </span>
-        <span className="flex items-center gap-1">
-          {skill.success_rate}% success
-        </span>
+        <span className="flex items-center gap-1">{skill.success_rate}% success</span>
       </div>
     </div>
   );
@@ -158,8 +143,7 @@ export const DashboardSkills: FC = memo(() => {
     const lower = search.toLowerCase();
     return skills.filter(
       (skill) =>
-        skill.name.toLowerCase().includes(lower) ||
-        skill.description.toLowerCase().includes(lower),
+        skill.name.toLowerCase().includes(lower) || skill.description.toLowerCase().includes(lower)
     );
   }, [skills, search]);
 
@@ -176,10 +160,7 @@ export const DashboardSkills: FC = memo(() => {
             {t('tenant.dashboard.skills.title', 'Skills')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t(
-              'tenant.dashboard.skills.subtitle',
-              'Manage declarative tool compositions',
-            )}
+            {t('tenant.dashboard.skills.subtitle', 'Manage declarative tool compositions')}
           </p>
         </div>
         <button
@@ -188,21 +169,20 @@ export const DashboardSkills: FC = memo(() => {
           disabled={isLoading}
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
         >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={isLoading ? 'animate-spin motion-reduce:animate-none' : ''} />
           {t('common.refresh', 'Refresh')}
         </button>
       </div>
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          size={16}
-        />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+          }}
           placeholder={t('tenant.dashboard.skills.searchPlaceholder', 'Search skills...')}
           className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
         />
@@ -214,17 +194,13 @@ export const DashboardSkills: FC = memo(() => {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.dashboard.skills.totalSkills', 'Total Skills')}
           </p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
-            {skills.length}
-          </p>
+          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{skills.length}</p>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.dashboard.skills.activeSkills', 'Active')}
           </p>
-          <p className="mt-1 text-xl font-bold text-green-600 dark:text-green-400">
-            {activeCount}
-          </p>
+          <p className="mt-1 text-xl font-bold text-green-600 dark:text-green-400">{activeCount}</p>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -239,7 +215,7 @@ export const DashboardSkills: FC = memo(() => {
       {/* Skills Grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
         </div>
       ) : filteredSkills.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">

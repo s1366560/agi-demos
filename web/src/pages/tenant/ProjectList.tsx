@@ -86,7 +86,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <p className="text-sm text-slate-500">{t('tenant.projects.subtitle')}</p>
         </div>
         <Link to={`/tenant/${currentTenant.id}/projects/new`}>
-          <button className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-all active:scale-95">
+          <button className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
             <span className="material-symbols-outlined text-lg">add</span>
             {t('tenant.projects.create')}
           </button>
@@ -106,7 +106,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
             onChange={(e) => {
               setSearch(e.target.value);
             }}
-            className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-700 transition-all outline-none"
+            className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
             placeholder={t('tenant.projects.searchPlaceholder')}
           />
         </div>
@@ -129,7 +129,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               onClick={() => {
                 setViewMode('grid');
               }}
-              className={`p-1.5 rounded transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+              className={`p-1.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
               <span className="material-symbols-outlined text-lg block">grid_view</span>
             </button>
@@ -137,7 +137,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               onClick={() => {
                 setViewMode('list');
               }}
-              className={`p-1.5 rounded transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+              className={`p-1.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
               <span className="material-symbols-outlined text-lg block">view_list</span>
             </button>
@@ -153,7 +153,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           {projects.map((project) => (
             <div
               key={project.id}
-              className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col gap-4"
+              className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-[color,background-color,border-color,box-shadow,opacity,transform] group flex flex-col gap-4"
             >
               <div className="flex justify-between items-start">
                 <div className="flex gap-3">
@@ -261,9 +261,9 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           {/* New Project Placeholder */}
           <Link
             to={`/tenant/${currentTenant.id}/projects/new`}
-            className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-all group min-h-[200px]"
+            className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-[color,background-color,border-color,box-shadow,opacity,transform] group min-h-[200px]"
           >
-            <div className="h-12 w-12 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:scale-110 transition-all">
+            <div className="h-12 w-12 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:scale-110 transition-[color,background-color,border-color,box-shadow,opacity,transform]">
               <span className="material-symbols-outlined text-2xl">add</span>
             </div>
             <div className="text-center">

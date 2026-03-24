@@ -119,7 +119,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
           <button
             onClick={onSelect}
             className={`
-            w-10 h-10 rounded-xl mb-1 transition-all duration-200
+            w-10 h-10 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200
             flex items-center justify-center relative mx-auto
             ${
               isActive
@@ -142,7 +142,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         onClick={onSelect}
         className={`
         group relative p-3 rounded-xl mb-1 cursor-pointer
-        transition-all duration-200 border
+        transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 border
         ${
           isActive
             ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
@@ -554,7 +554,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         ${mobile ? 'flex' : 'hidden md:flex'}
         flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark 
         flex-none z-20 h-full relative
-        ${isDragging ? '' : 'transition-all duration-300 ease-in-out'}
+        ${isDragging ? '' : 'transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-300 ease-in-out'}
       `}
       style={{ width: mobile ? '100%' : currentWidth }}
     >
@@ -568,7 +568,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             bg-transparent
             hover:bg-slate-200/50 dark:hover:bg-slate-700/50
             ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
-            transition-all duration-150
+            transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-150
             group/handle
           `}
         >
@@ -578,7 +578,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             bg-slate-400/50 dark:bg-slate-500/50
             opacity-0 group-hover/handle:opacity-100
             ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
-            transition-all duration-150
+            transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-150
           `}
           />
         </div>
@@ -677,7 +677,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         <div className={collapsed ? 'px-2' : 'px-3'}>
           {isLoadingHistory ? (
             <div className="flex items-center justify-center py-8">
-              <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
             </div>
           ) : (
             <>
@@ -712,7 +712,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               )}
               {isLoadingMore && !collapsed && (
                 <div className="flex items-center justify-center py-3">
-                  <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
                 </div>
               )}
             </>
@@ -778,28 +778,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               <span>{item.label}</span>
             </NavLink>
           ))}
-        </div>
-      )}
-
-      {/* Footer - AI Status */}
-      {!collapsed && (
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-sm">
-              <Bot size={16} className="text-white" />
-            </div>
-            <div className="flex flex-col overflow-hidden min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-900 dark:text-white truncate leading-5">
-                AI Assistant
-              </p>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <p className="text-xs text-emerald-500 dark:text-emerald-400 truncate leading-4">
-                  Online
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 

@@ -799,7 +799,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           {includeScrollButton && showScrollButton && (
             <button
               onClick={contextValue.scroll.scrollToBottom}
-              className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-all animate-fade-in"
+              className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] animate-fade-in"
               title={scrollButtonChild?.props.title || 'Scroll to bottom'}
               aria-label="Scroll to bottom"
               data-testid="scroll-button"

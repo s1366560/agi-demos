@@ -27,7 +27,7 @@ export const Loading: FC<ProjectManagerLoadingProps> = ({ message, className = '
       data-testid="loading-state"
     >
       <div className="flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+        <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
         {message && <span className="ml-3 text-gray-600 dark:text-slate-400">{message}</span>}
       </div>
     </div>

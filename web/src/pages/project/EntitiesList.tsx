@@ -434,7 +434,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
             <div className="lg:col-span-2 space-y-4">
               {loading ? (
                 <div className="text-center py-12">
-                  <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin">
+                  <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin motion-reduce:animate-none">
                     progress_activity
                   </span>
                   <p className="text-slate-500 mt-2">{t('project.graph.entities.loading')}</p>

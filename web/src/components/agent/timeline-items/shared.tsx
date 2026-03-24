@@ -88,7 +88,7 @@ export function OptionButton({
       onClick={onClick}
       disabled={disabled}
       className={`
-        w-full text-left p-3 rounded-lg border transition-all
+        w-full text-left p-3 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform]
         ${
           isSelected
             ? 'border-primary bg-primary/10 dark:bg-primary/20'

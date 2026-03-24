@@ -6,7 +6,7 @@ import { memo, useState, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Sparkles, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { FileText, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 interface ConversationSummaryCardProps {
   summary: string | null;
@@ -39,7 +39,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
           }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors mx-auto mb-4"
         >
-          <Sparkles size={12} />
+          <FileText size={12} />
           {t('agent.summary.showSummary', 'Show summary')}
           <ChevronDown size={12} />
         </button>
@@ -49,7 +49,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
     return (
       <div className="mx-4 mb-4 px-4 py-3 bg-gradient-to-r from-primary/5 to-transparent border border-primary/10 rounded-xl animate-fade-in-up">
         <div className="flex items-start gap-2">
-          <Sparkles size={14} className="text-primary mt-0.5 flex-shrink-0" />
+          <FileText size={14} className="text-primary mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-medium text-primary">
@@ -71,7 +71,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
                   title={t('agent.summary.regenerate', 'Regenerate summary')}
                 >
                   {regenerating ? (
-                    <Loader2 size={12} className="animate-spin" />
+                    <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
                   ) : (
                     <RefreshCw size={12} />
                   )}

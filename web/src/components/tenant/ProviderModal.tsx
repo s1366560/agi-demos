@@ -647,7 +647,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
             >
               {isSubmitting ? (
                 <>
-                  <span className="material-symbols-outlined animate-spin text-[18px]">
+                  <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[18px]">
                     progress_activity
                   </span>
                   Saving...

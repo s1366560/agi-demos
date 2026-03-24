@@ -9,6 +9,8 @@ import {
 } from '@ant-design/icons';
 import { Drawer, Progress, Space, Tag, Typography, Divider, Empty, Timeline } from 'antd';
 
+import { useThemeColors, resolveThemeColor } from '@/hooks/useThemeColor';
+
 import {
   useContextStatus,
   useContextDetailExpanded,
@@ -26,10 +28,10 @@ function formatTokens(tokens: number): string {
 }
 
 function getOccupancyColor(pct: number): string {
-  if (pct < 60) return '#52c41a';
-  if (pct < 80) return '#faad14';
-  if (pct < 90) return '#fa8c16';
-  return '#f5222d';
+  if (pct < 60) return resolveThemeColor('--color-success', '#52c41a');
+  if (pct < 80) return resolveThemeColor('--color-warning', '#faad14');
+  if (pct < 90) return resolveThemeColor('--color-warning-dark', '#fa8c16');
+  return resolveThemeColor('--color-error', '#f5222d');
 }
 
 const levelDescriptions: Record<string, string> = {
@@ -40,6 +42,16 @@ const levelDescriptions: Record<string, string> = {
 };
 
 const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distribution }) => {
+  const tc = useThemeColors({
+    info: '--color-info',
+    success: '--color-success',
+    purple: '--color-tile-purple',
+    warning: '--color-warning-dark',
+    cyan: '--color-tile-cyan',
+    muted: '--color-text-muted',
+    mutedLight: '--color-text-muted-light',
+  });
+
   const total =
     distribution.system +
     distribution.user +
@@ -50,11 +62,11 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distrib
     return <Empty description="No token data" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
 
   const segments = [
-    { key: 'system', label: 'System', color: '#1890ff', value: distribution.system },
-    { key: 'user', label: 'User', color: '#52c41a', value: distribution.user },
-    { key: 'assistant', label: 'Assistant', color: '#722ed1', value: distribution.assistant },
-    { key: 'tool', label: 'Tool', color: '#fa8c16', value: distribution.tool },
-    { key: 'summary', label: 'Summary', color: '#13c2c2', value: distribution.summary },
+    { key: 'system', label: 'System', color: tc.info, value: distribution.system },
+    { key: 'user', label: 'User', color: tc.success, value: distribution.user },
+    { key: 'assistant', label: 'Assistant', color: tc.purple, value: distribution.assistant },
+    { key: 'tool', label: 'Tool', color: tc.warning, value: distribution.tool },
+    { key: 'summary', label: 'Summary', color: tc.cyan, value: distribution.summary },
   ].filter((s) => s.value > 0);
 
   return (
@@ -92,11 +104,11 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distrib
                 display: 'inline-block',
               }}
             />
-            <span style={{ color: '#666' }}>{seg.label}</span>
+            <span style={{ color: tc.muted }}>{seg.label}</span>
             <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
               {formatTokens(seg.value)}
             </span>
-            <span style={{ color: '#999' }}>({((seg.value / total) * 100).toFixed(0)}%)</span>
+            <span style={{ color: tc.mutedLight }}>({((seg.value / total) * 100).toFixed(0)}%)</span>
           </span>
         ))}
       </div>
@@ -148,6 +160,14 @@ export const ContextDetailPanel: FC = () => {
   const expanded = useContextDetailExpanded();
   const { setDetailExpanded } = useContextActions();
 
+  const tc = useThemeColors({
+    muted: '--color-text-muted',
+    success: '--color-success',
+    info: '--color-info',
+    warningDark: '--color-warning-dark',
+    purple: '--color-tile-purple',
+  });
+
   const occupancy = status?.occupancyPct ?? 0;
   const currentTokens = status?.currentTokens ?? 0;
   const tokenBudget = status?.tokenBudget ?? 128000;
@@ -186,7 +206,7 @@ export const ContextDetailPanel: FC = () => {
                 <div style={{ fontSize: 20, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                   {occupancy.toFixed(1)}%
                 </div>
-                <div style={{ fontSize: 11, color: '#999' }}>
+                <div style={{ fontSize: 11, color: tc.muted }}>
                   {formatTokens(currentTokens)} / {formatTokens(tokenBudget)}
                 </div>
               </div>
@@ -212,7 +232,7 @@ export const ContextDetailPanel: FC = () => {
               : compressionLevel}
           </Tag>
         </div>
-        <div style={{ fontSize: 12, color: '#999', textAlign: 'center', marginTop: 6 }}>
+        <div style={{ fontSize: 12, color: tc.muted, textAlign: 'center', marginTop: 6 }}>
           {levelDescriptions[compressionLevel] ?? ''}
         </div>
       </div>
@@ -249,55 +269,55 @@ export const ContextDetailPanel: FC = () => {
           >
             <div
               style={{
-                background: '#f6ffed',
+                background: tc.success + '1a',
                 borderRadius: 8,
                 padding: '8px 12px',
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#52c41a' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: tc.success }}>
                 {formatTokens(history.total_tokens_saved)}
               </div>
-              <div style={{ fontSize: 11, color: '#999' }}>Tokens Saved</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>Tokens Saved</div>
             </div>
             <div
               style={{
-                background: '#e6f7ff',
+                background: tc.info + '1a',
                 borderRadius: 8,
                 padding: '8px 12px',
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#1890ff' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: tc.info }}>
                 {history.total_compressions}
               </div>
-              <div style={{ fontSize: 11, color: '#999' }}>Compressions</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>Compressions</div>
             </div>
             <div
               style={{
-                background: '#fff7e6',
+                background: tc.warningDark + '1a',
                 borderRadius: 8,
                 padding: '8px 12px',
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#fa8c16' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: tc.warningDark }}>
                 {(history.average_compression_ratio * 100).toFixed(0)}%
               </div>
-              <div style={{ fontSize: 11, color: '#999' }}>Avg Ratio</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>Avg Ratio</div>
             </div>
             <div
               style={{
-                background: '#f9f0ff',
+                background: tc.purple + '1a',
                 borderRadius: 8,
                 padding: '8px 12px',
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#722ed1' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: tc.purple }}>
                 {history.average_savings_pct.toFixed(0)}%
               </div>
-              <div style={{ fontSize: 11, color: '#999' }}>Avg Savings</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>Avg Savings</div>
             </div>
           </div>
         </div>

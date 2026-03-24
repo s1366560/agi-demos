@@ -519,7 +519,7 @@ const List: React.FC = memo(() => {
   if (loading) {
     return (
       <div data-testid="loading-indicator" className="text-center py-12">
-        <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin">
+        <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin motion-reduce:animate-none">
           progress_activity
         </span>
         <p className="text-slate-500 mt-2">{TEXTS.loading}</p>
@@ -539,7 +539,7 @@ const List: React.FC = memo(() => {
           onClick={() => {
             selectCommunity(community);
           }}
-          className={`bg-white dark:bg-slate-800 rounded-lg border p-5 cursor-pointer transition-all hover:shadow-md ${
+          className={`bg-white dark:bg-slate-800 rounded-lg border p-5 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
             selectedCommunity?.uuid === community.uuid
               ? 'border-purple-500 shadow-md ring-2 ring-purple-500 ring-opacity-20'
               : 'border-slate-200 dark:border-slate-700'
@@ -758,7 +758,7 @@ const TaskStatus: React.FC = memo(() => {
               : currentTask.status === 'failed'
                 ? 'text-red-600 dark:text-red-400'
                 : currentTask.status === 'running'
-                  ? 'text-blue-600 dark:text-blue-400 animate-spin'
+                  ? 'text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none'
                   : 'text-slate-400'
           }`}
         >
@@ -825,7 +825,7 @@ const TaskStatus: React.FC = memo(() => {
               </div>
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                 <div
-                  className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-[width] duration-300"
                   style={{ width: `${currentTask.progress}%` }}
                 />
               </div>

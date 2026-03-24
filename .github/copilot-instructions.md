@@ -138,3 +138,53 @@ web/src/
 - Swagger: http://localhost:8000/docs
 - Frontend: http://localhost:3000
 - Temporal UI: http://localhost:8080/namespaces/default
+
+## Design Context
+
+### Users
+
+Enterprise developers and technical professionals who use AI agents as collaborative partners. They work with complex multi-layer agent systems (Tool → Skill → SubAgent → Agent) and need to:
+- Monitor agent reasoning and execution
+- Manage knowledge graphs and memories
+- Configure and orchestrate specialized subagents
+- Review artifacts and execution traces
+
+### Brand Personality
+
+**Professional, Trustworthy, Intelligent**
+
+- **Confidence & Trust**: Users should feel the platform is reliable and safe for enterprise data
+- **Voice**: Direct, precise, helpful - never patronizing
+- **Tone**: Calm authority, technical depth without complexity
+
+### Aesthetic Direction
+
+**Clean Enterprise AI** - inspired by Anthropic Claude and OpenAI ChatGPT interfaces
+
+- **Conversational & Clean**: AI-forward design with clear information hierarchy
+- **Deep Blue Foundation**: Primary `#1e3fae` conveys trust and intelligence
+- **Subtle Depth**: Glass morphism, soft shadows, gradient accents - never flat, never flashy
+- **Professional Polish**: Rounded corners (6-12px), consistent spacing (8px grid), refined typography
+- **NOT playful/consumer apps**: Avoid over-the-top colors, whimsical illustrations, gamification
+
+### Design Principles
+
+1. **Clarity Over Cleanness**: Prioritize readable information hierarchy over minimalist aesthetics
+2. **Subtle Motion, Clear Feedback**: Use gentle animations (fade-in, slide-up) to guide attention, not distract
+3. **Progressive Disclosure**: Show essential information first. Complex details available on demand
+4. **Trust Through Transparency**: Agent reasoning and tool executions should be visible
+5. **Consistent Component Language**: Use established patterns from the design system consistently
+
+### Color Tokens
+
+```css
+--color-primary: #1e3fae
+--color-primary-dark: #152d7e
+--color-primary-light: #3b5fc9
+--color-background-light: #f8f9fb
+--color-background-dark: #141416
+```
+
+### Accessibility
+
+Target: WCAG 2.1 AA compliance. All animations respect `prefers-reduced-motion`.

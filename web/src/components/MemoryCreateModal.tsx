@@ -113,7 +113,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
-            aria-label="关闭创建记忆弹窗"
+            aria-label="Close create memory dialog"
           >
             <X className="h-5 w-5" />
           </button>
@@ -308,7 +308,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   >
                     {isExtracting ? (
                       <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
                         <span>提取中...</span>
                       </div>
                     ) : (
@@ -323,7 +323,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   >
                     {isExtracting ? (
                       <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
                         <span>提取中...</span>
                       </div>
                     ) : (
@@ -498,7 +498,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           >
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
                 <span>创建中...</span>
               </div>
             ) : (

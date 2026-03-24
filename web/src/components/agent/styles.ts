@@ -29,4 +29,16 @@ export const ASSISTANT_BUBBLE_CLASSES =
  * Used by: AssistantMessage, streaming content display.
  */
 export const ASSISTANT_AVATAR_CLASSES =
-  'w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm';
+  'w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm';
+
+/**
+ * Shared max-width constraint for message bubbles.
+ * Used by: UserMessage, AssistantMessage, TextDelta, Thought, ToolExecution, WorkPlan, TextEnd.
+ */
+export const MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%]';
+
+/**
+ * Common layout background for split-pane wrappers.
+ * Used by: AgentChatContent layout mode containers.
+ */
+export const LAYOUT_BG_CLASSES = 'bg-slate-50 dark:bg-slate-950';

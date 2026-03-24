@@ -278,6 +278,12 @@ export const TenantLayout: React.FC = memo(() => {
 
   return (
     <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:p-4 focus:bg-white focus:text-primary dark:focus:bg-surface-dark dark:focus:text-primary-light"
+      >
+        Skip to main content
+      </a>
       <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark">
         {/* Sidebar - Agent Conversation History (Primary Navigation) */}
         <TenantChatSidebar
@@ -297,7 +303,7 @@ export const TenantLayout: React.FC = memo(() => {
         </MobileSidebarDrawer>
 
         {/* Main Content */}
-        <main className="flex flex-col flex-1 h-full overflow-hidden relative">
+        <main id="main-content" className="flex flex-col flex-1 h-full overflow-hidden relative">
           {/* Header */}
           <TenantHeader
             tenantId={tenantId || ''}

@@ -13,6 +13,8 @@ import React, { useState, useMemo } from 'react';
 import { InfoCircleOutlined, DownOutlined, RightOutlined, DollarOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 
+import { resolveThemeColor } from '@/hooks/useThemeColor';
+
 /**
  * Token usage data structure
  */
@@ -59,21 +61,21 @@ const COLORS = {
     bgLight: 'bg-blue-100 dark:bg-blue-900/30',
     text: 'text-blue-600 dark:text-blue-400',
     border: 'border-blue-300 dark:border-blue-700',
-    hex: '#3b82f6', // Secondary color
+    get hex() { return resolveThemeColor('--color-info', '#3b82f6'); },
   },
   output: {
     bg: 'bg-emerald-500',
     bgLight: 'bg-emerald-100 dark:bg-emerald-900/30',
     text: 'text-emerald-600 dark:text-emerald-400',
     border: 'border-emerald-300 dark:border-emerald-700',
-    hex: '#10b981', // Success color
+    get hex() { return resolveThemeColor('--color-success', '#10b981'); },
   },
   reasoning: {
     bg: 'bg-purple-500',
     bgLight: 'bg-purple-100 dark:bg-purple-900/30',
     text: 'text-purple-600 dark:text-purple-400',
     border: 'border-purple-300 dark:border-purple-700',
-    hex: '#8b5cf6', // Purple for reasoning
+    get hex() { return resolveThemeColor('--color-tile-purple', '#8b5cf6'); }
   },
 };
 
@@ -124,14 +126,14 @@ const StackedBar: React.FC<StackedBarProps> = ({
           {/* Input segment */}
           <Tooltip title={`Input: ${formatNumber(input)} tokens`}>
             <div
-              className={`${COLORS.input.bg} transition-all duration-500`}
+              className={`${COLORS.input.bg} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
               style={{ width: `${inputPercent}%` }}
             />
           </Tooltip>
           {/* Output segment */}
           <Tooltip title={`Output: ${formatNumber(output)} tokens`}>
             <div
-              className={`${COLORS.output.bg} transition-all duration-500`}
+              className={`${COLORS.output.bg} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
               style={{ width: `${outputPercent}%` }}
             />
           </Tooltip>
@@ -139,7 +141,7 @@ const StackedBar: React.FC<StackedBarProps> = ({
           {reasoning > 0 && (
             <Tooltip title={`Reasoning: ${formatNumber(reasoning)} tokens`}>
               <div
-                className={`${COLORS.reasoning.bg} transition-all duration-500`}
+                className={`${COLORS.reasoning.bg} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
                 style={{ width: `${reasoningPercent}%` }}
               />
             </Tooltip>

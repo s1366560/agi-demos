@@ -332,7 +332,7 @@ export const ProviderList: React.FC = () => {
                   <MaterialIcon name="search" size={20} className="text-slate-400" />
                 </div>
                 <input
-                  className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg leading-5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg leading-5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                   placeholder={t('tenant.providers.searchPlaceholder')}
                   type="text"
                   value={search}
@@ -415,7 +415,7 @@ export const ProviderList: React.FC = () => {
                 <MaterialIcon
                   name="progress_activity"
                   size={32}
-                  className="animate-spin text-primary mx-auto"
+                  className="animate-spin motion-reduce:animate-none text-primary mx-auto"
                 />
                 <p className="mt-4 text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
               </div>
@@ -634,7 +634,7 @@ export const ProviderList: React.FC = () => {
                             <button
                               onClick={() => handleCheckHealth(provider.id)}
                               disabled={checkingHealth === provider.id}
-                              className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all disabled:opacity-50"
+                              className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50"
                               title={t('common.actions.checkHealth')}
                             >
                               <MaterialIcon
@@ -644,21 +644,21 @@ export const ProviderList: React.FC = () => {
                                     : 'monitor_heart'
                                 }
                                 size={18}
-                                className={checkingHealth === provider.id ? 'animate-spin' : ''}
+                                className={checkingHealth === provider.id ? 'animate-spin motion-reduce:animate-none' : ''}
                               />
                             </button>
                             <button
                               onClick={() => {
                                 handleEdit(provider);
                               }}
-                              className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                              className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.edit')}
                             >
                               <MaterialIcon name="edit" size={18} />
                             </button>
                             <button
                               onClick={() => handleDelete(provider.id)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.delete')}
                             >
                               <MaterialIcon name="delete" size={18} />
@@ -680,7 +680,7 @@ export const ProviderList: React.FC = () => {
           {PROVIDERS.map((providerMeta) => (
             <div
               key={providerMeta.value}
-              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center text-center hover:shadow-lg transition-all"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center text-center hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
             >
               <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 text-4xl">
                 {providerMeta.icon}

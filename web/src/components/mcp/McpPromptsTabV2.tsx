@@ -87,7 +87,7 @@ export const McpPromptsTabV2: React.FC = () => {
     if (servers.length > 0) {
       void fetchPrompts();
     } else {
-      setIsLoading(false);
+      queueMicrotask(() => { setIsLoading(false); });
     }
   }, [servers]);
 
@@ -217,7 +217,7 @@ export const McpPromptsTabV2: React.FC = () => {
             return (
               <div
                 key={key}
-                className={`${CARD_STYLES.base} overflow-hidden transition-all duration-200 hover:shadow-md`}
+                className={`${CARD_STYLES.base} overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 hover:shadow-md`}
               >
                 <button
                   type="button"

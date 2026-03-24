@@ -52,7 +52,7 @@ export const MaintenanceOperation: React.FC<MaintenanceOperationProps> = ({
           className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${warning ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-primary hover:bg-primary/90'}`}
         >
           {loading && (
-            <span className="material-symbols-outlined animate-spin text-sm">
+            <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-sm">
               progress_activity
             </span>
           )}

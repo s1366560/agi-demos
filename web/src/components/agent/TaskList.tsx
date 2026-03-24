@@ -49,7 +49,7 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
       }`}
     >
       <div className={`mt-0.5 flex-shrink-0 ${config.color}`}>
-        <Icon size={16} className={isActive ? 'animate-spin' : ''} />
+        <Icon size={16} className={isActive ? 'animate-spin motion-reduce:animate-none' : ''} />
       </div>
       <div className="flex-1 min-w-0">
         <p
@@ -107,7 +107,7 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
         </div>
         <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-500"
+            className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-[width] duration-500"
             style={{ width: `${stats.pct}%` }}
           />
         </div>

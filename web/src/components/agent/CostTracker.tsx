@@ -9,6 +9,8 @@ import React from 'react';
 
 import { DollarOutlined, ThunderboltOutlined } from '@ant-design/icons';
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import { formatTimeOnly } from '@/utils/date';
 
 import { Typography, Space, Tooltip, Progress } from '@/components/ui/lazyAntd';
@@ -56,6 +58,11 @@ export const CostTrackerCompact: React.FC<CostTrackerProps> = ({
   costTracking,
   showModel = false,
 }) => {
+  const colors = useThemeColors({
+    warning: '--color-warning',
+    success: '--color-success',
+  });
+
   if (!costTracking) {
     return null;
   }
@@ -73,11 +80,11 @@ export const CostTrackerCompact: React.FC<CostTrackerProps> = ({
       }
     >
       <Space size={4} style={{ cursor: 'help' }}>
-        <ThunderboltOutlined style={{ color: '#faad14', fontSize: 12 }} />
+        <ThunderboltOutlined style={{ color: colors.warning, fontSize: 12 }} />
         <Text type="secondary" style={{ fontSize: 12 }}>
           {formatTokenCount(costTracking.totalTokens)}
         </Text>
-        <DollarOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+        <DollarOutlined style={{ color: colors.success, fontSize: 12 }} />
         <Text type="secondary" style={{ fontSize: 12 }}>
           {formatCost(costTracking.costUsd)}
         </Text>
@@ -93,9 +100,16 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
   costTracking,
   showModel = true,
 }) => {
+  const colors = useThemeColors({
+    muted: '--color-text-muted',
+    info: '--color-info',
+    success: '--color-success',
+    borderDark: '--color-border-dark',
+  });
+
   if (!costTracking) {
     return (
-      <div style={{ padding: '8px 12px', color: '#999' }}>
+      <div style={{ padding: '8px 12px', color: colors.muted }}>
         <Text type="secondary">暂无费用数据</Text>
       </div>
     );
@@ -126,17 +140,17 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
             success={{ percent: inputPercent }}
             showInfo={false}
             size="small"
-            strokeColor="#1890ff"
-            trailColor="#f0f0f0"
+            strokeColor={colors.info}
+            trailColor={colors.borderDark}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
             <Space size={16}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                <span style={{ color: '#52c41a' }}>●</span> 输入:{' '}
+                <span style={{ color: colors.success }}>●</span> 输入:{' '}
                 {formatTokenCount(costTracking.inputTokens)}
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                <span style={{ color: '#1890ff' }}>●</span> 输出:{' '}
+                <span style={{ color: colors.info }}>●</span> 输出:{' '}
                 {formatTokenCount(costTracking.outputTokens)}
               </Text>
             </Space>
@@ -146,7 +160,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
         {/* Cost */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text type="secondary">估算费用</Text>
-          <Text strong style={{ fontSize: 16, color: '#52c41a' }}>
+          <Text strong style={{ fontSize: 16, color: colors.success }}>
             {formatCost(costTracking.costUsd)}
           </Text>
         </div>

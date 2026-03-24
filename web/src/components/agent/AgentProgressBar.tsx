@@ -15,6 +15,8 @@ import {
   ThunderboltFilled,
 } from '@ant-design/icons';
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import { LazyProgress, LazySpace, Typography } from '@/components/ui/lazyAntd';
 
 const { Text } = Typography;
@@ -107,6 +109,16 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
   const percentage = getPercentage(current, total);
   const displayLabel = customLabel || config.label;
 
+  const tc = useThemeColors({
+    success: '--color-success',
+    info: '--color-info',
+    border: '--color-border-dark',
+    error: '--color-error',
+    errorLight: '--color-error-light',
+    successLight: '--color-success-light',
+    infoLight: '--color-info-light',
+  });
+
   // Step indicators (dots)
   const stepIndicators =
     showSteps && !compact ? (
@@ -135,8 +147,8 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
                 height: 12,
                 borderRadius: '50%',
                 backgroundColor:
-                  stepNumber < current ? '#52c41a' : stepNumber === current ? '#1890ff' : '#d9d9d9',
-                border: stepNumber === current ? '2px solid #1890ff' : undefined,
+                  stepNumber < current ? tc.success : stepNumber === current ? tc.info : tc.border,
+                border: stepNumber === current ? `2px solid ${tc.info}` : undefined,
               }}
             />
           );
@@ -183,9 +195,9 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
           status={status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'}
           size="small"
           strokeColor={{
-            '0%': status === 'failed' ? '#ff4d4f' : status === 'completed' ? '#52c41a' : '#1890ff',
+            '0%': status === 'failed' ? tc.error : status === 'completed' ? tc.success : tc.info,
             '100%':
-              status === 'failed' ? '#ff7875' : status === 'completed' ? '#73d13d' : '#40a9ff',
+              status === 'failed' ? tc.errorLight : status === 'completed' ? tc.successLight : tc.infoLight,
           }}
           className={`progress-fill ${config.class} ${animate ? 'animate-progress' : ''} ${status === 'step_executing' || status === 'acting' ? 'progress-striped' : ''}`}
           style={{ marginBottom: showSteps && !compact ? 8 : 0 }}

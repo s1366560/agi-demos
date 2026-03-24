@@ -121,7 +121,7 @@ export const SearchResults = memo<SearchResultsProps>(
     return (
       <section
         className={`
-            flex flex-col gap-3 min-h-0 transition-all duration-300 ease-in-out
+            flex flex-col gap-3 min-h-0 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
             ${isResultsCollapsed ? 'h-10 overflow-hidden' : 'flex-1'}
         `}
       >
@@ -234,7 +234,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
       <div
         onClick={onClick}
         className={`
-                bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border transition-all group hover:shadow-md hover:shadow-blue-600/5 cursor-pointer
+                bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border transition-[color,background-color,border-color,box-shadow,opacity,transform] group hover:shadow-md hover:shadow-blue-600/5 cursor-pointer
                 ${
                   isSelected
                     ? 'border-blue-600 dark:border-blue-500 ring-1 ring-blue-600 dark:ring-blue-500'
@@ -356,7 +356,7 @@ NodeIdCopyButton.displayName = 'NodeIdCopyButton';
 const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => (
   <div
     className={`
-        bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 hover:border-blue-600/40 dark:hover:border-blue-600/40 cursor-pointer transition-all group hover:shadow-md hover:shadow-blue-600/5
+        bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 hover:border-blue-600/40 dark:hover:border-blue-600/40 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] group hover:shadow-md hover:shadow-blue-600/5
         ${viewMode === 'grid' ? 'p-4 flex flex-col h-full' : 'p-3 flex items-start gap-4'}
     `}
   >

@@ -25,7 +25,6 @@ import {
   Loader2,
   PanelLeft,
   PanelLeftClose,
-  Sparkles,
   Tag,
   X,
 } from 'lucide-react';
@@ -177,7 +176,7 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
                 onClick={() => {
                   setSelectedColor(c.name);
                 }}
-                className={`w-5 h-5 rounded-full ${c.dot} transition-all ${
+                className={`w-5 h-5 rounded-full ${c.dot} transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                   selectedColor === c.name
                     ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800'
                     : 'opacity-60 hover:opacity-100'
@@ -294,7 +293,7 @@ const ConversationItem = memo<ConversationItemProps>(
               )}
               {isStreaming && (
                 <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
-                  <Loader2 size={10} className="animate-spin" />{' '}
+                  <Loader2 size={10} className="animate-spin motion-reduce:animate-none" />{' '}
                   {t('agent.sidebar.processing', 'Processing')}
                 </div>
               )}
@@ -306,7 +305,7 @@ const ConversationItem = memo<ConversationItemProps>(
             type="button"
             onClick={onSelect}
             className={`
-            w-full p-3 rounded-xl mb-1 transition-all duration-200
+            w-full p-3 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
             flex items-center justify-center relative
             ${
               isActive
@@ -319,11 +318,11 @@ const ConversationItem = memo<ConversationItemProps>(
             {isActive && <span className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />}
             {/* HITL indicator badge */}
             {hasHITL && (
-              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full animate-pulse ring-2 ring-white dark:ring-slate-900" />
+              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full animate-pulse motion-reduce:animate-none ring-2 ring-white dark:ring-slate-900" />
             )}
             {/* Streaming indicator */}
             {!hasHITL && isStreaming && (
-              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full animate-pulse ring-2 ring-white dark:ring-slate-900" />
+              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full animate-pulse motion-reduce:animate-none ring-2 ring-white dark:ring-slate-900" />
             )}
           </button>
         </LazyTooltip>
@@ -341,8 +340,8 @@ const ConversationItem = memo<ConversationItemProps>(
           }
         }}
         className={`
-        w-full text-left group relative p-3 rounded-xl mb-1 cursor-pointer
-        transition-all duration-200
+        w-full text-left group relative p-3 rounded-lg mb-1 cursor-pointer
+        transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
         ${
           isActive
             ? 'bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700'
@@ -356,20 +355,20 @@ const ConversationItem = memo<ConversationItemProps>(
           <div
             className={`
           relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-          transition-all duration-200
+          transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
           ${
             hasHITL
-              ? 'bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30 text-amber-600 dark:text-amber-400'
+              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400'
               : isActive
-                ? 'bg-gradient-to-br from-primary/10 to-primary/5 text-primary'
+                ? 'bg-primary/10 text-primary'
                 : 'bg-slate-100 dark:bg-slate-700/50 text-slate-500'
           }
         `}
           >
             {hasHITL ? (
-              <AlertCircle size={18} className="animate-pulse" />
+              <AlertCircle size={18} className="animate-pulse motion-reduce:animate-none" />
             ) : isStreaming ? (
-              <Loader2 size={18} className="animate-spin" />
+              <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
             ) : (
               <MessageSquare size={18} />
             )}
@@ -421,12 +420,12 @@ const ConversationItem = memo<ConversationItemProps>(
               {/* Status badges */}
               {hasHITL ? (
                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
                   {t('agent.sidebar.needsInput', 'Input needed')}
                 </span>
               ) : isStreaming ? (
                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
                   {t('agent.sidebar.processing', 'Processing')}
                 </span>
               ) : conversation.status === 'active' ? (
@@ -536,10 +535,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   };
 
   return (
-    <nav
-      aria-label="Conversations"
-      className="h-full flex flex-col bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm"
-    >
+    <nav aria-label="Conversations" className="h-full flex flex-col bg-slate-50 dark:bg-slate-900">
       {/* Header */}
       <div
         className={`
@@ -549,7 +545,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
       >
         {collapsed ? (
           <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-lg shadow-primary/20">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-sm">
               <Bot className="text-white" size={24} />
             </div>
             {/* Collapse Toggle Button - Compact mode */}
@@ -569,7 +565,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
           <div className="space-y-4">
             {/* Title Row */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-lg shadow-primary/20">
+              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-sm">
                 <Bot className="text-white" size={24} />
               </div>
               <div className="flex-1 min-w-0">
@@ -608,10 +604,10 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
           onClick={onNew}
           className={`
             ${collapsed ? 'w-full aspect-square' : 'w-full'}
-            h-10 bg-gradient-to-r from-primary to-primary-600 hover:from-primary-600 hover:to-primary-700
-            shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30
+            h-10 bg-primary hover:bg-primary-600
+            shadow-sm hover:shadow-md
             rounded-xl flex items-center justify-center gap-2
-            transition-all duration-200 hover:-translate-y-0.5
+            transition-colors duration-200
           `}
         >
           {!collapsed && (
@@ -622,7 +618,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
 
       {/* Pending HITL Alert Banner */}
       {!collapsed && pendingHITLCount > 0 && (
-        <div className="mx-4 mb-3 p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 border border-amber-200 dark:border-amber-800/50">
+        <div className="mx-4 mb-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
           <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
             <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
               <AlertCircle size={16} />
@@ -671,41 +667,23 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
 
         {/* Empty state */}
         {!collapsed && conversations.length === 0 && (
-          <div className="text-center py-12 px-4">
+          <button
+            type="button"
+            onClick={onNew}
+            className="text-center py-12 px-4 w-full hover:bg-slate-50 dark:hover:bg-slate-800/30 rounded-xl transition-colors"
+          >
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
               <MessageSquare size={24} className="text-slate-400" />
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
               {t('agent.sidebar.noConversations', 'No conversations yet')}
             </p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              {t('agent.sidebar.startNewChat', 'Start a new chat to begin')}
+            <p className="text-xs text-primary font-medium">
+              {t('agent.sidebar.startNewChat', 'Start a new chat')}
             </p>
-          </div>
+          </button>
         )}
       </div>
-
-      {/* Footer */}
-      {!collapsed && (
-        <div className="p-4 border-t border-slate-200/60 dark:border-slate-700/50">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-md shadow-primary/20">
-              <Sparkles size={18} className="text-white" />
-            </div>
-            <div className="flex flex-col overflow-hidden min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                AI Assistant
-              </p>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                  {t('agent.sidebar.online', 'Online')}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Rename Modal */}
       <LazyModal

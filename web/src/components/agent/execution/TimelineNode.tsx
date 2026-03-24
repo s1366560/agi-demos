@@ -100,7 +100,7 @@ export function TimelineNode({
       <div
         className={`absolute left-4 w-5 h-5 rounded-full flex items-center justify-center
           ${statusConfig.bgColor} ${statusConfig.textColor}
-          ${statusConfig.pulse ? 'animate-pulse' : ''}
+          ${statusConfig.pulse ? 'animate-pulse motion-reduce:animate-none' : ''}
           ring-4 ring-white dark:ring-slate-900`}
       >
         {step.status === 'pending' ? (

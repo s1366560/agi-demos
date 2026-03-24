@@ -217,7 +217,7 @@ export const NewMemory: React.FC = () => {
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSaving ? (
-              <span className="material-symbols-outlined animate-spin text-[20px]">
+              <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[20px]">
                 progress_activity
               </span>
             ) : (
@@ -252,7 +252,7 @@ export const NewMemory: React.FC = () => {
                         check_circle
                       </span>
                     ) : (
-                      <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[24px] animate-spin">
+                      <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[24px] animate-spin motion-reduce:animate-none">
                         progress_activity
                       </span>
                     )}
@@ -281,7 +281,7 @@ export const NewMemory: React.FC = () => {
               {/* Progress Bar */}
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
                   style={{ width: `${currentTask.progress}%` }}
                 />
               </div>
@@ -336,7 +336,7 @@ export const NewMemory: React.FC = () => {
                   onChange={(e) => {
                     setTitle(e.target.value);
                   }}
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                   placeholder={t('project.memories.new.form.title_placeholder')}
                 />
               </div>
@@ -346,7 +346,7 @@ export const NewMemory: React.FC = () => {
                   {t('project.memories.new.form.context')}
                 </label>
                 <div className="relative">
-                  <select className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
+                  <select className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]">
                     <option>{t('project.memories.new.placeholders.context_option_1')}</option>
                     <option>{t('project.memories.new.placeholders.context_option_2')}</option>
                     <option>{t('project.memories.new.placeholders.context_option_3')}</option>
@@ -465,7 +465,7 @@ export const NewMemory: React.FC = () => {
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-100 dark:border-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isOptimizing ? (
-                    <span className="material-symbols-outlined animate-spin text-[16px]">
+                    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[16px]">
                       progress_activity
                     </span>
                   ) : (

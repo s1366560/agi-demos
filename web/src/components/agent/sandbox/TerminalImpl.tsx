@@ -5,12 +5,13 @@
  * until the terminal is actually needed.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 
+import { useThemeColors } from '../../../hooks/useThemeColor';
 import { createWebSocketUrl } from '../../../services/client/urlUtils';
 import { getAuthToken } from '../../../utils/tokenResolver';
 
@@ -34,6 +35,56 @@ interface TerminalImplProps {
   isFullscreen: boolean;
 }
 
+// Token map for terminal theme colors (resolved reactively via useThemeColors)
+const TERMINAL_TOKEN_MAP = {
+  background: '--color-background-dark',
+  foreground: '--color-text-inverse',
+  cursor: '--color-primary',
+  cursorAccent: '--color-background-dark',
+  selectionBackground: '--color-primary-light',
+  black: '--color-background-dark',
+  red: '--color-error',
+  green: '--color-success',
+  yellow: '--color-warning',
+  blue: '--color-info',
+  magenta: '--color-tile-purple',
+  cyan: '--color-tile-cyan',
+  white: '--color-text-inverse',
+  brightBlack: '--color-text-muted',
+  brightRed: '--color-error-light',
+  brightGreen: '--color-success-light',
+  brightYellow: '--color-warning-light',
+  brightBlue: '--color-info-light',
+  brightMagenta: '--color-tile-pink',
+  brightCyan: '--color-tile-cyan',
+  brightWhite: '--color-text-inverse',
+} as const;
+
+// Fallback hex values (original palette) for tokens that may not resolve
+const TERMINAL_FALLBACKS: Record<string, string> = {
+  background: '#141416',
+  foreground: '#e8eaed',
+  cursor: '#1e3fae',
+  cursorAccent: '#141416',
+  selectionBackground: '#3b5fc9',
+  black: '#141416',
+  red: '#ef4444',
+  green: '#10b981',
+  yellow: '#f59e0b',
+  blue: '#3b82f6',
+  magenta: '#8b5cf6',
+  cyan: '#06b6d4',
+  white: '#e8eaed',
+  brightBlack: '#7d8599',
+  brightRed: '#fee2e2',
+  brightGreen: '#d1fae5',
+  brightYellow: '#fef3c7',
+  brightBlue: '#dbeafe',
+  brightMagenta: '#ec4899',
+  brightCyan: '#06b6d4',
+  brightWhite: '#e8eaed',
+};
+
 export function TerminalImpl({
   sandboxId,
   projectId,
@@ -51,6 +102,21 @@ export function TerminalImpl({
 
   // Ref to hold connect function for use in onclose callback
   const connectRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+  const resolvedColors = useThemeColors(TERMINAL_TOKEN_MAP);
+
+  const terminalTheme = useMemo(() => {
+    const theme: Record<string, string> = {};
+    for (const key of Object.keys(TERMINAL_TOKEN_MAP) as Array<keyof typeof TERMINAL_TOKEN_MAP>) {
+      theme[key] = resolvedColors[key] || TERMINAL_FALLBACKS[key] || '';
+    }
+    return theme;
+  }, [resolvedColors]);
+
+  const terminalThemeRef = useRef(terminalTheme);
+  useEffect(() => {
+    terminalThemeRef.current = terminalTheme;
+  });
 
   // Get WebSocket URL using centralized utility
   // Use project-scoped WebSocket proxy endpoint if projectId is available
@@ -87,29 +153,7 @@ export function TerminalImpl({
       cursorBlink: true,
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#d4d4d4',
-        cursorAccent: '#1e1e1e',
-        selectionBackground: '#264f78',
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#e5e5e5',
-      },
+      theme: terminalThemeRef.current,
       allowProposedApi: true,
     });
 
@@ -272,6 +316,12 @@ export function TerminalImpl({
       }, 100);
     }
   }, [isFullscreen]);
+
+  useEffect(() => {
+    if (terminalInstance.current) {
+      terminalInstance.current.options.theme = terminalTheme;
+    }
+  }, [terminalTheme]);
 
   // Heartbeat
   useEffect(() => {

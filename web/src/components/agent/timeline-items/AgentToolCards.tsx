@@ -36,7 +36,7 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
   if (status === 'running') {
     return (
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider">
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
         {label ?? 'Running'}
       </span>
     );

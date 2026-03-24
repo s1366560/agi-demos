@@ -30,15 +30,7 @@ import {
   TaskCompleteItem,
 } from './timeline-items';
 
-import type {
-  AgentCompletedTimelineEvent,
-  AgentMessageReceivedTimelineEvent,
-  AgentMessageSentTimelineEvent,
-  AgentSpawnedTimelineEvent,
-  AgentStoppedTimelineEvent,
-  ArtifactCreatedEvent,
-  TimelineEvent,
-} from '../../types/agent';
+import type { ArtifactCreatedEvent, TimelineEvent } from '../../types/agent';
 
 export interface TimelineEventItemProps {
   /** The timeline event to render */
@@ -213,7 +205,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
         );
 
       case 'agent_spawned': {
-        const spawned = event as AgentSpawnedTimelineEvent;
+        const spawned = event;
         return (
           <div className="my-2 animate-slide-up" style={delayStyle}>
             <SubAgentDelegationIndicator
@@ -227,7 +219,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       }
 
       case 'agent_completed': {
-        const completed = event as AgentCompletedTimelineEvent;
+        const completed = event;
         return (
           <div className="my-2 animate-slide-up" style={delayStyle}>
             <SubAgentDelegationIndicator
@@ -241,7 +233,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       }
 
       case 'agent_stopped': {
-        const stopped = event as AgentStoppedTimelineEvent;
+        const stopped = event;
         return (
           <div className="my-2 animate-slide-up" style={delayStyle}>
             <SubAgentDelegationIndicator
@@ -255,7 +247,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       }
 
       case 'agent_message_sent': {
-        const sent = event as AgentMessageSentTimelineEvent;
+        const sent = event;
         return (
           <div className="my-2 animate-slide-up" style={delayStyle}>
             <AgentMessageIndicator
@@ -268,7 +260,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
         );
       }
       case 'agent_message_received': {
-        const received = event as AgentMessageReceivedTimelineEvent;
+        const received = event;
         return (
           <div className="my-2 animate-slide-up" style={delayStyle}>
             <AgentMessageIndicator

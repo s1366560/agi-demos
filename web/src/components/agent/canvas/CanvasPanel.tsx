@@ -29,7 +29,7 @@ import {
   Check,
   PanelLeftClose,
   Pencil,
-  Sparkles,
+  Wand2,
   Undo2,
   Redo2,
   Plus,
@@ -80,7 +80,7 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
     case 'mcp-app':
       return <AppWindow size={size} />;
     case 'a2ui-surface':
-      return <Sparkles size={size} />;
+      return <Wand2 size={size} />;
   }
 };
 
@@ -179,7 +179,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                   e.stopPropagation();
                   togglePin(tab.id);
                 }}
-                className={`ml-0.5 p-0.5 rounded transition-all ${
+                className={`ml-0.5 p-0.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                   tab.pinned
                     ? 'text-primary opacity-100'
                     : 'opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -194,7 +194,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                     e.stopPropagation();
                     handleClose(tab.id);
                   }}
-                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                 >
                   <X size={12} />
                 </button>
@@ -521,7 +521,7 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
     <div className="h-full w-full overflow-auto bg-white dark:bg-slate-100 rounded-b-lg relative">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-100/80 z-10">
-          <Loader2 size={24} className="animate-spin text-blue-500" />
+          <Loader2 size={24} className="animate-spin motion-reduce:animate-none text-blue-500" />
         </div>
       )}
       <div ref={containerRef} className="docx-container p-2" />
@@ -582,7 +582,7 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
     <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-b-lg relative">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 z-10">
-          <Loader2 size={24} className="animate-spin text-blue-500" />
+          <Loader2 size={24} className="animate-spin motion-reduce:animate-none text-blue-500" />
         </div>
       )}
       {sheets.length > 1 && (
@@ -1385,7 +1385,7 @@ const CanvasToolbar = memo<{
           className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
           title={t('agent.canvas.save', 'Save (Ctrl+S)')}
         >
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          {saving ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" /> : <Save size={14} />}
         </button>
       )}
       <button
@@ -1753,7 +1753,7 @@ export const CanvasPanel = memo<{
                 onClick={handleAskRefine}
                 className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-white text-xs rounded-lg shadow-lg hover:bg-primary-600 flex items-center gap-1.5"
               >
-                <Sparkles size={12} />
+                <Wand2 size={12} />
                 {t('agent.canvas.askRefine', 'Ask Agent to Refine')}
               </button>
             )}

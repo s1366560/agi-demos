@@ -144,7 +144,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
             >
               {isLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
                   <span>{t('tenant.create_modal.creating')}</span>
                 </>
               ) : (

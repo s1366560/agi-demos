@@ -63,7 +63,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
               <div className="flex justify-center items-center py-12">
                 <MaterialIcon
                   name="progress_activity"
-                  className="animate-spin text-primary text-4xl"
+                  className="animate-spin motion-reduce:animate-none text-primary text-4xl"
                 />
               </div>
             ) : error ? (

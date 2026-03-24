@@ -90,19 +90,19 @@ export function SandboxTerminal({
 
   return (
     <div
-      className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-[#1e1e1e]' : ''}`}
+      className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background-dark' : ''}`}
       style={{ height: isFullscreen ? '100vh' : height }}
     >
       {/* Toolbar */}
       {showToolbar && (
-        <div className="flex items-center justify-between px-3 py-2 bg-[#252526] border-b border-[#3c3c3c]">
+        <div className="flex items-center justify-between px-3 py-2 bg-surface-dark border-b border-border-dark">
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${
                 status === 'connected'
                   ? 'bg-green-500'
                   : status === 'connecting'
-                    ? 'bg-yellow-500 animate-pulse'
+                    ? 'bg-yellow-500 animate-pulse motion-reduce:animate-none'
                     : status === 'error'
                       ? 'bg-red-500'
                       : 'bg-gray-500'
@@ -142,7 +142,7 @@ export function SandboxTerminal({
       {/* Terminal */}
       <div className="flex-1 relative">
         {status === 'connecting' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#1e1e1e] z-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background-dark z-10">
             <Spin />
             <span className="text-slate-400">Connecting to terminal...</span>
           </div>
@@ -165,7 +165,7 @@ export function SandboxTerminal({
 
         <Suspense
           fallback={
-            <div className="h-full w-full flex items-center justify-center bg-[#1e1e1e] text-slate-400">
+            <div className="h-full w-full flex items-center justify-center bg-background-dark text-slate-400">
               <Spin /> Loading terminal...
             </div>
           }

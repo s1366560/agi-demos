@@ -15,7 +15,7 @@ const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200
     className={`w-full ${height} flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg`}
   >
     <div className="text-center">
-      <span className="material-symbols-outlined text-2xl text-blue-600 animate-spin">
+      <span className="material-symbols-outlined text-2xl text-blue-600 animate-spin motion-reduce:animate-none">
         progress_activity
       </span>
       <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">Loading chart...</p>
@@ -206,7 +206,7 @@ const TaskDashboardInner: React.FC<{
   if (loading && !stats) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -229,7 +229,7 @@ const TaskDashboardInner: React.FC<{
             disabled={refreshing}
             className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`size-5 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
             {t('tenant.tasks.refresh')}
           </button>
           <button className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors">
@@ -378,7 +378,7 @@ const TaskDashboardInner: React.FC<{
                 </div>
                 <div className="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div
-                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
+                    className={`h-full ${item.color} rounded-full transition-[width] duration-500`}
                     style={{ width: `${Math.max(2, (item.value / item.total) * 100)}%` }}
                   ></div>
                 </div>
@@ -462,13 +462,13 @@ export const TaskDashboard: React.FC = () => {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    setIsClient(true);
+    queueMicrotask(() => { setIsClient(true); });
   }, []);
 
   if (!isClient) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }

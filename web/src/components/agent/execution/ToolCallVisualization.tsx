@@ -121,7 +121,7 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
         <div
           key={exec.id}
           onClick={() => onToolClick?.(exec)}
-          className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+          className={`p-3 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
             exec.status === 'running'
               ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
               : exec.status === 'success'
@@ -236,9 +236,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) 
               >
                 <div
                   onClick={() => onToolClick?.(exec)}
-                  className={`absolute top-1/2 -translate-y-1/2 h-6 rounded cursor-pointer transition-all hover:opacity-80 ${
+                  className={`absolute top-1/2 -translate-y-1/2 h-6 rounded cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:opacity-80 ${
                     exec.status === 'running'
-                      ? 'bg-blue-500 animate-pulse'
+                      ? 'bg-blue-500 animate-pulse motion-reduce:animate-none'
                       : exec.status === 'success'
                         ? 'bg-emerald-500'
                         : 'bg-red-500'
@@ -283,7 +283,7 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
           >
             <div
               onClick={() => onToolClick?.(exec)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
                 exec.status === 'running'
                   ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
                   : exec.status === 'success'

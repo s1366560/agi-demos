@@ -28,7 +28,7 @@ export const ResizableHandle: React.FC<ResizableHandleProps> = React.memo(
         className={`
         relative z-50 flex items-center justify-center
         bg-slate-200 hover:bg-primary
-        transition-all duration-150 ease-out
+        transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 ease-out
         cursor-ew-resize
         before:absolute before:inset-0 before:bg-transparent before:hover:bg-primary/10
         ${className}

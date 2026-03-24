@@ -17,7 +17,7 @@ const StatusIcon = memo(({ status }: { status: string }) => {
     case 'completed':
       return <CheckCircle2 size={16} className="text-emerald-500" />;
     case 'running':
-      return <Loader2 size={16} className="text-blue-500 animate-spin" />;
+      return <Loader2 size={16} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
     case 'failed':
       return <XCircle size={16} className="text-red-500" />;
     case 'cancelled':
@@ -34,7 +34,7 @@ const getNodeStyles = (status: GraphNodeStatus) => {
     case 'pending':
       return 'bg-slate-300 border-slate-400 text-slate-800 dark:bg-slate-600 dark:border-slate-500 dark:text-slate-100';
     case 'running':
-      return 'bg-blue-500 border-blue-600 text-white animate-pulse shadow-lg shadow-blue-500/30';
+      return 'bg-blue-500 border-blue-600 text-white animate-pulse motion-reduce:animate-none shadow-lg shadow-blue-500/30';
     case 'completed':
       return 'bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20';
     case 'failed':
@@ -257,7 +257,7 @@ export const AgentGraphView = memo(() => {
                 <path
                   d={pathData}
                   fill="none"
-                  className={`${pathClass} transition-all duration-500`}
+                  className={`${pathClass} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
                   strokeWidth="2"
                   strokeDasharray="5 5"
                   markerEnd={markerId}
@@ -297,7 +297,7 @@ export const AgentGraphView = memo(() => {
               >
                 <div className="w-full h-full p-4 flex items-center justify-center">
                   <div
-                    className={`w-full h-full rounded-xl border-2 flex flex-col items-center justify-center p-2 transition-all duration-300 ${styleClass}`}
+                    className={`w-full h-full rounded-xl border-2 flex flex-col items-center justify-center p-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ${styleClass}`}
                   >
                     <span className="font-semibold text-sm truncate w-full text-center px-2">
                       {node.label}

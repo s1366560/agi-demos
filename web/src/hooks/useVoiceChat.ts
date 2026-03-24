@@ -67,7 +67,9 @@ export const useVoiceChat = (options: UseVoiceChatOptions): UseVoiceChatReturn =
   // Store the latest options in a ref so callbacks always read current values
   // without causing re-creation of the memoized functions.
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  useEffect(() => {
+    optionsRef.current = options;
+  });
   /**
    * Handle an incoming text (JSON) message from the WebSocket.
    */

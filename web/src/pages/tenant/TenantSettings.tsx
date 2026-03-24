@@ -56,7 +56,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               onChange={(e) => {
                 setName(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
             />
           </div>
           <div>
@@ -69,7 +69,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                 setDescription(e.target.value);
               }}
               rows={3}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none resize-none"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
             />
           </div>
 
@@ -91,7 +91,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isLoading && (
-                <span className="material-symbols-outlined animate-spin text-[20px]">
+                <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[20px]">
                   progress_activity
                 </span>
               )}

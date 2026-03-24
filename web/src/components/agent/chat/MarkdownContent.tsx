@@ -49,7 +49,7 @@ export interface MarkdownContentProps {
  * Loading fallback for lazy-loaded components.
  */
 const CodeBlockLoadingFallback: React.FC = () => (
-  <div className="my-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse">
+  <div className="my-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse motion-reduce:animate-none">
     <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-2" />
     <div className="space-y-1">
       <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded" />

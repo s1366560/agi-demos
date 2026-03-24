@@ -250,7 +250,7 @@ export const ArtifactCreatedItem = memo(
                 <div className="mb-3 relative">
                   {!imageLoaded && (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg min-h-[100px]">
-                      <span className="material-symbols-outlined animate-spin text-slate-400">
+                      <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-slate-400">
                         progress_activity
                       </span>
                     </div>
@@ -318,7 +318,7 @@ export const ArtifactCreatedItem = memo(
                 )}
                 {!url && artifactStatus === 'uploading' && (
                   <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                     {t('agent.artifact.uploading', 'Uploading...')}
                   </span>
                 )}

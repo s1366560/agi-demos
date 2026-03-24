@@ -107,7 +107,7 @@ export const LayoutModeSelector: FC = () => {
               }}
               className={`
                 flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
-                transition-all duration-150 cursor-pointer
+                transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 cursor-pointer
                 ${
                   isActive
                     ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'

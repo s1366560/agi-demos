@@ -42,7 +42,7 @@ function StatusIcon({ status }: { status: string }) {
     case 'failed':
       return <AlertCircle size={16} className="text-red-600 dark:text-red-400" />;
     case 'running':
-      return <Loader2 size={16} className="text-blue-600 dark:text-blue-400 animate-spin" />;
+      return <Loader2 size={16} className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />;
     case 'cancelled':
       return <XCircle size={16} className="text-amber-600 dark:text-amber-400" />;
     default:
@@ -177,7 +177,7 @@ EmptyChainState.displayName = 'EmptyChainState';
 
 const LoadingState: FC = memo(() => (
   <div className="flex items-center justify-center p-8">
-    <Loader2 size={24} className="text-blue-500 animate-spin" />
+    <Loader2 size={24} className="text-blue-500 animate-spin motion-reduce:animate-none" />
     <span className="ml-2 text-sm text-slate-500">Loading trace chain...</span>
   </div>
 ));

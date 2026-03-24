@@ -4,6 +4,8 @@ import type { FC } from 'react';
 import { CompressOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { Tooltip, Progress } from 'antd';
 
+import { useThemeColors, resolveThemeColor } from '@/hooks/useThemeColor';
+
 import { useContextStatus, useContextActions } from '../../../stores/contextStore';
 
 interface ContextMonitorProps {
@@ -18,17 +20,17 @@ const levelLabels: Record<string, string> = {
 };
 
 const levelColors: Record<string, string> = {
-  none: '#52c41a',
-  l1_prune: '#faad14',
-  l2_summarize: '#fa8c16',
-  l3_deep_compress: '#f5222d',
+  get none() { return resolveThemeColor('--color-success', '#52c41a'); },
+  get l1_prune() { return resolveThemeColor('--color-warning', '#faad14'); },
+  get l2_summarize() { return resolveThemeColor('--color-warning-dark', '#fa8c16'); },
+  get l3_deep_compress() { return resolveThemeColor('--color-error', '#f5222d'); },
 };
 
 function getOccupancyColor(pct: number): string {
-  if (pct < 60) return '#52c41a';
-  if (pct < 80) return '#faad14';
-  if (pct < 90) return '#fa8c16';
-  return '#f5222d';
+  if (pct < 60) return resolveThemeColor('--color-success', '#52c41a');
+  if (pct < 80) return resolveThemeColor('--color-warning', '#faad14');
+  if (pct < 90) return resolveThemeColor('--color-warning-dark', '#fa8c16');
+  return resolveThemeColor('--color-error', '#f5222d');
 }
 
 function formatTokens(tokens: number): string {
@@ -41,6 +43,11 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
   const status = useContextStatus();
   const { setDetailExpanded } = useContextActions();
 
+  const tc = useThemeColors({
+    muted: '--color-text-muted',
+    success: '--color-success',
+  });
+
   const occupancy = status?.occupancyPct ?? 0;
   const currentTokens = status?.currentTokens ?? 0;
   const tokenBudget = status?.tokenBudget ?? 128000;
@@ -49,7 +56,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
 
   const progressColor = useMemo(() => getOccupancyColor(occupancy), [occupancy]);
   const levelLabel = levelLabels[compressionLevel] ?? compressionLevel;
-  const levelColor = levelColors[compressionLevel] ?? '#52c41a';
+  const levelColor = levelColors[compressionLevel] ?? tc.success;
 
   if (!status) return null;
 
@@ -76,7 +83,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
             padding: '2px 8px',
             borderRadius: 6,
             fontSize: 12,
-            color: '#666',
+            color: tc.muted,
             transition: 'background 0.2s',
           }}
           onClick={() => {

@@ -65,6 +65,7 @@ export const ThreadView = memo<ThreadViewProps>(
     return (
       <div className="ml-10 mt-1 mb-2">
         <button
+          type="button"
           onClick={() => {
             setExpanded(!expanded);
           }}
@@ -85,7 +86,7 @@ export const ThreadView = memo<ThreadViewProps>(
           <div className="mt-2 pl-3 border-l-2 border-primary/20">
             {loading ? (
               <div className="py-2">
-                <Loader2 size={14} className="animate-spin text-slate-400" />
+                <Loader2 size={14} className="animate-spin motion-reduce:animate-none text-slate-400" />
               </div>
             ) : (
               <>
@@ -112,6 +113,7 @@ export const ThreadView = memo<ThreadViewProps>(
                       setReplyText(e.target.value);
                     }}
                     placeholder={t('agent.thread.replyPlaceholder', 'Write a reply...')}
+                    aria-label={t('agent.thread.replyPlaceholder', 'Write a reply...')}
                     className="flex-1 px-2.5 py-1.5 text-xs bg-transparent border border-slate-200 dark:border-slate-600 rounded-lg"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && replyText.trim()) {
@@ -121,6 +123,7 @@ export const ThreadView = memo<ThreadViewProps>(
                     }}
                   />
                   <button
+                    type="button"
                     onClick={() => {
                       if (replyText.trim()) {
                         onSendReply(replyText, messageId);
@@ -128,6 +131,7 @@ export const ThreadView = memo<ThreadViewProps>(
                       }
                     }}
                     disabled={!replyText.trim()}
+                    aria-label={t('agent.thread.sendReply', 'Send reply')}
                     className="p-1.5 rounded-lg bg-primary text-white disabled:opacity-50"
                   >
                     <Send size={12} />

@@ -39,7 +39,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-
 import { useAgentV3Store } from '@/stores/agentV3';
 import { useSubAgentStore } from '@/stores/subagent';
 import { useVoiceCallStore } from '@/stores/voiceCallStore';
@@ -53,6 +52,7 @@ import { useVoiceTranscribe } from '@/hooks/useVoiceTranscribe';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
+import { AgentSwitcher } from './AgentSwitcher';
 import { LlmOverridePopover } from './chat/LlmOverridePopover';
 import { MentionPopover } from './chat/MentionPopover';
 import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
@@ -61,10 +61,8 @@ import { VoiceCallPanel } from './chat/VoiceCallPanel';
 import { VoiceWaveform } from './chat/VoiceWaveform';
 import { useFileUpload, type PendingAttachment } from './FileUploader';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
-import { AgentSwitcher } from './AgentSwitcher';
 
 import type { SkillResponse, SlashItem } from '@/types/agent';
-
 
 import type { MentionPopoverHandle } from './chat/MentionPopover';
 import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
@@ -101,7 +99,17 @@ const formatSize = (bytes: number) => {
 };
 
 export const InputBar = memo<InputBarProps>(
-  ({ onSend, onAbort, isStreaming, disabled, projectId, onTogglePlanMode, isPlanMode, activeAgentId, onAgentSelect }) => {
+  ({
+    onSend,
+    onAbort,
+    isStreaming,
+    disabled,
+    projectId,
+    onTogglePlanMode,
+    isPlanMode,
+    activeAgentId,
+    onAgentSelect,
+  }) => {
     const { t } = useTranslation();
     const [content, setContent] = useState('');
     const [inputMode, setInputMode] = useState<'chat' | 'command'>('chat');
@@ -526,7 +534,11 @@ export const InputBar = memo<InputBarProps>(
         e.preventDefault();
         e.stopPropagation();
         dragCounter.current += 1;
-        if (!disabled && capabilities.supportsAttachment && e.dataTransfer.types.includes('Files')) {
+        if (
+          !disabled &&
+          capabilities.supportsAttachment &&
+          e.dataTransfer.types.includes('Files')
+        ) {
           setIsDragging(true);
         }
       },
@@ -657,8 +669,8 @@ export const InputBar = memo<InputBarProps>(
           onDrop={handleDrop}
           className={`
             flex-1 flex flex-col min-h-0 rounded-xl border relative
-            bg-white/90 dark:bg-slate-800/90
-            backdrop-blur-sm transition-all duration-300 ease-out shadow-lg
+            bg-white dark:bg-slate-800
+            transition-shadow duration-200 ease-out shadow-lg
             ${
               isDragging
                 ? 'border-primary/60 ring-2 ring-primary/20 shadow-primary/15'
@@ -788,7 +800,7 @@ export const InputBar = memo<InputBarProps>(
                 bg-slate-50/80 dark:bg-slate-900/50
                 text-slate-800 dark:text-slate-100
                 placeholder:text-slate-400 dark:placeholder:text-slate-500
-                focus:outline-none text-[15px] leading-relaxed
+                focus:outline-none text-sm leading-relaxed
                 overflow-y-auto overflow-x-hidden
                 break-words
                 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600
@@ -813,7 +825,10 @@ export const InputBar = memo<InputBarProps>(
                 title={
                   capabilities.supportsAttachment
                     ? t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')
-                    : t('agent.inputBar.attachNotSupported', 'Current model does not support file attachments')
+                    : t(
+                        'agent.inputBar.attachNotSupported',
+                        'Current model does not support file attachments'
+                      )
                 }
               >
                 <LazyButton
@@ -822,6 +837,7 @@ export const InputBar = memo<InputBarProps>(
                   icon={<Paperclip size={18} />}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!capabilities.supportsAttachment}
+                  aria-label={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}
                   className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
@@ -841,6 +857,7 @@ export const InputBar = memo<InputBarProps>(
                   onClick={() => {
                     setTemplateLibraryVisible((v) => !v);
                   }}
+                  aria-label={t('agent.inputBar.templates', 'Prompt templates')}
                   className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
@@ -863,8 +880,13 @@ export const InputBar = memo<InputBarProps>(
                   icon={isListening ? <MicOff size={18} /> : <Mic size={18} />}
                   onClick={toggleVoiceInput}
                   disabled={voiceCallStatus !== 'idle'}
+                  aria-label={
+                    isListening
+                      ? t('agent.inputBar.stopVoice', 'Stop voice input')
+                      : t('agent.inputBar.startVoice', 'Voice input')
+                  }
                   className={`
-                    rounded-lg h-8 w-8 flex items-center justify-center transition-all
+                    rounded-lg h-8 w-8 flex items-center justify-center transition-colors
                     ${
                       isListening
                         ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
@@ -875,18 +897,21 @@ export const InputBar = memo<InputBarProps>(
               </LazyTooltip>
               <VoiceWaveform active={isListening} />
 
-              <LazyTooltip title={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}>
+              <LazyTooltip
+                title={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}
+              >
                 <LazyButton
                   type="text"
                   size="small"
                   icon={voiceCallStatus !== 'idle' ? <PhoneOff size={18} /> : <Phone size={18} />}
                   onClick={handleVoiceCall}
                   disabled={!!(isStreaming || disabled || isListening)}
+                  aria-label={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}
                   className={`
-                    rounded-lg h-8 w-8 flex items-center justify-center transition-all
+                    rounded-lg h-8 w-8 flex items-center justify-center transition-colors
                     ${
                       voiceCallStatus !== 'idle'
-                        ? 'text-green-500 bg-green-50 dark:bg-green-900/20 animate-pulse'
+                        ? 'text-green-500 bg-green-50 dark:bg-green-900/20 animate-pulse motion-reduce:animate-none'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
                     }
                   `}
@@ -922,15 +947,21 @@ export const InputBar = memo<InputBarProps>(
                 arrow={false}
                 styles={{ content: { padding: 0 } }}
               >
-                <LazyTooltip title={selectedSubAgent ? `SubAgent: ${selectedSubAgent}` : 'Choose SubAgent'}>
+                <LazyTooltip
+                  title={selectedSubAgent ? `SubAgent: ${selectedSubAgent}` : 'Choose SubAgent'}
+                >
                   <button
                     type="button"
                     disabled={!!(isStreaming || disabled)}
+                    aria-label={
+                      selectedSubAgent ? `SubAgent: ${selectedSubAgent}` : 'Choose SubAgent'
+                    }
                     className={`
-                      flex items-center justify-center h-8 w-8 rounded-lg transition-all
-                      ${selectedSubAgent
-                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/50'
-                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 disabled:opacity-40'
+                      flex items-center justify-center h-8 w-8 rounded-lg transition-colors
+                      ${
+                        selectedSubAgent
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 disabled:opacity-40'
                       }
                     `}
                   >
@@ -953,8 +984,13 @@ export const InputBar = memo<InputBarProps>(
                     type="button"
                     onClick={onTogglePlanMode}
                     disabled={isStreaming}
+                    aria-label={
+                      isPlanMode
+                        ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
+                        : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
+                    }
                     className={`
-                      flex items-center justify-center h-8 w-8 rounded-lg transition-all
+                      flex items-center justify-center h-8 w-8 rounded-lg transition-colors
                       ${
                         isPlanMode
                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
@@ -979,8 +1015,9 @@ export const InputBar = memo<InputBarProps>(
                   onClick={() => {
                     setInputMode(inputMode === 'chat' ? 'command' : 'chat');
                   }}
+                  aria-label={t('agent.inputBar.modeToggle', 'Toggle input mode')}
                   className={`
-                    flex items-center justify-center h-8 w-8 rounded-lg transition-all
+                    flex items-center justify-center h-8 w-8 rounded-lg transition-colors
                     ${
                       inputMode === 'command'
                         ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
@@ -1025,13 +1062,14 @@ export const InputBar = memo<InputBarProps>(
                   icon={<Send size={14} />}
                   onClick={handleSend}
                   disabled={!canSend}
+                  aria-label={t('agent.inputBar.send', 'Send message')}
                   className={`
                     rounded-xl flex items-center gap-1.5 h-8 px-3
                     bg-gradient-to-r from-primary to-primary-600
                     hover:from-primary-600 hover:to-primary-700
                     shadow-md shadow-primary/20
                     disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
-                    transition-all duration-200
+                    transition-colors duration-200
                   `}
                 >
                   {t('agent.inputBar.send', 'Send')}

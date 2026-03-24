@@ -5,6 +5,7 @@
  */
 
 import { memo, useState, useCallback, useMemo } from 'react';
+import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -19,8 +20,6 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-
-import type { FC } from 'react';
 
 // ============================================================================
 // Tool Definitions (Static - should come from API in future)
@@ -113,12 +112,8 @@ const ToolCard: FC<ToolCardProps> = memo(({ tool, onToggle }) => {
             <Icon size={18} />
           </div>
           <div>
-            <h4 className="font-medium text-sm text-slate-900 dark:text-white">
-              {tool.name}
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {tool.category}
-            </p>
+            <h4 className="font-medium text-sm text-slate-900 dark:text-white">{tool.name}</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{tool.category}</p>
           </div>
         </div>
         <label className="inline-flex relative items-center cursor-pointer">
@@ -128,7 +123,7 @@ const ToolCard: FC<ToolCardProps> = memo(({ tool, onToggle }) => {
             onChange={(e) => onToggle?.(tool.name, e.target.checked)}
             className="sr-only peer"
           />
-          <div className="w-9 h-5 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
+          <div className="w-9 h-5 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:bg-blue-600" />
         </label>
       </div>
 
@@ -145,9 +140,7 @@ const ToolCard: FC<ToolCardProps> = memo(({ tool, onToggle }) => {
           )}
           {tool.enabled ? 'Enabled' : 'Disabled'}
         </span>
-        {tool.usageCount !== undefined && (
-          <span>{tool.usageCount.toLocaleString()} uses</span>
-        )}
+        {tool.usageCount !== undefined && <span>{tool.usageCount.toLocaleString()} uses</span>}
       </div>
     </div>
   );
@@ -164,20 +157,16 @@ interface CategoryGroupProps {
   onToggle?: ((name: string, enabled: boolean) => void) | undefined;
 }
 
-const CategoryGroup: FC<CategoryGroupProps> = memo(
-  ({ category, tools, onToggle }) => (
-    <div>
-      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-        {category}
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tools.map((tool) => (
-          <ToolCard key={tool.name} tool={tool} onToggle={onToggle} />
-        ))}
-      </div>
+const CategoryGroup: FC<CategoryGroupProps> = memo(({ category, tools, onToggle }) => (
+  <div>
+    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">{category}</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {tools.map((tool) => (
+        <ToolCard key={tool.name} tool={tool} onToggle={onToggle} />
+      ))}
     </div>
-  ),
-);
+  </div>
+));
 CategoryGroup.displayName = 'CategoryGroup';
 
 // ============================================================================
@@ -192,9 +181,7 @@ export const DashboardTools: FC = memo(() => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleToggle = useCallback((name: string, enabled: boolean) => {
-    setTools((prev) =>
-      prev.map((tool) => (tool.name === name ? { ...tool, enabled } : tool)),
-    );
+    setTools((prev) => prev.map((tool) => (tool.name === name ? { ...tool, enabled } : tool)));
   }, []);
 
   const filteredTools = useMemo(() => {
@@ -204,7 +191,7 @@ export const DashboardTools: FC = memo(() => {
       (tool) =>
         tool.name.toLowerCase().includes(lower) ||
         tool.description.toLowerCase().includes(lower) ||
-        tool.category.toLowerCase().includes(lower),
+        tool.category.toLowerCase().includes(lower)
     );
   }, [tools, search]);
 
@@ -224,7 +211,9 @@ export const DashboardTools: FC = memo(() => {
   const handleRefresh = useCallback(() => {
     setIsLoading(true);
     // Simulate refresh - in future, this would fetch from API
-    setTimeout(() => setIsLoading(false), 500);
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
   }, []);
 
   return (
@@ -236,10 +225,7 @@ export const DashboardTools: FC = memo(() => {
             {t('tenant.dashboard.tools.title', 'Available Tools')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t(
-              'tenant.dashboard.tools.subtitle',
-              'Manage and monitor tool usage across SubAgents',
-            )}
+            {t('tenant.dashboard.tools.subtitle', 'Manage and monitor tool usage across SubAgents')}
           </p>
         </div>
         <button
@@ -248,21 +234,20 @@ export const DashboardTools: FC = memo(() => {
           disabled={isLoading}
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
         >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={isLoading ? 'animate-spin motion-reduce:animate-none' : ''} />
           {t('common.refresh', 'Refresh')}
         </button>
       </div>
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          size={16}
-        />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+          }}
           placeholder={t('tenant.dashboard.tools.searchPlaceholder', 'Search tools...')}
           className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
         />
@@ -274,9 +259,7 @@ export const DashboardTools: FC = memo(() => {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.dashboard.tools.totalTools', 'Total Tools')}
           </p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
-            {tools.length}
-          </p>
+          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{tools.length}</p>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -250,7 +250,7 @@ export const MemoryDetail: React.FC = () => {
                 memory.processing_status === 'PROCESSING' ||
                 memory.processing_status === 'PENDING'
               }
-              className={`p-2 rounded-lg transition-all flex items-center gap-1 ${
+              className={`p-2 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1 ${
                 isReprocessing ||
                 memory.processing_status === 'PROCESSING' ||
                 memory.processing_status === 'PENDING'
@@ -260,7 +260,7 @@ export const MemoryDetail: React.FC = () => {
               title={t('project.memories.actions.reprocess') || 'Reprocess'}
             >
               <span
-                className={`material-symbols-outlined text-[20px] ${isReprocessing ? 'animate-spin' : ''}`}
+                className={`material-symbols-outlined text-[20px] ${isReprocessing ? 'animate-spin motion-reduce:animate-none' : ''}`}
               >
                 {isReprocessing ? 'progress_activity' : 'refresh'}
               </span>
@@ -269,7 +269,7 @@ export const MemoryDetail: React.FC = () => {
               onClick={() => {
                 setEditModalOpen(true);
               }}
-              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-all"
+              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Edit"
             >
               <span className="material-symbols-outlined text-[20px]">edit</span>
@@ -278,20 +278,20 @@ export const MemoryDetail: React.FC = () => {
               onClick={() => {
                 setDeleteModalOpen(true);
               }}
-              className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-all"
+              className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Delete"
             >
               <span className="material-symbols-outlined text-[20px]">delete</span>
             </button>
             <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
             <button
-              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-all"
+              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Share"
             >
               <span className="material-symbols-outlined text-[20px]">share</span>
             </button>
             <button
-              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-all"
+              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Export"
             >
               <span className="material-symbols-outlined text-[20px]">download</span>
@@ -359,7 +359,7 @@ export const MemoryDetail: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-2">
-                        <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[20px] animate-spin">
+                        <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[20px] animate-spin motion-reduce:animate-none">
                           progress_activity
                         </span>
                       </div>
@@ -383,7 +383,7 @@ export const MemoryDetail: React.FC = () => {
                   {/* Progress Bar */}
                   <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
                       style={{ width: `${processingProgress?.progress ?? 0}%` }}
                     />
                   </div>

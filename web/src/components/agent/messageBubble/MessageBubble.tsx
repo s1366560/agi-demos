@@ -23,7 +23,6 @@ import {
   Loader2,
   PanelRight,
   RefreshCw,
-  Sparkles,
   User,
   Wrench,
   XCircle,
@@ -42,7 +41,7 @@ import { safeMarkdownComponents, useMarkdownPlugins } from '../chat/markdownPlug
 import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 import { InlineHITLCard } from '../InlineHITLCard';
-import { MARKDOWN_PROSE_CLASSES } from '../styles';
+import { MARKDOWN_PROSE_CLASSES, MESSAGE_MAX_WIDTH_CLASSES } from '../styles';
 
 import { getErrorMessage } from '@/types/common';
 
@@ -297,16 +296,12 @@ const UserMessage: React.FC<UserMessageProps> = memo(
       <div className="group flex flex-col items-end gap-1 pb-2">
         {/* Main row: bubble + avatar */}
         <div className="flex items-end justify-end gap-3 w-full">
-          <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+          <div className={MESSAGE_MAX_WIDTH_CLASSES}>
             <div
               className={
                 isForced ? `relative ${gradientClass} rounded-xl rounded-br-sm p-px` : 'relative'
               }
             >
-              {!isForced && (
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
-              )}
-
               {/* Badge Icon for Forced Execution */}
               {isForced && (
                 <div
@@ -322,6 +317,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
+                      <title>SubAgent Icon</title>
                       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                       <line x1="8" y1="21" x2="16" y2="21" />
                       <line x1="12" y1="17" x2="12" y2="21" />
@@ -342,10 +338,10 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                 className={
                   isForced
                     ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2.5'
-                    : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200'
+                    : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm'
                 }
               >
-                <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
                   {content}
                 </p>
               </div>
@@ -409,12 +405,12 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
     if (!content && !isStreaming) return null;
     return (
       <div className="group flex items-start gap-3 pb-2">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm">
           <Bot size={18} className="text-white" />
         </div>
-        <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+        <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
           <div className="relative">
-            <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
               <div className={MARKDOWN_PROSE_CLASSES}>
                 {content ? (
                   <ReactMarkdown
@@ -468,10 +464,10 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
   if (!content) return null;
   return (
     <div className="flex items-start gap-3 pb-2">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
+      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm">
         <Bot size={18} className="text-white" />
       </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
           <div className={MARKDOWN_PROSE_CLASSES}>
             <ReactMarkdown
@@ -501,7 +497,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Lightbulb size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
         <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
           <button
             type="button"
@@ -548,7 +544,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
       <CheckCircle2 size={16} className="text-emerald-500" />
     )
   ) : (
-    <Loader2 size={16} className="text-blue-500 animate-spin" />
+    <Loader2 size={16} className="text-blue-500 animate-spin motion-reduce:animate-none" />
   );
 
   const statusText = observeEvent
@@ -568,8 +564,8 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Wrench size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
-      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
+      <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+        <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm">
           {/* Header */}
           <button
             type="button"
@@ -688,9 +684,9 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
   return (
     <div className="flex items-start gap-3 pb-4">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-        <Sparkles size={16} className="text-primary" />
+        <Bot size={16} className="text-primary" />
       </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
         <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
           <button
             type="button"
@@ -750,10 +746,10 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
 
   return (
     <div className="group flex items-start gap-3 pb-6">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
+      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm">
         <Bot size={18} className="text-white" />
       </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
         <div className="relative">
           <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm">
             <div className={MARKDOWN_PROSE_CLASSES}>
@@ -824,7 +820,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
     event.mimeType.startsWith('image/') ||
     event.mimeType.startsWith('video/') ||
     event.mimeType.startsWith('audio/') ||
-    isOfficeMimeType(event.mimeType?.toLowerCase() || '') ||
+    isOfficeMimeType(event.mimeType.toLowerCase()) ||
     isOfficeExtension(event.filename);
 
   // Refresh expired URL
@@ -989,7 +985,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             <div className="mb-3 relative rounded-lg overflow-hidden border border-emerald-200/50 dark:border-emerald-800/30">
               {!imageLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 min-h-[150px]">
-                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                  <Loader2 className="w-6 h-6 animate-spin motion-reduce:animate-none text-slate-400" />
                 </div>
               )}
               <img
@@ -1028,7 +1024,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 disabled={refreshingUrl}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50"
               >
-                <RefreshCw size={12} className={refreshingUrl ? 'animate-spin' : ''} />
+                <RefreshCw size={12} className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''} />
                 {refreshingUrl
                   ? t('agent.messageBubble.refreshing', 'Refreshing...')
                   : t('agent.messageBubble.refreshLink', 'Refresh Link')}
@@ -1075,7 +1071,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             )}
             {!url && artifactStatus === 'uploading' && (
               <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                 {t('agent.messageBubble.uploading', 'Uploading...')}
               </span>
             )}
@@ -1095,7 +1091,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 disabled={refreshingUrl}
                 className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50"
               >
-                <RefreshCw size={14} className={refreshingUrl ? 'animate-spin' : ''} />
+                <RefreshCw size={14} className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''} />
                 {refreshingUrl
                   ? t('agent.messageBubble.refreshing', 'Refreshing...')
                   : t('agent.messageBubble.refreshLink', 'Refresh')}

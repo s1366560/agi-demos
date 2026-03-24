@@ -132,7 +132,7 @@ export const AgentLayout: React.FC = () => {
 
             {/* Agent Status Badge */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-full">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse motion-reduce:animate-none"></div>
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
                 Agent Online
               </span>
@@ -146,7 +146,7 @@ export const AgentLayout: React.FC = () => {
                   onClick={() => {
                     handleTabClick(tab);
                   }}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ${
                     activeTab === tab.id
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -165,7 +165,7 @@ export const AgentLayout: React.FC = () => {
               <input
                 id="conversation-search"
                 name="conversation-search"
-                className="w-56 bg-slate-100 dark:bg-surface-dark border border-transparent focus:border-primary/30 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-text-muted text-slate-900 dark:text-white"
+                className="w-56 bg-slate-100 dark:bg-surface-dark border border-transparent focus:border-primary/30 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] placeholder:text-text-muted text-slate-900 dark:text-white"
                 placeholder="Search conversations..."
                 type="text"
               />

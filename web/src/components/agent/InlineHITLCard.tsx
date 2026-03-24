@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import { LazyButton, LazyProgress, LazyTag } from '@/components/ui/lazyAntd';
 
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -222,6 +224,13 @@ const CountdownTimer: React.FC<{
 
   const [remaining, setRemaining] = useState<number | null>(calculateRemaining);
 
+  const themeColors = useThemeColors({
+    info: '--color-info',
+    warning: '--color-warning',
+    purple: '--color-tile-purple',
+    error: '--color-error',
+  });
+
   useEffect(() => {
     if (!expiresAt) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate timer sync pattern
@@ -245,10 +254,10 @@ const CountdownTimer: React.FC<{
   const isUrgent = remaining < 60;
 
   const strokeColorMap: Record<string, string> = {
-    blue: '#3b82f6',
-    orange: '#f59e0b',
-    purple: '#8b5cf6',
-    red: '#ef4444',
+    blue: themeColors.info,
+    orange: themeColors.warning,
+    purple: themeColors.purple,
+    red: themeColors.error,
   };
 
   return (
@@ -263,7 +272,7 @@ const CountdownTimer: React.FC<{
         percent={progressPercent}
         size="small"
         showInfo={false}
-        strokeColor={isUrgent ? '#ef4444' : strokeColorMap[color] || '#3b82f6'}
+        strokeColor={isUrgent ? themeColors.error : strokeColorMap[color] || themeColors.info}
         className="w-14"
       />
     </div>
@@ -315,7 +324,7 @@ const ClarificationContent: React.FC<{
               return (
                 <div
                   key={optionKey}
-                  className={`p-3 rounded-xl border-2 transition-all ${
+                  className={`p-3 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                     isSelected
                       ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                       : isAnswered
@@ -378,7 +387,7 @@ const ClarificationContent: React.FC<{
             })}
             {data.allow_custom && !isAnswered && (
               <div
-                className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                   selected === '__custom__'
                     ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
@@ -519,7 +528,7 @@ const DecisionContent: React.FC<{
                 <div
                   key={optionKey}
                   className={`
-                    rounded-xl p-4 transition-all border-2
+                    rounded-xl p-4 transition-[color,background-color,border-color,box-shadow,opacity,transform] border-2
                     ${
                       isOptionSelected
                         ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
@@ -657,7 +666,7 @@ const DecisionContent: React.FC<{
             })}
             {data.allow_custom && !isAnswered && !isMultiSelect && (
               <div
-                className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                   selected === '__custom__'
                     ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'
@@ -1101,7 +1110,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
         <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
           <div
             className={`${bgClass} border rounded-xl overflow-hidden shadow-sm ${
-              !isAnswered ? 'hover:shadow-md transition-all duration-200' : ''
+              !isAnswered ? 'hover:shadow-md transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200' : ''
             }`}
           >
             {/* Header - Unified style */}

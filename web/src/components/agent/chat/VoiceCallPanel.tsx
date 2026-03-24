@@ -319,7 +319,9 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 	});
 
 	// Keep disconnectRef in sync so the cleanup effect always calls the latest version.
-	disconnectRef.current = disconnect;
+	useEffect(() => {
+		disconnectRef.current = disconnect;
+	});
 
 	// Cleanup: when VoiceCallPanel is truly unmounted (not StrictMode), tear down WS.
 	useEffect(() => {
@@ -468,7 +470,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 					data-drag-handle
 				>
 					<div
-						className={`w-3 h-3 rounded-full ${aiSpeaking ? "bg-blue-500 animate-pulse" : "bg-green-500"}`}
+						className={`w-3 h-3 rounded-full ${aiSpeaking ? "bg-blue-500 animate-pulse motion-reduce:animate-none" : "bg-green-500"}`}
 					/>
 					<span className="text-white text-sm font-mono">
 						{formatDuration(duration)}
@@ -515,7 +517,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 								status === "connected"
 									? "bg-green-500"
 									: status === "connecting"
-										? "bg-yellow-500 animate-pulse"
+										? "bg-yellow-500 animate-pulse motion-reduce:animate-none"
 										: "bg-red-500"
 							}`}
 						/>
@@ -577,7 +579,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 							<div
 								className={`
                   absolute inset-0 rounded-full border-4 flex items-center justify-center bg-slate-800
-                  transition-all duration-300
+                  transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
                   ${aiSpeaking ? "border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.4)] scale-105" : "border-slate-700"}
                 `}
 							>
@@ -607,7 +609,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 					{agentResponseText && (
 						<p className="text-sm text-blue-300 mt-1">
 							{agentResponseText}
-							{isAgentStreaming && <span className="animate-pulse">|</span>}
+							{isAgentStreaming && <span className="animate-pulse motion-reduce:animate-none">|</span>}
 						</p>
 					)}
 				</div>
@@ -620,7 +622,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 						onClick={storeToggleMute}
 						title={isMuted ? "Unmute" : "Mute"}
 						className={`
-              w-11 h-11 rounded-full flex items-center justify-center transition-all
+              w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${isMuted ? "bg-red-500/20 text-red-500 hover:bg-red-500/30" : "bg-slate-700 text-white hover:bg-slate-600"}
             `}
 					>
@@ -633,7 +635,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 						onClick={storeToggleCamera}
 						title={isCameraOn ? "Turn off camera" : "Turn on camera"}
 						className={`
-              w-11 h-11 rounded-full flex items-center justify-center transition-all
+              w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${isCameraOn ? "bg-blue-500/20 text-blue-500 hover:bg-blue-500/30" : "bg-slate-700 text-white hover:bg-slate-600"}
             `}
 					>
@@ -654,7 +656,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 							}
 						}}
 						title={callMode === "audio" ? "Switch to video" : "Switch to audio"}
-						className="w-11 h-11 rounded-full bg-slate-700 text-white hover:bg-slate-600 flex items-center justify-center transition-all"
+						className="w-11 h-11 rounded-full bg-slate-700 text-white hover:bg-slate-600 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]"
 					>
 						<Video size={20} />
 					</button>
@@ -665,7 +667,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 						onClick={() => { setShowDeviceSettings(!showDeviceSettings); }}
 						title="Device settings"
 						className={`
-              w-11 h-11 rounded-full flex items-center justify-center transition-all
+              w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${showDeviceSettings ? "bg-slate-600 text-white" : "bg-slate-700 text-white hover:bg-slate-600"}
             `}
 					>
@@ -677,7 +679,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 						type="button"
 						onClick={handleEndCall}
 						title="End call"
-						className="w-14 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 transition-all hover:scale-105"
+						className="w-14 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:scale-105"
 					>
 						<PhoneOff size={22} />
 					</button>

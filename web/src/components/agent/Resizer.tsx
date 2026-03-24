@@ -105,20 +105,46 @@ export const Resizer: React.FC<ResizerProps> = ({
   const cursorClass = direction === 'horizontal' ? 'cursor-ew-resize' : 'cursor-ns-resize';
   const sizeClass = direction === 'horizontal' ? 'w-1.5 hover:w-2' : 'h-1.5 hover:h-2';
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = e.shiftKey ? 50 : 10;
+      let newSize = currentSize;
+      if (direction === 'horizontal') {
+        if (e.key === 'ArrowRight') newSize = currentSize + step;
+        else if (e.key === 'ArrowLeft') newSize = currentSize - step;
+        else return;
+      } else {
+        if (e.key === 'ArrowDown') newSize = currentSize + step;
+        else if (e.key === 'ArrowUp') newSize = currentSize - step;
+        else return;
+      }
+      e.preventDefault();
+      onResize(Math.max(minSize, Math.min(maxSize, newSize)));
+    },
+    [direction, currentSize, minSize, maxSize, onResize]
+  );
+
   return (
     <div
+      role="separator"
+      aria-valuenow={currentSize}
+      aria-valuemin={minSize}
+      aria-valuemax={maxSize}
+      aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
       className={`
-        absolute z-50 flex items-center justify-center
+        absolute z-10 flex items-center justify-center
         ${positionStyles[direction][position]}
         ${cursorClass}
         ${sizeClass}
         bg-transparent
         hover:bg-slate-200/50 dark:hover:bg-slate-700/50
         ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
-        transition-all duration-150
+        transition-colors duration-150
         group
-        ${className}
+        ${className ?? ''}
       `}
       style={{
         [direction === 'horizontal' ? 'top' : 'left']: 0,
@@ -133,7 +159,7 @@ export const Resizer: React.FC<ResizerProps> = ({
         bg-slate-400/50 dark:bg-slate-500/50
         opacity-0 group-hover:opacity-100
         ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
-        transition-all duration-150
+        transition-colors duration-150
       `}
       />
     </div>

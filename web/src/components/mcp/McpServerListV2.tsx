@@ -46,7 +46,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
   iconBg,
   subtitle,
 }) => (
-  <div className="relative overflow-hidden bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-200 group">
+  <div className="relative overflow-hidden bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 group">
     <div className="flex items-center justify-between">
       <div>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{title}</p>
@@ -159,7 +159,7 @@ export const McpServerListV2: React.FC = () => {
           <MaterialIcon
             name={isReconciling ? 'progress_activity' : 'sync'}
             size={20}
-            className={isReconciling ? 'animate-spin' : ''}
+            className={isReconciling ? 'animate-spin motion-reduce:animate-none' : ''}
           />
           Reconcile
         </button>

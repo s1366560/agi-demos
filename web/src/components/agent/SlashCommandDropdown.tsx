@@ -19,7 +19,7 @@ import {
 
 import { useTranslation } from 'react-i18next';
 
-import { Zap, Hash, Brain, Sparkles, Terminal } from 'lucide-react';
+import { Zap, Hash, Brain, Terminal } from 'lucide-react';
 
 import { commandAPI } from '@/services/commandService';
 import { skillAPI } from '@/services/skillService';
@@ -46,7 +46,7 @@ const triggerTypeIcon = (type: string) => {
     case 'semantic':
       return <Brain size={12} className="text-purple-500" />;
     case 'hybrid':
-      return <Sparkles size={12} className="text-amber-500" />;
+      return <Zap size={12} className="text-amber-500" />;
     default:
       return <Zap size={12} className="text-slate-400" />;
   }

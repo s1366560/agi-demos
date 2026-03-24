@@ -40,7 +40,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 dark:border-blue-400"></div>
+        <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-blue-600 dark:border-blue-400"></div>
       </div>
     );
   }
@@ -80,7 +80,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
             {tenants.map((tenant) => (
               <div
                 key={tenant.id}
-                className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                className={`p-3 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                   currentTenant?.id === tenant.id
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'

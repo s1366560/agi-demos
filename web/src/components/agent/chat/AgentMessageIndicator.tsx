@@ -5,10 +5,10 @@
  * Renders a pill showing sender -> receiver with a message preview.
  */
 
+import type { FC } from 'react';
+
 import { Tooltip } from 'antd';
 import { ArrowRight, Bot, MessageSquare, Inbox } from 'lucide-react';
-
-import type { FC } from 'react';
 
 export interface AgentMessageIndicatorProps {
   direction: 'sent' | 'received';

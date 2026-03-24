@@ -240,14 +240,14 @@ interface ExecStateConfig {
 const execStateConfig: Record<AgentExecState, ExecStateConfig> = {
   thinking: {
     icon: Brain,
-    iconAnimate: 'animate-pulse',
+    iconAnimate: 'animate-pulse motion-reduce:animate-none',
     color: 'text-slate-600 dark:text-slate-400',
     bgColor: 'bg-slate-100 dark:bg-slate-800/50',
     borderColor: 'border-slate-200 dark:border-slate-700',
   },
   preparing: {
     icon: Loader2,
-    iconAnimate: 'animate-spin',
+    iconAnimate: 'animate-spin motion-reduce:animate-none',
     color: 'text-blue-600 dark:text-blue-400',
     bgColor: 'bg-blue-50 dark:bg-blue-900/20',
     borderColor: 'border-blue-200 dark:border-blue-800',
@@ -268,14 +268,14 @@ const execStateConfig: Record<AgentExecState, ExecStateConfig> = {
   },
   awaiting_input: {
     icon: MessageCircle,
-    iconAnimate: 'animate-pulse',
+    iconAnimate: 'animate-pulse motion-reduce:animate-none',
     color: 'text-slate-600 dark:text-slate-400',
     bgColor: 'bg-slate-100 dark:bg-slate-800/50',
     borderColor: 'border-slate-200 dark:border-slate-700',
   },
   retrying: {
     icon: RotateCcw,
-    iconAnimate: 'animate-spin',
+    iconAnimate: 'animate-spin motion-reduce:animate-none',
     color: 'text-red-600 dark:text-red-400',
     bgColor: 'bg-red-50 dark:bg-red-900/20',
     borderColor: 'border-red-200 dark:border-red-800',
@@ -295,7 +295,7 @@ const execStateConfig: Record<AgentExecState, ExecStateConfig> = {
 const StatusPhaseDot: FC<{ active: boolean; completed: boolean }> = ({ active, completed }) => (
   <span
     className={`
-      w-1.5 h-1.5 rounded-full transition-all duration-300
+      w-1.5 h-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
       ${active ? 'bg-current scale-125' : completed ? 'bg-current opacity-40' : 'bg-slate-300 dark:bg-slate-600'}
     `}
   />
@@ -632,7 +632,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const TierIcon = poolTierConfig?.icon ?? Layers;
 
   return (
-    <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 min-w-0">
+    <div className="px-4 py-1.5 flex items-center justify-between gap-2 min-w-0">
       {/* Left: Pool Tier, Sandbox Status, Lifecycle Status & Resources */}
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         {/* Pool Tier Indicator (shown when pool management is enabled) */}
@@ -696,11 +696,11 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
                   ${poolTierConfig?.bgColor ?? 'bg-slate-100 dark:bg-slate-800'}
                   ${poolTierConfig?.color ?? 'text-slate-500'}
-                  transition-all duration-300 cursor-help
+                  transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 cursor-help
                 `}
               >
                 {poolLoading ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
                 ) : (
                   <TierIcon size={12} />
                 )}
@@ -729,7 +729,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             className={`
               flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
               ${execConfig.bgColor} ${execConfig.color} border ${execConfig.borderColor}
-              transition-all duration-300
+              transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             `}
           >
             <execConfig.icon size={12} className={execConfig.iconAnimate} />
@@ -764,10 +764,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               className={`
                 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
                 ${config.bgColor} ${config.color}
-                transition-all duration-300 cursor-help
+                transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 cursor-help
               `}
             >
-              <StatusIcon size={12} className={config.animate ? 'animate-spin' : ''} />
+              <StatusIcon size={12} className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''} />
               <span className="hidden sm:inline">{config.label}</span>
               {status.resources.activeCalls > 0 ? (
                 <span className="ml-0.5">({status.resources.activeCalls})</span>
@@ -974,7 +974,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 `}
               >
                 {isActionPending ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                 ) : (
                   <PauseCircle size={14} />
                 )}
@@ -999,7 +999,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 `}
               >
                 {isActionPending ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                 ) : (
                   <Play size={14} />
                 )}
@@ -1035,7 +1035,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   `}
                 >
                   {isActionPending ? (
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                   ) : (
                     <Square size={14} />
                   )}
@@ -1067,7 +1067,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   `}
                 >
                   {isActionPending ? (
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
                   ) : (
                     <RefreshCw size={14} />
                   )}
@@ -1099,10 +1099,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         >
           <div className="flex items-center gap-1.5 text-slate-400">
             {isLoading ? (
-              <Loader2 size={12} className="animate-spin" />
+              <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
             ) : status.resources.activeCalls > 0 ? (
               <>
-                <Activity size={12} className="text-blue-500 animate-pulse" />
+                <Activity size={12} className="text-blue-500 animate-pulse motion-reduce:animate-none" />
                 <span className="hidden sm:inline text-blue-500">
                   {status.resources.activeCalls} active
                 </span>

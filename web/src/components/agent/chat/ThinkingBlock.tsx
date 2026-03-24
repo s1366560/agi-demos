@@ -94,7 +94,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
         <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
           <Brain
             size={16}
-            className={`text-slate-500 dark:text-slate-400 ${isStreaming ? 'animate-pulse' : ''}`}
+            className={`text-slate-500 dark:text-slate-400 ${isStreaming ? 'animate-pulse motion-reduce:animate-none' : ''}`}
           />
         </div>
 
@@ -161,7 +161,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
             {steps && steps.length > 0 && (
               <div className="w-full h-0.5 bg-slate-200 dark:bg-slate-700">
                 <div
-                  className="h-full bg-primary transition-all duration-300 ease-in-out"
+                  className="h-full bg-primary transition-[width] duration-300 ease-in-out"
                   style={{ width: `${progressPercentage}%` }}
                   role="progressbar"
                   aria-valuenow={progressPercentage}
@@ -178,7 +178,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
               role="region"
               aria-labelledby="thinking-label"
               className={`
-                overflow-hidden transition-all duration-300 ease-in-out
+                overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform,max-height] duration-300 ease-in-out
                 ${expanded ? 'max-h-[400px]' : 'max-h-0'}
               `}
             >

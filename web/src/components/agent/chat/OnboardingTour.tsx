@@ -206,7 +206,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
           {TOUR_STEPS.map((_, i) => (
             <div
               key={i}
-              className={`h-1.5 rounded-full transition-all duration-200 ${
+              className={`h-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ${
                 i === step
                   ? 'w-6 bg-blue-500'
                   : i < step

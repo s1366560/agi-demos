@@ -654,7 +654,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <React.Fragment key={step.key}>
                     <div className="flex items-center">
                       <div
-                        className={`flex items-center justify-center w-8 h-8 rounded-lg border-2 transition-all ${
+                        className={`flex items-center justify-center w-8 h-8 rounded-lg border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                           isCompleted
                             ? 'bg-primary border-primary text-white'
                             : isCurrent
@@ -711,7 +711,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <button
                       key={p.value}
                       onClick={() => handleProviderSelect(p.value)}
-                      className={`p-4 rounded-xl border-2 transition-all text-left hover:shadow-md ${
+                      className={`p-4 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left hover:shadow-md ${
                         formData.provider_type === p.value
                           ? 'border-primary bg-primary/5 dark:bg-primary/10'
                           : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'
@@ -795,7 +795,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             <MaterialIcon
                               name="progress_activity"
                               size={18}
-                              className="animate-spin"
+                              className="animate-spin motion-reduce:animate-none"
                             />
                           ) : (
                             'Test'
@@ -1042,7 +1042,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               <div className="space-y-4">
                 {isLoadingModels && (
                   <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-                    <MaterialIcon name="sync" size={16} className="animate-spin" />
+                    <MaterialIcon name="sync" size={16} className="animate-spin motion-reduce:animate-none" />
                     Fetching available models...
                   </div>
                 )}
@@ -1982,11 +1982,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <span className="flex items-center gap-2">
-                      <MaterialIcon name="progress_activity" size={18} className="animate-spin" />
+                      <MaterialIcon name="progress_activity" size={18} className="animate-spin motion-reduce:animate-none" />
                       Saving...
                     </span>
                   ) : (
@@ -2001,7 +2001,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     );
                   }}
                   disabled={!canProceed()}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>

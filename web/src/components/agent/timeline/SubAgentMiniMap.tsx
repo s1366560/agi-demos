@@ -32,7 +32,7 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
   if (summaries.length === 0) return null;
 
   return (
-    <div className="absolute top-4 right-4 z-10 w-64 rounded-lg border border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95 animate-fade-in transition-all duration-200">
+    <div className="absolute top-4 right-4 z-10 w-64 rounded-lg border border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95 animate-fade-in transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200">
       <button
         type="button"
         className="flex w-full cursor-pointer items-center justify-between border-b border-gray-100 p-2 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50"
@@ -75,7 +75,7 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
                 {summary.executionTimeMs ? (
                   <span>{formatDuration(summary.executionTimeMs)}</span>
                 ) : summary.status === 'running' ? (
-                  <span className="animate-pulse">running...</span>
+                  <span className="animate-pulse motion-reduce:animate-none">running...</span>
                 ) : (
                   <span>{summary.status}</span>
                 )}

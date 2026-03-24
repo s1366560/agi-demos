@@ -135,7 +135,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
                 className="px-4 py-2 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
               >
                 {isSubmitting && (
-                  <MaterialIcon name="progress_activity" className="animate-spin" size={16} />
+                  <MaterialIcon name="progress_activity" className="animate-spin motion-reduce:animate-none" size={16} />
                 )}
                 Assign
               </button>

@@ -51,7 +51,7 @@ const NodeStatusBadge = memo<{ status: GraphNodeState['status'] }>(({ status }) 
     case 'pending':
       return <Circle size={14} className="text-slate-400" />;
     case 'running':
-      return <Loader2 size={14} className="text-blue-500 animate-spin" />;
+      return <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
     case 'completed':
       return <CheckCircle2 size={14} className="text-emerald-500" />;
     case 'failed':

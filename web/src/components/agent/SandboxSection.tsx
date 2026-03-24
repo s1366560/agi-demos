@@ -87,7 +87,7 @@ const TerminalTab: React.FC<{
       <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <div
-            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`}
+            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse motion-reduce:animate-none'}`}
           />
           <span className="text-xs text-slate-400">
             {isConnected ? 'Connected' : 'Connecting...'}
@@ -308,33 +308,6 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
           padding: '0 16px',
         }}
       />
-
-      {/* Custom styles for tabs */}
-      <style>{`
-        .sandbox-tabs {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-        }
-        .sandbox-tabs > .ant-tabs-nav {
-          border-bottom: 1px solid #e2e8f0;
-        }
-        .dark .sandbox-tabs > .ant-tabs-nav {
-          border-bottom: 1px solid #334155;
-        }
-        .sandbox-tabs .ant-tabs-content {
-          flex: 1;
-          height: 0;
-        }
-        .sandbox-tabs .ant-tabs-content-holder {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-        .sandbox-tabs .ant-tabs-tabpane {
-          height: 100%;
-        }
-      `}</style>
     </div>
   );
 };

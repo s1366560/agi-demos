@@ -15,7 +15,6 @@ import {
   AlertCircle,
   Loader2,
   RotateCcw,
-  Sparkles,
   Globe,
   Clock,
   FileText,
@@ -94,7 +93,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
 
   return (
     <div
-      className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} transition-all duration-300 overflow-hidden`}
+      className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 overflow-hidden`}
     >
       {/* Source Indicator */}
       <div
@@ -117,7 +116,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
                   : 'bg-gradient-to-br from-cyan-50 to-blue-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
               }`}
             >
-              {isAgentDeveloped ? <Sparkles size={18} /> : <LayoutGrid size={18} />}
+              {isAgentDeveloped ? <Bot size={18} /> : <LayoutGrid size={18} />}
             </div>
 
             {/* App Info */}

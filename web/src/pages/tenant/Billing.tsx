@@ -10,7 +10,7 @@ import type { BillingInfo } from '../../services/billingService';
 // Loading state component
 const LoadingState = memo<{ message: string }>(({ message }) => (
   <div className="p-8 text-center text-slate-500">
-    <span className="material-symbols-outlined animate-spin mr-2">progress_activity</span>
+    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none mr-2">progress_activity</span>
     {message}
   </div>
 ));
@@ -166,7 +166,7 @@ export const Billing: FC = memo(() => {
               </p>
               <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-purple-500 transition-all"
+                  className="h-full bg-purple-500 transition-[width]"
                   style={{ width: `${usageStats.storagePercent}%` }}
                 ></div>
               </div>
@@ -183,7 +183,7 @@ export const Billing: FC = memo(() => {
               </p>
               <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-blue-500 transition-all"
+                  className="h-full bg-blue-500 transition-[width]"
                   style={{ width: `${usageStats.projectsPercent}%` }}
                 ></div>
               </div>
@@ -200,7 +200,7 @@ export const Billing: FC = memo(() => {
               </p>
               <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-green-500 transition-all"
+                  className="h-full bg-green-500 transition-[width]"
                   style={{ width: `${usageStats.usersPercent}%` }}
                 ></div>
               </div>

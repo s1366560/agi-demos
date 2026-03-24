@@ -61,7 +61,7 @@ function SidebarContent({
   return (
     <aside
       data-testid="app-sidebar"
-      className={`flex flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark flex-none z-20 transition-all duration-300 ease-in-out relative ${
+      className={`flex flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark flex-none z-20 transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-300 ease-in-out relative ${
         isCollapsed ? 'collapsed w-20' : 'w-64'
       }`}
       style={{

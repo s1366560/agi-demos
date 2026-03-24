@@ -5,6 +5,7 @@
 
 import { memo, useMemo, useState } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 
 import { Drawer, Progress } from 'antd';
@@ -24,6 +25,8 @@ import {
   Pause,
 } from 'lucide-react';
 
+import { useThemeColor } from '@/hooks/useThemeColor';
+
 import {
   useBackgroundExecutions,
   useBackgroundPanel,
@@ -42,11 +45,11 @@ const formatElapsed = (startedAt: number, completedAt?: number): string => {
 const StatusBadge = memo<{ status: BackgroundSubAgent['status'] }>(({ status }) => {
   switch (status) {
     case 'running':
-      return <Loader2 size={14} className="text-blue-500 animate-spin" />;
+      return <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
     case 'queued':
       return <Pause size={14} className="text-amber-500" />;
     case 'retrying':
-      return <RefreshCw size={14} className="text-orange-500 animate-spin" />;
+      return <RefreshCw size={14} className="text-orange-500 animate-spin motion-reduce:animate-none" />;
     case 'completed':
       return <CheckCircle2 size={14} className="text-emerald-500" />;
     case 'failed':
@@ -68,6 +71,7 @@ const ExecutionItem = memo<{
   onToggleExpand: (id: string) => void;
 }>(({ execution, onClear, onKill, isExpanded, onToggleExpand }) => {
   const { t } = useTranslation();
+  const infoColor = useThemeColor('--color-info', '#3b82f6');
 
   const statusBg =
     execution.status === 'running'
@@ -137,7 +141,7 @@ const ExecutionItem = memo<{
               <Progress
                 percent={execution.progress}
                 size="small"
-                strokeColor="#3b82f6"
+                strokeColor={infoColor}
                 trailColor="rgba(148,163,184,0.2)"
                 showInfo={false}
                 className="!mb-0"

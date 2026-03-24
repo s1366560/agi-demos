@@ -6,18 +6,11 @@
  */
 
 import { memo, useEffect, useMemo } from 'react';
+import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  Activity,
-  Brain,
-  Cpu,
-  Play,
-  Plus,
-  TrendingUp,
-  Zap,
-} from 'lucide-react';
+import { Activity, Brain, Cpu, Play, Plus, TrendingUp, Zap } from 'lucide-react';
 
 import {
   useEnabledSubAgentsCount,
@@ -35,7 +28,6 @@ import {
 } from '../../../stores/traceStore';
 
 import type { SubAgentRunDTO } from '../../../types/multiAgent';
-import type { FC } from 'react';
 
 // ============================================================================
 // Stat Card Component
@@ -61,9 +53,7 @@ const StatCard: FC<StatCardProps> = memo(
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
             {title}
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{value}</p>
           {trend && (
             <p
               className={`mt-1 text-xs flex items-center gap-1 ${
@@ -72,10 +62,7 @@ const StatCard: FC<StatCardProps> = memo(
                   : 'text-red-600 dark:text-red-400'
               }`}
             >
-              <TrendingUp
-                size={12}
-                className={trend.isPositive ? '' : 'rotate-180'}
-              />
+              <TrendingUp size={12} className={trend.isPositive ? '' : 'rotate-180'} />
               {trend.value}%
             </p>
           )}
@@ -85,7 +72,7 @@ const StatCard: FC<StatCardProps> = memo(
         </div>
       </div>
     </div>
-  ),
+  )
 );
 StatCard.displayName = 'StatCard';
 
@@ -100,7 +87,7 @@ interface RecentRunItemProps {
 const RecentRunItem: FC<RecentRunItemProps> = memo(({ run }) => {
   const statusColors: Record<string, string> = {
     completed: 'bg-green-500',
-    running: 'bg-blue-500 animate-pulse',
+    running: 'bg-blue-500 animate-pulse motion-reduce:animate-none',
     failed: 'bg-red-500',
     pending: 'bg-slate-400',
     cancelled: 'bg-amber-500',
@@ -115,14 +102,10 @@ const RecentRunItem: FC<RecentRunItemProps> = memo(({ run }) => {
         <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
           {run.subagent_name}
         </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-          {run.task}
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{run.task}</p>
       </div>
       <span className="text-xs text-slate-400 dark:text-slate-500">
-        {run.execution_time_ms !== null
-          ? `${Math.round(run.execution_time_ms / 1000)}s`
-          : '-'}
+        {run.execution_time_ms !== null ? `${Math.round(run.execution_time_ms / 1000)}s` : '-'}
       </span>
     </div>
   );
@@ -177,10 +160,7 @@ export const DashboardOverview: FC = memo(() => {
 
   const recentRuns = useMemo(() => {
     return [...runs]
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
   }, [runs]);
 
@@ -226,10 +206,7 @@ export const DashboardOverview: FC = memo(() => {
           icon={Plus}
           label={t('tenant.dashboard.actions.createSubAgent', 'Create SubAgent')}
         />
-        <QuickAction
-          icon={Play}
-          label={t('tenant.dashboard.actions.runTest', 'Run Test')}
-        />
+        <QuickAction icon={Play} label={t('tenant.dashboard.actions.runTest', 'Run Test')} />
       </div>
 
       {/* Recent Executions */}
@@ -239,21 +216,16 @@ export const DashboardOverview: FC = memo(() => {
             {t('tenant.dashboard.recentExecutions', 'Recent Executions')}
           </h3>
           {isLoading && (
-            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
           )}
         </div>
 
         {recentRuns.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-slate-500 dark:text-slate-400">
             <Activity size={32} className="mb-2 text-slate-300 dark:text-slate-600" />
-            <p className="text-sm">
-              {t('tenant.dashboard.noExecutions', 'No recent executions')}
-            </p>
+            <p className="text-sm">{t('tenant.dashboard.noExecutions', 'No recent executions')}</p>
             <p className="text-xs mt-1">
-              {t(
-                'tenant.dashboard.noExecutionsHint',
-                'SubAgent execution traces will appear here',
-              )}
+              {t('tenant.dashboard.noExecutionsHint', 'SubAgent execution traces will appear here')}
             </p>
           </div>
         ) : (

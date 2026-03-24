@@ -192,7 +192,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
         <MaterialIcon
           name="progress_activity"
           size={32}
-          className="animate-spin text-primary mx-auto"
+          className="animate-spin motion-reduce:animate-none text-primary mx-auto"
         />
       </div>
     );

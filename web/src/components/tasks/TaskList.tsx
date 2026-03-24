@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
                 <Search className="text-slate-400 size-5" />
               </div>
               <input
-                className="block w-full sm:w-64 pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-800 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm dark:text-white transition-all"
+                className="block w-full sm:w-64 pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-800 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm dark:text-white transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                 placeholder="Search Task ID or Name..."
                 type="text"
                 value={searchQuery}
@@ -128,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               disabled={refreshing}
               className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             >
-              <RefreshCw className={`size-5 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
             </button>
           </div>
         </div>
@@ -158,7 +158,7 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${task.statusColor}`}
             >
               <span
-                className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse' : ''} ${task.statusDot}`}
+                className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse motion-reduce:animate-none' : ''} ${task.statusDot}`}
               ></span>
               {task.status}
             </span>
@@ -416,7 +416,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
   if (loading && !tasks.length) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }

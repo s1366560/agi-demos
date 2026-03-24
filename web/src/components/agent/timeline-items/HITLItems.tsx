@@ -108,6 +108,7 @@ export const ClarificationAskedItem = memo(
                     <input
                       type="text"
                       placeholder={'\u6216\u8F93\u5165\u81EA\u5B9A\u4E49\u7B54\u6848...'}
+                      aria-label="Custom answer"
                       value={customAnswer}
                       onChange={(e) => {
                         setCustomAnswer(e.target.value);
@@ -259,6 +260,7 @@ export const DecisionAskedItem = memo(
                         <input
                           type="text"
                           placeholder={'\u6216\u8F93\u5165\u81EA\u5B9A\u4E49\u51B3\u7B56...'}
+                          aria-label="Custom decision"
                           value={customDecision}
                           onChange={(e) => {
                             setCustomDecision(e.target.value);
@@ -278,6 +280,7 @@ export const DecisionAskedItem = memo(
                     <input
                       type="text"
                       placeholder={'\u8F93\u5165\u4F60\u7684\u51B3\u7B56...'}
+                      aria-label="Enter your decision"
                       value={customDecision}
                       onChange={(e) => {
                         setCustomDecision(e.target.value);
@@ -409,6 +412,7 @@ export const EnvVarRequestedItem = memo(
                             field.placeholder ||
                             `\u8BF7\u8F93\u5165 ${field.label}`
                           }
+                          aria-label={field.label}
                           value={values[field.name] || field.default_value || ''}
                           onChange={(e) => {
                             handleChange(field.name, e.target.value);
@@ -424,6 +428,7 @@ export const EnvVarRequestedItem = memo(
                             field.placeholder ||
                             `\u8BF7\u8F93\u5165 ${field.label}`
                           }
+                          aria-label={field.label}
                           value={values[field.name] || field.default_value || ''}
                           onChange={(e) => {
                             handleChange(field.name, e.target.value);

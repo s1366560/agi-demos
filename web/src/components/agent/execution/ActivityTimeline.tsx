@@ -135,7 +135,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
 
   const getStatusIcon = () => {
     if (isThought) {
-      return <BulbOutlined className={`text-amber-500 ${isRunning ? 'animate-pulse' : ''}`} />;
+      return <BulbOutlined className={`text-amber-500 ${isRunning ? 'animate-pulse motion-reduce:animate-none' : ''}`} />;
     }
     switch (status) {
       case 'running':
@@ -168,11 +168,11 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
       <div
         className={`absolute left-0 top-1 ${
           compact ? 'w-3 h-3' : 'w-4 h-4'
-        } rounded-full border-2 flex items-center justify-center transition-all ${
+        } rounded-full border-2 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
           isThought
             ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600'
             : status === 'running'
-              ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 animate-pulse'
+              ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 animate-pulse motion-reduce:animate-none'
               : status === 'success'
                 ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-400 dark:border-emerald-600'
                 : status === 'failed'
@@ -408,7 +408,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
 
   const header = (
     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-      <BulbOutlined className={isActive ? 'animate-pulse text-amber-500' : ''} />
+      <BulbOutlined className={isActive ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''} />
       <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-medium`}>
         {isActive ? 'Processing...' : 'Activity Timeline'}
       </span>
@@ -504,7 +504,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                   <div
                     className={`absolute left-0 top-1 ${
                       compact ? 'w-3 h-3' : 'w-4 h-4'
-                    } rounded-full bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 dark:border-blue-600 animate-pulse flex items-center justify-center`}
+                    } rounded-full bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 dark:border-blue-600 animate-pulse motion-reduce:animate-none flex items-center justify-center`}
                   >
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
                   </div>

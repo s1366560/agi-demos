@@ -73,7 +73,9 @@ export const useVoiceTranscribe = (
 
   // Keep latest options in a ref to avoid re-creating callbacks
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  useEffect(() => {
+    optionsRef.current = options;
+  });
 
   /**
    * Handle incoming JSON messages from the WebSocket.

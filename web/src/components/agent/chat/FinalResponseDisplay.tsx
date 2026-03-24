@@ -165,7 +165,7 @@ export function FinalResponseDisplay({
               onClick={() => {
                 void handleCopy();
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               {copied ? 'Copied!' : 'Copy to Clipboard'}
@@ -176,7 +176,7 @@ export function FinalResponseDisplay({
                 void handleExportPDF();
               }}
               disabled={isExporting}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
               {isExporting ? 'Exporting...' : 'Export as PDF'}
@@ -186,7 +186,7 @@ export function FinalResponseDisplay({
               onClick={() => {
                 void handleShare();
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md cursor-pointer"
             >
               <Share2 className="w-4 h-4" />
               Share with Team

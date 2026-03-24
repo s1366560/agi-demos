@@ -36,7 +36,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
     <div
       className={`group ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
         isExpanded ? 'border-primary bg-primary/5 dark:border-primary' : ''
-      } transition-all duration-200 overflow-hidden`}
+      } transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 overflow-hidden`}
     >
       {/* Header - Clickable */}
       <button
@@ -94,7 +94,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
 
             {/* Expand Indicator */}
             <div
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 ${
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ${
                 isExpanded
                   ? 'bg-primary/10 text-primary rotate-180'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-400'

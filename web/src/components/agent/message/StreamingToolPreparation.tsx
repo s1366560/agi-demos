@@ -48,7 +48,7 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
       <div className="flex items-start gap-2 mb-2 animate-fade-in-up">
         <div className="flex flex-col items-center flex-shrink-0">
           <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/50">
-            <Loader2 size={11} className="text-blue-500 animate-spin" />
+            <Loader2 size={11} className="text-blue-500 animate-spin motion-reduce:animate-none" />
           </div>
         </div>
         <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
@@ -58,7 +58,7 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
                 {toolName}
               </span>
               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
                 Preparing
               </div>
             </div>
@@ -69,7 +69,7 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
               >
                 <pre className="whitespace-pre-wrap break-words">
                   {partialArguments}
-                  <span className="inline-block w-1.5 h-3 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+                  <span className="inline-block w-1.5 h-3 bg-blue-500 animate-pulse motion-reduce:animate-none ml-0.5 align-middle" />
                 </pre>
               </div>
             )}

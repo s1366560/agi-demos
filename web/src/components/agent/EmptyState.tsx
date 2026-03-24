@@ -15,12 +15,11 @@ import { useTranslation } from 'react-i18next';
 
 import {
   Plus,
-  Sparkles,
+  Bot,
   BarChart3,
   FileText,
   Code,
   MessageSquare,
-  Zap,
   Keyboard,
   ArrowRight,
   History,
@@ -84,16 +83,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       title: t('agent.emptyState.cards.analyzeTrends', 'Analyze project trends'),
       description: t(
         'agent.emptyState.cards.analyzeTrendsDesc',
-        'Identify key patterns and insights across your data streams'
+        'Identify key patterns and insights across your data'
       ),
       prompt: t(
         'agent.emptyState.cards.analyzeTrendsPrompt',
         'Analyze the trends and patterns in my project data. Identify key insights and anomalies.'
       ),
-      color: 'from-blue-500/10 to-blue-600/5',
-      iconColor: 'text-blue-500',
-      borderColor: 'border-blue-200/50 dark:border-blue-800/30',
-      hoverBorder: 'hover:border-blue-300 dark:hover:border-blue-700',
     },
     {
       icon: <FileText size={20} />,
@@ -106,10 +101,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         'agent.emptyState.cards.synthesizeReportsPrompt',
         'Help me synthesize a report from my recent findings. Create a clear executive summary.'
       ),
-      color: 'from-purple-500/10 to-purple-600/5',
-      iconColor: 'text-purple-500',
-      borderColor: 'border-purple-200/50 dark:border-purple-800/30',
-      hoverBorder: 'hover:border-purple-300 dark:hover:border-purple-700',
     },
     {
       icon: <Code size={20} />,
@@ -122,60 +113,30 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         'agent.emptyState.cards.generateCodePrompt',
         'Help me write code. What programming language and task do you need help with?'
       ),
-      color: 'from-emerald-500/10 to-emerald-600/5',
-      iconColor: 'text-emerald-500',
-      borderColor: 'border-emerald-200/50 dark:border-emerald-800/30',
-      hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-700',
-    },
-    {
-      icon: <Zap size={20} />,
-      title: t('agent.emptyState.cards.quickAutomation', 'Quick automation'),
-      description: t(
-        'agent.emptyState.cards.quickAutomationDesc',
-        'Build workflows and automate repetitive tasks'
-      ),
-      prompt: t(
-        'agent.emptyState.cards.quickAutomationPrompt',
-        'Help me automate a repetitive task. Describe the workflow you want to streamline.'
-      ),
-      color: 'from-amber-500/10 to-amber-600/5',
-      iconColor: 'text-amber-500',
-      borderColor: 'border-amber-200/50 dark:border-amber-800/30',
-      hoverBorder: 'hover:border-amber-300 dark:hover:border-amber-700',
     },
   ];
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center p-6 overflow-y-auto relative">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse-slow" />
-        <div
-          className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl animate-pulse-slow"
-          style={{ animationDelay: '1s' }}
-        />
-      </div>
-
       {/* Main Content */}
       <div className="text-center mb-10 relative z-10">
         {/* Logo/Icon with glow effect */}
         <div className="relative inline-block mb-6">
-          <div className="absolute inset-0 bg-primary/20 rounded-3xl blur-xl animate-pulse-slow" />
-          <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-xl shadow-primary/25">
-            <Sparkles size={40} className="text-white" />
+          <div className="relative w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-md">
+            <Bot size={32} className="text-white" />
           </div>
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">
-          {t('agent.emptyState.greeting', 'How can I help you today?')}
-        </h1>
+        <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+          {t('agent.emptyState.greeting', 'What are you working on?')}
+        </h2>
 
         {/* Subtitle */}
-        <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-8 text-base leading-relaxed">
+        <p className="text-slate-400 dark:text-slate-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
           {t(
             'agent.emptyState.subtitle',
-            'Your intelligent AI assistant is ready to help with analysis, coding, writing, and more.'
+            'Start a conversation or pick a suggestion below.'
           )}
         </p>
 
@@ -187,12 +148,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           onClick={onNewConversation}
           className="
             h-12 px-8 rounded-xl
-            bg-gradient-to-r from-primary to-primary-600
-            hover:from-primary-600 hover:to-primary-700
-            shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30
+            bg-primary hover:bg-primary-600
+            shadow-sm hover:shadow-md
             text-base font-medium
-            transition-all duration-300
-            hover:-translate-y-0.5
+            transition-colors duration-200
           "
         >
           {t('agent.emptyState.newConversation', 'Start New Conversation')}
@@ -203,6 +162,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       {lastConversation && onResumeConversation && (
         <div className="max-w-2xl w-full relative z-10 mb-4">
           <button
+            type="button"
             onClick={() => {
               onResumeConversation(lastConversation.id);
             }}
@@ -211,9 +171,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               bg-white dark:bg-slate-800/50
               border-l-4 border-l-primary border border-slate-200/50 dark:border-slate-700/30
               hover:shadow-lg hover:shadow-primary/10
-              transition-all duration-300 ease-out
+              transition-shadow duration-200 ease-out
               text-left
-              hover:-translate-y-0.5
             "
           >
             <div
@@ -255,7 +214,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </div>
       )}
 
-      {/* Project Context */}
+      {/* Project Context — shown above suggestions when available */}
       {projectId && (
         <div className="space-y-4 mb-6 max-w-2xl w-full relative z-10">
           <ProjectContextCard projectId={projectId} />
@@ -267,60 +226,48 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       )}
 
       {/* Suggestion Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl w-full relative z-10">
-        {suggestionCards.map((card, index) => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl w-full relative z-10">
+        {suggestionCards.map((card) => (
           <button
-            key={index}
+            key={card.title}
+            type="button"
             onClick={() => {
               handleCardClick(card.prompt);
             }}
-            className={`
-              group relative p-5 rounded-2xl
+            className="
+              group relative p-4 rounded-xl
               bg-white dark:bg-slate-800/50
-              border ${card.borderColor} ${card.hoverBorder}
-              hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-black/20
-              transition-all duration-300 ease-out
+              border border-slate-200 dark:border-slate-700/50
+              hover:border-slate-300 dark:hover:border-slate-600
+              hover:shadow-md
+              transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ease-out
               text-left
-              hover:-translate-y-0.5
-              overflow-hidden
-            `}
+            "
           >
-            {/* Gradient background on hover */}
-            <div
-              className={`absolute inset-0 bg-gradient-to-br ${card.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
-            />
-
-            <div className="relative z-10">
-              {/* Icon + Arrow */}
-              <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`
-                  w-11 h-11 rounded-xl
-                  bg-gradient-to-br ${card.color}
-                  border ${card.borderColor}
+            <div className="flex items-start justify-between mb-3">
+              <div
+                className="
+                  w-10 h-10 rounded-lg
+                  bg-primary/8 dark:bg-primary/15
                   flex items-center justify-center
-                  group-hover:scale-110 transition-transform duration-300
-                  ${card.iconColor}
-                `}
-                >
-                  {card.icon}
-                </div>
-                <ArrowRight
-                  size={16}
-                  className="text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300"
-                />
+                  text-primary
+                "
+              >
+                {card.icon}
               </div>
-
-              {/* Title */}
-              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1.5 text-base">
-                {card.title}
-              </h3>
-
-              {/* Description */}
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                {card.description}
-              </p>
+              <ArrowRight
+                size={14}
+                className="text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200"
+              />
             </div>
+
+            <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-1 text-sm">
+              {card.title}
+            </h3>
+
+            <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
+              {card.description}
+            </p>
           </button>
         ))}
       </div>

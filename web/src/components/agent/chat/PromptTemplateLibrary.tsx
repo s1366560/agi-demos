@@ -332,6 +332,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           <button
             type="button"
             onClick={handleClose}
+            aria-label="Close template library"
             className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors"
           >
             <X size={14} />
@@ -350,6 +351,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                 setSearch(e.target.value);
               }}
               placeholder={t('agent.templates.search', 'Search templates...')}
+              aria-label={t('agent.templates.search', 'Search templates...')}
               className="flex-1 bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
@@ -461,7 +463,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           ) : // Custom templates
           customLoading ? (
             <div className="px-4 py-8 text-center text-sm text-slate-400">
-              <Loader2 size={16} className="inline animate-spin mr-2" />
+              <Loader2 size={16} className="inline animate-spin motion-reduce:animate-none mr-2" />
               Loading...
             </div>
           ) : filteredCustom.length === 0 ? (
@@ -505,7 +507,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                         onClick={(e) => {
                           handleDeleteCustom(e, tmpl.id);
                         }}
-                        className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-all"
+                        className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                         aria-label="Delete"
                       >
                         <Trash2 size={12} />

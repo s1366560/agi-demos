@@ -73,7 +73,7 @@ export function WorkspaceSidebar({
 
   return (
     <aside
-      className={`flex flex-col bg-background-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark shrink-0 transition-all duration-300 ${
+      className={`flex flex-col bg-background-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark shrink-0 transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-300 ${
         collapsed ? 'w-16' : 'w-64 lg:w-64'
       }`}
     >
@@ -85,16 +85,16 @@ export function WorkspaceSidebar({
           </div>
           {!collapsed && (
             <div className="flex flex-col">
-              <h1 className="text-sm font-semibold leading-tight text-slate-900 dark:text-white">
+              <h2 className="text-sm font-semibold leading-tight text-slate-900 dark:text-white">
                 Unified Agent
-              </h1>
+              </h2>
               <p className="text-xs text-text-muted">{version}</p>
             </div>
           )}
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 space-y-1" aria-label="主导航">
+        <nav className="flex-1 space-y-1" aria-label="Main navigation">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}

@@ -305,7 +305,7 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
   // Clear loading indicator when hasEarlierMessages becomes false
   useEffect(() => {
     if (!hasEarlierMessages) {
-      setShowLoadingIndicator(false);
+      queueMicrotask(() => { setShowLoadingIndicator(false); });
       if (loadingIndicatorTimeoutRef.current) {
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;

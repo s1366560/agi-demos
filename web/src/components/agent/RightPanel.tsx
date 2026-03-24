@@ -243,10 +243,10 @@ export const RightPanel = memo<RightPanelProps>(
   }) => {
     const hasInsights = Boolean(
       executionPathDecision ||
-        selectionTrace ||
-        policyFiltered ||
-        latestToolsetChange ||
-        (executionNarrative && executionNarrative.length > 0)
+      selectionTrace ||
+      policyFiltered ||
+      latestToolsetChange ||
+      (executionNarrative && executionNarrative.length > 0)
     );
     const hasAgents = Boolean(agentNodes && agentNodes.size > 0);
     const [preferredTab, setPreferredTab] = useState<PanelTab>(
@@ -274,7 +274,7 @@ export const RightPanel = memo<RightPanelProps>(
 
     return (
       <div
-        className="h-full w-full flex bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm relative"
+        className="h-full w-full flex bg-white dark:bg-slate-900 relative"
         data-testid="right-panel"
       >
         {onWidthChange ? (
@@ -346,7 +346,7 @@ export const RightPanel = memo<RightPanelProps>(
                     size="small"
                     icon={<X size={18} />}
                     onClick={onClose}
-                    className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
+                    className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                     data-testid="close-button"
                   />
                 ) : null}

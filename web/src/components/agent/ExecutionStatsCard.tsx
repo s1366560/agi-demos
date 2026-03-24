@@ -5,6 +5,8 @@
  * success/failure rates, tool usage, and performance metrics.
  */
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import {
   LazyCard,
   LazyStatistic,
@@ -24,6 +26,11 @@ interface ExecutionStatsCardProps {
 }
 
 export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
+  const colors = useThemeColors({
+    success: '--color-success',
+    successDark: '--color-success-dark',
+  });
+
   const successRate =
     stats.total_executions > 0 ? (stats.completed_count / stats.total_executions) * 100 : 0;
 
@@ -133,8 +140,8 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
           percent={successRate}
           status={successRate >= 80 ? 'success' : successRate >= 50 ? 'normal' : 'exception'}
           strokeColor={{
-            '0%': '#10b981',
-            '100%': '#059669',
+            '0%': colors.success,
+            '100%': colors.successDark,
           }}
         />
       </div>

@@ -61,9 +61,9 @@ export function FinalReport({
       // Headers
       if (line.startsWith('# ')) {
         return (
-          <h1 key={index} className="text-xl font-bold text-slate-900 dark:text-white mt-4 mb-2">
+          <h2 key={index} className="text-xl font-bold text-slate-900 dark:text-white mt-4 mb-2">
             {line.replace('# ', '')}
-          </h1>
+          </h2>
         );
       }
       if (line.startsWith('## ')) {

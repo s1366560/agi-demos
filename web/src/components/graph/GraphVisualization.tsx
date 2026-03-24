@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 import { Network, MousePointer2, Move, Focus, Plus, Minus, X } from 'lucide-react';
 
+import { resolveThemeColor } from '../../hooks/useThemeColor';
 import { useMemoryStore } from '../../stores/memory';
 import { useProjectStore } from '../../stores/project';
 import { useThemeStore } from '../../stores/theme';
@@ -36,26 +37,26 @@ interface GraphEdge {
 
 const getNodeColor = (type: string): string => {
   const colors: Record<string, string> = {
-    person: '#3B82F6', // blue
-    organization: '#10B981', // green
-    location: '#F59E0B', // yellow
-    event: '#EF4444', // red
-    concept: '#8B5CF6', // purple
-    object: '#6B7280', // gray
+    person: resolveThemeColor('--color-info', '#3B82F6'),
+    organization: resolveThemeColor('--color-success', '#10B981'),
+    location: resolveThemeColor('--color-warning', '#F59E0B'),
+    event: resolveThemeColor('--color-error', '#EF4444'),
+    concept: resolveThemeColor('--color-tile-purple', '#8B5CF6'),
+    object: resolveThemeColor('--color-text-muted', '#6B7280'),
   };
-  return colors[type] || '#6B7280';
+  return colors[type] || resolveThemeColor('--color-text-muted', '#6B7280');
 };
 
 const getEdgeColor = (type: string): string => {
   const colors: Record<string, string> = {
-    works_at: '#3B82F6',
-    located_in: '#10B981',
-    part_of: '#F59E0B',
-    knows: '#EF4444',
-    related_to: '#8B5CF6',
-    owns: '#6B7280',
+    works_at: resolveThemeColor('--color-info', '#3B82F6'),
+    located_in: resolveThemeColor('--color-success', '#10B981'),
+    part_of: resolveThemeColor('--color-warning', '#F59E0B'),
+    knows: resolveThemeColor('--color-error', '#EF4444'),
+    related_to: resolveThemeColor('--color-tile-purple', '#8B5CF6'),
+    owns: resolveThemeColor('--color-text-muted', '#6B7280'),
   };
-  return colors[type] || '#9CA3AF';
+  return colors[type] || resolveThemeColor('--color-text-muted-light', '#9CA3AF');
 };
 
 export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
@@ -170,7 +171,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       ctx.beginPath();
       ctx.moveTo(sourceNode.x || 0, sourceNode.y || 0);
       ctx.lineTo(targetNode.x || 0, targetNode.y || 0);
-      ctx.strokeStyle = edge.color || (isDark ? '#4B5563' : '#9CA3AF');
+      ctx.strokeStyle = edge.color || (isDark ? resolveThemeColor('--color-text-muted', '#4B5563') : resolveThemeColor('--color-text-muted-light', '#9CA3AF'));
       ctx.lineWidth = (edge.weight || 1) * 2;
       ctx.stroke();
 
@@ -180,11 +181,11 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         const midY = ((sourceNode.y || 0) + (targetNode.y || 0)) / 2;
 
         // Label Background
-        ctx.fillStyle = isDark ? '#111521' : '#FFFFFF';
+        ctx.fillStyle = isDark ? resolveThemeColor('--color-background-dark', '#111521') : resolveThemeColor('--color-background', '#FFFFFF');
         const textWidth = ctx.measureText(edge.label).width;
         ctx.fillRect(midX - textWidth / 2 - 4, midY - 14, textWidth + 8, 18);
 
-        ctx.fillStyle = isDark ? '#9CA3AF' : '#374151';
+        ctx.fillStyle = isDark ? resolveThemeColor('--color-text-muted-light', '#9CA3AF') : resolveThemeColor('--color-text-secondary', '#374151');
         ctx.font = '10px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(edge.label, midX, midY - 2);
@@ -208,22 +209,22 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       // Draw node circle
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
-      ctx.fillStyle = node.color || '#6B7280';
+      ctx.fillStyle = node.color || resolveThemeColor('--color-text-muted', '#6B7280');
       ctx.fill();
 
       // Border
-      ctx.strokeStyle = isDark ? '#1F2937' : '#FFFFFF';
+      ctx.strokeStyle = isDark ? resolveThemeColor('--color-surface-dark-alt', '#1F2937') : resolveThemeColor('--color-background', '#FFFFFF');
       ctx.lineWidth = 2;
       ctx.stroke();
 
       // Draw node label
       if (showLabels) {
-        ctx.fillStyle = isDark ? '#E5E7EB' : '#1F2937';
+        ctx.fillStyle = isDark ? resolveThemeColor('--color-text-primary', '#E5E7EB') : resolveThemeColor('--color-surface-dark-alt', '#1F2937');
         ctx.font = 'bold 12px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(node.label, x, y + size + 16);
 
-        ctx.fillStyle = isDark ? '#9CA3AF' : '#6B7280';
+        ctx.fillStyle = isDark ? resolveThemeColor('--color-text-muted-light', '#9CA3AF') : resolveThemeColor('--color-text-muted', '#6B7280');
         ctx.font = '10px Inter, sans-serif';
         ctx.fillText(node.type.toUpperCase(), x, y + size + 28);
       }
@@ -295,7 +296,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
   if (!currentProject) {
     return (
-      <div className="bg-[#111521] rounded-lg shadow-sm border border-slate-800 p-8 h-full">
+      <div className="bg-background-dark rounded-lg shadow-sm border border-slate-800 p-8 h-full">
         <div className="text-center">
           <Network className="h-12 w-12 text-slate-600 mx-auto mb-3" />
           <h3 className="text-lg font-medium text-white mb-2">Please select a project</h3>
@@ -306,21 +307,21 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
   return (
     <div
-      className="bg-[#111521] rounded-lg shadow-sm border border-slate-800 relative h-full flex flex-col overflow-hidden"
+      className="bg-background-dark rounded-lg shadow-sm border border-slate-800 relative h-full flex flex-col overflow-hidden"
       ref={containerRef}
     >
       {/* Grid Pattern Background */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"
         style={{
-          backgroundImage: 'radial-gradient(#2b324a 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(var(--color-border-dark) 1px, transparent 1px)',
           backgroundSize: '40px 40px',
         }}
       ></div>
 
       {/* Floating Toolbar (Left) */}
       <div className="absolute top-6 left-6 flex flex-col gap-2 z-10">
-        <div className="bg-[#1e2332] border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col">
+        <div className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col">
           <button
             onClick={() => {
               setInteractionMode('select');
@@ -340,7 +341,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             <Move className="w-5 h-5" />
           </button>
         </div>
-        <div className="bg-[#1e2332] border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col mt-2">
+        <div className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col mt-2">
           <button
             onClick={handleZoomIn}
             className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 transition-colors"
@@ -356,7 +357,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         </div>
         <button
           onClick={handleResetView}
-          className="bg-[#1e2332] border border-slate-700 rounded-lg shadow-xl p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 mt-2 transition-colors"
+          className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 mt-2 transition-colors"
         >
           <Focus className="w-5 h-5" />
         </button>
@@ -364,7 +365,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       {/* Legend / Filters (Bottom Left) */}
       <div className="absolute bottom-6 left-6 z-10">
-        <div className="bg-[#1e2332]/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl">
+        <div className="bg-surface-dark/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl">
           <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
             Entity Types
           </div>
@@ -411,7 +412,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       {/* Node Details Panel (Right) */}
       {selectedNode && (
-        <div className="absolute top-6 right-6 bottom-6 w-80 bg-[#1e2332] border border-slate-700 shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+        <div className="absolute top-6 right-6 bottom-6 w-80 bg-surface-dark border border-slate-700 shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
           <div className="p-5 border-b border-slate-700 bg-gradient-to-r from-blue-900/20 to-transparent">
             <div className="flex justify-between items-start mb-2">
               <div className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-blue-500/30">
@@ -474,8 +475,8 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
               </div>
             </div>
           </div>
-          <div className="p-4 border-t border-slate-700 bg-[#151820] flex gap-2">
-            <button className="flex-1 py-2 rounded-lg border border-slate-600 bg-[#1e2332] text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors">
+          <div className="p-4 border-t border-slate-700 bg-background-dark flex gap-2">
+            <button className="flex-1 py-2 rounded-lg border border-slate-600 bg-surface-dark text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors">
               Expand
             </button>
             <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-colors">

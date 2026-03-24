@@ -443,11 +443,11 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
       <div
         className={
           className ||
-          'flex flex-col h-full bg-slate-50 dark:bg-[#111521] text-slate-900 dark:text-white overflow-hidden'
+          'flex flex-col h-full bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden'
         }
       >
         <EntityTypeList.Header />
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-[#111521] p-8">
+        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark p-8">
           <div className="max-w-7xl mx-auto flex flex-col gap-6">
             <EntityTypeList.Toolbar />
             <EntityTypeList.Table
@@ -490,20 +490,20 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
   if (!handleCreate) return null;
 
   return (
-    <div className="w-full flex-none pt-8 pb-4 px-8 border-b border-slate-200 dark:border-[#2a324a]/50 bg-white dark:bg-[#121521]">
+    <div className="w-full flex-none pt-8 pb-4 px-8 border-b border-slate-200 dark:border-border-dark/50 bg-white dark:bg-background-dark">
       <div className="max-w-7xl mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap justify-between items-center gap-4">
           <div>
             <h2 className="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">
               {TEXTS.title}
             </h2>
-            <p className="text-slate-500 dark:text-[#95a0c6] text-sm mt-1">{TEXTS.subtitle}</p>
+            <p className="text-slate-500 dark:text-text-muted text-sm mt-1">{TEXTS.subtitle}</p>
           </div>
           <button
             onClick={() => {
               handleCreate(null);
             }}
-            className="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-blue-600 dark:bg-[#193db3] hover:bg-blue-700 dark:hover:bg-[#254bcc] text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+            className="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-blue-600 dark:bg-primary hover:bg-blue-700 dark:hover:bg-primary-light text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
           >
             <Plus className="w-5 h-5" />
             <span>{TEXTS.create}</span>
@@ -542,14 +542,14 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
   if (!setSearch || !setViewMode) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-[#1e2433] p-4 rounded-xl border border-slate-200 dark:border-[#2a324a]">
+    <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-200 dark:border-border-dark">
       <div className="flex flex-1 max-w-md">
-        <label className="flex w-full items-center h-10 rounded-lg bg-slate-100 dark:bg-[#252d46] border border-transparent focus-within:border-blue-500 dark:focus-within:border-[#193db3]/50 transition-colors">
-          <div className="text-slate-400 dark:text-[#95a0c6] flex items-center justify-center pl-3">
+        <label className="flex w-full items-center h-10 rounded-lg bg-slate-100 dark:bg-surface-dark-alt border border-transparent focus-within:border-blue-500 dark:focus-within:border-primary/50 transition-colors">
+          <div className="text-slate-400 dark:text-text-muted flex items-center justify-center pl-3">
             <Search className="w-5 h-5" />
           </div>
           <input
-            className="w-full bg-transparent border-none text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#95a0c6] focus:ring-0 text-sm px-3 outline-none"
+            className="w-full bg-transparent border-none text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-text-muted focus:ring-0 text-sm px-3 outline-none"
             placeholder={TEXTS.searchPlaceholder}
             value={search}
             onChange={(e) => {
@@ -559,21 +559,21 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
         </label>
       </div>
       <div className="flex items-center gap-3">
-        <button className="flex h-9 items-center gap-2 rounded-lg bg-slate-100 dark:bg-[#252d46] hover:bg-slate-200 dark:hover:bg-[#2f3956] border border-slate-200 dark:border-[#2a324a] px-3 transition-colors">
+        <button className="flex h-9 items-center gap-2 rounded-lg bg-slate-100 dark:bg-surface-dark-alt hover:bg-slate-200 dark:hover:bg-surface-elevated border border-slate-200 dark:border-border-dark px-3 transition-colors">
           <span className="text-slate-700 dark:text-white text-sm font-medium">
             {TEXTS.filterProject}
           </span>
-          <ChevronDown className="w-4 h-4 text-slate-400 dark:text-[#95a0c6]" />
+          <ChevronDown className="w-4 h-4 text-slate-400 dark:text-text-muted" />
         </button>
-        <div className="h-6 w-px bg-slate-200 dark:bg-[#2a324a] mx-1"></div>
+        <div className="h-6 w-px bg-slate-200 dark:bg-border-dark mx-1"></div>
         <button
           onClick={() => {
             setViewMode('list');
           }}
           className={`flex items-center justify-center h-9 w-9 rounded-lg transition-colors ${
             viewMode === 'list'
-              ? 'bg-slate-200 dark:bg-[#252d46] text-slate-900 dark:text-white'
-              : 'bg-transparent text-slate-400 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white'
+              ? 'bg-slate-200 dark:bg-surface-dark-alt text-slate-900 dark:text-white'
+              : 'bg-transparent text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white'
           }`}
           title={TEXTS.listView}
         >
@@ -585,8 +585,8 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
           }}
           className={`flex items-center justify-center h-9 w-9 rounded-lg transition-colors ${
             viewMode === 'grid'
-              ? 'bg-slate-200 dark:bg-[#252d46] text-slate-900 dark:text-white'
-              : 'bg-transparent text-slate-400 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white'
+              ? 'bg-slate-200 dark:bg-surface-dark-alt text-slate-900 dark:text-white'
+              : 'bg-transparent text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white'
           }`}
           title={TEXTS.gridView}
         >
@@ -663,7 +663,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
   }, [entity.id, onDelete]);
 
   return (
-    <div className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-[#252d46] transition-colors group items-start">
+    <div className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-surface-dark-alt transition-colors group items-start">
       <div className="col-span-2 flex items-center gap-4">
         <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
           <User className="w-6 h-6" />
@@ -672,14 +672,14 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
           <span className="text-slate-900 dark:text-white font-medium text-sm">{entity.name}</span>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
-            <span className="text-xs text-slate-500 dark:text-[#95a0c6]">
+            <span className="text-xs text-slate-500 dark:text-text-muted">
               {entity.description || 'Core Model'}
             </span>
           </div>
         </div>
       </div>
       <div className="col-span-2 flex items-center">
-        <code className="text-xs font-mono bg-slate-100 dark:bg-[#121521] px-2 py-1 rounded text-slate-500 dark:text-[#95a0c6] border border-slate-200 dark:border-[#2a324a]">
+        <code className="text-xs font-mono bg-slate-100 dark:bg-background-dark px-2 py-1 rounded text-slate-500 dark:text-text-muted border border-slate-200 dark:border-border-dark">
           {entity.id.slice(0, 8)}...
         </code>
       </div>
@@ -689,18 +689,18 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
           .map(([key, val]: [string, any]) => (
             <div key={key} className="flex items-center gap-2 text-xs">
               <span className="text-emerald-600 dark:text-emerald-300 font-mono">{key}</span>
-              <span className="text-slate-500 dark:text-[#95a0c6] text-[10px]">
+              <span className="text-slate-500 dark:text-text-muted text-[10px]">
                 : {typeof val === 'string' ? val : val.type}
               </span>
             </div>
           ))}
         {Object.keys(entity.schema || {}).length > 3 && (
-          <div className="text-[10px] text-slate-500 dark:text-[#95a0c6] mt-1 font-medium">
+          <div className="text-[10px] text-slate-500 dark:text-text-muted mt-1 font-medium">
             +{Object.keys(entity.schema || {}).length - 3} more
           </div>
         )}
         {Object.keys(entity.schema || {}).length === 0 && (
-          <div className="text-[10px] text-slate-400 dark:text-[#95a0c6] italic">
+          <div className="text-[10px] text-slate-400 dark:text-text-muted italic">
             {TEXTS.table.noAttributes}
           </div>
         )}
@@ -715,19 +715,19 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
         <span className="text-sm text-slate-700 dark:text-white">
           {entity.created_at ? formatDateOnly(entity.created_at) : '-'}
         </span>
-        <span className="text-xs text-slate-400 dark:text-[#95a0c6]">by Admin</span>
+        <span className="text-xs text-slate-400 dark:text-text-muted">by Admin</span>
       </div>
       <div className="col-span-1 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
         <button
           onClick={handleEdit}
-          className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-[#193db3]/20 text-slate-400 dark:text-[#95a0c6] hover:text-blue-600 dark:hover:text-[#193db3] transition-colors"
+          className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-primary/20 text-slate-400 dark:text-text-muted hover:text-blue-600 dark:hover:text-primary transition-colors"
           title={TEXTS.edit}
         >
           <FileEdit className="w-4 h-4" />
         </button>
         <button
           onClick={handleDelete}
-          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/20 text-slate-400 dark:text-[#95a0c6] hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/20 text-slate-400 dark:text-text-muted hover:text-red-600 dark:hover:text-red-400 transition-colors"
           title={TEXTS.delete}
         >
           <Trash2 className="w-4 h-4" />
@@ -755,9 +755,9 @@ const TableInternal: React.FC<TableProps> = React.memo(({ entities, onEdit, onDe
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-slate-200 dark:border-[#2a324a] bg-white dark:bg-[#1e2433] overflow-hidden shadow-xl">
+    <div className="flex flex-col rounded-xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark overflow-hidden shadow-xl">
       <EntityTypeList.TableHeader />
-      <div className="divide-y divide-slate-200 dark:divide-[#2a324a]">
+      <div className="divide-y divide-slate-200 dark:divide-border-dark">
         {entities.map((entity) => (
           <EntityTypeList.TableRow
             key={entity.id}
@@ -778,7 +778,7 @@ TableInternal.displayName = 'EntityTypeList.Table';
 // ============================================================================
 
 const TableHeaderInternal: React.FC = React.memo(() => (
-  <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-[#2a324a] bg-slate-50 dark:bg-[#252d46]/50 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-[#95a0c6]">
+  <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark-alt/50 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-text-muted">
     <div className="col-span-2 flex items-center">{TEXTS.table.entityType}</div>
     <div className="col-span-2 flex items-center">{TEXTS.table.internalId}</div>
     <div className="col-span-3 flex items-center">{TEXTS.table.schemaDefinition}</div>
@@ -796,7 +796,7 @@ TableHeaderInternal.displayName = 'EntityTypeList.TableHeader';
 // ============================================================================
 
 const EmptyInternal: React.FC = () => (
-  <div className="px-6 py-8 text-center text-slate-500 dark:text-[#95a0c6]">
+  <div className="px-6 py-8 text-center text-slate-500 dark:text-text-muted">
     {TEXTS.table.empty}
   </div>
 );
@@ -934,12 +934,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
           onClick={onClose}
         ></div>
         <div
-          className="relative w-full max-w-3xl bg-white dark:bg-[#111521] shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-[#2a324a] animate-in slide-in-from-right duration-300"
+          className="relative w-full max-w-3xl bg-white dark:bg-background-dark shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-border-dark animate-in slide-in-from-right duration-300"
           onClick={(e) => {
             e.stopPropagation();
           }}
         >
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#2a324a] bg-slate-50 dark:bg-[#1e2433]">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark">
             <div className="flex items-center gap-4">
               <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
                 <User className="w-6 h-6" />
@@ -950,7 +950,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     ? `${TEXTS.modal.titleEdit} ${editingEntity.name}`
                     : TEXTS.modal.titleNew}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-[#95a0c6] mt-1 font-mono">
+                <p className="text-xs text-slate-500 dark:text-text-muted mt-1 font-mono">
                   {editingEntity?.id || 'New ID'}
                 </p>
               </div>
@@ -958,14 +958,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-[#95a0c6] hover:bg-slate-200 dark:hover:bg-[#2a324a] hover:text-slate-900 dark:hover:text-white transition-colors"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-text-muted hover:bg-slate-200 dark:hover:bg-border-dark hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <div className="flex border-b border-slate-200 dark:border-[#2a324a] sticky top-0 bg-white dark:bg-[#111521] z-10 px-6 pt-2">
+            <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
               <button
                 onClick={() => {
                   setActiveTab('general');
@@ -973,7 +973,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'general'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
-                    : 'text-slate-500 dark:text-[#95a0c6] border-transparent hover:text-slate-900 dark:hover:text-white'
+                    : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {TEXTS.generalSettings}
@@ -985,7 +985,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'attributes'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
-                    : 'text-slate-500 dark:text-[#95a0c6] border-transparent hover:text-slate-900 dark:hover:text-white'
+                    : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {TEXTS.attributesSchema}
@@ -997,7 +997,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'relationships'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
-                    : 'text-slate-500 dark:text-[#95a0c6] border-transparent hover:text-slate-900 dark:hover:text-white'
+                    : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {TEXTS.relationships}
@@ -1012,11 +1012,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                   </h4>
                   <div className="grid grid-cols-1 gap-4">
                     <div>
-                      <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                      <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                         {TEXTS.modal.nameLabel}
                       </label>
                       <input
-                        className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
                         type="text"
                         value={formData.name}
                         onChange={(e) => {
@@ -1027,11 +1027,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                      <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                         {TEXTS.modal.descLabel}
                       </label>
                       <textarea
-                        className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors h-32"
+                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors h-32"
                         value={formData.description}
                         onChange={(e) => {
                           setFormData({ ...formData, description: e.target.value });
@@ -1064,7 +1064,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       </h4>
                       <button
                         onClick={addAttribute}
-                        className="text-blue-600 dark:text-[#193db3] text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-[#254bcc] px-3 py-1.5 bg-blue-50 dark:bg-[#193db3]/10 rounded-lg border border-blue-200 dark:border-[#193db3]/20 transition-colors"
+                        className="text-blue-600 dark:text-primary text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-primary-light px-3 py-1.5 bg-blue-50 dark:bg-primary/10 rounded-lg border border-blue-200 dark:border-primary/20 transition-colors"
                       >
                         <Plus className="w-4 h-4" /> {TEXTS.modal.addAttribute}
                       </button>
@@ -1073,11 +1073,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       {attributes.map((attr, idx) => (
                         <div
                           key={idx}
-                          className="border border-blue-200 dark:border-[#193db3]/50 bg-white dark:bg-[#1e2433] rounded-xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-blue-100 dark:ring-[#193db3]/30"
+                          className="border border-blue-200 dark:border-primary/50 bg-white dark:bg-surface-dark rounded-xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-blue-100 dark:ring-primary/30"
                         >
-                          <div className="bg-slate-50 dark:bg-[#252d46] px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-[#2a324a]">
+                          <div className="bg-slate-50 dark:bg-surface-dark-alt px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-border-dark">
                             <div className="flex items-center gap-2">
-                              <FileEdit className="w-4 h-4 text-blue-600 dark:text-[#193db3]" />
+                              <FileEdit className="w-4 h-4 text-blue-600 dark:text-primary" />
                               <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wide">
                                 Attribute #{idx + 1}
                               </span>
@@ -1094,11 +1094,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                           <div className="p-5 flex flex-col gap-6">
                             <div className="grid grid-cols-12 gap-4">
                               <div className="col-span-5">
-                                <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                                <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                                   {TEXTS.modal.attrNameLabel}
                                 </label>
                                 <input
-                                  className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                                  className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
                                   type="text"
                                   value={attr.name}
                                   onChange={(e) => {
@@ -1108,12 +1108,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 />
                               </div>
                               <div className="col-span-4">
-                                <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                                <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                                   {TEXTS.modal.dataTypeLabel}
                                 </label>
                                 <div className="relative">
                                   <select
-                                    className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none appearance-none focus:border-blue-600 dark:focus:border-[#193db3]"
+                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none appearance-none focus:border-blue-600 dark:focus:border-primary"
                                     value={attr.type}
                                     onChange={(e) => {
                                       updateAttribute(idx, 'type', e.target.value);
@@ -1127,7 +1127,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                     <option value="List">List</option>
                                     <option value="Dict">Dict</option>
                                   </select>
-                                  <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-slate-400 dark:text-[#95a0c6] pointer-events-none" />
+                                  <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-slate-400 dark:text-text-muted pointer-events-none" />
                                 </div>
                               </div>
                               <div className="col-span-3 flex items-end pb-2">
@@ -1147,11 +1147,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               </div>
                             </div>
                             <div>
-                              <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                              <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                                 {TEXTS.modal.docstringLabel}
                               </label>
                               <input
-                                className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-500 dark:text-[#95a0c6] px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                                className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-500 dark:text-text-muted px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
                                 type="text"
                                 value={attr.description}
                                 onChange={(e) => {
@@ -1162,7 +1162,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                             </div>
 
                             {/* Validation Rules */}
-                            <div className="bg-slate-100 dark:bg-[#121521] rounded-lg border border-slate-200 dark:border-[#2a324a] p-4">
+                            <div className="bg-slate-100 dark:bg-background-dark rounded-lg border border-slate-200 dark:border-border-dark p-4">
                               <div className="flex items-center gap-2 mb-3">
                                 <Gavel className="w-4 h-4 text-blue-500" />
                                 <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wider">
@@ -1173,12 +1173,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 {(attr.type === 'Integer' || attr.type === 'Float') && (
                                   <>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-[#95a0c6] block mb-1 font-mono">
+                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         min_val (ge)
                                       </label>
                                       <input
                                         type="number"
-                                        className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
+                                        className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.ge || ''}
                                         onChange={(e) => {
                                           updateAttribute(
@@ -1190,12 +1190,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-[#95a0c6] block mb-1 font-mono">
+                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         max_val (le)
                                       </label>
                                       <input
                                         type="number"
-                                        className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
+                                        className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.le || ''}
                                         onChange={(e) => {
                                           updateAttribute(
@@ -1211,12 +1211,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 {attr.type === 'String' && (
                                   <>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-[#95a0c6] block mb-1 font-mono">
+                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         min_len
                                       </label>
                                       <input
                                         type="number"
-                                        className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
+                                        className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.min_len || ''}
                                         onChange={(e) => {
                                           updateAttribute(
@@ -1228,12 +1228,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-[#95a0c6] block mb-1 font-mono">
+                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         max_len
                                       </label>
                                       <input
                                         type="number"
-                                        className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
+                                        className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.max_len || ''}
                                         onChange={(e) => {
                                           updateAttribute(
@@ -1245,12 +1245,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       />
                                     </div>
                                     <div className="col-span-2">
-                                      <label className="text-[10px] text-slate-500 dark:text-[#95a0c6] block mb-1 font-mono">
+                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         regex
                                       </label>
                                       <input
                                         type="text"
-                                        className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
+                                        className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         placeholder="e.g. ^[a-z]+$"
                                         value={attr.validation?.regex || ''}
                                         onChange={(e) => {
@@ -1285,8 +1285,8 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
               )}
             </div>
           </div>
-          <div className="border-t border-slate-200 dark:border-[#2a324a] p-4 bg-slate-50 dark:bg-[#1e2433] flex justify-between items-center gap-3">
-            <div className="text-xs text-slate-500 dark:text-[#95a0c6] flex items-center gap-1">
+          <div className="border-t border-slate-200 dark:border-border-dark p-4 bg-slate-50 dark:bg-surface-dark flex justify-between items-center gap-3">
+            <div className="text-xs text-slate-500 dark:text-text-muted flex items-center gap-1">
               <History className="w-4 h-4" />
               <span>
                 {TEXTS.modal.lastSaved.replace(
@@ -1300,13 +1300,13 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2a324a] rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a324a] transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
               >
                 {TEXTS.modal.discard}
               </button>
               <button
                 onClick={onSave}
-                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-[#193db3] rounded-lg hover:bg-blue-700 dark:hover:bg-[#254bcc] shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
               >
                 {TEXTS.modal.save}
               </button>

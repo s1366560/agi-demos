@@ -97,13 +97,13 @@ export function ChatHistorySidebar({
   };
 
   return (
-    <aside className="w-80 flex flex-col bg-slate-50 dark:bg-[#0c0c0e] border-r border-slate-200 dark:border-border-dark shrink-0">
+    <aside className="w-80 flex flex-col bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-border-dark shrink-0">
       <div className="p-4 flex flex-col h-full space-y-4">
         {/* New Chat Button */}
         <button
           onClick={onNewChat}
-          aria-label="新建对话"
-          className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-primary/20 text-sm font-semibold"
+          aria-label="New conversation"
+          className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 px-4 rounded-xl transition-colors shadow-sm text-sm font-semibold"
         >
           <span className="material-symbols-outlined text-xl">add_comment</span>
           <span>New Chat</span>
@@ -122,8 +122,8 @@ export function ChatHistorySidebar({
             value={localSearch}
             onChange={handleSearchChange}
             placeholder="Search history..."
-            aria-label="搜索对话历史"
-            className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-text-muted text-slate-900 dark:text-white shadow-md"
+            aria-label="Search conversation history"
+            className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-[color,background-color,border-color,box-shadow,opacity,transform] placeholder:text-text-muted text-slate-900 dark:text-white shadow-md"
           />
         </div>
 

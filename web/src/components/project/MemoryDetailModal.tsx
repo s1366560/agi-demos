@@ -147,7 +147,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   title="保存"
                 >
                   {isLoading ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                    <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-green-600"></div>
                   ) : (
                     <Save className="h-4 w-4" />
                   )}

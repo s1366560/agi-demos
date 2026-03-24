@@ -69,7 +69,7 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
 
   const bgClass = level === 'work' ? 'bg-purple-50' : 'bg-cyan-50';
   const borderClass = level === 'work' ? 'border-purple-300' : 'border-cyan-300';
-  const animationClass = isThinking ? 'animate-pulse' : '';
+  const animationClass = isThinking ? 'animate-pulse motion-reduce:animate-none' : '';
   const maxHeightClass = collapsed ? 'max-h-none' : 'max-h-[200px]';
   const overflowClass = collapsed ? 'overflow-visible' : 'overflow-auto';
 

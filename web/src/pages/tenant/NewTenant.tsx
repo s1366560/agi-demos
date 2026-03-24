@@ -100,7 +100,7 @@ export const NewTenant: React.FC = () => {
                       onChange={(e) => {
                         setFormData({ ...formData, name: e.target.value });
                       }}
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 transition-all outline-none"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
                       placeholder="e.g. Acme Corp"
                       type="text"
                     />
@@ -117,7 +117,7 @@ export const NewTenant: React.FC = () => {
                     onChange={(e) => {
                       setFormData({ ...formData, description: e.target.value });
                     }}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary p-3 text-sm placeholder:text-slate-400 transition-all outline-none resize-none"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary p-3 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
                     placeholder="Briefly describe your organization..."
                   />
                 </label>
@@ -145,10 +145,10 @@ export const NewTenant: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isLoading || !formData.name.trim()}
-                  className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-[color,background-color,border-color,box-shadow,opacity,transform] transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
-                    <span className="material-symbols-outlined animate-spin">
+                    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none">
                       progress_activity
                     </span>
                   ) : (

@@ -155,7 +155,7 @@ export const Login: React.FC = () => {
                   onChange={(e) => {
                     setEmail(e.target.value);
                   }}
-                  className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
+                  className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                   placeholder="name@company.com"
                   required
                   disabled={isLoading || authLoading}
@@ -187,7 +187,7 @@ export const Login: React.FC = () => {
                   onChange={(e) => {
                     setPassword(e.target.value);
                   }}
-                  className="block w-full px-4 py-3 pr-10 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
+                  className="block w-full px-4 py-3 pr-10 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                   placeholder={t('login.form.password_placeholder')}
                   required
                   disabled={isLoading || authLoading}
@@ -213,13 +213,13 @@ export const Login: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:-translate-y-0.5"
+              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:-translate-y-0.5"
               disabled={isLoading || authLoading}
               data-testid="login-submit-button"
             >
               {isLoading || authLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                  <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
                   {t('login.loading')}
                 </>
               ) : (

@@ -102,7 +102,7 @@ const getProcessingStatusStyles = (status: string | undefined) => {
     default:
       return {
         badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-        dot: 'bg-yellow-500 animate-pulse',
+        dot: 'bg-yellow-500 animate-pulse motion-reduce:animate-none',
       };
   }
 };
@@ -360,7 +360,7 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
       </div>
       <Link to={`${projectBasePath}/memories/new`}>
-        <button className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-all active:scale-95">
+        <button className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
           <span className="material-symbols-outlined text-lg">add</span>
           <span>{TEXTS.addMemory}</span>
         </button>
@@ -402,7 +402,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
           type="text"
           value={search}
           onChange={(e) => onSearchChange?.(e.target.value)}
-          className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600/20 focus:bg-white dark:focus:bg-slate-700 transition-all outline-none"
+          className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600/20 focus:bg-white dark:focus:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
           placeholder={TEXTS.searchPlaceholder}
         />
       </div>
@@ -531,7 +531,7 @@ const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
         {progress !== undefined && (
           <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -642,7 +642,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
               >
                 {state?.deletingId === memory.id ? (
                   <span
-                    className="material-symbols-outlined animate-spin"
+                    className="material-symbols-outlined animate-spin motion-reduce:animate-none"
                     style={{ fontSize: '20px' }}
                   >
                     progress_activity

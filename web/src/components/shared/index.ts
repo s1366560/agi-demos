@@ -6,11 +6,38 @@
  *
  * Sub-categories:
  * - modals: Reusable modal components (DeleteConfirmationModal)
- * - ui: Generic UI components (LanguageSwitcher, NotificationPanel, ThemeToggle, WorkspaceSwitcher)
+ * - ui: Generic UI components (design system, navigation, workspace)
  */
 
 // Modal components
 export { DeleteConfirmationModal } from './modals';
 
-// UI components
-export { LanguageSwitcher, NotificationPanel, ThemeToggle, WorkspaceSwitcher } from './ui';
+// Design System Components
+export {
+  // Status indicators
+  StatusBadge,
+  // State display
+  StateDisplay,
+  // Empty states
+  EmptyStateVariant,
+  EmptyStateSimple,
+  EmptyStateCards,
+  // Navigation
+  LanguageSwitcher,
+  NotificationPanel,
+  ThemeToggle,
+  WorkspaceSwitcher,
+} from './ui';
+
+// Type exports for design system
+export type {
+  StatusBadgeProps,
+  StatusBadgeStatus,
+  StateLoadingProps,
+  StateEmptyProps,
+  StateErrorProps,
+  EmptyStateVariantProps,
+  EmptyStateSimpleProps,
+  EmptyStateCardsProps,
+  SuggestionCard,
+} from './ui';

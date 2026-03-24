@@ -406,27 +406,6 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
             tabBarStyle={{ margin: 0, paddingLeft: 16, paddingRight: 16 }}
           />
         )}
-
-        {/* Styles */}
-        <style>{`
-          .sandbox-panel-tabs {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-          }
-          .sandbox-panel-tabs .ant-tabs-content {
-            flex: 1;
-            height: 0;
-          }
-          .sandbox-panel-tabs .ant-tabs-content-holder {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-          }
-          .sandbox-panel-tabs .ant-tabs-tabpane {
-            height: 100%;
-          }
-        `}</style>
       </div>
     </SandboxPanelProvider>
   );

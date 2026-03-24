@@ -79,7 +79,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
       <div
         className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
           hasError ? CARD_STYLES.error : ''
-        } transition-all duration-200 overflow-hidden`}
+        } transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 overflow-hidden`}
       >
         {/* Status Bar */}
         <div
@@ -135,7 +135,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
             <MaterialIcon
               name={runtimeStyle.icon}
               size={16}
-              className={`${runtimeStyle.color} ${status === 'starting' ? 'animate-spin' : ''}`}
+              className={`${runtimeStyle.color} ${status === 'starting' ? 'animate-spin motion-reduce:animate-none' : ''}`}
             />
             <span className={`text-xs font-medium ${runtimeStyle.color}`}>
               {runtimeStyle.label}
@@ -184,7 +184,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 <MaterialIcon
                   name={isSyncing ? 'progress_activity' : 'sync'}
                   size={16}
-                  className={isSyncing ? 'animate-spin' : ''}
+                  className={isSyncing ? 'animate-spin motion-reduce:animate-none' : ''}
                 />
                 Sync
               </button>
@@ -201,7 +201,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 <MaterialIcon
                   name={isTesting ? 'progress_activity' : 'science'}
                   size={16}
-                  className={isTesting ? 'animate-spin' : ''}
+                  className={isTesting ? 'animate-spin motion-reduce:animate-none' : ''}
                 />
                 Test
               </button>

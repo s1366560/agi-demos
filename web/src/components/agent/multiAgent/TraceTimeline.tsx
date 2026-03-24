@@ -60,7 +60,7 @@ function StatusIcon({ status }: { status: string }) {
     case 'failed':
       return <AlertCircle size={14} className="text-red-600 dark:text-red-400" />;
     case 'running':
-      return <Loader2 size={14} className="text-blue-600 dark:text-blue-400 animate-spin" />;
+      return <Loader2 size={14} className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />;
     case 'cancelled':
       return <AlertCircle size={14} className="text-amber-600 dark:text-amber-400" />;
     default:

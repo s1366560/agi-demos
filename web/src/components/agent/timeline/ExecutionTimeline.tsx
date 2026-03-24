@@ -172,7 +172,7 @@ const TimelineStepItem = memo<{
         <div className="flex flex-col items-center flex-shrink-0" style={{ width: '24px' }}>
           <div
             className={`
-              w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-all duration-300
+              w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-colors duration-200
               ${
                 step.status === 'running'
                   ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
@@ -184,10 +184,13 @@ const TimelineStepItem = memo<{
             style={{ minWidth: '24px', minHeight: '24px' }}
           >
             {step.status === 'running' ? (
-              <Loader2 size={11} className="text-blue-500 animate-spin" />
+              <Loader2 size={11} className="text-blue-500 animate-spin motion-reduce:animate-none" />
             ) : (
               <span className="animate-fade-in flex items-center justify-center">
-                <Brain size={11} className={step.status === 'success' ? 'text-emerald-500' : 'text-red-500'} />
+                <Brain
+                  size={11}
+                  className={step.status === 'success' ? 'text-emerald-500' : 'text-red-500'}
+                />
               </span>
             )}
           </div>
@@ -225,7 +228,7 @@ const TimelineStepItem = memo<{
 
   const statusIcon =
     step.status === 'running' ? (
-      <Loader2 size={14} className={`${statusColor} animate-spin`} />
+      <Loader2 size={14} className={`${statusColor} animate-spin motion-reduce:animate-none`} />
     ) : step.status === 'success' ? (
       <CheckCircle2 size={14} className={`${statusColor} animate-fade-in`} />
     ) : (
@@ -238,7 +241,7 @@ const TimelineStepItem = memo<{
       <div className="flex flex-col items-center flex-shrink-0" style={{ width: '24px' }}>
         <div
           className={`
-            w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-all duration-300
+            w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             ${
               step.status === 'running'
                 ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
@@ -250,7 +253,7 @@ const TimelineStepItem = memo<{
           style={{ minWidth: '24px', minHeight: '24px' }}
         >
           {step.status === 'running' ? (
-            <Loader2 size={11} className="text-blue-500 animate-spin" />
+            <Loader2 size={11} className="text-blue-500 animate-spin motion-reduce:animate-none" />
           ) : (
             <span className="animate-fade-in flex items-center justify-center">
               {getToolIcon(step.toolName, 11, statusColor)}
@@ -294,6 +297,7 @@ const TimelineStepItem = memo<{
                   onUndoRequest(step.id, step.toolName);
                 }}
                 className="ml-1 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-amber-500 transition-colors"
+                aria-label={t('agent.undo.button', 'Undo this action')}
                 title={t('agent.undo.button', 'Undo this action')}
               >
                 <Undo2 size={12} />
@@ -416,7 +420,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
             </span>
           )}
           {isStreaming && summary.running > 0 && (
-            <Loader2 size={12} className="text-blue-500 animate-spin" />
+            <Loader2 size={12} className="text-blue-500 animate-spin motion-reduce:animate-none" />
           )}
         </button>
 

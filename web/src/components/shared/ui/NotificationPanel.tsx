@@ -128,7 +128,7 @@ export const NotificationPanel: React.FC = () => {
           <div className="max-h-96 overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+                <Loader2 className="h-8 w-8 animate-spin motion-reduce:animate-none text-blue-600 dark:text-blue-400" />
               </div>
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center text-slate-500 dark:text-slate-400">

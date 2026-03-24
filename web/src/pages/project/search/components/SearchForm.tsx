@@ -173,7 +173,7 @@ export const SearchForm = memo<SearchFormProps>(
                 )}
               </div>
               <input
-                className="block w-full pl-10 pr-12 py-3 bg-white dark:bg-[#1e212b] border border-transparent focus:border-blue-600/50 ring-0 focus:ring-4 focus:ring-blue-600/10 rounded-xl text-sm placeholder-slate-400 text-slate-900 dark:text-white shadow-sm transition-all"
+                className="block w-full pl-10 pr-12 py-3 bg-white dark:bg-[#1e212b] border border-transparent focus:border-blue-600/50 ring-0 focus:ring-4 focus:ring-blue-600/10 rounded-xl text-sm placeholder-slate-400 text-slate-900 dark:text-white shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                 placeholder={getPlaceholder()}
                 type="text"
                 value={getInputValue()}
@@ -198,7 +198,7 @@ export const SearchForm = memo<SearchFormProps>(
                     onClick={onVoiceSearch}
                     className={`p-1.5 rounded-lg transition-colors ${
                       isListening
-                        ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse'
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse motion-reduce:animate-none'
                         : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                     title={
@@ -215,7 +215,7 @@ export const SearchForm = memo<SearchFormProps>(
             <button
               onClick={onSearch}
               disabled={loading}
-              className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-all active:scale-95 shrink-0 disabled:opacity-50"
+              className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95 shrink-0 disabled:opacity-50"
             >
               <span>
                 {loading
@@ -262,7 +262,7 @@ const SearchModeButton = memo<SearchModeButtonProps>(
   ({ mode, currentMode, onClick, icon, label }) => (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-2 ${
         mode === currentMode
           ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
           : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
@@ -284,7 +284,7 @@ interface HistoryButtonProps {
 const HistoryButton = memo<HistoryButtonProps>(({ showHistory, count, onClick }) => (
   <button
     onClick={onClick}
-    className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+    className={`px-3 py-2 rounded-lg text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1.5 ${
       showHistory
         ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
         : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'

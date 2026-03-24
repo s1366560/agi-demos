@@ -486,7 +486,7 @@ export const EnhancedSearch: React.FC = () => {
             {/* Graph View */}
             <section
               className={`
-                            bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden group transition-all duration-300 ease-in-out
+                            bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden group transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
                             ${isResultsCollapsed ? 'flex-1' : 'h-[55%]'}
                         `}
             >

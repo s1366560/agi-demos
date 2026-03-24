@@ -158,7 +158,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
           >
             {execution.status === 'running' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
             )}
             {execution.status !== 'running' && (
               <MaterialIcon name={statusConfig.icon as any} size={12} />
@@ -292,7 +292,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
         {execution.status === 'running' && !execution.result && !execution.error && (
           <div className="flex items-center justify-center py-4">
             <div className="flex items-center gap-2 text-sm text-slate-500">
-              <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
               Executing...
             </div>
           </div>

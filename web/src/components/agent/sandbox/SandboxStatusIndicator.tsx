@@ -220,7 +220,7 @@ const MetricsPopover: FC<{
           <span className="font-medium text-slate-800 dark:text-slate-200">沙盒环境</span>
         </div>
         <div className={`flex items-center gap-1 text-xs ${config.color}`}>
-          <config.icon size={12} className={config.animate ? 'animate-spin' : ''} />
+          <config.icon size={12} className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''} />
           <span>{config.label}</span>
         </div>
       </div>
@@ -228,7 +228,7 @@ const MetricsPopover: FC<{
       {/* Loading state */}
       {loading && !stats && (
         <div className="flex items-center justify-center py-4">
-          <Loader2 size={16} className="animate-spin text-slate-400" />
+          <Loader2 size={16} className="animate-spin motion-reduce:animate-none text-slate-400" />
           <span className="ml-2 text-sm text-slate-500">Loading...</span>
         </div>
       )}
@@ -309,7 +309,7 @@ const MetricsPopover: FC<{
           disabled={loading}
           className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
         >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={12} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} />
           刷新
         </button>
         {sandbox.status === 'running' && (
@@ -692,7 +692,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   const indicatorContent = (
     <>
-      <StatusIcon size={12} className={config.animate || starting ? 'animate-spin' : ''} />
+      <StatusIcon size={12} className={config.animate || starting ? 'animate-spin motion-reduce:animate-none' : ''} />
       <span>{starting ? '启动中' : config.label}</span>
       {sandbox?.status === 'running' && <PlayCircle size={10} className="text-emerald-500" />}
     </>
@@ -721,7 +721,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
           className={`
             flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
             ${config.bgColor} ${config.color}
-            transition-all duration-300
+            transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             cursor-pointer hover:opacity-80
             border-none outline-none
             ${className || ''}
@@ -735,7 +735,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
           className={`
             flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
             ${config.bgColor} ${config.color}
-            transition-all duration-300
+            transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
             ${className || ''}
           `}
         >

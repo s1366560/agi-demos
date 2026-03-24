@@ -106,7 +106,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   const cbConfig = getCircuitBreakerConfig(provider.resilience?.circuit_breaker_state);
 
   return (
-    <div className="group relative bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 overflow-hidden">
+    <div className="group relative bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 overflow-hidden">
       {/* Card Header */}
       <div className="p-4 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-start justify-between">
@@ -243,7 +243,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           <MaterialIcon
             name={isCheckingHealth ? 'progress_activity' : 'monitor_heart'}
             size={16}
-            className={isCheckingHealth ? 'animate-spin' : ''}
+            className={isCheckingHealth ? 'animate-spin motion-reduce:animate-none' : ''}
           />
           Health
         </button>
@@ -261,7 +261,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               <MaterialIcon
                 name={isResettingCircuitBreaker ? 'progress_activity' : 'refresh'}
                 size={16}
-                className={isResettingCircuitBreaker ? 'animate-spin' : ''}
+                className={isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : ''}
               />
               Reset
             </button>

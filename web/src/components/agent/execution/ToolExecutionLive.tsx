@@ -46,14 +46,14 @@ export function ToolExecutionLive({
       case 'preparing':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             Preparing
           </span>
         );
       case 'running':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
             Running
           </span>
         );

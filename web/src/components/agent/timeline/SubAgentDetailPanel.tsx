@@ -38,7 +38,7 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
     group.events && group.events.length > 0 ? (group.events[0]?.timestamp ?? 0) : 0;
 
   return (
-    <div className="relative flex flex-col w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-bottom-2">
+    <div className="relative flex flex-col w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 animate-in fade-in slide-in-from-bottom-2">
       {/* 1. Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
         <div className="flex items-center gap-2.5">

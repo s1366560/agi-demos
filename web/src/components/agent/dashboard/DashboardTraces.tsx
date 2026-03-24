@@ -5,17 +5,11 @@
  */
 
 import { memo, useEffect, useMemo, useState, useCallback } from 'react';
+import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  Activity,
-  RefreshCw,
-  Search,
-} from 'lucide-react';
-
-import { TraceTimeline } from '../multiAgent/TraceTimeline';
-import { TraceChainView } from '../multiAgent/TraceChainView';
+import { Activity, RefreshCw, Search } from 'lucide-react';
 
 import {
   useTraceRuns,
@@ -25,9 +19,10 @@ import {
   useGetTraceChain,
   useTraceStore,
 } from '../../../stores/traceStore';
+import { TraceChainView } from '../multiAgent/TraceChainView';
+import { TraceTimeline } from '../multiAgent/TraceTimeline';
 
 import type { SubAgentRunDTO } from '../../../types/multiAgent';
-import type { FC } from 'react';
 
 // ============================================================================
 // Dashboard Traces Component
@@ -62,7 +57,7 @@ export const DashboardTraces: FC = memo(() => {
         void getTraceChain(run.conversation_id, run.trace_id);
       }
     },
-    [getTraceChain],
+    [getTraceChain]
   );
 
   const handleCloseDetails = useCallback(() => {
@@ -74,8 +69,7 @@ export const DashboardTraces: FC = memo(() => {
     const lower = search.toLowerCase();
     return runs.filter(
       (run) =>
-        run.subagent_name.toLowerCase().includes(lower) ||
-        run.task.toLowerCase().includes(lower),
+        run.subagent_name.toLowerCase().includes(lower) || run.task.toLowerCase().includes(lower)
     );
   }, [runs, search]);
 
@@ -96,10 +90,7 @@ export const DashboardTraces: FC = memo(() => {
             {t('tenant.dashboard.traces.title', 'Execution Traces')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t(
-              'tenant.dashboard.traces.subtitle',
-              'Monitor SubAgent execution history',
-            )}
+            {t('tenant.dashboard.traces.subtitle', 'Monitor SubAgent execution history')}
           </p>
         </div>
         <button
@@ -108,21 +99,20 @@ export const DashboardTraces: FC = memo(() => {
           disabled={isLoading}
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
         >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={isLoading ? 'animate-spin motion-reduce:animate-none' : ''} />
           {t('common.refresh', 'Refresh')}
         </button>
       </div>
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          size={16}
-        />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+          }}
           placeholder={t('tenant.dashboard.traces.searchPlaceholder', 'Search traces...')}
           className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
         />
@@ -134,17 +124,13 @@ export const DashboardTraces: FC = memo(() => {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.dashboard.traces.totalRuns', 'Total Runs')}
           </p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
-            {stats.total}
-          </p>
+          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{stats.total}</p>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.dashboard.traces.running', 'Running')}
           </p>
-          <p className="mt-1 text-xl font-bold text-blue-600 dark:text-blue-400">
-            {stats.running}
-          </p>
+          <p className="mt-1 text-xl font-bold text-blue-600 dark:text-blue-400">{stats.running}</p>
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -158,9 +144,7 @@ export const DashboardTraces: FC = memo(() => {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.dashboard.traces.failed', 'Failed')}
           </p>
-          <p className="mt-1 text-xl font-bold text-red-600 dark:text-red-400">
-            {stats.failed}
-          </p>
+          <p className="mt-1 text-xl font-bold text-red-600 dark:text-red-400">{stats.failed}</p>
         </div>
       </div>
 
@@ -168,7 +152,7 @@ export const DashboardTraces: FC = memo(() => {
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
           </div>
         ) : filteredRuns.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
@@ -181,7 +165,7 @@ export const DashboardTraces: FC = memo(() => {
                 ? t('tenant.dashboard.traces.noResults', 'Try a different search term')
                 : t(
                     'tenant.dashboard.traces.emptyHint',
-                    'SubAgent execution traces will appear here',
+                    'SubAgent execution traces will appear here'
                   )}
             </p>
           </div>

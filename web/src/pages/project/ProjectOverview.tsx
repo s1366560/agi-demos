@@ -452,7 +452,7 @@ export const ProjectOverview: React.FC = () => {
 
           {/* Quick Actions / Activity */}
           <div className="bg-primary text-white rounded-lg shadow-lg p-5 relative overflow-hidden group">
-            <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all"></div>
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-[color,background-color,border-color,box-shadow,opacity,transform]"></div>
             <div className="relative z-10">
               <h3 className="text-sm font-bold uppercase tracking-wide mb-3">
                 {t('common.stats.systemStatus')}

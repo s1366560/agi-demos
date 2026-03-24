@@ -399,7 +399,7 @@ export function ToolExecutionCardDisplay({
       case 'preparing':
         return (
           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             Preparing
           </div>
         );
@@ -470,7 +470,7 @@ export function ToolExecutionCardDisplay({
                 >
                   <pre className="whitespace-pre-wrap break-words">
                     {partialArguments}
-                    <span className="inline-block w-1.5 h-3.5 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+                    <span className="inline-block w-1.5 h-3.5 bg-blue-500 animate-pulse motion-reduce:animate-none ml-0.5 align-middle" />
                   </pre>
                 </div>
               </div>
@@ -480,7 +480,7 @@ export function ToolExecutionCardDisplay({
             {status === 'preparing' && !partialArguments && (
               <div className="space-y-2">
                 <div className="border border-dashed border-blue-200 dark:border-blue-500/20 rounded-lg p-4 flex items-center justify-center gap-2 text-center bg-blue-50/50 dark:bg-blue-500/5">
-                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
                   <p className="text-xs text-blue-600 dark:text-blue-400 italic">
                     Preparing tool call...
                   </p>

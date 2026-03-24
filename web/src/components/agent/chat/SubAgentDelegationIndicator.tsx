@@ -4,10 +4,10 @@
  * Shows when the main agent delegates a task to a SubAgent.
  */
 
+import type { FC } from 'react';
+
 import { Tooltip } from 'antd';
 import { Bot, Loader2, CheckCircle, XCircle, AtSign, Search, Zap } from 'lucide-react';
-
-import type { FC } from 'react';
 
 export interface SubAgentDelegationIndicatorProps {
   subagentName: string;
@@ -46,7 +46,7 @@ const getTriggerLabel = (triggerType: string) => {
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'started':
-      return <Loader2 size={12} className="animate-spin" />;
+      return <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />;
     case 'completed':
       return <CheckCircle size={12} className="text-green-500" />;
     case 'failed':

@@ -103,9 +103,9 @@ export function IdleState({
     <>
       {/* Headline Section */}
       <div className="space-y-4">
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white">
+        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white">
           {greeting}
-        </h1>
+        </h2>
         {subtitle && (
           <p className="text-lg text-slate-500 dark:text-text-muted max-w-xl mx-auto">{subtitle}</p>
         )}
@@ -122,7 +122,7 @@ export function IdleState({
               onClick={() => {
                 handleTileClick(tile);
               }}
-              className={`group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer text-left`}
+              className={`group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 cursor-pointer text-left`}
             >
               <div className={`mb-4 p-2 rounded-lg ${colors.bg} ${colors.text}`}>
                 <MaterialIcon name={tile.icon as any} size={24} />

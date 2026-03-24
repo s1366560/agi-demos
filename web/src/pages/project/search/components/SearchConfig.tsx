@@ -148,7 +148,7 @@ export const SearchConfig = memo<SearchConfigProps>(
 
         <aside
           className={`
-                fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-[#121520] lg:bg-transparent transition-all duration-300 ease-in-out lg:relative lg:transform-none lg:z-0 flex flex-col gap-6 shrink-0 h-full
+                fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-[#121520] lg:bg-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out lg:relative lg:transform-none lg:z-0 flex flex-col gap-6 shrink-0 h-full
                 ${showMobileConfig ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
                 ${!isConfigOpen && 'lg:w-0 lg:overflow-hidden lg:opacity-0 lg:p-0'}
             `}
@@ -247,7 +247,7 @@ const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChang
       onClick={() => {
         onTabChange('params');
       }}
-      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${currentTab === 'params' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'params' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
     >
       <Sliders className="w-3.5 h-3.5" />
       Parameters
@@ -256,7 +256,7 @@ const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChang
       onClick={() => {
         onTabChange('filters');
       }}
-      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${currentTab === 'filters' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'filters' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
     >
       <Filter className="w-3.5 h-3.5" />
       Filters
@@ -325,7 +325,7 @@ const RetrievalModeSelector = memo<{
         onClick={() => {
           onChange('hybrid');
         }}
-        className={`flex-1 py-2 px-2 rounded-md shadow-sm text-xs font-semibold transition-all ${value === 'hybrid' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        className={`flex-1 py-2 px-2 rounded-md shadow-sm text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'hybrid' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
       >
         Hybrid
       </button>
@@ -333,7 +333,7 @@ const RetrievalModeSelector = memo<{
         onClick={() => {
           onChange('nodeDistance');
         }}
-        className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all ${value === 'nodeDistance' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'nodeDistance' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
       >
         Node Distance
       </button>

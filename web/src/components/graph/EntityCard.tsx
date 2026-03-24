@@ -98,7 +98,7 @@ const EntityCardInternal: React.FC<EntityCardProps> = ({ entity, onClick, isSele
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      className={`bg-white dark:bg-slate-800 rounded-lg border p-4 cursor-pointer transition-all hover:shadow-md ${
+      className={`bg-white dark:bg-slate-800 rounded-lg border p-4 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
         isSelected
           ? 'border-blue-500 shadow-md ring-2 ring-blue-500 ring-opacity-20'
           : 'border-slate-200 dark:border-slate-700'

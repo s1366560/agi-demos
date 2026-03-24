@@ -22,6 +22,12 @@ export interface ResizeHandleProps {
   position?: 'left' | 'right' | 'top' | 'bottom' | undefined;
   /** Optional className for custom styling */
   className?: string | undefined;
+  /** Current size value for ARIA (accessibility) */
+  ariaValueNow?: number | undefined;
+  /** Minimum size for ARIA */
+  ariaValueMin?: number | undefined;
+  /** Maximum size for ARIA */
+  ariaValueMax?: number | undefined;
 }
 
 export const ResizeHandle = ({
@@ -29,6 +35,9 @@ export const ResizeHandle = ({
   direction = 'horizontal',
   position = 'left',
   className = '',
+  ariaValueNow,
+  ariaValueMin = 0,
+  ariaValueMax = 100,
 }: ResizeHandleProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const startPosRef = useRef(0);
@@ -43,6 +52,25 @@ export const ResizeHandle = ({
       document.body.style.cursor = direction === 'horizontal' ? 'ew-resize' : 'ns-resize';
     },
     [direction]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = e.shiftKey ? 50 : 10;
+      let delta = 0;
+      if (direction === 'horizontal') {
+        if (e.key === 'ArrowRight') delta = step;
+        else if (e.key === 'ArrowLeft') delta = -step;
+        else return;
+      } else {
+        if (e.key === 'ArrowDown') delta = step;
+        else if (e.key === 'ArrowUp') delta = -step;
+        else return;
+      }
+      e.preventDefault();
+      onResize(delta);
+    },
+    [direction, onResize]
   );
 
   useEffect(() => {
@@ -93,6 +121,13 @@ export const ResizeHandle = ({
 
   return (
     <div
+      role="separator"
+      aria-valuenow={ariaValueNow}
+      aria-valuemin={ariaValueMin}
+      aria-valuemax={ariaValueMax}
+      tabIndex={0}
+      aria-label={`Resize ${direction === 'horizontal' ? 'width' : 'height'}`}
+      onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
       className={`
         absolute z-50 flex items-center justify-center
@@ -100,7 +135,7 @@ export const ResizeHandle = ({
         bg-transparent
         hover:bg-slate-200/50 dark:hover:bg-slate-700/50
         ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
-        transition-all duration-150
+        transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150
         group
         ${className}
       `}
@@ -114,7 +149,7 @@ export const ResizeHandle = ({
         bg-slate-400/50 dark:bg-slate-500/50
         opacity-0 group-hover:opacity-100
         ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
-        transition-all duration-150
+        transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150
       `}
       />
     </div>

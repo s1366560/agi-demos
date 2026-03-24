@@ -38,11 +38,11 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
 
   return (
     <div
-      className={`absolute top-6 right-6 bottom-6 w-80 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-[#2b324a] shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden transition-transform duration-300 ${node ? 'translate-x-0' : 'translate-x-[120%]'}`}
+      className={`absolute top-6 right-6 bottom-6 w-80 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden transition-transform duration-300 ${node ? 'translate-x-0' : 'translate-x-[120%]'}`}
     >
       {node ? (
         <>
-          <div className="p-5 border-b border-slate-200 dark:border-[#2b324a] bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/10 dark:to-transparent">
+          <div className="p-5 border-b border-slate-200 dark:border-border-dark bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/10 dark:to-transparent">
             <div className="flex justify-between items-start mb-2">
               <div
                 className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
@@ -86,7 +86,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
                   {t('project.graph.node_detail.high', 'High')}
                 </span>
               </div>
-              <div className="w-full bg-slate-100 dark:bg-[#111521] rounded-full h-1.5 overflow-hidden">
+              <div className="w-full bg-slate-100 dark:bg-background-dark rounded-full h-1.5 overflow-hidden">
                 <div
                   className="bg-gradient-to-r from-emerald-500 to-blue-600 h-full rounded-full"
                   style={{ width: '85%' }}
@@ -130,7 +130,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
 
             {/* Context Info */}
             {node.tenant_id && (
-              <div className="pt-4 border-t border-slate-200 dark:border-[#2b324a]">
+              <div className="pt-4 border-t border-slate-200 dark:border-border-dark">
                 <div className="space-y-2 text-xs text-slate-500">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[16px]">domain</span>
@@ -143,8 +143,8 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
             )}
           </div>
 
-          <div className="p-4 border-t border-slate-200 dark:border-[#2b324a] bg-slate-50 dark:bg-[#111521] flex gap-2">
-            <button className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-[#2b324a] bg-white dark:bg-[#1e2332] text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-[#2b324a] hover:text-slate-900 dark:hover:text-white transition-colors">
+          <div className="p-4 border-t border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-background-dark flex gap-2">
+            <button className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-surface-elevated hover:text-slate-900 dark:hover:text-white transition-colors">
               {t('project.graph.node_detail.expand', 'Expand')}
             </button>
             <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-colors">

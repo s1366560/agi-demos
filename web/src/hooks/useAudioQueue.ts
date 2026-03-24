@@ -57,9 +57,9 @@ export const useAudioQueue = (): UseAudioQueueReturn => {
   const disconnectAllSources = useCallback(() => {
     for (const source of activeSourcesRef.current) {
       try {
-        source.onended = null;
-        source.stop();
+        // Disconnect first to prevent onended from firing after stop
         source.disconnect();
+        source.stop();
       } catch {
         // Source may already be stopped or disconnected
       }

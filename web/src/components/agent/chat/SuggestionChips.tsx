@@ -49,7 +49,7 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(
                   hover:border-primary/50 hover:text-primary dark:hover:text-primary-300
                   hover:bg-primary/5 dark:hover:bg-primary/10
                   hover:shadow-sm
-                  transition-all duration-200
+                  transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
                   cursor-pointer
                 "
               >

@@ -115,7 +115,7 @@ const SubAgentCard = memo<{
 }>(({ agent, onToggle }) => {
   return (
     <div
-      className={`rounded-xl p-5 relative overflow-hidden transition-all border-2 ${
+      className={`rounded-xl p-5 relative overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform] border-2 ${
         agent.active
           ? 'bg-white dark:bg-slate-800 border-blue-600 shadow-lg shadow-blue-600/5'
           : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-300 dark:hover:border-slate-600'
@@ -200,7 +200,7 @@ const EngineConfigCard = memo<EngineConfigCardProps>(
               }}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600"></div>
           </label>
         </div>
         <div>
@@ -262,7 +262,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
           </h1>
           {activeRunCount > 0 && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-full">
-              <Activity size={12} className="animate-pulse" />
+              <Activity size={12} className="animate-pulse motion-reduce:animate-none" />
               {activeRunCount} active
             </span>
           )}
@@ -302,7 +302,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                 Execution Traces
               </h3>
               {isTraceLoading && (
-                <Loader2 size={14} className="text-blue-500 animate-spin" />
+                <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />
               )}
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">

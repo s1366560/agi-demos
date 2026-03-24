@@ -240,7 +240,7 @@ export function PatternList({
             <div className="col-span-4 flex items-center gap-3">
               <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className={`h-full ${getSuccessRateColor(pattern.successRate)} transition-all duration-300`}
+                  className={`h-full ${getSuccessRateColor(pattern.successRate)} transition-[width] duration-300`}
                   style={{ width: `${pattern.successRate}%` }}
                 />
               </div>

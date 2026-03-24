@@ -21,7 +21,7 @@ import type { GraphConfig, NodeData, CytoscapeElement } from './types';
 const ViewportLoading: React.FC = () => (
   <div className="flex-1 flex items-center justify-center">
     <div className="text-center">
-      <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin">
+      <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin motion-reduce:animate-none">
         progress_activity
       </span>
       <p className="text-slate-600 dark:text-slate-400 mt-2">Loading graph visualization...</p>
@@ -255,7 +255,7 @@ export function CytoscapeGraphViewport({
       {loading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
           <div className="text-center">
-            <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin">
+            <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin motion-reduce:animate-none">
               progress_activity
             </span>
             <p className="text-slate-600 dark:text-slate-400 mt-2">Loading graph...</p>

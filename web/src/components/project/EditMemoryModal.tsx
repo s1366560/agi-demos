@@ -110,7 +110,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             onClick={onClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
             disabled={isSaving}
-            aria-label="关闭"
+            aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>
@@ -210,9 +210,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                 }}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-                placeholder="添加新标签"
+                placeholder="Add new tag"
                 disabled={isSaving}
-                aria-label="添加新标签"
+                aria-label="Add new tag"
               />
               <button
                 type="button"
@@ -249,7 +249,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             disabled={isSaving}
           >
-            {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
             {isSaving ? '保存中...' : '保存更改'}
           </button>
         </div>

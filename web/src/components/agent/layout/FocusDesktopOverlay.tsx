@@ -81,7 +81,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
         }}
         className="absolute top-4 right-4 z-[60] flex items-center gap-2 px-3 py-1.5 rounded-lg
           bg-black/60 hover:bg-black/80 text-white/80 hover:text-white text-xs font-medium
-          backdrop-blur-sm transition-all cursor-pointer"
+          backdrop-blur-sm transition-[color,background-color,border-color,box-shadow,opacity,transform] cursor-pointer"
         title="Exit focus mode (ESC)"
       >
         <Minimize2 size={14} />
@@ -97,8 +97,8 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
             absolute bottom-6 left-6 z-[60] w-12 h-12 rounded-full
             flex items-center justify-center cursor-pointer
             bg-blue-600 hover:bg-blue-500 text-white shadow-lg
-            transition-all duration-200 hover:scale-110
-            ${isStreaming ? 'animate-pulse' : ''}
+            transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 hover:scale-110
+            ${isStreaming ? 'animate-pulse motion-reduce:animate-none' : ''}
           `}
           aria-label="Open chat"
         >
@@ -121,7 +121,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Chat</span>
               {isStreaming && (
                 <span className="flex items-center gap-1 text-xs text-amber-600">
-                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse motion-reduce:animate-none" />
                   Streaming
                 </span>
               )}

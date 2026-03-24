@@ -85,7 +85,7 @@ export function SimpleExecutionView({ toolExecutions, isStreaming }: SimpleExecu
       {isStreaming && runningCount === 0 && (
         <div className="mt-4 flex items-center justify-center py-4 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl">
           <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
             Processing...
           </div>
         </div>

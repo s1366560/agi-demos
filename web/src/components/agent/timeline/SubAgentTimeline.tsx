@@ -112,7 +112,7 @@ export const StatusIcon = memo<{ status: string; size?: number | undefined }>(
   ({ status, size = 14 }) => {
     switch (status) {
       case 'running':
-        return <Loader2 size={size} className="text-blue-500 animate-spin" />;
+        return <Loader2 size={size} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
       case 'success':
         return <CheckCircle2 size={size} className="text-emerald-500" />;
       case 'error':
@@ -128,7 +128,7 @@ export const StatusIcon = memo<{ status: string; size?: number | undefined }>(
       case 'depth_limited':
         return <ShieldAlert size={size} className="text-orange-500" />;
       default:
-        return <Loader2 size={size} className="text-slate-400 animate-spin" />;
+        return <Loader2 size={size} className="text-slate-400 animate-spin motion-reduce:animate-none" />;
     }
   }
 );
@@ -237,7 +237,7 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
                   {isDone ? (
                     <StatusIcon status={isSuccess ? 'success' : 'error'} size={12} />
                   ) : (
-                    <Loader2 size={12} className="text-blue-400 animate-spin" />
+                    <Loader2 size={12} className="text-blue-400 animate-spin motion-reduce:animate-none" />
                   )}
                   <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                     {task.subagent_name}
@@ -394,12 +394,12 @@ const ProgressPhaseBar = memo<{ group: SubAgentGroup }>(({ group }) => {
   return (
     <div className="w-full px-4 pt-2 pb-1">
       <div className="flex justify-between items-center mb-1.5 text-[10px] text-slate-500 font-medium">
-        <span className="animate-pulse">{phaseLabel}</span>
+        <span className="animate-pulse motion-reduce:animate-none">{phaseLabel}</span>
         {parallelText && <span>{parallelText}</span>}
       </div>
       <div className="w-full bg-slate-200/60 dark:bg-slate-700/60 rounded-full h-1 overflow-hidden">
         <div
-          className="bg-blue-500 h-1 rounded-full transition-all duration-500 ease-out"
+          className="bg-blue-500 h-1 rounded-full transition-[width] duration-500 ease-out"
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -580,7 +580,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
       {group.status === 'running' && subagentPreview && (
         <div className="mt-2 rounded-md bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 font-mono leading-relaxed animate-fade-in">
           <div className="flex items-center gap-1.5 mb-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wider font-sans">
               {t('agent.subagent.live_preview')}
             </span>
@@ -638,7 +638,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {isStreaming && group.status === 'running' && (
             <div className="flex items-center gap-1.5 text-xs text-blue-500">
-              <Loader2 size={12} className="animate-spin" />
+              <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
               <span>{t('agent.subagent.executing', 'Executing...')}</span>
             </div>
           )}

@@ -18,7 +18,15 @@
  * State Management: useReducer instead of multiple useState
  */
 
-import { useEffect, useRef, useCallback, useReducer, useMemo, createContext, useContext } from 'react';
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useReducer,
+  useMemo,
+  createContext,
+  useContext,
+} from 'react';
 
 import { MaterialIcon } from '../shared';
 
@@ -218,7 +226,7 @@ const HeaderContent: React.FC = () => {
         aria-valuemax={100}
       >
         <div
-          className="h-full bg-primary transition-all duration-500 ease-out"
+          className="h-full bg-primary transition-[width] duration-500 ease-out"
           style={{ width: `${progressPercent}%` }}
         />
       </div>
@@ -293,7 +301,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                   ) : isFailed ? (
                     <MaterialIcon name="close" size={14} />
                   ) : isActive ? (
-                    <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <span className="w-2 h-2 bg-white rounded-full animate-pulse motion-reduce:animate-none" />
                   ) : (
                     <span className="text-xs text-slate-500">{idx + 1}</span>
                   )}
@@ -471,7 +479,7 @@ function SimpleTimelineMode({
                     {isCompleted ? (
                       <MaterialIcon name="check" size={14} />
                     ) : isActive ? (
-                      <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                      <span className="w-2 h-2 bg-white rounded-full animate-pulse motion-reduce:animate-none" />
                     ) : (
                       <span className="text-xs text-slate-500">{idx + 1}</span>
                     )}
@@ -576,7 +584,7 @@ function ExecutionTimelineImpl({
       collapseAll,
       isStepExpanded,
     }),
-     
+
     [
       workPlan,
       steps,
