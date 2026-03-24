@@ -10,8 +10,8 @@ services:
     environment:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=your_password_here
-      - DATABASE_URL=postgresql://postgres:your_password_here@postgres:5432/memstack
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/memstack
       - REDIS_URL=redis://redis:6379
       - LLM_PROVIDER=gemini
       - CUA_MCP_URL=ws://cua-mcp-server:18766
@@ -45,7 +45,7 @@ services:
       - "7474:7474" # HTTP
       - "7687:7687" # Bolt
     environment:
-      - NEO4J_AUTH=neo4j/your_password_here
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-password}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
       # Heap size for development (lower than production)
@@ -59,7 +59,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "cypher-shell -u neo4j -p your_password_here 'RETURN 1' || exit 1",
+          "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-password} 'RETURN 1' || exit 1",
         ]
       interval: 10s
       timeout: 5s
@@ -82,7 +82,7 @@ services:
     environment:
       - POSTGRES_DB=memstack
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=your_password_here
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Initialize pgvector extension on first startup

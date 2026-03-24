@@ -187,12 +187,18 @@ help-full: ## Show all available commands
 init: ## First time setup: install deps, start infra
 	@echo " Initializing MemStack development environment..."
 	@echo ""
+	@if [ ! -f .env ]; then \
+		echo "Step 0: Creating .env from .env.example..."; \
+		cp .env.example .env; \
+		echo " .env created (edit to customize passwords/API keys)"; \
+		echo ""; \
+	fi
 	@echo "Step 1/2: Installing dependencies..."
 	@$(MAKE) install
 	@echo ""
 	@echo "Step 2/2: Starting infrastructure services..."
 	@$(MAKE) dev-infra
-	@sleep 3
+	@$(MAKE) db-wait
 	@echo ""
 	@echo " Environment initialized!"
 	@echo ""
@@ -532,7 +538,19 @@ hooks-uninstall: ## Uninstall git hooks (restore default hooks path)
 # Database
 # =============================================================================
 
-db-init: ## Initialize database (create if not exists)
+db-wait: ## Wait for PostgreSQL to be ready (up to 30s)
+	@echo "  Waiting for PostgreSQL to be ready..."
+	@for i in $$(seq 1 30); do \
+		if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then \
+			echo " PostgreSQL is ready"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo " PostgreSQL did not become ready in 30s"; \
+	exit 1
+
+db-init: db-wait ## Initialize database (create if not exists)
 	@echo "  Initializing database..."
 	@echo " Enabling pgvector extension..."
 	@docker compose exec -T postgres psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true
@@ -573,11 +591,12 @@ db-shell: ## Open PostgreSQL shell
 	@echo " Opening PostgreSQL shell..."
 	docker compose exec postgres psql -U postgres memstack
 
-db-schema: ## Initialize database schema (create tables)
+db-schema: ## Initialize database schema (create tables + stamp alembic)
 	@echo "  Initializing database schema..."
 	@PYTHONPATH=. uv run python -c \
 		"import asyncio; from src.infrastructure.adapters.secondary.persistence.database import initialize_database; asyncio.run(initialize_database())"
 	@echo " Schema initialized"
+	@echo " Note: Alembic version auto-stamped to head. 'make db-migrate' is now a no-op."
 
 db-migrate: ## Run Alembic migrations (upgrade to latest)
 	@echo " Running database migrations..."
