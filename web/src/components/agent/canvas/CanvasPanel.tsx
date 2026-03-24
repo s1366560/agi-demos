@@ -55,6 +55,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { artifactService } from '@/services/artifactService';
 
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
+import { sanitizeHtml } from '@/utils/sanitize';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
@@ -143,12 +144,44 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
 
     return (
       <div className="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50">
-        <div className="flex-1 flex items-center overflow-x-auto scrollbar-none">
+        <div
+          className="flex-1 flex items-center overflow-x-auto scrollbar-none"
+          role="tablist"
+          onKeyDown={(e) => {
+            const tabElements = Array.from(
+              e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')
+            );
+            const currentIndex = tabElements.indexOf(document.activeElement as HTMLElement);
+            if (currentIndex === -1) return;
+
+            let nextIndex = currentIndex;
+            if (e.key === 'ArrowRight') {
+              nextIndex = (currentIndex + 1) % tabElements.length;
+              e.preventDefault();
+            } else if (e.key === 'ArrowLeft') {
+              nextIndex = (currentIndex - 1 + tabElements.length) % tabElements.length;
+              e.preventDefault();
+            } else if (e.key === 'Home') {
+              nextIndex = 0;
+              e.preventDefault();
+            } else if (e.key === 'End') {
+              nextIndex = tabElements.length - 1;
+              e.preventDefault();
+            }
+
+            if (nextIndex !== currentIndex) {
+              tabElements[nextIndex]?.focus();
+            }
+          }}
+        >
           {tabs.map((tab) => (
             <div
               key={tab.id}
+              id={`tab-${tab.id}`}
               role="tab"
-              tabIndex={0}
+              aria-controls={`panel-${tab.id}`}
+              tabIndex={tab.id === activeTabId ? 0 : -1}
+              aria-selected={tab.id === activeTabId}
               onClick={() => {
                 setActiveTab(tab.id);
               }}
@@ -608,7 +641,7 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
       {sheets[activeSheet] && (
         <div
           className="flex-1 overflow-auto p-2 xlsx-preview"
-          dangerouslySetInnerHTML={{ __html: sheets[activeSheet].html }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(sheets[activeSheet].html) }}
         />
       )}
     </div>
@@ -1695,6 +1728,9 @@ export const CanvasPanel = memo<{
             {mcpAppTabs.map((tab) => (
               <div
                 key={tab.id}
+                role="tabpanel"
+                id={`panel-${tab.id}`}
+                aria-labelledby={`tab-${tab.id}`}
                 style={{
                   display: tab.id === activeTabId ? 'flex' : 'none',
                   flexDirection: 'column',
@@ -1738,11 +1774,18 @@ export const CanvasPanel = memo<{
             ))}
             {/* Non-mcp-app active tab content */}
             {activeTab.type !== 'mcp-app' && (
-              <CanvasContent
-                tab={activeTab}
-                editMode={editMode}
-                onContentChange={handleContentChange}
-              />
+              <div
+                role="tabpanel"
+                id={`panel-${activeTab.id}`}
+                aria-labelledby={`tab-${activeTab.id}`}
+                className="h-full"
+              >
+                <CanvasContent
+                  tab={activeTab}
+                  editMode={editMode}
+                  onContentChange={handleContentChange}
+                />
+              </div>
             )}
             {!editMode && (
               <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />

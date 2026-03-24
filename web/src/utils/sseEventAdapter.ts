@@ -122,10 +122,19 @@ function extractEventOrdering(data: unknown): {
   timestamp: number;
 } {
   const d = data as Record<string, unknown>;
-  const eventTimeUs = typeof d?.event_time_us === 'number' ? d.event_time_us : Date.now() * 1000;
-  const eventCounter = typeof d?.event_counter === 'number' ? d.event_counter : 0;
+  const rawEventTimeUs = d.event_time_us ?? d.eventTimeUs;
+  const rawEventCounter = d.event_counter ?? d.eventCounter;
+  const eventTimeUs = typeof rawEventTimeUs === 'number' ? rawEventTimeUs : Date.now() * 1000;
+  const eventCounter = typeof rawEventCounter === 'number' ? rawEventCounter : 0;
   const timestamp = eventTimeUs ? Math.floor(eventTimeUs / 1000) : Date.now();
   return { eventTimeUs, eventCounter, timestamp };
+}
+
+function hasStableOrderingMetadata(data: unknown): boolean {
+  const d = data as Record<string, unknown>;
+  const rawEventTimeUs = d.event_time_us ?? d.eventTimeUs;
+  const rawEventCounter = d.event_counter ?? d.eventCounter;
+  return typeof rawEventTimeUs === 'number' && typeof rawEventCounter === 'number';
 }
 
 /**
@@ -808,6 +817,8 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'skill_tool_result':
     case 'skill_execution_complete':
     case 'skill_fallback':
+      return null;
+
     case 'memory_recalled': {
       const data = event.data as MemoryRecalledEventData;
       return {
@@ -954,6 +965,20 @@ export function appendSSEEventToTimeline(
   const timelineEvent = sseEventToTimeline(event);
 
   if (!timelineEvent) {
+    return existingTimeline;
+  }
+
+  if (!hasStableOrderingMetadata(event.data)) {
+    return existingTimeline.concat(timelineEvent);
+  }
+
+  const isDuplicate = existingTimeline.some(
+    (existing) =>
+      existing.type === timelineEvent.type &&
+      existing.eventTimeUs === timelineEvent.eventTimeUs &&
+      existing.eventCounter === timelineEvent.eventCounter
+  );
+  if (isDuplicate) {
     return existingTimeline;
   }
 

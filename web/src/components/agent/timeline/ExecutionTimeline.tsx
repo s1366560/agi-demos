@@ -94,6 +94,8 @@ const getToolLabel = (toolName: string): string => {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
+const toSafeDomId = (value: string): string => value.replace(/[^A-Za-z0-9_-]/g, '-');
+
 // eslint-disable-next-line react-refresh/only-export-components -- Utility function exported for reuse in related components
 export { getToolLabel };
 
@@ -161,6 +163,9 @@ const TimelineStepItem = memo<{
   const { t } = useTranslation();
   const preview = getInputPreview(step.input, step.toolName);
   const openMCPApp = useMCPAppOpen(step);
+  const stepLabel = getToolLabel(step.toolName);
+  const safeStepId = useMemo(() => toSafeDomId(step.id), [step.id]);
+  const detailsPanelId = `timeline-step-panel-${safeStepId}`;
 
   if (isAgentTool(step.toolName)) {
     return (
@@ -168,7 +173,7 @@ const TimelineStepItem = memo<{
         <div className="flex flex-col items-center flex-shrink-0" style={{ width: '24px' }}>
           <div
             className={`
-              w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-colors duration-200
+              w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-colors duration-200 motion-reduce:transition-none
               ${
                 step.status === 'running'
                   ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
@@ -263,65 +268,87 @@ const TimelineStepItem = memo<{
 
       {/* Content */}
       <div className="flex-1 pb-1.5 min-w-0 flex flex-col">
-        <button
-          type="button"
-          onClick={() => {
-            setExpanded((v) => !v);
-          }}
-          className={`
-            w-full text-left rounded-md border px-2.5 py-1.5 transition-colors duration-300
-            focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1
+        <div
+            className={`
+            w-full rounded-md border px-2.5 py-1.5 transition-colors duration-300 motion-reduce:transition-none
             ${statusBg}
-            hover:shadow-sm cursor-pointer
+            hover:shadow-sm
           `}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">
-              {getToolLabel(step.toolName)}
-            </span>
-            {step.duration != null && (
-              <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                <Clock size={10} />
-                {formatDuration(step.duration)}
+            <button
+              type="button"
+              onClick={() => {
+                setExpanded((v) => !v);
+              }}
+              aria-expanded={expanded}
+              aria-controls={detailsPanelId}
+              aria-label={
+                expanded
+                  ? t('agent.timeline.hideStepDetails', 'Hide details for {{tool}}', {
+                      tool: stepLabel,
+                    })
+                  : t('agent.timeline.showStepDetails', 'Show details for {{tool}}', {
+                      tool: stepLabel,
+                    })
+              }
+              className="flex min-w-0 flex-1 items-center gap-2 text-left cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            >
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">
+                {stepLabel}
               </span>
-            )}
-            {statusIcon}
+              {step.duration != null && (
+                <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                  <Clock size={10} />
+                  {formatDuration(step.duration)}
+                </span>
+              )}
+              {statusIcon}
+              {(step.input || step.output) &&
+                (expanded ? (
+                  <ChevronDown size={12} className="text-slate-400" />
+                ) : (
+                  <ChevronRight size={12} className="text-slate-400" />
+                ))}
+            </button>
             {onUndoRequest && step.status === 'success' && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={() => {
                   onUndoRequest(step.id, step.toolName);
                 }}
-                className="ml-1 p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-amber-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/50 min-w-[28px] min-h-[28px] flex items-center justify-center"
+                className="ml-1 p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 active:bg-slate-300 dark:active:bg-slate-500 text-slate-400 hover:text-amber-500 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 min-w-[32px] min-h-[32px] flex items-center justify-center"
                 aria-label={t('agent.undo.button', 'Undo this action')}
                 title={t('agent.undo.button', 'Undo this action')}
               >
                 <Undo2 size={14} />
               </button>
             )}
-            {(step.input || step.output) &&
-              (expanded ? (
-                <ChevronDown size={12} className="text-slate-400" />
-              ) : (
-                <ChevronRight size={12} className="text-slate-400" />
-              ))}
           </div>
           {!expanded && preview && (
-            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
+            <button
+              type="button"
+              onClick={() => {
+                setExpanded(true);
+              }}
+              aria-label={t('agent.timeline.showStepDetails', 'Show details for {{tool}}', {
+                tool: stepLabel,
+              })}
+              className="mt-1 w-full text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate text-left rounded-sm hover:text-slate-600 dark:hover:text-slate-300 active:text-slate-700 dark:active:text-slate-200 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 cursor-pointer"
+            >
               {preview}
-            </div>
+            </button>
           )}
-        </button>
+        </div>
 
         {/* MCP App "Open App" button - visible without expanding */}
         {step.toolName.startsWith('mcp__') && step.status === 'success' && !step.isError && (
           <button
             type="button"
-            onClick={() => {
-              void openMCPApp();
+            onClick={(e) => {
+              void openMCPApp(e);
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1 mt-1 text-xs rounded-md bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 border border-violet-200/60 dark:border-violet-800/30 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:ring-offset-1"
+            className="flex items-center gap-1.5 px-2.5 py-1 mt-1 text-xs rounded-md bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 active:bg-violet-200 dark:active:bg-violet-800/40 border border-violet-200/60 dark:border-violet-800/30 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-1"
           >
             <AppWindow size={12} />
             {t('agent.timeline.openApp', 'Open App')}
@@ -329,7 +356,14 @@ const TimelineStepItem = memo<{
         )}
 
         {expanded && (
-          <div className="mt-1.5 space-y-1.5 text-xs">
+          <div
+            id={detailsPanelId}
+            role="region"
+            aria-label={t('agent.timeline.stepDetailsRegion', 'Details for {{tool}}', {
+              tool: stepLabel,
+            })}
+            className="mt-1.5 space-y-1.5 text-xs"
+          >
             {step.input && Object.keys(step.input).length > 0 && (
               <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-2 border border-slate-200/60 dark:border-slate-700/40">
                 <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1">
@@ -377,6 +411,10 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
   ({ steps, isStreaming, defaultCollapsed, onUndoRequest }) => {
     const { t } = useTranslation();
     const [collapsed, setCollapsed] = useState(defaultCollapsed ?? false);
+    const timelineStepsPanelId = useMemo(
+      () => `execution-timeline-steps-${toSafeDomId(steps[0]?.id ?? 'current')}`,
+      [steps]
+    );
 
     const summary = useMemo(() => {
       const total = steps.length;
@@ -396,7 +434,14 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
           onClick={() => {
             setCollapsed((v) => !v);
           }}
-          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 rounded"
+          aria-expanded={!collapsed}
+          aria-controls={timelineStepsPanelId}
+          aria-label={
+            collapsed
+              ? t('agent.timeline.showTimeline', 'Show execution steps')
+              : t('agent.timeline.hideTimeline', 'Hide execution steps')
+          }
+          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer rounded min-h-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
         >
           {collapsed ? (
             <ChevronRight size={14} className="text-slate-400" />
@@ -415,7 +460,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
           </span>
           {summary.failed > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
-              {summary.failed} {t('agent.timeline.failed', 'failed')}
+              {summary.failed} {t('agent.timeline.failed', 'Failed')}
             </span>
           )}
           {isStreaming && summary.running > 0 && (
@@ -425,7 +470,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
 
         {/* Timeline steps */}
         {!collapsed && (
-          <div className="pl-1 pt-0.5" style={{ display: 'flow-root' }}>
+          <div id={timelineStepsPanelId} className="pl-1 pt-0.5" style={{ display: 'flow-root' }}>
             {steps.map((step, i) => (
               <TimelineStepItem
                 key={step.id}

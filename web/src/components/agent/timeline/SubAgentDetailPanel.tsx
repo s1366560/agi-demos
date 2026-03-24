@@ -34,26 +34,81 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
     return 'bg-slate-400';
   };
 
+  const formatEventDetail = (event: Record<string, unknown>) => {
+    const formatInt = (value: number) => String(value);
+    switch (event.type) {
+      case 'subagent_routed': {
+        const confidence =
+          typeof event.confidence === 'number'
+            ? `${formatInt(Math.round(event.confidence * 100))}%`
+            : null;
+        const reason = typeof event.reason === 'string' ? event.reason : null;
+        return [confidence, reason].filter(Boolean).join(' · ');
+      }
+      case 'subagent_started': {
+        return typeof event.task === 'string' ? event.task : '';
+      }
+      case 'subagent_session_update': {
+        const statusMessage =
+          typeof event.statusMessage === 'string'
+            ? event.statusMessage
+            : typeof event.status_message === 'string'
+              ? event.status_message
+              : '';
+        const tokens =
+          typeof event.tokensUsed === 'number'
+            ? `${formatTokens(event.tokensUsed)} tokens`
+            : typeof event.tokens_used === 'number'
+              ? `${formatTokens(event.tokens_used)} tokens`
+              : '';
+        const toolCalls =
+          typeof event.toolCallsCount === 'number'
+            ? `${formatInt(event.toolCallsCount)} tools`
+            : typeof event.tool_calls_count === 'number'
+              ? `${formatInt(event.tool_calls_count)} tools`
+              : '';
+        return [statusMessage, tokens, toolCalls].filter(Boolean).join(' · ');
+      }
+      case 'subagent_completed':
+      case 'parallel_completed':
+      case 'chain_step_completed': {
+        const summary = event.summary;
+        if (typeof summary === 'string') return summary;
+        return '';
+      }
+      case 'subagent_failed': {
+        return typeof event.error === 'string' ? event.error : '';
+      }
+      default:
+        return '';
+    }
+  };
+
   const firstEventTimestamp =
-    group.events && group.events.length > 0 ? (group.events[0]?.timestamp ?? 0) : 0;
+    group.events.length > 0 ? (group.events[0]?.timestamp ?? 0) : 0;
+  const displayName = group.subagentName || group.subagentId.slice(0, 8);
 
   return (
-    <div className="relative flex flex-col w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 animate-in fade-in slide-in-from-bottom-2">
+    <div className="relative mt-1.5 flex flex-col w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 animate-in fade-in slide-in-from-bottom-2">
       {/* 1. Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
+        <div className="flex min-w-0 items-start gap-2.5">
           <StatusIcon status={group.status} size={16} />
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {group.subagentName}
-          </h3>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 font-mono">
-            {group.subagentId.slice(0, 8)}...
-          </span>
-          {'modelName' in group && Boolean((group as Record<string, unknown>).modelName) ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-              {String((group as Record<string, unknown>).modelName)}
-            </span>
-          ) : null}
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 break-words [overflow-wrap:anywhere]">
+              {displayName}
+            </h3>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 font-mono">
+                {group.subagentId.slice(0, 8)}...
+              </span>
+              {'modelName' in group && Boolean((group as Record<string, unknown>).modelName) ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 break-all">
+                  {String((group as Record<string, unknown>).modelName)}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -95,7 +150,7 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
               <XCircle size={14} />
               {t('agent.subagent.detail.error_title', 'Execution Error')}
             </h4>
-            <p className="text-xs text-red-600 dark:text-red-300 whitespace-pre-wrap font-mono">
+            <p className="text-xs text-red-600 dark:text-red-300 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono">
               {group.error}
             </p>
           </div>
@@ -107,14 +162,14 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
             <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               {t('agent.subagent.detail.summary_title', 'Execution Summary')}
             </h4>
-            <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed break-words [overflow-wrap:anywhere]">
               {group.summary}
             </p>
           </div>
         )}
 
         {/* 2. Timeline Strip */}
-        {group.events && group.events.length > 0 && (
+        {group.events.length > 0 && (
           <div className="pt-2">
             <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-3 px-1">
               {t('agent.subagent.detail.timeline_title', 'Lifecycle Events')}
@@ -124,6 +179,7 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
                 const isLast = i === group.events.length - 1;
                 const relMs = Math.max(0, event.timestamp - firstEventTimestamp);
                 const relTime = relMs > 0 ? `+${formatDuration(relMs)}` : '0ms';
+                const eventDetail = formatEventDetail(event as unknown as Record<string, unknown>);
 
                 return (
                   <div key={event.id || i} className="relative flex gap-3 pb-4">
@@ -138,13 +194,20 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 flex items-start justify-between min-w-0">
-                      <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                        {formatEventType(event.type)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between min-w-0">
+                        <div className="text-xs font-medium text-slate-700 dark:text-slate-300 break-words [overflow-wrap:anywhere] pr-2">
+                          {formatEventType(event.type)}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
+                          {relTime}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
-                        {relTime}
-                      </div>
+                      {eventDetail && (
+                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed break-words [overflow-wrap:anywhere]">
+                          {eventDetail}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );

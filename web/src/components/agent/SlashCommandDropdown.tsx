@@ -76,8 +76,8 @@ export const SlashCommandDropdown = memo(
           skillAPI.list({ status: 'active', limit: 50 }).catch(() => ({ skills: [] })),
         ]).then(([cmdRes, skillRes]) => {
           if (!cancelled) {
-            setCommands(cmdRes.commands);
-            setSkills(skillRes.skills);
+            setCommands(Array.isArray(cmdRes.commands) ? cmdRes.commands : []);
+            setSkills(Array.isArray(skillRes.skills) ? skillRes.skills : []);
             setLoaded(true);
             setLoading(false);
           }

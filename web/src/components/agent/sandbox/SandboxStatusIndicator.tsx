@@ -11,6 +11,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Popover, message } from 'antd';
 import {
   Terminal,
@@ -26,6 +28,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import {
   projectSandboxService,
   type ProjectSandbox,
@@ -33,8 +38,10 @@ import {
   type ProjectSandboxStatus,
 } from '../../../services/projectSandboxService';
 import { sandboxSSEService, type BaseSandboxSSEEvent } from '../../../services/sandboxSSEService';
-import { type SandboxStateData } from '../../../types/agent';
 import { logger } from '../../../utils/logger';
+
+import type { SandboxStateData } from '../../../types/agent';
+import type { TFunction } from 'i18next';
 
 interface SandboxStatusIndicatorProps {
   /** Project ID */
@@ -45,85 +52,88 @@ interface SandboxStatusIndicatorProps {
   className?: string | undefined;
 }
 
+interface StatusConfigEntry {
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  bgColor: string;
+  description: string;
+  animate?: boolean | undefined;
+  clickable?: boolean | undefined;
+}
+
 /**
  * Status configuration for different sandbox states
  */
-const statusConfig: Record<
-  ProjectSandboxStatus | 'none',
-  {
-    label: string;
-    icon: React.ElementType;
-    color: string;
-    bgColor: string;
-    description: string;
-    animate?: boolean | undefined;
-    clickable?: boolean | undefined;
-  }
-> = {
-  none: {
-    label: '未启动',
-    icon: Power,
-    color: 'text-slate-500',
-    bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: '点击启动沙盒环境',
-    clickable: true,
-  },
-  pending: {
-    label: '等待中',
-    icon: Clock,
-    color: 'text-amber-500',
-    bgColor: 'bg-amber-100 dark:bg-amber-900/30',
-    description: '沙盒正在排队等待启动',
-    animate: true,
-  },
-  creating: {
-    label: '创建中',
-    icon: Loader2,
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-    description: '正在创建沙盒容器',
-    animate: true,
-  },
-  running: {
-    label: '运行中',
-    icon: CheckCircle2,
-    color: 'text-emerald-500',
-    bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
-    description: '沙盒环境正常运行',
-  },
-  unhealthy: {
-    label: '不健康',
-    icon: AlertCircle,
-    color: 'text-orange-500',
-    bgColor: 'bg-orange-100 dark:bg-orange-900/30',
-    description: '沙盒运行异常，可能需要重启',
-    clickable: true,
-  },
-  stopped: {
-    label: '已停止',
-    icon: Power,
-    color: 'text-slate-500',
-    bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: '沙盒已停止，点击重新启动',
-    clickable: true,
-  },
-  terminated: {
-    label: '已终止',
-    icon: Power,
-    color: 'text-slate-400',
-    bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: '沙盒已终止，点击创建新沙盒',
-    clickable: true,
-  },
-  error: {
-    label: '错误',
-    icon: AlertCircle,
-    color: 'text-red-500',
-    bgColor: 'bg-red-100 dark:bg-red-900/30',
-    description: '沙盒出现错误',
-    clickable: true,
-  },
-};
+function getStatusConfig(
+  t: TFunction,
+): Record<ProjectSandboxStatus | 'none', StatusConfigEntry> {
+  return {
+    none: {
+      label: t('agent.sandbox.status.not_started', 'Not started'),
+      icon: Power,
+      color: 'text-slate-500',
+      bgColor: 'bg-slate-100 dark:bg-slate-800',
+      description: t('agent.sandbox.click_to_start', 'Click to start sandbox'),
+      clickable: true,
+    },
+    pending: {
+      label: t('agent.sandbox.status.waiting', 'Waiting'),
+      icon: Clock,
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-100 dark:bg-amber-900/30',
+      description: t('agent.sandbox.status.pending_desc', 'Sandbox is queued for startup'),
+      animate: true,
+    },
+    creating: {
+      label: t('agent.sandbox.status.creating', 'Creating'),
+      icon: Loader2,
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+      description: t('agent.sandbox.status.creating_desc', 'Creating sandbox container'),
+      animate: true,
+    },
+    running: {
+      label: t('agent.sandbox.status.running', 'Running'),
+      icon: CheckCircle2,
+      color: 'text-emerald-500',
+      bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
+      description: t('agent.sandbox.status.running_desc', 'Sandbox is running normally'),
+    },
+    unhealthy: {
+      label: t('agent.sandbox.status.unhealthy', 'Unhealthy'),
+      icon: AlertCircle,
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+      description: t('agent.sandbox.status.unhealthy_desc', 'Sandbox is unhealthy, may need restart'),
+      clickable: true,
+    },
+    stopped: {
+      label: t('agent.sandbox.status.stopped', 'Stopped'),
+      icon: Power,
+      color: 'text-slate-500',
+      bgColor: 'bg-slate-100 dark:bg-slate-800',
+      description: t('agent.sandbox.status.stopped_desc', 'Sandbox stopped, click to restart'),
+      clickable: true,
+    },
+    terminated: {
+      label: t('agent.sandbox.status.terminated', 'Terminated'),
+      icon: Power,
+      color: 'text-slate-400',
+      bgColor: 'bg-slate-100 dark:bg-slate-800',
+      description: t('agent.sandbox.status.terminated_desc', 'Sandbox terminated, click to create new'),
+      clickable: true,
+    },
+    error: {
+      label: t('agent.sandbox.status.error', 'Error'),
+      icon: AlertCircle,
+      color: 'text-red-500',
+      bgColor: 'bg-red-100 dark:bg-red-900/30',
+      description: t('agent.sandbox.status.error_desc', 'Sandbox encountered an error'),
+      clickable: true,
+    },
+  };
+}
 
 const SANDBOX_SYNC_THROTTLE_MS = 1500;
 
@@ -141,12 +151,15 @@ function formatBytes(bytes: number): string {
 /**
  * Format seconds to human readable duration
  */
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}秒`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
-  const hours = Math.floor(seconds / 3600);
+function formatDuration(seconds: number, t: TFunction): string {
+  const s = t('agent.sandbox.duration.seconds', 's');
+  const m = t('agent.sandbox.duration.minutes', 'm');
+  const h = t('agent.sandbox.duration.hours', 'h');
+  if (seconds < 60) return `${seconds}${s}`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}${m}${seconds % 60}${s}`;
+  const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  return `${hours}小时${mins}分`;
+  return `${hrs}${h}${mins}${m}`;
 }
 
 /**
@@ -197,19 +210,27 @@ const MetricsPopover: FC<{
   onRestart: () => void;
   onStop: () => void;
 }> = memo(({ sandbox, stats, loading, onRefresh, onRestart, onStop }) => {
+  const { t } = useTranslation();
+  const statusCfg = getStatusConfig(t);
+  const themeColors = useThemeColors({
+    info: '--color-info',
+    error: '--color-error',
+    purple: '--color-tile-purple',
+  });
+
   if (!sandbox) {
     return (
       <div className="p-3 text-sm text-slate-500">
         <div className="flex items-center gap-2 mb-2">
           <Terminal size={16} />
-          <span className="font-medium">沙盒环境</span>
+          <span className="font-medium">{t('agent.sandbox.label', 'Sandbox environment')}</span>
         </div>
-        <p>点击状态指示器启动沙盒环境</p>
+        <p>{t('agent.sandbox.click_to_start', 'Click to start sandbox')}</p>
       </div>
     );
   }
 
-  const config = statusConfig[sandbox.status] || statusConfig.none;
+  const config = statusCfg[sandbox.status] || statusCfg.none;
 
   return (
     <div className="p-3 min-w-70">
@@ -217,7 +238,7 @@ const MetricsPopover: FC<{
       <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-slate-600 dark:text-slate-400" />
-          <span className="font-medium text-slate-800 dark:text-slate-200">沙盒环境</span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">{t('agent.sandbox.label', 'Sandbox environment')}</span>
         </div>
         <div className={`flex items-center gap-1 text-xs ${config.color}`}>
           <config.icon size={12} className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''} />
@@ -246,7 +267,7 @@ const MetricsPopover: FC<{
                   {stats.cpu_percent.toFixed(1)}%
                 </AnimatedValue>
               </div>
-              <SmoothProgressBar percent={stats.cpu_percent} color="#3b82f6" highColor="#ef4444" />
+              <SmoothProgressBar percent={stats.cpu_percent} color={themeColors.info} highColor={themeColors.error} />
             </div>
           </div>
 
@@ -255,15 +276,15 @@ const MetricsPopover: FC<{
             <HardDrive size={14} className="text-purple-500 shrink-0" />
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600 dark:text-slate-400">内存</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('agent.sandbox.metrics.memory', 'Memory')}</span>
                 <AnimatedValue className="text-slate-800 dark:text-slate-200 font-mono tabular-nums">
                   {formatBytes(stats.memory_usage)} / {formatBytes(stats.memory_limit)}
                 </AnimatedValue>
               </div>
               <SmoothProgressBar
                 percent={stats.memory_percent}
-                color="#8b5cf6"
-                highColor="#ef4444"
+                color={themeColors.purple}
+                highColor={themeColors.error}
               />
             </div>
           </div>
@@ -274,7 +295,7 @@ const MetricsPopover: FC<{
               <Network size={14} className="text-emerald-500 shrink-0" />
               <div className="flex-1 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-600 dark:text-slate-400">网络</span>
+                  <span className="text-slate-600 dark:text-slate-400">{t('agent.sandbox.metrics.network', 'Network')}</span>
                   <span className="text-slate-800 dark:text-slate-200">
                     ↓{formatBytes(stats.network_rx_bytes || 0)} / ↑
                     {formatBytes(stats.network_tx_bytes || 0)}
@@ -287,13 +308,13 @@ const MetricsPopover: FC<{
           {/* Processes & Uptime */}
           <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-slate-700">
             <div className="text-slate-500">
-              进程: <span className="text-slate-700 dark:text-slate-300">{stats.pids}</span>
+              {t('agent.sandbox.metrics.processes', 'Processes')}: <span className="text-slate-700 dark:text-slate-300">{stats.pids}</span>
             </div>
             {stats.uptime_seconds !== undefined && (
               <div className="text-slate-500">
-                运行时间:{' '}
+                {t('agent.sandbox.metrics.uptime', 'Uptime')}:{' '}
                 <span className="text-slate-700 dark:text-slate-300">
-                  {formatDuration(stats.uptime_seconds)}
+                  {formatDuration(stats.uptime_seconds, t)}
                 </span>
               </div>
             )}
@@ -310,7 +331,7 @@ const MetricsPopover: FC<{
           className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} />
-          刷新
+          {t('agent.sandbox.action.refresh', 'Refresh')}
         </button>
         {sandbox.status === 'running' && (
           <>
@@ -319,14 +340,14 @@ const MetricsPopover: FC<{
               onClick={onRestart}
               className="px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
             >
-              重启
+              {t('agent.sandbox.action.restart', 'Restart')}
             </button>
             <button
               type="button"
               onClick={onStop}
               className="px-2.5 py-1 text-xs rounded-md border border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer"
             >
-              停止
+              {t('agent.sandbox.action.stop', 'Stop')}
             </button>
           </>
         )}
@@ -344,6 +365,8 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   // tenantId reserved for future multi-tenant filtering
   className,
 }) => {
+  const { t } = useTranslation();
+  const statusConfig = getStatusConfig(t);
   const [sandbox, setSandbox] = useState<ProjectSandbox | null>(null);
   const [stats, setStats] = useState<SandboxStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -471,15 +494,15 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
         auto_create: true,
       });
       setSandbox(info);
-      message.success('沙盒环境已启动');
+      message.success(t('agent.sandbox.toast.started', 'Sandbox started'));
     } catch (error) {
       logger.error('[SandboxStatusIndicator] Failed to start sandbox:', error);
-      const errMsg = error instanceof Error ? error.message : '未知错误';
-      message.error('启动沙盒失败: ' + errMsg);
+      const errMsg = error instanceof Error ? error.message : t('agent.sandbox.toast.unknown_error', 'Unknown error');
+      message.error(`${t('agent.sandbox.toast.start_failed', 'Failed to start sandbox')}: ${errMsg}`);
     } finally {
       setStarting(false);
     }
-  }, [projectId, starting]);
+  }, [projectId, starting, t]);
 
   /**
    * Restart sandbox
@@ -493,14 +516,14 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       if (result.sandbox) {
         setSandbox(result.sandbox);
       }
-      message.success('沙盒已重启');
+      message.success(t('agent.sandbox.toast.restarted', 'Sandbox restarted'));
     } catch (error) {
       logger.error('[SandboxStatusIndicator] Failed to restart sandbox:', error);
-      message.error('重启沙盒失败');
+      message.error(t('agent.sandbox.toast.restart_failed', 'Failed to restart sandbox'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   /**
    * Stop sandbox
@@ -513,14 +536,14 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       await projectSandboxService.terminateSandbox(projectId);
       setSandbox(null);
       setStats(null);
-      message.success('沙盒已停止');
+      message.success(t('agent.sandbox.toast.stopped', 'Sandbox stopped'));
     } catch (error) {
       logger.error('[SandboxStatusIndicator] Failed to stop sandbox:', error);
-      message.error('停止沙盒失败');
+      message.error(t('agent.sandbox.toast.stop_failed', 'Failed to stop sandbox'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   /**
    * Handle indicator click
@@ -693,7 +716,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   const indicatorContent = (
     <>
       <StatusIcon size={12} className={config.animate || starting ? 'animate-spin motion-reduce:animate-none' : ''} />
-      <span>{starting ? '启动中' : config.label}</span>
+      <span>{starting ? t('agent.sandbox.status.starting', 'Starting') : config.label}</span>
       {sandbox?.status === 'running' && <PlayCircle size={10} className="text-emerald-500" />}
     </>
   );

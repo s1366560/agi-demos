@@ -179,7 +179,6 @@ export const DecisionAskedItem = memo(
     const hasOptions = event.options.length > 0;
     const isMultiSelect = event.selectionMode === 'multiple';
     const customDecisionId = useId();
-    const customDecisionId = useId();
 
     const toggleMultiSelect = (optionId: string) => {
       setSelectedMultiple((prev) =>

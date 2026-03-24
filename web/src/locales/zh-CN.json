@@ -1803,6 +1803,7 @@
       "exportPdf": "导出为 PDF",
       "pin": "固定",
       "unpin": "取消固定",
+      "jumpToMessage": "跳转到消息",
       "reply": "回复"
     },
     "branch": {
@@ -2003,7 +2004,16 @@
       "output": "输出",
       "running": "正在执行 {{count}} 个工具...",
       "completed": "{{completed}}/{{total}} 步已完成",
-      "failed": "失败"
+      "failed": "失败",
+      "openApp": "打开应用",
+      "taskProgress": "任务 {{current}}/{{total}}",
+      "taskStatus": "任务 {{current}}/{{total}} {{status}}",
+      "taskCompleted": "已完成",
+      "showStepDetails": "显示 {{tool}} 的详情",
+      "hideStepDetails": "隐藏 {{tool}} 的详情",
+      "stepDetailsRegion": "{{tool}} 的详情",
+      "showTimeline": "显示执行步骤",
+      "hideTimeline": "隐藏执行步骤"
     },
     "subagent": {
       "single": "子代理: {{name}}",
@@ -2036,7 +2046,28 @@
       "minimap_expand": "展开",
       "action_stop": "停止",
       "action_redirect": "重定向",
-      "redirect_placeholder": "输入新的指令..."
+      "redirect_placeholder": "输入新的指令...",
+      "send_redirect": "发送重定向",
+      "cancel_redirect": "取消重定向",
+      "parallel_badge": "并行",
+      "parallel_completed": "已完成",
+      "chain_completed": "步骤已完成",
+      "unnamed": "未命名代理",
+      "viewDetails": "查看详情",
+      "hideDetails": "隐藏详情",
+      "progress": {
+        "initializing": "初始化中...",
+        "routed": "已路由",
+        "started": "已开始",
+        "executing": "执行中",
+        "parallelTasks": "任务：{{completed}}/{{total}}"
+      },
+      "detail": {
+        "close": "关闭",
+        "error_title": "执行错误",
+        "summary_title": "执行总结",
+        "timeline_title": "生命周期事件"
+      }
     },
     "background": {
       "title": "后台任务",

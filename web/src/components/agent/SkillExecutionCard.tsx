@@ -41,36 +41,36 @@ const getStatusConfig = (status: SkillExecutionState['status']) => {
       icon: <ThunderboltOutlined />,
       label: 'Matched',
       color: 'blue',
-      bgColor: '#e6f7ff',
-      borderColor: '#91d5ff',
+      bgClass: 'bg-blue-50',
+      borderClass: 'border-blue-300',
     },
     executing: {
       icon: <LoadingOutlined spin />,
       label: 'Executing',
       color: 'processing',
-      bgColor: '#e6f7ff',
-      borderColor: '#91d5ff',
+      bgClass: 'bg-blue-50',
+      borderClass: 'border-blue-300',
     },
     completed: {
       icon: <CheckCircleOutlined />,
       label: 'Completed',
       color: 'success',
-      bgColor: '#f6ffed',
-      borderColor: '#b7eb8f',
+      bgClass: 'bg-green-50',
+      borderClass: 'border-green-300',
     },
     failed: {
       icon: <CloseCircleOutlined />,
       label: 'Failed',
       color: 'error',
-      bgColor: '#fff1f0',
-      borderColor: '#ffccc7',
+      bgClass: 'bg-red-50',
+      borderClass: 'border-red-200',
     },
     fallback: {
       icon: <WarningOutlined />,
       label: 'Fallback to LLM',
       color: 'warning',
-      bgColor: '#fffbe6',
-      borderColor: '#ffe58f',
+      bgClass: 'bg-yellow-50',
+      borderClass: 'border-yellow-300',
     },
   };
   return configs[status] || configs.executing;
@@ -95,13 +95,13 @@ const getModeIcon = (mode: 'direct' | 'prompt') => {
   if (mode === 'direct') {
     return (
       <Tooltip title="Direct execution - bypassing LLM">
-        <RocketOutlined style={{ color: '#1890ff' }} />
+        <RocketOutlined className="text-blue-500" />
       </Tooltip>
     );
   }
   return (
     <Tooltip title="Prompt injection - guided by LLM">
-      <EditOutlined style={{ color: '#52c41a' }} />
+      <EditOutlined className="text-green-500" />
     </Tooltip>
   );
 };
@@ -149,11 +149,9 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
     <Card
       data-testid="skill-execution-card"
       size="small"
-      className={`skill-execution-card status-${skillExecution.status}`}
+      className={`skill-execution-card status-${skillExecution.status} ${statusConfig.bgClass} border border-solid ${statusConfig.borderClass}`}
       style={{
         marginBottom: 8,
-        backgroundColor: statusConfig.bgColor,
-        border: `1px solid ${statusConfig.borderColor}`,
       }}
       aria-label={`Skill execution: ${skillExecution.skill_name}`}
     >
@@ -161,7 +159,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
         {/* Header */}
         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
-            <ThunderboltOutlined style={{ color: '#faad14' }} />
+            <ThunderboltOutlined className="text-yellow-500" />
             <Text strong>{skillExecution.skill_name}</Text>
             {getModeIcon(skillExecution.execution_mode)}
             <Tag
@@ -211,8 +209,8 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
               Tools:{' '}
             </Text>
             <Space wrap size={4}>
-              {skillExecution.tools.map((tool, idx) => (
-                <Tag key={idx} style={{ fontSize: 10 }}>
+              {skillExecution.tools.map((tool) => (
+                <Tag key={tool} style={{ fontSize: 10 }}>
                   {tool}
                 </Tag>
               ))}
@@ -223,8 +221,8 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
         {/* Summary (when completed) */}
         {skillExecution.summary && (
           <div
+            className="bg-neutral-50"
             style={{
-              backgroundColor: '#fafafa',
               padding: 8,
               borderRadius: 4,
               marginTop: 4,
@@ -242,8 +240,8 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
         {/* Error (when failed or fallback) */}
         {skillExecution.error && (
           <div
+            className="bg-red-50"
             style={{
-              backgroundColor: '#fff1f0',
               padding: 8,
               borderRadius: 4,
               marginTop: 4,

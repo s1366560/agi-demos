@@ -8,14 +8,12 @@
  * TDD Phase 3: SSE to TimelineEvent Converter
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 import {
   sseEventToTimeline,
   batchConvertSSEEvents,
   generateTimelineEventId,
-  getNextSequenceNumber,
-  resetSequenceCounter,
   appendSSEEventToTimeline,
   isSupportedEventType,
 } from '../../utils/sseEventAdapter';
@@ -33,10 +31,6 @@ import type {
 } from '../../types/agent';
 
 describe('SSE Event Adapter', () => {
-  beforeEach(() => {
-    // Reset sequence counter before each test
-    resetSequenceCounter();
-  });
 
   describe('Typewriter Effect Support (text_*)', () => {
     it('should support text_delta event type', () => {
@@ -57,7 +51,7 @@ describe('SSE Event Adapter', () => {
         data: { delta: 'Hello' },
       };
 
-      const result = sseEventToTimeline(event, 1);
+      const result = sseEventToTimeline(event);
 
       expect(result).not.toBeNull();
       expect(result?.type).toBe('text_delta');
@@ -80,6 +74,115 @@ describe('SSE Event Adapter', () => {
       if (result[0].type === 'text_delta') {
         expect(result[0].content).toBe('World');
       }
+    });
+
+    it('should deduplicate replayed events with identical ordering metadata', () => {
+      let timeline: any[] = [];
+      const event: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: {
+          delta: 'Replay-safe chunk',
+          event_time_us: 1234567890000,
+          event_counter: 7,
+        } as unknown as TextDeltaEventData,
+      };
+
+      timeline = appendSSEEventToTimeline(timeline, event);
+      timeline = appendSSEEventToTimeline(timeline, event);
+
+      expect(timeline).toHaveLength(1);
+      expect(timeline[0].type).toBe('text_delta');
+      if (timeline[0].type === 'text_delta') {
+        expect(timeline[0].content).toBe('Replay-safe chunk');
+      }
+    });
+
+    it('should deduplicate replayed events with camelCase ordering metadata', () => {
+      let timeline: any[] = [];
+      const event: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: {
+          delta: 'Camel case chunk',
+          eventTimeUs: 2234567890000,
+          eventCounter: 11,
+        } as unknown as TextDeltaEventData,
+      };
+
+      timeline = appendSSEEventToTimeline(timeline, event);
+      timeline = appendSSEEventToTimeline(timeline, event);
+
+      expect(timeline).toHaveLength(1);
+      expect(timeline[0].type).toBe('text_delta');
+      if (timeline[0].type === 'text_delta') {
+        expect(timeline[0].content).toBe('Camel case chunk');
+      }
+    });
+
+    it('should not deduplicate when ordering metadata is absent', () => {
+      let timeline: any[] = [];
+      const event: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: { delta: 'No ordering' },
+      };
+
+      timeline = appendSSEEventToTimeline(timeline, event);
+      timeline = appendSSEEventToTimeline(timeline, event);
+
+      expect(timeline).toHaveLength(2);
+    });
+
+    it('should not deduplicate when ordering metadata is partial', () => {
+      let timeline: any[] = [];
+      const eventWithOnlyTime: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: {
+          delta: 'Only time',
+          event_time_us: 3234567890000,
+        } as unknown as TextDeltaEventData,
+      };
+      const eventWithOnlyCounter: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: {
+          delta: 'Only counter',
+          event_counter: 13,
+        } as unknown as TextDeltaEventData,
+      };
+
+      timeline = appendSSEEventToTimeline(timeline, eventWithOnlyTime);
+      timeline = appendSSEEventToTimeline(timeline, eventWithOnlyTime);
+      timeline = appendSSEEventToTimeline(timeline, eventWithOnlyCounter);
+      timeline = appendSSEEventToTimeline(timeline, eventWithOnlyCounter);
+
+      expect(timeline).toHaveLength(4);
+    });
+
+    it('should keep events with same ordering metadata but different types', () => {
+      let timeline: any[] = [];
+      const sharedOrdering = {
+        event_time_us: 4234567890000,
+        event_counter: 17,
+      };
+      const deltaEvent: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: {
+          delta: 'Chunk A',
+          ...sharedOrdering,
+        } as unknown as TextDeltaEventData,
+      };
+      const endEvent: AgentEvent<TextEndEventData> = {
+        type: 'text_end',
+        data: {
+          full_text: 'Chunk A',
+          ...sharedOrdering,
+        } as unknown as TextEndEventData,
+      };
+
+      timeline = appendSSEEventToTimeline(timeline, deltaEvent);
+      timeline = appendSSEEventToTimeline(timeline, endEvent);
+
+      expect(timeline).toHaveLength(2);
+      expect(timeline[0].type).toBe('text_delta');
+      expect(timeline[1].type).toBe('text_end');
     });
 
     it('should handle multiple text_delta events in sequence', () => {
@@ -107,7 +210,7 @@ describe('SSE Event Adapter', () => {
         data: {},
       };
 
-      const result = sseEventToTimeline(event, 1);
+      const result = sseEventToTimeline(event);
 
       expect(result).not.toBeNull();
       expect(result?.type).toBe('text_start');
@@ -119,7 +222,7 @@ describe('SSE Event Adapter', () => {
         data: { full_text: 'Hello World!' },
       };
 
-      const result = sseEventToTimeline(event, 1);
+      const result = sseEventToTimeline(event);
 
       expect(result).not.toBeNull();
       expect(result?.type).toBe('text_end');
@@ -128,6 +231,7 @@ describe('SSE Event Adapter', () => {
       }
     });
   });
+
   describe('ID Generation', () => {
     it('should generate unique IDs for events', () => {
       const id1 = generateTimelineEventId('thought');
@@ -157,36 +261,6 @@ describe('SSE Event Adapter', () => {
     });
   });
 
-  describe('Sequence Number Management', () => {
-    it('should start sequence from 1', () => {
-      const seq1 = getNextSequenceNumber();
-      const seq2 = getNextSequenceNumber();
-
-      expect(seq1).toBe(1);
-      expect(seq2).toBe(2);
-    });
-
-    it('should increment sequence for each call', () => {
-      const sequences = [
-        getNextSequenceNumber(),
-        getNextSequenceNumber(),
-        getNextSequenceNumber(),
-        getNextSequenceNumber(),
-      ];
-
-      expect(sequences).toEqual([1, 2, 3, 4]);
-    });
-
-    it('should reset sequence when requested', () => {
-      getNextSequenceNumber(); // 1
-      getNextSequenceNumber(); // 2
-      getNextSequenceNumber(); // 3
-
-      const afterReset = getNextSequenceNumber(true); // Reset
-
-      expect(afterReset).toBe(1);
-    });
-  });
 
   describe('SSE to TimelineEvent Conversion', () => {
     it('should convert user message event', () => {
@@ -200,11 +274,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 1);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('user_message');
-      expect(timelineEvent?.sequenceNumber).toBe(1);
       if (timelineEvent?.type === 'user_message') {
         expect(timelineEvent.content).toBe('Hello, how are you?');
         expect(timelineEvent.role).toBe('user');
@@ -222,11 +295,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 2);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('assistant_message');
-      expect(timelineEvent?.sequenceNumber).toBe(2);
       if (timelineEvent?.type === 'assistant_message') {
         expect(timelineEvent.content).toBe('I am doing well, thank you!');
         expect(timelineEvent.role).toBe('assistant');
@@ -243,11 +315,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 3);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('thought');
-      expect(timelineEvent?.sequenceNumber).toBe(3);
       if (timelineEvent?.type === 'thought') {
         expect(timelineEvent.content).toBe('I need to search for information about...');
       }
@@ -263,11 +334,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 4);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('act');
-      expect(timelineEvent?.sequenceNumber).toBe(4);
       if (timelineEvent?.type === 'act') {
         expect(timelineEvent.toolName).toBe('web_search');
         expect(timelineEvent.toolInput).toEqual({ query: 'TypeScript best practices' });
@@ -284,11 +354,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 5);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('observe');
-      expect(timelineEvent?.sequenceNumber).toBe(5);
       if (timelineEvent?.type === 'observe') {
         expect(timelineEvent.toolOutput).toBe('Search completed successfully with 10 results');
         expect(timelineEvent.isError).toBe(false);
@@ -321,11 +390,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 6);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('work_plan');
-      expect(timelineEvent?.sequenceNumber).toBe(6);
       if (timelineEvent?.type === 'work_plan') {
         expect(timelineEvent.steps).toHaveLength(2);
         expect(timelineEvent.steps[0].description).toBe('Search for information');
@@ -344,11 +412,10 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 9);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       expect(timelineEvent?.type).toBe('assistant_message');
-      expect(timelineEvent?.sequenceNumber).toBe(9);
       if (timelineEvent?.type === 'assistant_message') {
         expect(timelineEvent.content).toBe('Based on my research, here are the key points...');
         expect(timelineEvent.artifacts).toEqual([]);
@@ -366,7 +433,7 @@ describe('SSE Event Adapter', () => {
       ] as const;
 
       unsupportedEvents.forEach((event) => {
-        const timelineEvent = sseEventToTimeline(event as any, 10);
+        const timelineEvent = sseEventToTimeline(event as any);
         expect(timelineEvent).toBeNull();
       });
     });
@@ -396,6 +463,7 @@ describe('SSE Event Adapter', () => {
       }
     });
   });
+
 
   describe('Batch Conversion', () => {
     it('should convert multiple SSE events to timeline', () => {
@@ -432,11 +500,6 @@ describe('SSE Event Adapter', () => {
       expect(timelineEvents[4].type).toBe('assistant_message');
 
       // Verify sequence numbers
-      expect(timelineEvents[0].sequenceNumber).toBe(1);
-      expect(timelineEvents[1].sequenceNumber).toBe(2);
-      expect(timelineEvents[2].sequenceNumber).toBe(3);
-      expect(timelineEvents[3].sequenceNumber).toBe(4);
-      expect(timelineEvents[4].sequenceNumber).toBe(5);
     });
 
     it('should filter out null events in batch conversion', () => {
@@ -465,28 +528,8 @@ describe('SSE Event Adapter', () => {
       expect(timelineEvents[0].type).toBe('user_message');
       expect(timelineEvents[1].type).toBe('assistant_message');
     });
-
-    it('should reset sequence number for each batch', () => {
-      const batch1: AgentEvent<any>[] = [
-        { type: 'message', data: { role: 'user', content: 'A', id: 'm1' } },
-        { type: 'message', data: { role: 'assistant', content: 'B', id: 'm2' } },
-      ];
-
-      const batch2: AgentEvent<any>[] = [
-        { type: 'message', data: { role: 'user', content: 'C', id: 'm3' } },
-        { type: 'message', data: { role: 'assistant', content: 'D', id: 'm4' } },
-      ];
-
-      const timeline1 = batchConvertSSEEvents(batch1);
-      const timeline2 = batchConvertSSEEvents(batch2);
-
-      expect(timeline1[0].sequenceNumber).toBe(1);
-      expect(timeline1[1].sequenceNumber).toBe(2);
-
-      expect(timeline2[0].sequenceNumber).toBe(1);
-      expect(timeline2[1].sequenceNumber).toBe(2);
-    });
   });
+
 
   describe('Edge Cases', () => {
     it('should handle empty batch', () => {
@@ -503,7 +546,7 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 1);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       if (timelineEvent?.type === 'thought') {
@@ -528,7 +571,7 @@ describe('SSE Event Adapter', () => {
         },
       };
 
-      const timelineEvent = sseEventToTimeline(sseEvent, 1);
+      const timelineEvent = sseEventToTimeline(sseEvent);
 
       expect(timelineEvent).not.toBeNull();
       if (timelineEvent?.type === 'assistant_message') {

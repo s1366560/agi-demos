@@ -23,11 +23,13 @@ export const TextDeltaItem = memo(function TextDeltaItem({ event }: TextDeltaIte
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-4">
+      <div className="flex items-start gap-3 my-3.5">
         <div className={ASSISTANT_AVATAR_CLASSES}>
           <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES}`}>
+        <div
+          className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES} break-words [overflow-wrap:anywhere]`}
+        >
           <MarkdownWithSuspense>{event.content}</MarkdownWithSuspense>
         </div>
       </div>
@@ -56,11 +58,13 @@ export const TextEndItem = memo(function TextEndItem({ event }: TextEndItemProps
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-4">
+      <div className="flex items-start gap-3 my-3.5">
         <div className={ASSISTANT_AVATAR_CLASSES}>
           <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES}`}>
+        <div
+          className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES} break-words [overflow-wrap:anywhere]`}
+        >
           <MarkdownWithSuspense>{fullText}</MarkdownWithSuspense>
         </div>
       </div>

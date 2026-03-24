@@ -1607,6 +1607,7 @@
       "exportPdf": "Export as PDF",
       "pin": "Pin",
       "unpin": "Unpin",
+      "jumpToMessage": "Jump to message",
       "reply": "Reply"
     },
     "branch": {
@@ -1807,7 +1808,16 @@
       "output": "Output",
       "running": "Running {{count}} tools...",
       "completed": "{{completed}}/{{total}} steps completed",
-      "failed": "failed"
+      "failed": "Failed",
+      "openApp": "Open App",
+      "taskProgress": "Task {{current}}/{{total}}",
+      "taskStatus": "Task {{current}}/{{total}} {{status}}",
+      "taskCompleted": "completed",
+      "showStepDetails": "Show details for {{tool}}",
+      "hideStepDetails": "Hide details for {{tool}}",
+      "stepDetailsRegion": "Details for {{tool}}",
+      "showTimeline": "Show execution steps",
+      "hideTimeline": "Hide execution steps"
     },
     "subagent": {
       "single": "SubAgent: {{name}}",
@@ -1840,7 +1850,28 @@
       "minimap_expand": "Expand",
       "action_stop": "Stop",
       "action_redirect": "Redirect",
-      "redirect_placeholder": "Enter new instructions..."
+      "redirect_placeholder": "Enter new instructions...",
+      "send_redirect": "Send redirect",
+      "cancel_redirect": "Cancel redirect",
+      "parallel_badge": "Parallel",
+      "parallel_completed": "completed",
+      "chain_completed": "steps completed",
+      "unnamed": "Unnamed Agent",
+      "viewDetails": "Show details",
+      "hideDetails": "Hide details",
+      "progress": {
+        "initializing": "Initializing...",
+        "routed": "Routed",
+        "started": "Started",
+        "executing": "Executing",
+        "parallelTasks": "Tasks: {{completed}}/{{total}}"
+      },
+      "detail": {
+        "close": "Close",
+        "error_title": "Execution Error",
+        "summary_title": "Execution Summary",
+        "timeline_title": "Lifecycle Events"
+      }
     },
     "background": {
       "title": "Background Tasks",

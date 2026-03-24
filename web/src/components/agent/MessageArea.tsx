@@ -37,6 +37,7 @@ import {
   Children,
   useMemo,
   isValidElement,
+  useId,
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -227,10 +228,10 @@ const InternalEmpty: React.FC<_MessageAreaEmptyProps & { context: _MessageAreaCo
 const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
   ({
     timeline,
-    streamingContent: _propStreamingContent,
-    streamingThought: _propStreamingThought,
+    streamingContent: propStreamingContent,
+    streamingThought: propStreamingThought,
     isStreaming,
-    isThinkingStreaming: _propIsThinkingStreaming,
+    isThinkingStreaming: propIsThinkingStreaming,
     isLoading,
     hasEarlierMessages = false,
     onLoadEarlier,
@@ -247,12 +248,15 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const storeStreamingThought = useAgentV3Store((s) => s.streamingThought);
     const storeIsThinkingStreaming = useAgentV3Store((s) => s.isThinkingStreaming);
 
-    const streamingContent = isStreaming ? storeStreamingContent : '';
-    const streamingThought = storeStreamingThought;
-    const isThinkingStreaming = storeIsThinkingStreaming;
+    const streamingContent = isStreaming
+      ? (storeStreamingContent ?? propStreamingContent ?? '')
+      : '';
+    const streamingThought = storeStreamingThought ?? propStreamingThought ?? '';
+    const isThinkingStreaming = storeIsThinkingStreaming ?? Boolean(propIsThinkingStreaming);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
+    const pinnedSectionId = useId();
     const { t } = useTranslation();
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(streamingContent);
 
@@ -351,6 +355,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       containerRef,
       timeline,
       isStreaming,
+      isThinkingStreaming,
       isLoading,
       streamingContent,
       streamingThought,
@@ -409,6 +414,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     const timelineLen = timeline.length;
     const lastEventIndex = timelineLen - 1;
+    const hasStreamingThought = streamingThought.trim().length > 0;
+    const hasStreamingText = streamingContent.trim().length > 0;
+    const effectiveIsThinkingStreaming = isThinkingStreaming && !hasStreamingText;
+    const shouldShowThinkingBlock =
+      includeStreamingContent &&
+      isStreaming &&
+      (effectiveIsThinkingStreaming || (hasStreamingThought && !hasStreamingText));
 
     // Virtualizer setup
     const estimateSize = useCallback(
@@ -517,7 +529,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 onClick={() => {
                   setPinnedCollapsed(!pinnedCollapsed);
                 }}
-                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                aria-expanded={!pinnedCollapsed}
+                aria-controls={pinnedSectionId}
+                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 active:bg-slate-200 dark:active:bg-slate-700/70 transition-colors motion-reduce:transition-none min-h-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               >
                 <Pin size={12} />
                 <span>{t('agent.pinnedMessages', 'Pinned')}</span>
@@ -527,7 +541,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 </span>
               </button>
               {!pinnedCollapsed && (
-                <div className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
+                <div id={pinnedSectionId} className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
                   {pinnedEvents.map((event) => {
                     const content =
                       ('content' in event ? (event as { content: string }).content : '') ||
@@ -535,26 +549,38 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                     return (
                       <div
                         key={`pinned-${event.id}`}
-                        className="flex items-start gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/50 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors group/pin"
-                        onClick={() => {
-                          const el = containerRef.current?.querySelector(
-                            `[data-msg-id="${event.id}"]`
-                          );
-                          if (el) {
-                            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                          }
-                        }}
+                        className="flex items-start gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/50 transition-colors group/pin hover:bg-slate-100 dark:hover:bg-slate-700/60"
                       >
-                        <p className="flex-1 text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
-                          {content || '...'}
-                        </p>
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                          onClick={() => {
+                            const targetId = event.id;
+                            const el = Array.from(
+                              containerRef.current?.querySelectorAll<HTMLElement>('[data-msg-id]') ??
+                                []
+                            ).find((node) => node.getAttribute('data-msg-id') === targetId);
+                            if (el) {
+                              el.scrollIntoView({
+                                block: 'center',
+                                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                                  ? 'auto'
+                                  : 'smooth',
+                              });
+                            }
+                          }}
+                          className="flex-1 min-w-0 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                          aria-label={t('agent.actions.jumpToMessage', 'Jump to message')}
+                        >
+                          <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
+                            {content || '...'}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             if (event.id) togglePinEvent(event.id);
                           }}
-                          className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-red-500 opacity-0 group-hover/pin:opacity-100 transition-opacity"
+                          className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-opacity motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           aria-label={t('agent.actions.unpin', 'Unpin')}
                         >
                           <PinOff size={12} />
@@ -626,6 +652,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         key={`subagent-group-${String(item.startIndex)}`}
                         data-index={virtualRow.index}
                         data-msg-index={virtualRow.index}
+                        data-timeline-index={item.startIndex}
+                        data-subagent-start-index={item.startIndex}
+                        data-subagent-id={item.group.subagentId}
                         ref={virtualizer.measureElement}
                         style={{
                           position: 'absolute',
@@ -637,7 +666,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       >
                         <div className="flex items-start gap-3 pb-1.5">
                           <div className="w-8 shrink-0" />
-                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                          <div className="flex-1 min-w-0 max-w-[92%] md:max-w-[86%] lg:max-w-[82%]">
                             <SubAgentTimeline
                               group={item.group}
                               isStreaming={
@@ -742,10 +771,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 )}
 
                 {/* Streaming thought indicator - ThinkingBlock (new design) */}
-                {includeStreamingContent && (isThinkingStreaming || streamingThought) && (
+                {shouldShowThinkingBlock && (
                   <ThinkingBlock
                     content={streamingThought || ''}
-                    isStreaming={isThinkingStreaming}
+                    isStreaming={effectiveIsThinkingStreaming}
                   />
                 )}
 
@@ -756,7 +785,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 {includeStreamingContent &&
                   isStreaming &&
                   streamingContent &&
-                  !isThinkingStreaming && (
+                  !effectiveIsThinkingStreaming && (
                     <div
                       className="flex items-start gap-3 mb-2 animate-fade-in-up"
                       aria-live="assertive"

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Modal, Form, Input, InputNumber, Progress, Select, Tag, message } from 'antd';
 
+import { useThemeColors } from '@/hooks/useThemeColor';
+
 import {
   useCreateBinding,
   useBindingSubmitting,
@@ -80,6 +82,12 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   const createBinding = useCreateBinding();
   const definitions = useDefinitions();
   const listDefinitions = useListDefinitions();
+
+  const colors = useThemeColors({
+    warning: '--color-warning',
+    success: '--color-success',
+    info: '--color-info',
+  });
 
   // Watch form values for specificity score calculation
   const formValues = Form.useWatch([], form) as FormValues | undefined;
@@ -280,9 +288,9 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
               size="small"
               className="flex-1"
               strokeColor={{
-                '0%': '#ff7a45',
-                '50%': '#52c41a',
-                '100%': '#1890ff',
+                '0%': colors.warning,
+                '50%': colors.success,
+                '100%': colors.info,
               }}
             />
             <span className="text-sm font-mono text-slate-600 dark:text-slate-400 w-8 text-right">

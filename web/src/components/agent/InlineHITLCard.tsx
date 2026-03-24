@@ -13,6 +13,8 @@
 
 import React, { memo, useState, useCallback, useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Radio, Input, Form, Checkbox } from 'antd';
 import {
   HelpCircle,
@@ -26,6 +28,7 @@ import {
   ChevronUp,
   Wrench,
   Bot,
+  DollarSign,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -99,18 +102,20 @@ const getHITLIcon = (type: HITLType) => {
   }
 };
 
-const getHITLTitle = (type: HITLType) => {
+const getHITLTitleKey = (
+  type: HITLType
+): { key: string; fallback: string } => {
   switch (type) {
     case 'clarification':
-      return '需要澄清';
+      return { key: 'agent.hitl.title.clarification', fallback: 'Needs clarification' };
     case 'decision':
-      return '需要决策';
+      return { key: 'agent.hitl.title.decision', fallback: 'Needs decision' };
     case 'env_var':
-      return '需要配置';
+      return { key: 'agent.hitl.title.env_var', fallback: 'Needs configuration' };
     case 'permission':
-      return '需要授权';
+      return { key: 'agent.hitl.title.permission', fallback: 'Needs permission' };
     default:
-      return '需要输入';
+      return { key: 'agent.hitl.title.input_required', fallback: 'User input required' };
   }
 };
 
@@ -193,15 +198,32 @@ const getHITLIconColorClass = (type: HITLType) => {
   }
 };
 
-const formatTimeAgo = (timestamp: string) => {
+const formatTimeAgoKey = (
+  timestamp: string
+): { key: string; fallback: string; params?: Record<string, number> } => {
   const now = Date.now();
   const time = new Date(timestamp).getTime();
   const diff = Math.floor((now - time) / 1000);
 
-  if (diff < 60) return '刚刚';
-  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
-  return `${Math.floor(diff / 86400)}天前`;
+  if (diff < 60)
+    return { key: 'agent.hitl.time.just_now', fallback: 'just now' };
+  if (diff < 3600)
+    return {
+      key: 'agent.hitl.time.minutes_ago',
+      fallback: '{{count}} minutes ago',
+      params: { count: Math.floor(diff / 60) },
+    };
+  if (diff < 86400)
+    return {
+      key: 'agent.hitl.time.hours_ago',
+      fallback: '{{count}} hours ago',
+      params: { count: Math.floor(diff / 3600) },
+    };
+  return {
+    key: 'agent.hitl.time.days_ago',
+    fallback: '{{count}} days ago',
+    params: { count: Math.floor(diff / 86400) },
+  };
 };
 
 // =============================================================================
@@ -288,6 +310,7 @@ const ClarificationContent: React.FC<{
   isAnswered?: boolean | undefined;
   answeredValue?: string | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<string | null>(
     isAnswered ? answeredValue || null : null
   );
@@ -322,9 +345,10 @@ const ClarificationContent: React.FC<{
               const optionKey = option.id || `option-${idx}`;
               const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
               return (
-                <div
+                <button
+                  type="button"
                   key={optionKey}
-                  className={`p-3 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                  className={`p-3 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left w-full ${
                     isSelected
                       ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                       : isAnswered
@@ -338,6 +362,7 @@ const ClarificationContent: React.FC<{
                         }
                       : undefined
                   }
+                  disabled={isAnswered}
                 >
                   <div className="flex items-center gap-2">
                     {isAnswered ? (
@@ -362,12 +387,12 @@ const ClarificationContent: React.FC<{
                     </span>
                     {option.recommended && !isAnswered && (
                       <LazyTag color="green" className="text-xs">
-                        推荐
+                        {t('agent.hitl.tag.recommended', 'Recommended')}
                       </LazyTag>
                     )}
                     {isSelected && isAnswered && (
                       <LazyTag color="blue" className="text-xs ml-auto">
-                        已选择
+                        {t('agent.hitl.tag.selected', 'Selected')}
                       </LazyTag>
                     )}
                   </div>
@@ -382,12 +407,13 @@ const ClarificationContent: React.FC<{
                       {option.description}
                     </p>
                   )}
-                </div>
+                </button>
               );
             })}
             {data.allow_custom && !isAnswered && (
-              <div
-                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+              <button
+                type="button"
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left w-full ${
                   selected === '__custom__'
                     ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
@@ -398,18 +424,20 @@ const ClarificationContent: React.FC<{
               >
                 <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
                   <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-                    自定义回答
+                    {t('agent.hitl.option.custom_answer', 'Custom answer')}
                   </span>
                 </Radio>
-              </div>
+              </button>
             )}
           </>
         ) : data.allow_custom ? (
           <p className="text-sm text-slate-500 dark:text-slate-400 italic">
-            暂无预设选项，请在下方输入您的回答
+            {t('agent.hitl.none.no_preset_answer', 'No preset options - enter your answer below')}
           </p>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500 italic">暂无可选选项</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">
+            {t('agent.hitl.none.no_options', 'No options available')}
+          </p>
         )}
       </div>
 
@@ -419,7 +447,7 @@ const ClarificationContent: React.FC<{
           onChange={(e) => {
             setCustomInput(e.target.value);
           }}
-          placeholder="请输入您的回答..."
+          placeholder={t('agent.hitl.placeholder.enter_answer', 'Enter your answer...')}
           rows={3}
           className="mt-2 rounded-xl"
         />
@@ -435,7 +463,7 @@ const ClarificationContent: React.FC<{
             size="middle"
             className="rounded-lg"
           >
-            确认
+            {t('agent.hitl.button.confirm', 'Confirm')}
           </LazyButton>
         </div>
       )}
@@ -452,6 +480,7 @@ const DecisionContent: React.FC<{
   isAnswered?: boolean | undefined;
   answeredValue?: string | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<string | null>(
     isAnswered ? answeredValue || null : data.default_option || null
   );
@@ -505,7 +534,13 @@ const DecisionContent: React.FC<{
 
       {isMultiSelect && !isAnswered && (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          可多选{data.max_selections ? `（最多 ${data.max_selections} 项）` : ''}
+          {data.max_selections
+            ? t('agent.hitl.multiselect.limit', 'You may select up to {{max}} items', {
+                max: data.max_selections,
+              })
+            : t('agent.hitl.multiselect.limit', 'You may select up to {{max}} items', {
+                max: '∞',
+              })}
         </p>
       )}
 
@@ -525,10 +560,11 @@ const DecisionContent: React.FC<{
                 (option.estimated_time || option.estimated_cost || option.risks?.length);
 
               return (
-                <div
+                <button
+                  type="button"
                   key={optionKey}
                   className={`
-                    rounded-xl p-4 transition-[color,background-color,border-color,box-shadow,opacity,transform] border-2
+                    rounded-xl p-4 transition-[color,background-color,border-color,box-shadow,opacity,transform] border-2 text-left w-full
                     ${
                       isOptionSelected
                         ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
@@ -548,6 +584,7 @@ const DecisionContent: React.FC<{
                         }
                       : undefined
                   }
+                  disabled={isAnswered}
                 >
                   <div className="flex items-start gap-3">
                     {isAnswered ? (
@@ -581,12 +618,12 @@ const DecisionContent: React.FC<{
                         </span>
                         {option.recommended && !isAnswered && (
                           <LazyTag color="green" className="text-xs">
-                            推荐
+                            {t('agent.hitl.tag.recommended', 'Recommended')}
                           </LazyTag>
                         )}
                         {isOptionSelected && isAnswered && (
                           <LazyTag color="amber" className="text-xs ml-auto">
-                            已选择
+                            {t('agent.hitl.tag.selected', 'Selected')}
                           </LazyTag>
                         )}
                         {!isOptionSelected &&
@@ -595,7 +632,7 @@ const DecisionContent: React.FC<{
                           !isAnswered && (
                             <LazyTag color="orange" className="text-xs">
                               <AlertTriangle className="w-3 h-3 mr-1" />
-                              有风险
+                              {t('agent.hitl.tag.has_risks', 'Has risks')}
                             </LazyTag>
                           )}
                       </div>
@@ -621,8 +658,8 @@ const DecisionContent: React.FC<{
                             </span>
                           )}
                           {option.estimated_cost && (
-                            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
-                              💰 {option.estimated_cost}
+                            <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
+                              <DollarSign size={14} className="inline" /> {option.estimated_cost}
                             </span>
                           )}
                         </div>
@@ -631,6 +668,7 @@ const DecisionContent: React.FC<{
                       {/* Expandable risks - only show when not answered */}
                       {hasDetails && (
                         <button
+                          type="button"
                           className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -642,7 +680,9 @@ const DecisionContent: React.FC<{
                           ) : (
                             <ChevronDown className="w-3.5 h-3.5" />
                           )}
-                          {isExpanded ? '收起详情' : '查看详情'}
+                          {isExpanded
+                            ? t('agent.hitl.action.hide_details', 'Hide details')
+                            : t('agent.hitl.action.view_details', 'View details')}
                         </button>
                       )}
 
@@ -650,7 +690,7 @@ const DecisionContent: React.FC<{
                         <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800/50">
                           <p className="font-medium text-amber-700 dark:text-amber-400 mb-2 text-xs flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3" />
-                            风险提示
+                            {t('agent.hitl.section.risk_warning_title', 'Risk notice')}
                           </p>
                           <ul className="list-disc list-inside text-amber-600 dark:text-amber-300 space-y-1 text-xs">
                             {option.risks.map((risk, rIdx) => (
@@ -661,12 +701,13 @@ const DecisionContent: React.FC<{
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
             {data.allow_custom && !isAnswered && !isMultiSelect && (
-              <div
-                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+              <button
+                type="button"
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left w-full ${
                   selected === '__custom__'
                     ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'
@@ -677,18 +718,23 @@ const DecisionContent: React.FC<{
               >
                 <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
                   <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-                    自定义决策
+                    {t('agent.hitl.option.custom_decision', 'Custom decision')}
                   </span>
                 </Radio>
-              </div>
+              </button>
             )}
           </>
         ) : data.allow_custom ? (
           <p className="text-sm text-slate-500 dark:text-slate-400 italic">
-            暂无预设选项，请在下方输入您的决策
+            {t(
+              'agent.hitl.none.no_preset_decision',
+              'No preset options - enter your decision below'
+            )}
           </p>
         ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500 italic">暂无可选选项</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">
+            {t('agent.hitl.none.no_options', 'No options available')}
+          </p>
         )}
       </div>
 
@@ -701,7 +747,7 @@ const DecisionContent: React.FC<{
             onChange={(e) => {
               setCustomInput(e.target.value);
             }}
-            placeholder="请输入您的决策..."
+            placeholder={t('agent.hitl.placeholder.enter_decision', 'Enter your decision...')}
             rows={3}
             className="mt-2 rounded-xl"
           />
@@ -717,7 +763,7 @@ const DecisionContent: React.FC<{
             size="middle"
             className="rounded-lg"
           >
-            确认选择
+            {t('agent.hitl.button.confirm_choice', 'Confirm choice')}
           </LazyButton>
         </div>
       )}
@@ -733,6 +779,7 @@ const EnvVarContent: React.FC<{
   isSubmitting: boolean;
   isAnswered?: boolean | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered }) => {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const [saveForLater, setSaveForLater] = useState(true);
 
@@ -753,7 +800,9 @@ const EnvVarContent: React.FC<{
 
       <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
         <Wrench className="w-3.5 h-3.5" />
-        <span>工具: {data.tool_name}</span>
+        <span>
+          {t('agent.hitl.label.tool', 'Tool: {{toolName}}', { toolName: data.tool_name })}
+        </span>
       </div>
 
       {!isAnswered ? (
@@ -769,24 +818,50 @@ const EnvVarContent: React.FC<{
                     {field.required && <span className="text-rose-500 ml-1">*</span>}
                   </span>
                 }
-                rules={field.required ? [{ required: true, message: `请输入 ${field.label}` }] : []}
+                rules={
+                  field.required
+                    ? [
+                        {
+                          required: true,
+                          message: t('agent.hitl.validation.enter_field', 'Please enter {{field}}', {
+                            field: field.label,
+                          }),
+                        },
+                      ]
+                    : []
+                }
                 tooltip={field.description}
                 initialValue={field.default_value}
               >
                 {field.input_type === 'password' ? (
                   <Input.Password
-                    placeholder={field.placeholder || `请输入 ${field.label}`}
+                    placeholder={
+                      field.placeholder ||
+                      t('agent.hitl.validation.enter_field', 'Please enter {{field}}', {
+                        field: field.label,
+                      })
+                    }
                     className="rounded-lg"
                   />
                 ) : field.input_type === 'textarea' ? (
                   <Input.TextArea
-                    placeholder={field.placeholder || `请输入 ${field.label}`}
+                    placeholder={
+                      field.placeholder ||
+                      t('agent.hitl.validation.enter_field', 'Please enter {{field}}', {
+                        field: field.label,
+                      })
+                    }
                     rows={3}
                     className="rounded-lg"
                   />
                 ) : (
                   <Input
-                    placeholder={field.placeholder || `请输入 ${field.label}`}
+                    placeholder={
+                      field.placeholder ||
+                      t('agent.hitl.validation.enter_field', 'Please enter {{field}}', {
+                        field: field.label,
+                      })
+                    }
                     className="rounded-lg"
                   />
                 )}
@@ -794,7 +869,7 @@ const EnvVarContent: React.FC<{
             ))
           ) : (
             <div className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
-              暂无需配置的环境变量
+              {t('agent.hitl.none.no_env_vars', 'No environment variables required')}
             </div>
           )}
         </Form>
@@ -802,13 +877,16 @@ const EnvVarContent: React.FC<{
         <div className="p-3 rounded-xl border-2 border-green-400 bg-green-50/50 dark:bg-green-900/20">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-green-500" />
-            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">已配置</span>
+            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+              {t('agent.hitl.status.configured', 'Configured')}
+            </span>
             <LazyTag color="green" className="text-xs">
-              已完成
+              {t('agent.hitl.status.completed', 'Completed')}
             </LazyTag>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">
-            {data.fields?.map((f) => f.label).join(', ') || '环境变量'}
+            {data.fields?.map((f) => f.label).join(', ') ||
+              t('agent.hitl.placeholder.env_vars_fallback', 'Environment variables')}
           </p>
         </div>
       )}
@@ -824,7 +902,7 @@ const EnvVarContent: React.FC<{
               }}
               className="rounded w-4 h-4 accent-violet-500"
             />
-            <span>保存配置以便下次使用</span>
+            <span>{t('agent.hitl.save_for_later', 'Save configuration for next time')}</span>
           </label>
           <LazyButton
             type="primary"
@@ -833,7 +911,7 @@ const EnvVarContent: React.FC<{
             size="middle"
             className="rounded-lg"
           >
-            提交
+            {t('agent.hitl.button.submit', 'Submit')}
           </LazyButton>
         </div>
       )}
@@ -850,6 +928,7 @@ const PermissionContent: React.FC<{
   isAnswered?: boolean | undefined;
   answeredValue?: string | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
+  const { t } = useTranslation();
   const [remember, setRemember] = useState(false);
 
   const riskConfig = {
@@ -890,11 +969,11 @@ const PermissionContent: React.FC<{
         </div>
         {isAnswered ? (
           <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
-            {wasGranted ? '已授权' : '已拒绝'}
+            {wasGranted ? t('agent.hitl.permission.granted', 'Granted') : t('agent.hitl.permission.denied', 'Denied')}
           </LazyTag>
         ) : data.risk_level ? (
           <LazyTag color={risk?.color} className="text-xs">
-            风险: {data.risk_level === 'low' ? '低' : data.risk_level === 'medium' ? '中' : '高'}
+            {t('agent.hitl.risk.label', 'Risk')}: {data.risk_level === 'low' ? t('agent.hitl.risk.level.low', 'low') : data.risk_level === 'medium' ? t('agent.hitl.risk.level.medium', 'medium') : t('agent.hitl.risk.level.high', 'high')}
           </LazyTag>
         ) : null}
       </div>
@@ -905,10 +984,10 @@ const PermissionContent: React.FC<{
             <AlertTriangle className="w-4 h-4" />
             <span className="font-medium">
               {data.risk_level === 'high'
-                ? '高风险操作'
+                ? t('agent.hitl.risk.message.high', 'High risk operation')
                 : data.risk_level === 'medium'
-                  ? '中等风险操作'
-                  : '低风险操作'}
+                  ? t('agent.hitl.risk.message.medium', 'Medium risk operation')
+                  : t('agent.hitl.risk.message.low', 'Low risk operation')}
             </span>
           </p>
         </div>
@@ -927,10 +1006,10 @@ const PermissionContent: React.FC<{
           <div className="flex items-center gap-2">
             <CheckCircle2 className={`w-4 h-4 ${wasGranted ? 'text-green-500' : 'text-red-500'}`} />
             <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-              {wasGranted ? '已授权执行' : '已拒绝执行'}
+              {wasGranted ? t('agent.hitl.status.granted_executed', 'Granted - executed') : t('agent.hitl.status.denied_executed', 'Denied - executed')}
             </span>
             <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
-              已{wasGranted ? '允许' : '拒绝'}
+              {wasGranted ? t('agent.hitl.action.allowed', 'Allow') : t('agent.hitl.action.denied', 'Deny')}
             </LazyTag>
           </div>
         </div>
@@ -945,7 +1024,7 @@ const PermissionContent: React.FC<{
               }}
               className="rounded w-4 h-4 accent-rose-500"
             />
-            <span>记住此选择</span>
+            <span>{t('agent.hitl.option.remember_choice', 'Remember this choice')}</span>
           </label>
           <div className="flex gap-2">
             <LazyButton
@@ -957,7 +1036,7 @@ const PermissionContent: React.FC<{
               size="middle"
               className="rounded-lg"
             >
-              拒绝
+              {t('agent.hitl.action.denied', 'Deny')}
             </LazyButton>
             <LazyButton
               type="primary"
@@ -968,7 +1047,7 @@ const PermissionContent: React.FC<{
               size="middle"
               className="rounded-lg"
             >
-              允许
+              {t('agent.hitl.action.allowed', 'Allow')}
             </LazyButton>
           </div>
         </div>
@@ -1018,6 +1097,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
 
     const [localSubmitting, setLocalSubmitting] = useState(false);
     const [localAnsweredValue, setLocalAnsweredValue] = useState<string | undefined>(undefined);
+    const { t } = useTranslation();
 
     // Check if answered from either props (history) or store (real-time)
     const storeStatus = requestId ? requestStatuses.get(requestId) : undefined;
@@ -1026,7 +1106,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
 
     // Priority: prop from timeline event > local state from submission > fallback
     const answeredValue =
-      answeredValueProp || localAnsweredValue || (isAnsweredFromStore ? '已提交' : undefined);
+      answeredValueProp || localAnsweredValue || (isAnsweredFromStore ? t('agent.hitl.status.submitted', 'Submitted') : undefined);
 
     const isCurrentlySubmitting =
       localSubmitting || (isSubmitting && submittingRequestId === requestId);
@@ -1090,7 +1170,8 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
     );
 
     const icon = getHITLIcon(hitlType);
-    const title = getHITLTitle(hitlType);
+    const titleInfo = getHITLTitleKey(hitlType);
+    const title = t(titleInfo.key, titleInfo.fallback);
     const color = getHITLColor(hitlType);
     const iconBgClass = getHITLIconBgClass(hitlType);
     const iconColorClass = getHITLIconColorClass(hitlType);
@@ -1124,7 +1205,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                 </span>
                 {isAnswered ? (
                   <LazyTag color={color} className="text-xs rounded-full opacity-60">
-                    已完成
+                    {t('agent.hitl.status.completed', 'Completed')}
                   </LazyTag>
                 ) : (
                   <LazyTag color={color} className="text-xs rounded-full">
@@ -1133,11 +1214,14 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                 )}
               </div>
               {isAnswered ? (
-                createdAt && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {formatTimeAgo(createdAt)}
-                  </span>
-                )
+                createdAt && (() => {
+                  const timeInfo = formatTimeAgoKey(createdAt);
+                  return (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {t(timeInfo.key, timeInfo.fallback, timeInfo.params ?? {})}
+                    </span>
+                  );
+                })()
               ) : (
                 <CountdownTimer
                   expiresAt={expiresAt}

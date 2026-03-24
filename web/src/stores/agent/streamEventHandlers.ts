@@ -127,13 +127,15 @@ export function createStreamEventHandlers(
       thoughtIdleResetTimer = null;
     }
   };
-  const clearPendingThoughtDelta = () => {
+  const consumePendingThoughtDelta = (): string => {
     const buffer = getDeltaBuffer(handlerConversationId);
     if (buffer.thoughtDeltaFlushTimer) {
       clearTimeout(buffer.thoughtDeltaFlushTimer);
       buffer.thoughtDeltaFlushTimer = null;
     }
+    const pending = buffer.thoughtDeltaBuffer;
     buffer.thoughtDeltaBuffer = '';
+    return pending;
   };
   const armThoughtIdleResetTimer = () => {
     clearThoughtIdleResetTimer();
@@ -141,11 +143,10 @@ export function createStreamEventHandlers(
       thoughtIdleResetTimer = null;
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState.isThinkingStreaming && !convState.streamingThought) {
+      if (!convState.isThinkingStreaming) {
         return;
       }
       updateConversationState(handlerConversationId, {
-        streamingThought: '',
         isThinkingStreaming: false,
       });
     }, THINKING_IDLE_RESET_MS);
@@ -246,16 +247,33 @@ export function createStreamEventHandlers(
 
     onThought: (event) => {
       clearThoughtIdleResetTimer();
-      clearPendingThoughtDelta();
+      const pendingThoughtDelta = consumePendingThoughtDelta();
       const newThought = event.data.thought;
       const { getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
+      let persistedStreamingThought = convState.streamingThought + pendingThoughtDelta;
+      const normalizedNewThought = (newThought || '').trim();
+      const normalizedPersisted = persistedStreamingThought.trim();
+      if (normalizedNewThought.length > 0) {
+        if (normalizedPersisted.length === 0) {
+          persistedStreamingThought = newThought;
+        } else if (!normalizedPersisted.includes(normalizedNewThought)) {
+          if (
+            normalizedNewThought.length > normalizedPersisted.length &&
+            normalizedNewThought.includes(normalizedPersisted)
+          ) {
+            persistedStreamingThought = newThought;
+          } else if (!normalizedNewThought.includes(normalizedPersisted)) {
+            persistedStreamingThought = `${normalizedPersisted}\n${newThought}`;
+          }
+        }
+      }
 
       const stateUpdates: Partial<ConversationState> = {
         agentState: 'thinking',
-        streamingThought: '',
         isThinkingStreaming: false,
+        streamingThought: persistedStreamingThought,
       };
 
       if (newThought && newThought.trim() !== '') {
@@ -654,7 +672,7 @@ export function createStreamEventHandlers(
 
     onTextStart: () => {
       clearThoughtIdleResetTimer();
-      clearPendingThoughtDelta();
+      consumePendingThoughtDelta();
       const { updateConversationState } = get();
 
       updateConversationState(handlerConversationId, {
@@ -668,6 +686,11 @@ export function createStreamEventHandlers(
     onTextDelta: (event) => {
       const delta = event.data.delta;
       if (!delta) return;
+      // text_start can occasionally be skipped or delayed on unreliable links.
+      // When text tokens arrive, force-stop any pending thought stream to avoid
+      // stale thinking blocks masking assistant output.
+      clearThoughtIdleResetTimer();
+      consumePendingThoughtDelta();
 
       const buffer = getDeltaBuffer(handlerConversationId);
       buffer.textDeltaBuffer += delta;
@@ -683,9 +706,14 @@ export function createStreamEventHandlers(
 
             const convState = getConversationState(handlerConversationId);
             const newContent = convState.streamingAssistantContent + bufferedContent;
+            const shouldClearThinking =
+              convState.isThinkingStreaming || convState.streamingThought.trim().length > 0;
             updateConversationState(handlerConversationId, {
               streamingAssistantContent: newContent,
               streamStatus: 'streaming',
+              ...(shouldClearThinking
+                ? { streamingThought: '', isThinkingStreaming: false }
+                : {}),
             });
           }
         }, tokenBatchIntervalMs);
@@ -714,6 +742,8 @@ export function createStreamEventHandlers(
 
       queueTimelineEvent(textEndEvent, {
         streamingAssistantContent: '',
+        streamingThought: '',
+        isThinkingStreaming: false,
       });
       flushTimelineBufferSync();
     },

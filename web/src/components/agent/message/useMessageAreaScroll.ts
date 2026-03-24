@@ -21,6 +21,7 @@ export interface UseMessageAreaScrollParams {
   containerRef: React.RefObject<HTMLDivElement | null>;
   timeline: TimelineEvent[];
   isStreaming: boolean;
+  isThinkingStreaming: boolean;
   isLoading: boolean;
   streamingContent: string | undefined;
   streamingThought: string | undefined;
@@ -57,6 +58,7 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
     containerRef,
     timeline,
     isStreaming,
+    isThinkingStreaming,
     isLoading,
     streamingContent,
     streamingThought,
@@ -282,7 +284,11 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
     const container = containerRef.current;
     if (!container) return;
 
-    if (isStreaming && !userScrolledUpRef.current) {
+    const hasStreamingContent = (streamingContent ?? '').trim().length > 0;
+    const hasStreamingThought = (streamingThought ?? '').trim().length > 0;
+    const thoughtOnlyStreaming = isThinkingStreaming && hasStreamingThought && !hasStreamingContent;
+
+    if (isStreaming && !userScrolledUpRef.current && !thoughtOnlyStreaming) {
       isSwitchingConversationRef.current = false;
 
       requestAnimationFrame(() => {
@@ -291,7 +297,13 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
         }
       });
     }
-  }, [streamingContent, streamingThought, isStreaming, containerRef]);
+  }, [
+    streamingContent,
+    streamingThought,
+    isStreaming,
+    isThinkingStreaming,
+    containerRef,
+  ]);
 
   // Cleanup timeout on unmount
   useEffect(() => {

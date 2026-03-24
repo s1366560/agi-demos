@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
+import { appendSSEEventToTimeline } from '../../../utils/sseEventAdapter';
 
 import type {
   DeltaBufferState,
@@ -90,6 +91,14 @@ describe('streamEventHandlers', () => {
       timelineToMessages: vi.fn(),
       tokenBatchIntervalMs: 50,
       thoughtBatchIntervalMs: 50,
+      queueTimelineEvent: vi.fn((event, stateUpdates) => {
+        const nextTimeline = appendSSEEventToTimeline(mockState.timeline as any, event as any) as any;
+        mockUpdateConversationState(conversationId, {
+          timeline: nextTimeline,
+          ...(stateUpdates || {}),
+        });
+      }),
+      flushTimelineBufferSync: vi.fn(),
     };
   });
 
@@ -180,6 +189,29 @@ describe('streamEventHandlers', () => {
     });
   });
 
+  it('should clear stale thinking state when text delta arrives without text_start', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    mockState.streamingThought = 'leftover thought';
+    mockState.isThinkingStreaming = true;
+
+    handlers.onTextDelta!({
+      type: 'text_delta',
+      data: { delta: 'Answer token' },
+    });
+
+    vi.advanceTimersByTime(50);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        streamingAssistantContent: 'Answer token',
+        streamStatus: 'streaming',
+        streamingThought: '',
+        isThinkingStreaming: false,
+      })
+    );
+  });
+
   it('should handle onTextEnd and flush remaining buffer', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
 
@@ -203,6 +235,8 @@ describe('streamEventHandlers', () => {
       conversationId,
       expect.objectContaining({
         streamingAssistantContent: '',
+        streamingThought: '',
+        isThinkingStreaming: false,
         timeline: expect.arrayContaining([
           expect.objectContaining({
             type: 'text_end',
@@ -389,7 +423,6 @@ describe('streamEventHandlers', () => {
 
     expect(mockUpdateConversationState.mock.calls.length).toBeGreaterThan(updateCallCountAfterFlush);
     expect(mockUpdateConversationState).toHaveBeenLastCalledWith(conversationId, {
-      streamingThought: '',
       isThinkingStreaming: false,
     });
   });
@@ -416,7 +449,7 @@ describe('streamEventHandlers', () => {
     );
   });
 
-  it('should not flush stale thought delta after onThought', () => {
+  it('should keep pending thought delta and finalized thought after onThought', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
     handlers.onThoughtDelta!({
       type: 'thought_delta',
@@ -433,7 +466,7 @@ describe('streamEventHandlers', () => {
 
     vi.advanceTimersByTime(500);
     expect(mockState.isThinkingStreaming).toBe(false);
-    expect(mockState.streamingThought).toBe('');
+    expect(mockState.streamingThought).toBe('stale thought\nfinalized thought');
   });
 
   it('should handle onThought and add to timeline', () => {
@@ -454,7 +487,7 @@ describe('streamEventHandlers', () => {
       expect.objectContaining({
         agentState: 'thinking',
         isThinkingStreaming: false,
-        streamingThought: '',
+        streamingThought: 'I should search.',
         currentThought: '\nI should search.',
         timeline: expect.arrayContaining([
           expect.objectContaining({
@@ -464,6 +497,25 @@ describe('streamEventHandlers', () => {
         ]),
       })
     );
+  });
+
+  it('should merge buffered thought delta with onThought content when flush has not run', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    handlers.onThoughtDelta!({
+      type: 'thought_delta',
+      data: { delta: 'partial delta ' },
+    } as any);
+
+    vi.advanceTimersByTime(10);
+    handlers.onThought!({
+      type: 'thought',
+      data: {
+        thought: 'final thought',
+      },
+    } as any);
+
+    expect(mockState.streamingThought).toBe('partial delta\nfinal thought');
+    expect(mockState.isThinkingStreaming).toBe(false);
   });
 
   it('should handle onTaskListUpdated', () => {

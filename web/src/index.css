@@ -1918,6 +1918,13 @@ img[loading='lazy'] {
   animation: status-pill-in 200ms ease-out;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-subagent-pulse,
+  .animate-status-pill-in {
+    animation: none;
+  }
+}
+
 /* ============================================================================
  * A2UI SURFACE THEME OVERRIDES
  * Scoped polish for A2UI form-heavy surfaces rendered in Canvas.

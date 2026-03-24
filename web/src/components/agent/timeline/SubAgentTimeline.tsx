@@ -230,23 +230,23 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
           return (
             <div
               key={`parallel-${task.subagent_name}-${task.task}`}
-              className={`flex flex-col gap-1.5 p-2.5 rounded-md bg-slate-50 dark:bg-slate-800/50 border ${borderClass}`}
+              className={`flex min-w-0 flex-col gap-1.5 p-2.5 rounded-md bg-slate-50 dark:bg-slate-800/50 border ${borderClass}`}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
+                <div className="flex min-w-0 items-center gap-1.5">
                   {isDone ? (
                     <StatusIcon status={isSuccess ? 'success' : 'error'} size={12} />
                   ) : (
                     <Loader2 size={12} className="text-blue-400 animate-spin motion-reduce:animate-none" />
                   )}
-                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
                     {task.subagent_name}
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-400">{statusText}</span>
+                <span className="text-[10px] text-slate-400 pl-2 shrink-0">{statusText}</span>
               </div>
               <div
-                className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2"
+                className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 break-words [overflow-wrap:anywhere]"
                 title={result?.summary || task.task}
               >
                 {result?.summary || task.task}
@@ -309,7 +309,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
 
           return {
             title: (
-              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 break-words [overflow-wrap:anywhere]">
                 {step.name || step.subagentName}{' '}
                 <span className="text-[10px] text-slate-400 font-normal">
                   ({step.subagentName})
@@ -317,7 +317,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
               </span>
             ),
             description: step.summary ? (
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 break-words [overflow-wrap:anywhere]">
                 {step.summary}
               </div>
             ) : undefined,
@@ -412,7 +412,7 @@ ProgressPhaseBar.displayName = 'ProgressPhaseBar';
 // --- Main component ---
 
 export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreaming }) => {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(group.status === 'running');
   const [showDetail, setShowDetail] = useState(false);
   const { t } = useTranslation();
   const activeConversationId = useAgentV3Store((state) => state.activeConversationId);
@@ -522,14 +522,52 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     setShowDetail((prev) => !prev);
   }, []);
 
+  const lifecycleSteps = useMemo(() => {
+    const hasType = (type: string) => group.events.some((event) => event.type === type);
+    return [
+      {
+        id: 'routed',
+        active: hasType('subagent_routed'),
+        label: t('agent.subagent.progress.routed', 'Routed'),
+      },
+      {
+        id: 'started',
+        active: hasType('subagent_started'),
+        label: t('agent.subagent.progress.started', 'Started'),
+      },
+      {
+        id: 'executing',
+        active: hasType('subagent_session_update'),
+        label: t('agent.subagent.progress.executing', 'Executing'),
+      },
+      {
+        id: 'ended',
+        active:
+          group.status !== 'running' &&
+          group.events.some((event) =>
+            [
+              'subagent_completed',
+              'subagent_failed',
+              'subagent_killed',
+              'subagent_depth_limited',
+              'parallel_completed',
+              'chain_completed',
+              'background_launched',
+            ].includes(event.type)
+          ),
+        label: t('agent.subagent.detail.timeline_title', 'Lifecycle Events'),
+      },
+    ];
+  }, [group.events, group.status, t]);
+
   return (
     <div className={cardClasses}>
       {/* Header — 1.4: px-4 py-3 (was px-3 py-2) */}
       <button
         type="button"
         onClick={toggleExpanded}
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left
-          hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors rounded-t-lg
+        className="w-full flex items-start gap-2.5 px-4 py-3 text-left
+          hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors rounded-t-lg min-w-0
           focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
       >
         {expanded ? (
@@ -540,12 +578,26 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
         <ModeIcon mode={group.mode} size={14} />
 
-        <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate flex-1">
-          {headerLabel}
-        </span>
+        <div className="min-w-0 flex-1">
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block truncate">
+            {headerLabel}
+          </span>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800/70">
+              <Bot size={9} />
+              <span className="truncate max-w-[160px]">
+                {displayName}
+              </span>
+            </span>
+            <span className="inline-flex items-center rounded-full px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800/70">
+              {group.events.length}{' '}
+              {t('agent.subagent.detail.timeline_title', 'Lifecycle Events')}
+            </span>
+          </div>
+        </div>
 
         {/* Status badges — 1.3: pill replaces trailing icon */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 max-w-[48%]">
           {group.confidence != null && (
             <span
               className="text-[10px] px-1.5 py-0.5 rounded-full
@@ -564,7 +616,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             </span>
           )}
           {group.executionTimeMs != null && group.executionTimeMs > 0 && (
-            <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+            <span className="text-[10px] text-slate-400 flex items-center gap-0.5 shrink-0">
               <Clock size={9} />
               {formatDuration(group.executionTimeMs)}
             </span>
@@ -579,35 +631,49 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
       {/* Live streaming preview */}
       {group.status === 'running' && subagentPreview && (
-        <div className="mt-2 rounded-md bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 font-mono leading-relaxed animate-fade-in">
+        <div className="mx-4 mt-2 rounded-md bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 font-mono leading-relaxed animate-fade-in border border-slate-200/60 dark:border-slate-700/60">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wider font-sans">
               {t('agent.subagent.live_preview')}
             </span>
           </div>
-          <div className="line-clamp-3 whitespace-pre-wrap break-words">{subagentPreview}</div>
+          <div className="line-clamp-3 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            {subagentPreview}
+          </div>
         </div>
-      )}
-
-      {/* SubAgent inline actions (stop / redirect) */}
-      {group.status === 'running' && activeConversationId && (
-        <SubAgentActions subagentId={group.subagentId} conversationId={activeConversationId} />
       )}
 
       {/* Body — 1.4: px-4 pb-3.5 (was px-3 pb-2.5), gap-2.5 (was gap/space-y-2) */}
       {expanded && (
         <div className="px-4 pb-3.5 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {lifecycleSteps.map((step) => (
+              <span
+                key={step.id}
+                className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                  step.active
+                    ? 'border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20'
+                    : 'border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 text-slate-400'
+                }`}
+              >
+                {step.label}
+              </span>
+            ))}
+          </div>
+
           {/* Task description */}
           {group.task && (
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed break-words [overflow-wrap:anywhere]">
               {group.task}
             </p>
           )}
 
           {/* Routing reason */}
           {group.reason && (
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">{group.reason}</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 italic break-words [overflow-wrap:anywhere]">
+              {group.reason}
+            </p>
           )}
 
           {/* Parallel detail */}
@@ -621,7 +687,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           {/* Summary (on completion) — 2.3 distinct output framing (quote block) & 2.6 Animated Status Transitions */}
           {group.summary && (
             <div className="mt-1 border-l-2 border-slate-300 dark:border-slate-600 pl-3 ml-1 animate-fade-in">
-              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                 {group.summary}
               </p>
             </div>
@@ -633,7 +699,9 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
               className="mt-1 p-2.5 rounded-md bg-red-50/60 dark:bg-red-950/30
               border border-red-200/40 dark:border-red-800/30"
             >
-              <p className="text-xs text-red-600 dark:text-red-400">{humanizedError}</p>
+              <p className="text-xs text-red-600 dark:text-red-400 break-words [overflow-wrap:anywhere]">
+                {humanizedError}
+              </p>
             </div>
           )}
 
@@ -642,6 +710,10 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
               <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
               <span>{t('agent.subagent.executing', 'Executing...')}</span>
             </div>
+          )}
+
+          {group.status === 'running' && activeConversationId && (
+            <SubAgentActions subagentId={group.subagentId} conversationId={activeConversationId} />
           )}
 
           {/* 2.2 - Inline Detail Panel refinement (moved to bottom of body) */}

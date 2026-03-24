@@ -146,37 +146,35 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     );
   }
 
-  // Empty project list state
-  if (projectOptions.length === 0) {
-    return (
-      <Select
-        placeholder="No projects available"
-        disabled
-        {...(className != null ? { className } : {})}
-        style={{ width: 250 }}
-        aria-label="Select project for agent conversation"
-      />
-    );
-  }
+   // Empty project list state
+   if (projectOptions.length === 0) {
+     return (
+       <Select
+         placeholder="No projects available"
+         disabled
+         {...(className != null ? { className } : { className: 'w-64' })}
+         aria-label="Select project for agent conversation"
+       />
+     );
+   }
 
   // Find current project name for display
   const currentProjectName = currentProject?.name || undefined;
 
-  return (
-    <>
-      <Select
-        {...(currentProjectId ? { value: currentProjectId } : {})}
-        placeholder="Select a project"
-        onChange={handleProjectSelect}
-        loading={projectsLoading}
-        disabled={projectOptions.length === 1}
-        {...(className != null ? { className } : {})}
-        style={{ width: 250 }}
-        aria-label="Select project for agent conversation"
-        showSearch
-        optionFilterProp="children"
-        notFoundContent={projectsLoading ? <Spin size="small" /> : 'No projects found'}
-      >
+   return (
+     <>
+       <Select
+         {...(currentProjectId ? { value: currentProjectId } : {})}
+         placeholder="Select a project"
+         onChange={handleProjectSelect}
+         loading={projectsLoading}
+         disabled={projectOptions.length === 1}
+         {...(className != null ? { className } : { className: 'w-64' })}
+         aria-label="Select project for agent conversation"
+         showSearch
+         optionFilterProp="children"
+         notFoundContent={projectsLoading ? <Spin size="small" /> : 'No projects found'}
+       >
         {projectOptions.map((project) => {
           // Display label with tenant context if duplicate names exist
           const label =
@@ -251,13 +249,12 @@ export const ProjectSelectorLoading: React.FC<{ className?: string | undefined }
  * Empty state component when no projects are available
  */
 export const ProjectSelectorEmpty: React.FC<{ className?: string | undefined }> = ({
-  className,
-}) => (
-  <Select
-    placeholder="No projects available"
-    disabled
-    {...(className != null ? { className } : {})}
-    style={{ width: 250 }}
-    aria-label="Select project for agent conversation"
-  />
-);
+   className,
+ }) => (
+   <Select
+     placeholder="No projects available"
+     disabled
+     {...(className != null ? { className } : { className: 'w-64' })}
+     aria-label="Select project for agent conversation"
+   />
+ );

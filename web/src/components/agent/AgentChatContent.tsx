@@ -14,7 +14,7 @@
  */
 
 import * as React from 'react';
-import { useEffect, useCallback, useMemo, useState } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -284,6 +284,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       () => !localStorage.getItem('memstack_onboarding_complete')
     );
 
+    const inputBarRef = useRef<HTMLTextAreaElement>(null);
+
     // Auto-switch to task mode when tasks appear
     useEffect(() => {
       if (tasks.length > 0 && layoutMode === 'chat') {
@@ -327,20 +329,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           const target = e.target as HTMLElement;
           const isInput =
             target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-          if (!isInput) {
-            e.preventDefault();
-            const textarea = document.querySelector<HTMLTextAreaElement>(
-              '[data-testid="chat-input"], textarea[placeholder]'
-            );
-            textarea?.focus();
-          }
+            if (!isInput) {
+              e.preventDefault();
+              inputBarRef.current?.focus();
+            }
         }
       };
       window.addEventListener('keydown', handleKeyShortcut);
       return () => {
         window.removeEventListener('keydown', handleKeyShortcut);
       };
-    }, []);
+    }, [inputBarRef]);
 
     // Load conversations
     useEffect(() => {
@@ -372,33 +371,27 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     useEffect(() => {
       if (!isLoadingHistory && activeConversationId) {
         const timer = setTimeout(() => {
-          const textarea = document.querySelector<HTMLTextAreaElement>(
-            'textarea[data-testid="chat-input"]'
-          );
-          textarea?.focus();
+          inputBarRef.current?.focus();
         }, 100);
         return () => {
           clearTimeout(timer);
         };
       }
       return undefined;
-    }, [isLoadingHistory, activeConversationId]);
+    }, [isLoadingHistory, activeConversationId, inputBarRef]);
 
     // Return focus to input when agent finishes responding
     useEffect(() => {
       if (!isStreaming && activeConversationId) {
         const timer = setTimeout(() => {
-          const textarea = document.querySelector<HTMLTextAreaElement>(
-            'textarea[data-testid="chat-input"]'
-          );
-          textarea?.focus();
+          inputBarRef.current?.focus();
         }, 200);
         return () => {
           clearTimeout(timer);
         };
       }
       return undefined;
-    }, [isStreaming, activeConversationId]);
+    }, [isStreaming, activeConversationId, inputBarRef]);
 
     // Handle errors
     useEffect(() => {
@@ -620,13 +613,15 @@ ${content}`;
     );
 
     const handleScrollToSubAgent = useCallback((startIndex: number) => {
-      const element = document.querySelector(`[data-timeline-index="${startIndex}"]`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        // Fallback for when elements might not have the data attribute yet
-        // The VirtualizedMessageList might not have rendered it
-        console.warn('SubAgent element not found in DOM for scrolling', startIndex);
+      const exact = document.querySelector(`[data-subagent-start-index="${String(startIndex)}"]`);
+      if (exact instanceof HTMLElement) {
+        exact.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      const nearest = document.querySelector(`[data-timeline-index="${String(startIndex)}"]`);
+      if (nearest instanceof HTMLElement) {
+        nearest.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, []);
 
@@ -691,6 +686,7 @@ ${content}`;
             </div>
           </div>
           <InputBar
+            ref={inputBarRef}
             onSend={(...args) => {
               void handleSend(...args);
             }}
