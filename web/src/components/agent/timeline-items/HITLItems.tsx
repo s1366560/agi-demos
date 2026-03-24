@@ -4,7 +4,9 @@
  * Contains ClarificationAskedItem, DecisionAskedItem, and EnvVarRequestedItem.
  */
 
-import { memo, useState } from 'react';
+import { memo, useState, useId } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { useAgentV3Store } from '../../../stores/agentV3';
 
@@ -29,12 +31,14 @@ interface ClarificationAskedItemProps {
 
 export const ClarificationAskedItem = memo(
   function ClarificationAskedItem({ event }: ClarificationAskedItemProps) {
-    const hasOptions = event.options && event.options.length > 0;
+    const { t } = useTranslation();
+    const hasOptions = event.options.length > 0;
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [customAnswer, setCustomAnswer] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { respondToClarification } = useAgentV3Store();
-    const isAnswered = event.answered || false;
+    const isAnswered = event.answered ?? false;
+    const customAnswerId = useId();
 
     const handleSubmit = async () => {
       const answer = hasOptions ? selectedOption || customAnswer : customAnswer;
@@ -57,7 +61,7 @@ export const ClarificationAskedItem = memo(
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3">
-          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
               help_outline
             </span>
@@ -65,11 +69,11 @@ export const ClarificationAskedItem = memo(
           <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-                {'\u9700\u8981\u6F84\u6E05'}
+                {t('agent.hitl.title.clarification')}
               </span>
               {isAnswered && (
                 <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                  {'\u5DF2\u56DE\u7B54'}
+                  {t('agent.hitl.status.completed')}
                 </span>
               )}
             </div>
@@ -81,7 +85,7 @@ export const ClarificationAskedItem = memo(
                   <div className="space-y-2 mb-3">
                     {event.options.map((option: ClarificationOption, idx: number) => (
                       <OptionButton
-                        key={option.id || `option-${idx}`}
+                        key={option.id || `option-${String(idx)}`}
                         option={option}
                         isSelected={selectedOption === option.id}
                         isRecommended={option.recommended}
@@ -95,20 +99,23 @@ export const ClarificationAskedItem = memo(
                   </div>
                 ) : event.allowCustom ? (
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                    {'\u6682\u65E0\u9884\u8BBE\u9009\u9879\uFF0C\u8BF7\u76F4\u63A5\u8F93\u5165'}
+                    {t('agent.hitl.none.no_preset_answer')}
                   </p>
                 ) : (
                   <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
-                    {'\u6682\u65E0\u53EF\u9009\u9009\u9879'}
+                    {t('agent.hitl.none.no_options')}
                   </p>
                 )}
 
                 {(event.allowCustom || !hasOptions) && (hasOptions || event.allowCustom) && (
                   <div className="mb-3">
+                    <label htmlFor={customAnswerId} className="sr-only">
+                      {t('agent.hitl.option.custom_answer')}
+                    </label>
                     <input
+                      id={customAnswerId}
                       type="text"
-                      placeholder={'\u6216\u8F93\u5165\u81EA\u5B9A\u4E49\u7B54\u6848...'}
-                      aria-label="Custom answer"
+                      placeholder={t('agent.hitl.placeholder.enter_answer')}
                       value={customAnswer}
                       onChange={(e) => {
                         setCustomAnswer(e.target.value);
@@ -126,19 +133,20 @@ export const ClarificationAskedItem = memo(
                     void handleSubmit();
                   }}
                   disabled={isSubmitDisabled}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
                 >
-                  {isSubmitting ? '\u63D0\u4EA4\u4E2D...' : '\u786E\u8BA4'}
+                  {isSubmitting ? t('common.loading') : t('agent.hitl.button.confirm')}
                 </button>
               </>
             ) : (
               <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-                <span className="font-medium">{'\u5DF2\u9009\u62E9\uFF1A'}</span> {event.answer}
+                <span className="font-medium">{t('agent.hitl.status.submitted')}: </span>{' '}
+                {event.answer}
               </div>
             )}
           </div>
         </div>
-        <div className="pl-11">
+        <div className="pl-12">
           <TimeBadge timestamp={event.timestamp} />
         </div>
       </div>
@@ -159,6 +167,7 @@ interface DecisionAskedItemProps {
 
 export const DecisionAskedItem = memo(
   function DecisionAskedItem({ event }: DecisionAskedItemProps) {
+    const { t } = useTranslation();
     const [selectedOption, setSelectedOption] = useState<string | null>(
       event.defaultOption || null
     );
@@ -166,9 +175,11 @@ export const DecisionAskedItem = memo(
     const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { respondToDecision } = useAgentV3Store();
-    const isAnswered = event.answered || false;
-    const hasOptions = event.options && event.options.length > 0;
+    const isAnswered = event.answered ?? false;
+    const hasOptions = event.options.length > 0;
     const isMultiSelect = event.selectionMode === 'multiple';
+    const customDecisionId = useId();
+    const customDecisionId = useId();
 
     const toggleMultiSelect = (optionId: string) => {
       setSelectedMultiple((prev) =>
@@ -206,10 +217,14 @@ export const DecisionAskedItem = memo(
       return !selectedOption;
     })();
 
+    const titleLabel = isMultiSelect
+      ? t('agent.hitl.multiselect.limit', { max: event.maxSelections || 10 })
+      : t('agent.hitl.title.decision');
+
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3">
-          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-lg">
               rule
             </span>
@@ -217,11 +232,11 @@ export const DecisionAskedItem = memo(
           <div className="flex-1 min-w-0 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wider">
-                {isMultiSelect ? '\u591A\u9009\u51B3\u7B56' : '\u9700\u8981\u51B3\u7B56'}
+                {titleLabel}
               </span>
               {isAnswered && (
                 <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                  {'\u5DF2\u51B3\u5B9A'}
+                  {t('agent.hitl.status.completed')}
                 </span>
               )}
             </div>
@@ -234,7 +249,7 @@ export const DecisionAskedItem = memo(
                     <div className="space-y-2 mb-3">
                       {event.options.map((option: DecisionOption, idx: number) => (
                         <OptionButton
-                          key={option.id || `option-${idx}`}
+                          key={option.id || `option-${String(idx)}`}
                           option={option}
                           isSelected={
                             isMultiSelect
@@ -257,10 +272,13 @@ export const DecisionAskedItem = memo(
 
                     {event.allowCustom && !isMultiSelect && (
                       <div className="mb-3">
+                        <label htmlFor={customDecisionId} className="sr-only">
+                          {t('agent.hitl.option.custom_decision')}
+                        </label>
                         <input
+                          id={customDecisionId}
                           type="text"
-                          placeholder={'\u6216\u8F93\u5165\u81EA\u5B9A\u4E49\u51B3\u7B56...'}
-                          aria-label="Custom decision"
+                          placeholder={t('agent.hitl.placeholder.enter_decision')}
                           value={customDecision}
                           onChange={(e) => {
                             setCustomDecision(e.target.value);
@@ -275,12 +293,15 @@ export const DecisionAskedItem = memo(
                 ) : event.allowCustom ? (
                   <div className="mb-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                      {'\u6CA1\u6709\u9884\u8BBE\u9009\u9879\uFF0C\u8BF7\u76F4\u63A5\u8F93\u5165\u4F60\u7684\u51B3\u7B56\uFF1A'}
+                      {t('agent.hitl.none.no_preset_decision')}
                     </p>
+                    <label htmlFor={`${customDecisionId}-fallback`} className="sr-only">
+                      {t('agent.hitl.option.custom_decision')}
+                    </label>
                     <input
+                      id={`${customDecisionId}-fallback`}
                       type="text"
-                      placeholder={'\u8F93\u5165\u4F60\u7684\u51B3\u7B56...'}
-                      aria-label="Enter your decision"
+                      placeholder={t('agent.hitl.placeholder.enter_decision')}
                       value={customDecision}
                       onChange={(e) => {
                         setCustomDecision(e.target.value);
@@ -291,7 +312,7 @@ export const DecisionAskedItem = memo(
                   </div>
                 ) : (
                   <div className="mb-3 text-xs text-slate-400 dark:text-slate-500 italic">
-                    {'\u6CA1\u6709\u53EF\u7528\u7684\u9009\u9879'}
+                    {t('agent.hitl.none.no_options')}
                   </div>
                 )}
 
@@ -301,24 +322,24 @@ export const DecisionAskedItem = memo(
                     void handleSubmit();
                   }}
                   disabled={isSubmitDisabled}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
                 >
                   {isSubmitting
-                    ? '\u63D0\u4EA4\u4E2D...'
+                    ? t('common.loading')
                     : isMultiSelect
-                      ? `\u786E\u8BA4\u9009\u62E9 (${selectedMultiple.length})`
-                      : '\u786E\u8BA4\u51B3\u7B56'}
+                      ? `${t('agent.hitl.button.confirm_choice')} (${String(selectedMultiple.length)})`
+                      : t('agent.hitl.button.confirm')}
                 </button>
               </>
             ) : (
               <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-                <span className="font-medium">{'\u5DF2\u51B3\u5B9A\uFF1A'}</span>{' '}
+                <span className="font-medium">{t('agent.hitl.status.completed')}: </span>{' '}
                 {event.decision}
               </div>
             )}
           </div>
         </div>
-        <div className="pl-11">
+        <div className="pl-12">
           <TimeBadge timestamp={event.timestamp} />
         </div>
       </div>
@@ -339,10 +360,12 @@ interface EnvVarRequestedItemProps {
 
 export const EnvVarRequestedItem = memo(
   function EnvVarRequestedItem({ event }: EnvVarRequestedItemProps) {
+    const { t } = useTranslation();
     const [values, setValues] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { respondToEnvVar } = useAgentV3Store();
     const isAnswered = event.answered || false;
+    const fieldIds = useId();
 
     const handleChange = (name: string, value: string) => {
       setValues((prev) => ({ ...prev, [name]: value }));
@@ -371,7 +394,7 @@ export const EnvVarRequestedItem = memo(
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3">
-          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
               key
             </span>
@@ -379,12 +402,12 @@ export const EnvVarRequestedItem = memo(
           <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-                {'\u9700\u8981\u914D\u7F6E'}
+                {t('agent.hitl.title.env_var')}
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">{event.toolName}</span>
               {isAnswered && (
                 <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-                  {'\u5DF2\u63D0\u4F9B'}
+                  {t('agent.hitl.status.configured')}
                 </span>
               )}
             </div>
@@ -395,50 +418,53 @@ export const EnvVarRequestedItem = memo(
             {!isAnswered ? (
               <>
                 <div className="space-y-3 mb-3">
-                  {event.fields.map((field: EnvVarField) => (
-                    <div key={field.name}>
-                      <div className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        {field.label}
-                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                  {event.fields.map((field: EnvVarField) => {
+                    const fieldId = `${fieldIds}-${field.name}`;
+                    return (
+                      <div key={field.name}>
+                        <label htmlFor={fieldId} className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          {field.label}
+                          {field.required && (
+                            <span className="text-red-500 ml-1" aria-label={t('common.forms.required')}>
+                              *
+                            </span>
+                          )}
+                        </label>
+                        {field.description && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                            {field.description}
+                          </p>
+                        )}
+                        {field.input_type === 'textarea' ? (
+                          <textarea
+                            id={fieldId}
+                            name={field.name}
+                            placeholder={field.placeholder || t('agent.hitl.validation.enter_field', { field: field.label })}
+                            value={values[field.name] || field.default_value || ''}
+                            onChange={(e) => {
+                              handleChange(field.name, e.target.value);
+                            }}
+                            disabled={isSubmitting}
+                            rows={3}
+                            className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        ) : (
+                          <input
+                            id={fieldId}
+                            name={field.name}
+                            type={field.input_type === 'password' ? 'password' : 'text'}
+                            placeholder={field.placeholder || t('agent.hitl.validation.enter_field', { field: field.label })}
+                            value={values[field.name] || field.default_value || ''}
+                            onChange={(e) => {
+                              handleChange(field.name, e.target.value);
+                            }}
+                            disabled={isSubmitting}
+                            className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        )}
                       </div>
-                      {field.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                          {field.description}
-                        </p>
-                      )}
-                      {field.input_type === 'textarea' ? (
-                        <textarea
-                          placeholder={
-                            field.placeholder ||
-                            `\u8BF7\u8F93\u5165 ${field.label}`
-                          }
-                          aria-label={field.label}
-                          value={values[field.name] || field.default_value || ''}
-                          onChange={(e) => {
-                            handleChange(field.name, e.target.value);
-                          }}
-                          disabled={isSubmitting}
-                          rows={3}
-                          className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      ) : (
-                        <input
-                          type={field.input_type === 'password' ? 'password' : 'text'}
-                          placeholder={
-                            field.placeholder ||
-                            `\u8BF7\u8F93\u5165 ${field.label}`
-                          }
-                          aria-label={field.label}
-                          value={values[field.name] || field.default_value || ''}
-                          onChange={(e) => {
-                            handleChange(field.name, e.target.value);
-                          }}
-                          disabled={isSubmitting}
-                          className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <button
@@ -447,20 +473,20 @@ export const EnvVarRequestedItem = memo(
                     void handleSubmit();
                   }}
                   disabled={isSubmitting || !requiredFilled}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
                 >
-                  {isSubmitting ? '\u4FDD\u5B58\u4E2D...' : '\u4FDD\u5B58\u914D\u7F6E'}
+                  {isSubmitting ? t('common.loading') : t('agent.hitl.button.submit')}
                 </button>
               </>
             ) : (
               <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-                <span className="font-medium">{'\u5DF2\u914D\u7F6E\uFF1A'}</span>{' '}
+                <span className="font-medium">{t('agent.hitl.status.configured')}: </span>{' '}
                 {event.providedVariables?.join(', ')}
               </div>
             )}
           </div>
         </div>
-        <div className="pl-11">
+        <div className="pl-12">
           <TimeBadge timestamp={event.timestamp} />
         </div>
       </div>

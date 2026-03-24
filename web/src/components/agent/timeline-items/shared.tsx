@@ -7,6 +7,8 @@
 
 import { lazy, Suspense } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { formatDateTime, formatDistanceToNowCN, formatTimeOnly } from '../../../utils/date';
 import { safeMarkdownComponents } from '../chat/markdownPlugins';
 
@@ -50,24 +52,28 @@ export function MarkdownWithSuspense({ children }: { children: string }) {
 }
 
 /**
- * TimeBadge - Natural time display component
+ * TimeBadge - Natural time display component with semantic time element
+ * WCAG 1.3.1: Uses semantic <time> element with datetime attribute
  */
 export function TimeBadge({ timestamp }: { timestamp: number }) {
   const naturalTime = formatDistanceToNowCN(timestamp);
   const readableTime = formatTimeOnly(timestamp);
+  const isoDateTime = new Date(timestamp).toISOString();
 
   return (
-    <span
+    <time
+      dateTime={isoDateTime}
       className="text-[10px] text-slate-400 dark:text-slate-500 select-none"
       title={formatDateTime(timestamp)}
     >
       {naturalTime} · {readableTime}
-    </span>
+    </time>
   );
 }
 
 /**
  * Option button component for HITL events
+ * WCAG 2.4.7: Includes visible focus indicator
  */
 export function OptionButton({
   option,
@@ -82,6 +88,8 @@ export function OptionButton({
   onClick: () => void;
   disabled?: boolean | undefined;
 }) {
+  const { t } = useTranslation();
+
   return (
     <button
       type="button"
@@ -89,6 +97,7 @@ export function OptionButton({
       disabled={disabled}
       className={`
         w-full text-left p-3 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform]
+        focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
         ${
           isSelected
             ? 'border-primary bg-primary/10 dark:bg-primary/20'
@@ -101,7 +110,7 @@ export function OptionButton({
         <span className="font-medium text-sm">{option.label}</span>
         {isRecommended && (
           <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
-            推荐
+            {t('agent.hitl.tag.recommended')}
           </span>
         )}
       </div>

@@ -2140,6 +2140,132 @@
     "theme": {
       "highContrast": "高对比度",
       "highContrastDescription": "增强可见性，使用更强烈的颜色和边框"
+    },
+    "hitl": {
+      "title": {
+        "clarification": "需要澄清",
+        "decision": "需要决策",
+        "env_var": "需要配置",
+        "permission": "需要授权",
+        "input_required": "需要输入"
+      },
+      "time": {
+        "just_now": "刚刚",
+        "minutes_ago": "{{count}}分钟前",
+        "hours_ago": "{{count}}小时前",
+        "days_ago": "{{count}}天前"
+      },
+      "tag": {
+        "recommended": "推荐",
+        "selected": "已选择",
+        "has_risks": "有风险"
+      },
+      "option": {
+        "custom_answer": "自定义回答",
+        "custom_decision": "自定义决策",
+        "remember_choice": "记住此选择"
+      },
+      "placeholder": {
+        "enter_answer": "请输入您的回答...",
+        "enter_decision": "请输入您的决策...",
+        "env_vars_fallback": "环境变量"
+      },
+      "none": {
+        "no_preset_answer": "暂无预设选项，请在下方输入您的回答",
+        "no_options": "暂无可选项",
+        "no_preset_decision": "暂无预设选项，请在下方输入您的决策",
+        "no_env_vars": "暂无需要配置的环境变量"
+      },
+      "button": {
+        "confirm": "确认",
+        "confirm_choice": "确认选择",
+        "confirm_decision": "确认决策",
+        "submit": "提交"
+      },
+      "multiselect": {
+        "limit": "可多选（最多 {{max}} 项）"
+      },
+      "action": {
+        "view_details": "查看详情",
+        "hide_details": "收起详情",
+        "allowed": "允许",
+        "denied": "拒绝"
+      },
+      "section": {
+        "risk_warning_title": "风险提示"
+      },
+      "label": {
+        "tool": "工具: {{toolName}}"
+      },
+      "validation": {
+        "enter_field": "请输入 {{field}}"
+      },
+      "status": {
+        "configured": "已配置",
+        "completed": "已完成",
+        "submitted": "已提交",
+        "granted_executed": "已授权执行",
+        "denied_executed": "已拒绝执行"
+      },
+      "save_for_later": "保存配置以便下次使用",
+      "permission": {
+        "granted": "已授权",
+        "denied": "已拒绝"
+      },
+      "risk": {
+        "label": "风险",
+        "level": {
+          "low": "低",
+          "medium": "中",
+          "high": "高"
+        },
+        "message": {
+          "low": "低风险操作",
+          "medium": "中风险操作",
+          "high": "高风险操作"
+        }
+      },
+      "cost": {
+        "label": "费用"
+      }
+    },
+    "sandbox": {
+      "status": {
+        "not_started": "未启动",
+        "waiting": "等待中",
+        "creating": "创建中",
+        "running": "运行中",
+        "unhealthy": "不健康",
+        "stopped": "已停止",
+        "terminated": "已终止",
+        "error": "错误"
+      },
+      "label": "沙箱环境",
+      "click_to_start": "点击启动沙箱环境",
+      "toast": {
+        "started": "沙箱已启动",
+        "start_failed": "启动沙箱失败",
+        "restarted": "沙箱已重启",
+        "restart_failed": "重启沙箱失败",
+        "stopped": "沙箱已停止",
+        "stop_failed": "停止沙箱失败"
+      },
+      "action": {
+        "refresh": "刷新",
+        "restart": "重启",
+        "stop": "停止"
+      },
+      "metrics": {
+        "memory": "内存",
+        "network": "网络",
+        "processes": "进程",
+        "uptime": "运行时间"
+      },
+      "duration": {
+        "seconds": "秒",
+        "minutes": "分",
+        "hours": "小时"
+      }
     }
   },
   "user_profile": {

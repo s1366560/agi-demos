@@ -20,7 +20,7 @@ import {
 } from '@ant-design/icons';
 import { Collapse, Tooltip } from 'antd';
 
-import { formatTimeOnly } from '@/utils/date';
+import { formatTimeOnly, formatDuration } from '@/utils/date';
 
 import type { ToolCall, ToolResult } from '../../../types/agent';
 
@@ -64,46 +64,13 @@ export interface ActivityTimelineProps {
   autoScroll?: boolean | undefined;
 }
 
-// Helper to format relative time
+// Format relative time
 const formatRelativeTime = (timestamp: number): string => {
   const diff = Date.now() - timestamp;
   if (diff < 1000) return 'now';
-  if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 60000) return `${String(Math.floor(diff / 1000))}s ago`;
+  if (diff < 3600000) return `${String(Math.floor(diff / 60000))}m ago`;
   return formatTimeOnly(timestamp);
-};
-
-// Format duration in ms to human readable
-const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-};
-
-// Sequence number formatter (circled numbers)
-const formatSequenceNumber = (num: number): string => {
-  const circledNumbers = [
-    '①',
-    '②',
-    '③',
-    '④',
-    '⑤',
-    '⑥',
-    '⑦',
-    '⑧',
-    '⑨',
-    '⑩',
-    '⑪',
-    '⑫',
-    '⑬',
-    '⑭',
-    '⑮',
-    '⑯',
-    '⑰',
-    '⑱',
-    '⑲',
-    '⑳',
-  ];
-  return num <= 20 ? (circledNumbers[num - 1] ?? `${num}.`) : `${num}.`;
 };
 
 /**
@@ -211,7 +178,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
               compact ? 'text-[10px]' : 'text-xs'
             } font-semibold text-slate-600 dark:text-slate-400`}
           >
-            {formatSequenceNumber(sequence)} {isThought ? 'Thought' : 'Tool'}
+            {sequence}. {isThought ? 'Thought' : 'Tool'}
           </span>
           <div className="ml-auto flex items-center gap-2">
             {duration !== undefined && (
@@ -486,7 +453,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                       compact={compact}
                     >
                       <ToolCardInline
-                        toolName={item.toolName!}
+                        toolName={item.toolName ?? 'unknown'}
                         input={item.toolInput}
                         result={item.result}
                         error={item.error}

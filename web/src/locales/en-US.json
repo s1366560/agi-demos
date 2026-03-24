@@ -1944,6 +1944,132 @@
     "theme": {
       "highContrast": "High Contrast",
       "highContrastDescription": "Enhanced visibility with stronger colors and borders"
+    },
+    "hitl": {
+      "title": {
+        "clarification": "Needs clarification",
+        "decision": "Needs decision",
+        "env_var": "Needs configuration",
+        "permission": "Needs permission",
+        "input_required": "User input required"
+      },
+      "time": {
+        "just_now": "just now",
+        "minutes_ago": "{{count}} minutes ago",
+        "hours_ago": "{{count}} hours ago",
+        "days_ago": "{{count}} days ago"
+      },
+      "tag": {
+        "recommended": "Recommended",
+        "selected": "Selected",
+        "has_risks": "Has risks"
+      },
+      "option": {
+        "custom_answer": "Custom answer",
+        "custom_decision": "Custom decision",
+        "remember_choice": "Remember this choice"
+      },
+      "placeholder": {
+        "enter_answer": "Enter your answer...",
+        "enter_decision": "Enter your decision...",
+        "env_vars_fallback": "Environment variables"
+      },
+      "none": {
+        "no_preset_answer": "No preset options - enter your answer below",
+        "no_options": "No options available",
+        "no_preset_decision": "No preset options - enter your decision below",
+        "no_env_vars": "No environment variables required"
+      },
+      "button": {
+        "confirm": "Confirm",
+        "confirm_choice": "Confirm choice",
+        "confirm_decision": "Confirm decision",
+        "submit": "Submit"
+      },
+      "multiselect": {
+        "limit": "You may select up to {{max}} items"
+      },
+      "action": {
+        "view_details": "View details",
+        "hide_details": "Hide details",
+        "allowed": "Allow",
+        "denied": "Deny"
+      },
+      "section": {
+        "risk_warning_title": "Risk notice"
+      },
+      "label": {
+        "tool": "Tool: {{toolName}}"
+      },
+      "validation": {
+        "enter_field": "Please enter {{field}}"
+      },
+      "status": {
+        "configured": "Configured",
+        "completed": "Completed",
+        "submitted": "Submitted",
+        "granted_executed": "Granted - executed",
+        "denied_executed": "Denied - executed"
+      },
+      "save_for_later": "Save configuration for next time",
+      "permission": {
+        "granted": "Granted",
+        "denied": "Denied"
+      },
+      "risk": {
+        "label": "Risk",
+        "level": {
+          "low": "low",
+          "medium": "medium",
+          "high": "high"
+        },
+        "message": {
+          "low": "Low risk operation",
+          "medium": "Medium risk operation",
+          "high": "High risk operation"
+        }
+      },
+      "cost": {
+        "label": "Cost"
+      }
+    },
+    "sandbox": {
+      "status": {
+        "not_started": "Not started",
+        "waiting": "Waiting",
+        "creating": "Creating",
+        "running": "Running",
+        "unhealthy": "Unhealthy",
+        "stopped": "Stopped",
+        "terminated": "Terminated",
+        "error": "Error"
+      },
+      "label": "Sandbox environment",
+      "click_to_start": "Click to start sandbox",
+      "toast": {
+        "started": "Sandbox started",
+        "start_failed": "Failed to start sandbox",
+        "restarted": "Sandbox restarted",
+        "restart_failed": "Failed to restart sandbox",
+        "stopped": "Sandbox stopped",
+        "stop_failed": "Failed to stop sandbox"
+      },
+      "action": {
+        "refresh": "Refresh",
+        "restart": "Restart",
+        "stop": "Stop"
+      },
+      "metrics": {
+        "memory": "Memory",
+        "network": "Network",
+        "processes": "Processes",
+        "uptime": "Uptime"
+      },
+      "duration": {
+        "seconds": "s",
+        "minutes": "m",
+        "hours": "h"
+      }
     }
   },
   "user_profile": {

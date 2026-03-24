@@ -8,7 +8,7 @@
  * @module components/agent/TimelineEventItem
  */
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 
 import { AgentMessageIndicator } from './chat/AgentMessageIndicator';
 import { AssistantMessage } from './chat/AssistantMessage';
@@ -45,8 +45,15 @@ export interface TimelineEventItemProps {
 
 export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
   ({ event, isStreaming = false, allEvents, index }) => {
-    const events = allEvents ?? [event];
-    const delayStyle = { animationDelay: `${Math.min(index ?? 0, 5) * 50}ms` };
+    // Memoize events array to prevent unnecessary recalculations
+    const events = useMemo(() => allEvents ?? [event], [allEvents, event]);
+    const delayStyle = { animationDelay: `${String(Math.min(index ?? 0, 5) * 50)}ms` };
+
+    // Pre-compute text_end existence to avoid O(n) check per text_delta event
+    const hasTextEnd = useMemo(
+      () => events.some((e) => e.type === 'text_end'),
+      [events]
+    );
 
     switch (event.type) {
       case 'user_message':
@@ -122,7 +129,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case 'text_delta':
         // Skip text_delta when a text_end exists (it contains the full text)
-        if (events.some((e) => e.type === 'text_end')) {
+        if (hasTextEnd) {
           return null;
         }
         return (
@@ -273,7 +280,9 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       }
 
       default:
-        console.warn('Unknown event type in TimelineEventItem:', (event as { type: string }).type);
+        if (import.meta.env.DEV) {
+          console.warn('Unknown event type in TimelineEventItem:', (event as { type: string }).type);
+        }
         return null;
     }
   }

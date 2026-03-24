@@ -10,7 +10,7 @@
 type DateInput = Date | string | number | null | undefined;
 
 function pad(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
+  return n < 10 ? `0${String(n)}` : String(n);
 }
 
 function toDate(input: DateInput): Date | null {
@@ -34,7 +34,7 @@ function toDate(input: DateInput): Date | null {
 export function formatDateTime(input: DateInput): string {
   const d = toDate(input);
   if (!d) return '';
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /**
@@ -44,7 +44,7 @@ export function formatDateTime(input: DateInput): string {
 export function formatDateTimeFull(input: DateInput): string {
   const d = toDate(input);
   if (!d) return '';
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /**
@@ -54,7 +54,7 @@ export function formatDateTimeFull(input: DateInput): string {
 export function formatDateOnly(input: DateInput): string {
   const d = toDate(input);
   if (!d) return '';
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /**
@@ -77,9 +77,31 @@ export function formatTimeWithSeconds(input: DateInput): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** @deprecated Use formatDateOnly */
-export function formatDate(date: Date): string {
-  return formatDateOnly(date);
+/**
+ * Format duration from milliseconds to human readable string.
+ * Unified utility for all timeline components.
+ *
+ * @param ms - Duration in milliseconds
+ * @returns Formatted string like "500ms", "1.5s", "2m 30s"
+ */
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${String(Math.round(ms))}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.round((ms % 60000) / 1000);
+  return seconds > 0 ? `${String(minutes)}m ${String(seconds)}s` : `${String(minutes)}m`;
+}
+
+/**
+ * Format duration from milliseconds to human readable string (verbose).
+ * Used for detailed execution logs.
+ *
+ * @param ms - Duration in milliseconds
+ * @returns Formatted string like "500ms", "1.50s", "2m 30s"
+ */
+export function formatDurationVerbose(ms: number): string {
+  if (ms < 1000) return `${String(ms)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 /** @deprecated Use formatTimeOnly */
@@ -108,11 +130,11 @@ export function formatDistanceToNow(input: DateInput): string {
   if (diffSecs < 60) {
     return 'just now';
   } else if (diffMins < 60) {
-    return `${diffMins}m ago`;
+    return `${String(diffMins)}m ago`;
   } else if (diffHours < 24) {
-    return `${diffHours}h ago`;
+    return `${String(diffHours)}h ago`;
   } else if (diffDays < 7) {
-    return `${diffDays}d ago`;
+    return `${String(diffDays)}d ago`;
   } else {
     return formatDateOnly(date);
   }
@@ -134,18 +156,18 @@ export function formatDistanceToNowCN(input: DateInput): string {
   if (diffSecs < 10) {
     return '刚刚';
   } else if (diffSecs < 60) {
-    return `${diffSecs}秒前`;
+    return `${String(diffSecs)}秒前`;
   } else if (diffMins < 60) {
-    return `${diffMins}分钟前`;
+    return `${String(diffMins)}分钟前`;
   } else if (diffHours < 24) {
-    return `${diffHours}小时前`;
+    return `${String(diffHours)}小时前`;
   } else if (diffDays === 1) {
     return '昨天';
   } else if (diffDays < 7) {
-    return `${diffDays}天前`;
+    return `${String(diffDays)}天前`;
   } else if (diffDays < 30) {
     const weeks = Math.floor(diffDays / 7);
-    return `${weeks}周前`;
+    return `${String(weeks)}周前`;
   } else {
     return formatDateOnly(date);
   }

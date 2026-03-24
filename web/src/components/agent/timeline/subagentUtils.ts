@@ -5,14 +5,11 @@
  * eliminate code duplication.
  */
 
-export const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
-};
+// Re-export formatDuration from shared utils
+export { formatDuration } from '../../../utils/date';
 
 export const formatTokens = (count: number): string => {
-  if (count < 1000) return `${count}`;
+  if (count < 1000) return String(count);
   return `${(count / 1000).toFixed(1)}k`;
 };
 

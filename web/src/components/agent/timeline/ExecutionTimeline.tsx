@@ -28,6 +28,7 @@ import {
   AppWindow,
 } from 'lucide-react';
 
+import { formatDuration } from '../../../utils/date';
 import { isAgentTool, AgentToolStepCard } from '../timeline-items/AgentToolCards';
 
 import { useMCPAppOpen } from './useMCPAppOpen';
@@ -93,13 +94,8 @@ const getToolLabel = (toolName: string): string => {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- Utility function exported for reuse in related components
 export { getToolLabel };
-
-const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
-};
 
 const getInputPreview = (input?: Record<string, unknown>, toolName?: string): string | null => {
   if (!input) return null;
@@ -111,7 +107,7 @@ const getInputPreview = (input?: Record<string, unknown>, toolName?: string): st
     const content = (input.content ?? input.new_content ?? input.text ?? '') as string;
     if (filePath) {
       const lineCount = content ? content.split('\n').length : 0;
-      return lineCount > 0 ? `${filePath} (${lineCount} lines)` : filePath;
+      return lineCount > 0 ? `${filePath} (${String(lineCount)} lines)` : filePath;
     }
   }
 
@@ -274,6 +270,7 @@ const TimelineStepItem = memo<{
           }}
           className={`
             w-full text-left rounded-md border px-2.5 py-1.5 transition-colors duration-300
+            focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1
             ${statusBg}
             hover:shadow-sm cursor-pointer
           `}
@@ -296,11 +293,11 @@ const TimelineStepItem = memo<{
                   e.stopPropagation();
                   onUndoRequest(step.id, step.toolName);
                 }}
-                className="ml-1 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-amber-500 transition-colors"
+                className="ml-1 p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-amber-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/50 min-w-[28px] min-h-[28px] flex items-center justify-center"
                 aria-label={t('agent.undo.button', 'Undo this action')}
                 title={t('agent.undo.button', 'Undo this action')}
               >
-                <Undo2 size={12} />
+                <Undo2 size={14} />
               </button>
             )}
             {(step.input || step.output) &&
@@ -321,8 +318,10 @@ const TimelineStepItem = memo<{
         {step.toolName.startsWith('mcp__') && step.status === 'success' && !step.isError && (
           <button
             type="button"
-            onClick={openMCPApp}
-            className="flex items-center gap-1.5 px-2.5 py-1 mt-1 text-xs rounded-md bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 border border-violet-200/60 dark:border-violet-800/30 transition-colors"
+            onClick={() => {
+              void openMCPApp();
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 mt-1 text-xs rounded-md bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 border border-violet-200/60 dark:border-violet-800/30 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:ring-offset-1"
           >
             <AppWindow size={12} />
             {t('agent.timeline.openApp', 'Open App')}
@@ -397,7 +396,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
           onClick={() => {
             setCollapsed((v) => !v);
           }}
-          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer"
+          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 rounded"
         >
           {collapsed ? (
             <ChevronRight size={14} className="text-slate-400" />

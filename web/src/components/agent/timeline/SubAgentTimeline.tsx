@@ -297,7 +297,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
       </div>
 
       <Steps
-        direction="vertical"
+        orientation="vertical"
         size="small"
         current={current}
         className="subagent-chain-steps"
@@ -354,7 +354,7 @@ const ProgressPhaseBar = memo<{ group: SubAgentGroup }>(({ group }) => {
 
   if (group.status !== 'running') return null;
 
-  const events = group.events || [];
+  const events = group.events;
 
   let phase = 0;
   let phaseLabel = t('agent.subagent.progress.initializing', 'Initializing...');
@@ -400,7 +400,7 @@ const ProgressPhaseBar = memo<{ group: SubAgentGroup }>(({ group }) => {
       <div className="w-full bg-slate-200/60 dark:bg-slate-700/60 rounded-full h-1 overflow-hidden">
         <div
           className="bg-blue-500 h-1 rounded-full transition-[width] duration-500 ease-out"
-          style={{ width: `${percent}%` }}
+          style={{ width: `${String(percent)}%` }}
         />
       </div>
     </div>
@@ -425,7 +425,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     const convId = state.activeConversationId;
     if (!convId) return undefined;
     const convState = state.conversationStates.get(convId);
-    return convState?.subagentPreviews?.get(group.subagentId);
+    return convState?.subagentPreviews.get(group.subagentId);
   });
 
   // 1.1 - Name fallback
@@ -529,7 +529,8 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         type="button"
         onClick={toggleExpanded}
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left
-          hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors rounded-t-lg"
+          hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors rounded-t-lg
+          focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
       >
         {expanded ? (
           <ChevronDown size={14} className="text-slate-400 shrink-0" />
@@ -648,7 +649,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             <button
               type="button"
               onClick={toggleDetail}
-              className="text-[10px] text-slate-400 hover:text-blue-500 transition-colors flex items-center gap-1"
+              className="text-[10px] text-slate-400 hover:text-blue-500 transition-colors flex items-center gap-1 min-h-[28px] min-w-[28px] px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
               title={
                 showDetail
                   ? t('agent.subagent.hideDetails', 'Hide details')
