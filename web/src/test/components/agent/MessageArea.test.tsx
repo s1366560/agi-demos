@@ -7,7 +7,26 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { useAgentV3Store } from '../../../stores/agentV3';
+
 import { MessageArea } from '../../../components/agent/MessageArea';
+
+// Mock virtualizer to render all rows in tests
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 80,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        start: index * 80,
+        size: 80,
+        key: index,
+      })),
+    measureElement: vi.fn(),
+    scrollToIndex: vi.fn(),
+    measure: vi.fn(),
+  }),
+}));
 
 // Mock the dependencies
 vi.mock('../../../components/agent/MessageBubble', () => ({
@@ -18,18 +37,8 @@ vi.mock('../../../components/agent/MessageBubble', () => ({
   ),
 }));
 
-vi.mock('../../../components/agent/PlanModeBanner', () => ({
-  PlanModeBanner: ({ status, onViewPlan, onExit }: any) => (
-    <div data-testid="plan-banner">
-      <button onClick={onViewPlan}>View Plan</button>
-      <button onClick={onExit}>Exit</button>
-      <span data-testid="plan-status">{status?.mode}</span>
-    </div>
-  ),
-}));
-
-vi.mock('../../../components/agent/StreamingThoughtBubble', () => ({
-  StreamingThoughtBubble: ({ content, isStreaming }: any) => (
+vi.mock('../../../components/agent/chat/ThinkingBlock', () => ({
+  ThinkingBlock: ({ content, isStreaming }: any) => (
     <div data-testid="streaming-thought" data-streaming={isStreaming}>
       {content || 'Thinking...'}
     </div>
@@ -46,8 +55,8 @@ vi.mock('remark-gfm', () => ({
 
 // Mock timeline data
 const mockTimeline: any[] = [
-  { id: '1', role: 'user', content: 'Hello' },
-  { id: '2', role: 'assistant', content: 'Hi there!' },
+  { id: '1', type: 'user_message', content: 'Hello', timestamp: 1 },
+  { id: '2', type: 'assistant_message', content: 'Hi there!', timestamp: 2 },
 ];
 
 describe('MessageArea Compound Component', () => {
@@ -55,14 +64,15 @@ describe('MessageArea Compound Component', () => {
     timeline: mockTimeline,
     isStreaming: false,
     isLoading: false,
-    planModeStatus: null,
-    onViewPlan: vi.fn(),
-    onExitPlanMode: vi.fn(),
-    hasEarlierMessages: false,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useAgentV3Store.setState({
+      streamingAssistantContent: '',
+      streamingThought: '',
+      isThinkingStreaming: false,
+    });
   });
 
   describe('Root Component', () => {
@@ -74,9 +84,11 @@ describe('MessageArea Compound Component', () => {
     });
 
     it('should render with streaming content', () => {
-      render(<MessageArea {...defaultProps} streamingContent="Streaming..." isStreaming />);
+      useAgentV3Store.setState({ streamingAssistantContent: 'Streaming...' });
+      render(<MessageArea {...defaultProps} isStreaming />);
 
       expect(screen.getByTestId('markdown')).toBeInTheDocument();
+      expect(screen.getByText('Streaming...')).toBeInTheDocument();
     });
 
     it('should support custom preloadItemCount', () => {
@@ -123,41 +135,6 @@ describe('MessageArea Compound Component', () => {
     });
   });
 
-  describe('PlanBanner Sub-Component', () => {
-    it('should render plan banner when in plan mode', () => {
-      render(
-        <MessageArea {...defaultProps} planModeStatus={{ is_in_plan_mode: true, mode: 'auto' }} />
-      );
-
-      expect(screen.getByTestId('plan-banner')).toBeInTheDocument();
-      expect(screen.getByTestId('plan-status')).toHaveTextContent('auto');
-    });
-
-    it('should not render plan banner when not in plan mode', () => {
-      render(
-        <MessageArea {...defaultProps} planModeStatus={{ is_in_plan_mode: false, mode: 'none' }} />
-      );
-
-      expect(screen.queryByTestId('plan-banner')).not.toBeInTheDocument();
-    });
-
-    it('should call onViewPlan when View Plan button clicked', async () => {
-      const onViewPlan = vi.fn();
-      render(
-        <MessageArea
-          {...defaultProps}
-          onViewPlan={onViewPlan}
-          planModeStatus={{ is_in_plan_mode: true, mode: 'auto' }}
-        />
-      );
-
-      const viewPlanBtn = screen.getByText('View Plan');
-      viewPlanBtn.click();
-
-      expect(onViewPlan).toHaveBeenCalledTimes(1);
-    });
-  });
-
   describe('ScrollIndicator Sub-Component', () => {
     it('should render when loading earlier messages', () => {
       render(<MessageArea {...defaultProps} hasEarlierMessages isLoadingEarlier />);
@@ -182,15 +159,22 @@ describe('MessageArea Compound Component', () => {
 
   describe('StreamingContent Sub-Component', () => {
     it('should render streaming thought when thinking', () => {
-      render(<MessageArea {...defaultProps} streamingThought="Thinking..." isThinkingStreaming />);
+      useAgentV3Store.setState({ streamingThought: 'Thinking...', isThinkingStreaming: true });
+      render(<MessageArea {...defaultProps} isStreaming />);
 
       expect(screen.getByTestId('streaming-thought')).toBeInTheDocument();
+      expect(screen.getByText('Thinking...')).toBeInTheDocument();
     });
 
     it('should render streaming content when streaming', () => {
-      render(<MessageArea {...defaultProps} streamingContent="Response..." isStreaming />);
+      useAgentV3Store.setState({
+        streamingAssistantContent: 'Response...',
+        isThinkingStreaming: false,
+      });
+      render(<MessageArea {...defaultProps} isStreaming />);
 
       expect(screen.getByTestId('markdown')).toBeInTheDocument();
+      expect(screen.getByText('Response...')).toBeInTheDocument();
     });
   });
 
@@ -212,7 +196,6 @@ describe('MessageArea Compound Component', () => {
       expect(MessageArea.ScrollIndicator).toBeDefined();
       expect(MessageArea.ScrollButton).toBeDefined();
       expect(MessageArea.Content).toBeDefined();
-      expect(MessageArea.PlanBanner).toBeDefined();
       expect(MessageArea.StreamingContent).toBeDefined();
     });
 

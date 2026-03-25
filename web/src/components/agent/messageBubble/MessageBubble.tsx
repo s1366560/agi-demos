@@ -41,7 +41,13 @@ import { safeMarkdownComponents, useMarkdownPlugins } from '../chat/markdownPlug
 import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 import { InlineHITLCard } from '../InlineHITLCard';
-import { MARKDOWN_PROSE_CLASSES, MESSAGE_MAX_WIDTH_CLASSES } from '../styles';
+import {
+  ASSISTANT_AVATAR_CLASSES,
+  ASSISTANT_BUBBLE_CLASSES,
+  MARKDOWN_PROSE_CLASSES,
+  MESSAGE_MAX_WIDTH_CLASSES,
+  WIDE_MESSAGE_MAX_WIDTH_CLASSES,
+} from '../styles';
 
 import { getErrorMessage } from '@/types/common';
 
@@ -287,13 +293,13 @@ const UserMessage: React.FC<UserMessageProps> = memo(
 
     let gradientClass = '';
     if (isSubAgent) {
-      gradientClass = 'bg-gradient-to-r from-purple-400 via-purple-500/80 to-purple-400';
+      gradientClass = 'bg-gradient-to-r from-purple-500/30 via-purple-500/20 to-purple-500/30';
     } else if (isSkill) {
-      gradientClass = 'bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400';
+      gradientClass = 'bg-gradient-to-r from-primary/30 via-primary/20 to-primary/30';
     }
 
     return (
-      <div className="group flex flex-col items-end gap-1 pb-2">
+      <div className="group flex flex-col items-end gap-1 pb-1">
         {/* Main row: bubble + avatar */}
         <div className="flex items-end justify-end gap-3 w-full">
           <div className={MESSAGE_MAX_WIDTH_CLASSES}>
@@ -337,11 +343,11 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               <div
                 className={
                   isForced
-                    ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2.5'
-                    : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm'
+                    ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2'
+                    : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2 shadow-sm'
                 }
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
+                <p className="text-sm leading-[1.5] whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
                   {content}
                 </p>
               </div>
@@ -353,7 +359,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               {/* Badge Label */}
               {isForced && (
                 <div
-                  className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[10px] font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary/70'}`}
+                  className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[11px] font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary dark:text-primary-300'}`}
                 >
                   {isSubAgent ? `@${forcedSubAgentName}` : forcedSkillName}
                 </div>
@@ -404,13 +410,13 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
     if (!content && !isStreaming) return null;
     return (
-      <div className="group flex items-start gap-3 pb-2">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-          <Bot size={18} className="text-white" />
+      <div className="group flex items-start gap-3 pb-1">
+        <div className={ASSISTANT_AVATAR_CLASSES}>
+          <Bot size={18} className="text-primary" />
         </div>
         <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
           <div className="relative">
-            <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
+            <div className={ASSISTANT_BUBBLE_CLASSES}>
               <div className={MARKDOWN_PROSE_CLASSES}>
                 {content ? (
                   <ReactMarkdown
@@ -463,12 +469,12 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
   if (!content) return null;
   return (
-    <div className="flex items-start gap-3 pb-2">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-        <Bot size={18} className="text-white" />
+    <div className="flex items-start gap-3 pb-1">
+      <div className={ASSISTANT_AVATAR_CLASSES}>
+        <Bot size={18} className="text-primary" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
+        <div className={ASSISTANT_BUBBLE_CLASSES}>
           <div className={MARKDOWN_PROSE_CLASSES}>
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
@@ -493,7 +499,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
   if (!content) return null;
 
   return (
-    <div className="flex items-start gap-3 pb-2">
+    <div className="flex items-start gap-3 pb-1">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Lightbulb size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
@@ -504,7 +510,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors"
+            className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               {t('agent.messageBubble.reasoning', 'Reasoning')}
@@ -560,11 +566,11 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
     : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50';
 
   return (
-    <div className="flex items-start gap-3 pb-2">
+    <div className="flex items-start gap-3 pb-1">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Wrench size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
-      <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+      <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
         <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm">
           {/* Header */}
           <button
@@ -572,7 +578,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <span className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">
@@ -682,7 +688,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
   if (!steps.length) return null;
 
   return (
-    <div className="flex items-start gap-3 pb-4">
+    <div className="flex items-start gap-3 pb-2">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Bot size={16} className="text-primary" />
       </div>
@@ -693,7 +699,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
@@ -745,13 +751,13 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
   if (!fullText || !fullText.trim()) return null;
 
   return (
-    <div className="group flex items-start gap-3 pb-6">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-        <Bot size={18} className="text-white" />
+    <div className="group flex items-start gap-3 pb-2">
+      <div className={ASSISTANT_AVATAR_CLASSES}>
+        <Bot size={18} className="text-primary" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
         <div className="relative">
-          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm">
+          <div className={ASSISTANT_BUBBLE_CLASSES}>
             <div className={MARKDOWN_PROSE_CLASSES}>
               <ReactMarkdown
                 remarkPlugins={remarkPlugins}
@@ -959,14 +965,14 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const url = artifactUrl || artifactPreviewUrl;
 
   return (
-    <div className="flex items-start gap-3 pb-4">
-      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/30 flex items-center justify-center shrink-0">
+    <div className="flex items-start gap-3 pb-2">
+      <div className="w-8 h-8 rounded-lg bg-emerald-100/90 dark:bg-emerald-900/35 border border-emerald-200/70 dark:border-emerald-800/45 flex items-center justify-center shrink-0">
         <FileOutput size={16} className="text-emerald-600 dark:text-emerald-400" />
       </div>
-      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="bg-gradient-to-r from-emerald-50/90 to-teal-50/70 dark:from-emerald-900/25 dark:to-teal-900/15 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-800/30 shadow-sm">
+      <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
+        <div className="bg-emerald-50/70 dark:bg-emerald-900/15 rounded-xl p-3.5 border border-emerald-200/50 dark:border-emerald-800/30 shadow-sm">
           {/* Header */}
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-2.5">
             <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
               {getCategoryIcon(event.category)}
             </span>
@@ -1022,7 +1028,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                   void handleRefreshUrl();
                 }}
                 disabled={refreshingUrl}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50"
+                className="touch-target flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 <RefreshCw size={12} className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''} />
                 {refreshingUrl
@@ -1033,7 +1039,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
           )}
 
           {/* File Info */}
-          <div className="flex items-center gap-3 text-sm bg-white/60 dark:bg-slate-800/40 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/20">
+          <div className="flex items-center gap-3 text-sm bg-white/60 dark:bg-slate-800/40 rounded-lg p-2.5 border border-emerald-100 dark:border-emerald-800/20">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <span className="material-symbols-outlined text-emerald-500 dark:text-emerald-400 text-base">
                 insert_drive_file
@@ -1050,7 +1056,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors font-medium"
+                className="touch-target flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
                 download={event.filename}
               >
                 <span className="material-symbols-outlined text-base">download</span>
@@ -1063,7 +1069,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 onClick={() => {
                   void handleOpenInCanvas();
                 }}
-                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+                className="touch-target flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
               >
                 <PanelRight size={14} />
                 {t('agent.messageBubble.openInCanvas', 'Canvas')}
@@ -1089,7 +1095,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                   void handleRefreshUrl();
                 }}
                 disabled={refreshingUrl}
-                className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50"
+                className="touch-target flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
               >
                 <RefreshCw size={14} className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''} />
                 {refreshingUrl

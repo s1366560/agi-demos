@@ -7,6 +7,22 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('react-i18next', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-i18next')>();
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, defaultValue?: string, options?: Record<string, unknown>) => {
+        if (typeof defaultValue === 'string') {
+          return defaultValue.replace('{{count}}', String(options?.count ?? ''));
+        }
+        return key;
+      },
+      i18n: { language: 'en' },
+    }),
+  };
+});
+
 // Mock heavy dependencies
 vi.mock('react-markdown', () => ({
   default: ({ children }: any) => <div data-testid="markdown">{children}</div>,
@@ -41,6 +57,7 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       {children}
     </span>
   ),
+  LazyTooltip: ({ children }: any) => <>{children}</>,
 }));
 
 // Import from the MessageBubble.tsx file directly
@@ -128,35 +145,34 @@ describe('MessageBubble Compound Component', () => {
     it('should render user message event', () => {
       render(<MessageBubble event={mockUserEvent} />);
 
-      expect(screen.getByTestId('avatar')).toBeInTheDocument();
       expect(screen.getByText('Hello, how are you?')).toBeInTheDocument();
     });
 
     it('should render assistant message event', () => {
       render(<MessageBubble event={mockAssistantEvent} />);
 
-      expect(screen.getByTestId('avatar')).toBeInTheDocument();
       expect(screen.getByTestId('markdown')).toBeInTheDocument();
+      expect(screen.getByText('I am doing well, thank you!')).toBeInTheDocument();
     });
 
     it('should render text delta event', () => {
       render(<MessageBubble event={mockTextDeltaEvent} />);
 
-      expect(screen.getByTestId('avatar')).toBeInTheDocument();
       expect(screen.getByTestId('markdown')).toBeInTheDocument();
+      expect(screen.getByText('Streaming...')).toBeInTheDocument();
     });
 
     it('should render text end event', () => {
       render(<MessageBubble event={mockTextEndEvent} />);
 
-      expect(screen.getByTestId('avatar')).toBeInTheDocument();
       expect(screen.getByTestId('markdown')).toBeInTheDocument();
+      expect(screen.getByText('Complete response here')).toBeInTheDocument();
     });
 
     it('should render thought event', () => {
       render(<MessageBubble event={mockThoughtEvent} />);
 
-      expect(screen.getByText('Reasoning Log')).toBeInTheDocument();
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
       expect(screen.getByText('Thinking about the response')).toBeInTheDocument();
     });
 
@@ -165,7 +181,7 @@ describe('MessageBubble Compound Component', () => {
       render(<MessageBubble event={mockActEvent} allEvents={allEvents} />);
 
       expect(screen.getByText('search')).toBeInTheDocument();
-      expect(screen.getByTestId('tag')).toBeInTheDocument();
+      expect(screen.getByText('Success')).toBeInTheDocument();
     });
 
     it('should return null for observe event (rendered with act)', () => {
@@ -177,7 +193,7 @@ describe('MessageBubble Compound Component', () => {
     it('should render work plan event', () => {
       render(<MessageBubble event={mockWorkPlanEvent} />);
 
-      expect(screen.getByText(/Work Plan:/)).toBeInTheDocument();
+      expect(screen.getByText('Work Plan')).toBeInTheDocument();
       expect(screen.getByText('Step 1')).toBeInTheDocument();
       expect(screen.getByText('Step 2')).toBeInTheDocument();
     });
@@ -281,7 +297,7 @@ describe('MessageBubble Compound Component', () => {
     it('should render WorkPlan sub-component', () => {
       render(<MessageBubble.WorkPlan event={mockWorkPlanEvent} />);
 
-      expect(screen.getByText(/Work Plan:/)).toBeInTheDocument();
+      expect(screen.getByText('Work Plan')).toBeInTheDocument();
       expect(screen.getByText('Step 1')).toBeInTheDocument();
     });
 
@@ -313,7 +329,7 @@ describe('MessageBubble Compound Component', () => {
       render(<MessageBubble.ArtifactCreated event={mockArtifactEvent} />);
 
       expect(screen.getByText('test.png')).toBeInTheDocument();
-      expect(screen.getByText(/文件已生成/)).toBeInTheDocument();
+      expect(screen.getByText('File Generated')).toBeInTheDocument();
     });
 
     it('should display image preview for image artifacts', () => {

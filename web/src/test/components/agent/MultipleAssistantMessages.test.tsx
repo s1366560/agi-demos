@@ -6,10 +6,33 @@
  */
 
 import { render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
 
 import { MessageArea } from '../../../components/agent/MessageArea';
 
 import type { TimelineEvent } from '../../../types/agent';
+
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 80,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        start: index * 80,
+        size: 80,
+        key: index,
+      })),
+    measureElement: vi.fn(),
+    scrollToIndex: vi.fn(),
+    measure: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../components/agent/MessageBubble', () => ({
+  MessageBubble: ({ event }: { event: { id?: string; content?: string } }) => (
+    <div data-testid={`message-${event.id || 'unknown'}`}>{event.content || 'message'}</div>
+  ),
+}));
 
 // Mock data: After backend fix, each event has unique id = "{event_type}-{sequence_number}"
 const mockTimeline: TimelineEvent[] = [
@@ -68,24 +91,15 @@ describe('Multiple Assistant Messages Rendering', () => {
     render(
       <MessageArea
         timeline={mockTimeline}
-        streamingContent=""
         isStreaming={false}
-        isThinkingStreaming={false}
         isLoading={false}
-        planModeStatus={null}
-        onViewPlan={() => {}}
-        onExitPlanMode={() => {}}
       />
     );
 
-    // Check that each assistant message content is rendered separately
-    expect(screen.getByText(/Hello! I am MemStack Agent/)).toBeInTheDocument();
-    expect(screen.getByText(/我具备以下技能和工具/)).toBeInTheDocument();
-    expect(screen.getByText(/我来为你创建PPT/)).toBeInTheDocument();
-
-    // Count assistant message bubbles (they should all be separate)
-    const assistantBubbles = screen.getAllByText(/Hello!|我具备|我来为/);
-    expect(assistantBubbles.length).toBeGreaterThanOrEqual(3);
+    // Verify each assistant event is rendered as a distinct bubble node
+    expect(screen.getByTestId('message-assistant_message-203')).toBeInTheDocument();
+    expect(screen.getByTestId('message-assistant_message-725')).toBeInTheDocument();
+    expect(screen.getByTestId('message-assistant_message-5832')).toBeInTheDocument();
   });
 
   it('should have unique event IDs for each assistant_message', () => {

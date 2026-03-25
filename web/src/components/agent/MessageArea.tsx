@@ -75,7 +75,13 @@ import { StreamingToolPreparation } from './message/StreamingToolPreparation';
 import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
 import { useMessageAreaScroll } from './message/useMessageAreaScroll';
 import { MessageBubble } from './MessageBubble';
-import { MARKDOWN_PROSE_CLASSES } from './styles';
+import {
+  ASSISTANT_AVATAR_CLASSES,
+  ASSISTANT_BUBBLE_CLASSES,
+  MARKDOWN_PROSE_CLASSES,
+  MESSAGE_MAX_WIDTH_CLASSES,
+  WIDE_MESSAGE_MAX_WIDTH_CLASSES,
+} from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import { MemoryRecalledStep, MemoryCapturedStep } from './timeline/MemoryRecalledStep';
 import { SubAgentCostSummary } from './timeline/SubAgentCostSummary';
@@ -531,7 +537,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 }}
                 aria-expanded={!pinnedCollapsed}
                 aria-controls={pinnedSectionId}
-                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 active:bg-slate-200 dark:active:bg-slate-700/70 transition-colors motion-reduce:transition-none min-h-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 active:bg-slate-200 dark:active:bg-slate-700/70 transition-colors motion-reduce:transition-none min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               >
                 <Pin size={12} />
                 <span>{t('agent.pinnedMessages', 'Pinned')}</span>
@@ -580,7 +586,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           onClick={() => {
                             if (event.id) togglePinEvent(event.id);
                           }}
-                          className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-opacity motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-opacity motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           aria-label={t('agent.actions.unpin', 'Unpin')}
                         >
                           <PinOff size={12} />
@@ -598,7 +604,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             <div
               ref={containerRef}
               onScroll={handleScroll}
-              className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 pb-24 min-h-0"
+              className="flex-1 overflow-y-auto chat-scrollbar p-3 md:p-4 pb-20 min-h-0"
               data-testid="message-container"
               role="log"
               aria-live="polite"
@@ -630,9 +636,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           transform: `translateY(${String(virtualRow.start)}px)`,
                         }}
                       >
-                        <div className="flex items-start gap-3 pb-1.5">
+                        <div className="flex items-start gap-3 pb-1">
                           <div className="w-8 shrink-0" />
-                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                          <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
                             <ExecutionTimeline
                               steps={item.steps}
                               isStreaming={
@@ -664,9 +670,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           transform: `translateY(${String(virtualRow.start)}px)`,
                         }}
                       >
-                        <div className="flex items-start gap-3 pb-1.5">
+                        <div className="flex items-start gap-3 pb-1">
                           <div className="w-8 shrink-0" />
-                          <div className="flex-1 min-w-0 max-w-[92%] md:max-w-[86%] lg:max-w-[82%]">
+                          <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
                             <SubAgentTimeline
                               group={item.group}
                               isStreaming={
@@ -696,9 +702,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           transform: `translateY(${String(virtualRow.start)}px)`,
                         }}
                       >
-                        <div className="flex items-start gap-3 pb-1.5">
+                        <div className="flex items-start gap-3 pb-1">
                           <div className="w-8 shrink-0" />
-                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                          <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
                             {event.type === 'memory_recalled' ? (
                               <MemoryRecalledStep event={event} />
                             ) : (
@@ -731,7 +737,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           : ''
                       }
                     >
-                      <div className="pb-1.5">
+                      <div className="pb-1">
                         <MessageBubble
                           event={event}
                           isStreaming={isStreaming && index === lastEventIndex}
@@ -753,11 +759,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
               {subagentGroups.length >= 2 && !isStreaming && (
                 <div
-                  className="flex items-start gap-3 pb-4"
+                  className="flex items-start gap-3 pb-3"
                   style={{ marginTop: virtualizer.getTotalSize() ? 8 : 0 }}
                 >
                   <div className="w-8 shrink-0" />
-                  <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                  <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
                     <SubAgentCostSummary groups={subagentGroups} />
                   </div>
                 </div>
@@ -790,9 +796,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       className="flex items-start gap-3 mb-2 animate-fade-in-up"
                       aria-live="assertive"
                     >
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
+                      <div className={ASSISTANT_AVATAR_CLASSES}>
                         <svg
-                          className="w-[18px] h-[18px] text-white"
+                          className="w-[18px] h-[18px] text-primary"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -805,8 +811,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           />
                         </svg>
                       </div>
-                      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-                        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm">
+                      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+                        <div className={ASSISTANT_BUBBLE_CLASSES}>
                           <div className={MARKDOWN_PROSE_CLASSES}>
                             <ReactMarkdown
                               remarkPlugins={remarkPlugins}
@@ -828,7 +834,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           {includeScrollButton && showScrollButton && (
             <button
               onClick={contextValue.scroll.scrollToBottom}
-              className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] animate-fade-in"
+              className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] animate-fade-in"
               title={scrollButtonChild?.props.title || 'Scroll to bottom'}
               aria-label="Scroll to bottom"
               data-testid="scroll-button"

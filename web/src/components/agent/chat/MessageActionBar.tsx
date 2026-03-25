@@ -196,7 +196,7 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
           bg-white dark:bg-slate-800
           border border-slate-200 dark:border-slate-700
           rounded-lg shadow-sm
-          opacity-0 group-hover:opacity-100 touch-show
+          opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 touch-show
           transition-opacity duration-200
           ${className}
         `}
@@ -210,7 +210,7 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
                 action.onClick();
               }}
               className={`
-                p-1.5 rounded-md transition-colors duration-150
+                touch-target p-1.5 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
                 ${
                   action.danger
                     ? 'text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
