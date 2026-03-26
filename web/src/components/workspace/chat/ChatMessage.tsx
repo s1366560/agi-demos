@@ -36,7 +36,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
           <div className="flex items-baseline space-x-2 mb-1">
             {!isOwn && (
               <Text type="secondary" className="text-xs">
-                {isAgent ? 'Agent' : 'User'}
+                {(message.metadata.sender_name as string) || (isAgent ? 'Agent' : 'User')}
               </Text>
             )}
             <Text type="secondary" className="text-[10px]">

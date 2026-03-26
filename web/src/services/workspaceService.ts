@@ -106,6 +106,40 @@ export const workspaceService = {
     const payload: unknown = await response.json();
     return normalizeListResponse<WorkspaceAgent>(payload, ['items', 'agents']);
   },
+
+  bindAgent: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    data: {
+      agent_id: string;
+      display_name?: string;
+      description?: string;
+      config?: Record<string, unknown>;
+      is_active?: boolean;
+      hex_q?: number;
+      hex_r?: number;
+      theme_color?: string;
+      label?: string;
+    }
+  ): Promise<WorkspaceAgent> => {
+    const response = await apiFetch.post(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents`,
+      data
+    );
+    return response.json() as Promise<WorkspaceAgent>;
+  },
+
+  unbindAgent: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string
+  ): Promise<void> => {
+    await apiFetch.delete(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents/${workspaceAgentId}`
+    );
+  },
 };
 
 export const workspaceBlackboardService = {
@@ -266,7 +300,7 @@ export const workspaceObjectiveService = {
     const response = await apiFetch.get(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives`
     );
-    const payload = await response.json();
+    const payload: unknown = await response.json();
     return normalizeListResponse<import('@/types/workspace').CyberObjective>(payload, ['items']);
   },
 
@@ -333,7 +367,7 @@ export const workspaceGeneService = {
       }
     }
     const response = await apiFetch.get(url);
-    const payload = await response.json();
+    const payload: unknown = await response.json();
     return normalizeListResponse<import('@/types/workspace').CyberGene>(payload, ['items']);
   },
 
@@ -405,7 +439,7 @@ export const workspaceChatService = {
     }
     const response = await apiFetch.get(url, { retry: { maxRetries: 1 } });
     const payload = (await response.json()) as import('@/types/workspace').MessageListResponse;
-    return payload.items ?? [];
+    return payload.items;
   },
 
   sendMessage: async (
@@ -426,9 +460,9 @@ export const workspaceChatService = {
     limit?: number
   ): Promise<import('@/types/workspace').WorkspaceMessage[]> => {
     let url = `${chatBase(tenantId, projectId, workspaceId)}/mentions/${targetId}`;
-    if (limit !== undefined) url += `?limit=${limit}`;
+    if (limit !== undefined) url += '?limit=' + String(limit);
     const response = await apiFetch.get(url);
     const payload = (await response.json()) as import('@/types/workspace').MessageListResponse;
-    return payload.items ?? [];
+    return payload.items;
   },
 };

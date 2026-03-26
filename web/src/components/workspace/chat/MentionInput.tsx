@@ -24,7 +24,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const allMentions = [
-    ...members.map((m) => ({ id: m.id, type: 'human', name: m.user_id })),
+    ...members.map((m) => ({ id: m.id, type: 'human', name: m.user_email || m.user_id })),
     ...agents.map((a) => ({ id: a.id, type: 'agent', name: a.display_name || a.agent_id })),
   ];
 
@@ -86,7 +86,10 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     const textBeforeCursor = content.slice(0, cursorPosition);
     const textAfterCursor = content.slice(cursorPosition);
     
-    const newTextBeforeCursor = textBeforeCursor.replace(/@[\w-]*$/, `@${mention.name} `);
+    const mentionText = /^[\w][\w\-.]*$/.test(mention.name)
+      ? `@${mention.name}`
+      : `@"${mention.name}"`;
+    const newTextBeforeCursor = textBeforeCursor.replace(/@[\w-]*$/, `${mentionText} `);
     
     setContent(newTextBeforeCursor + textAfterCursor);
     setShowDropdown(false);

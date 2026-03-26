@@ -135,6 +135,28 @@ interface WorkspaceState {
   clearPresence: () => void;
   selectHex: (q: number, r: number) => void;
   clearSelectedHex: () => void;
+  bindAgent: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    data: {
+      agent_id: string;
+      display_name?: string;
+      description?: string;
+      config?: Record<string, unknown>;
+      is_active?: boolean;
+      hex_q?: number;
+      hex_r?: number;
+      theme_color?: string;
+      label?: string;
+    }
+  ) => Promise<void>;
+  unbindAgent: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string
+  ) => Promise<void>;
   moveAgent: (workspaceId: string, agentId: string, q: number, r: number) => Promise<void>;
   handleTopologyEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleTaskEvent: (event: { type: string; data: Record<string, unknown> }) => void;
@@ -370,6 +392,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       clearSelectedHex: () => {
         set({ selectedHex: null });
+      },
+
+      bindAgent: async (tenantId, projectId, workspaceId, data) => {
+        const agent = await workspaceService.bindAgent(tenantId, projectId, workspaceId, data);
+        set({ agents: [...get().agents, agent] });
+      },
+
+      unbindAgent: async (tenantId, projectId, workspaceId, workspaceAgentId) => {
+        await workspaceService.unbindAgent(tenantId, projectId, workspaceId, workspaceAgentId);
+        set({ agents: get().agents.filter((a) => a.id !== workspaceAgentId) });
       },
 
       moveAgent: async (workspaceId, agentId, q, r) => {
@@ -633,6 +665,8 @@ export const useWorkspaceActions = () =>
       selectHex: state.selectHex,
       clearSelectedHex: state.clearSelectedHex,
       moveAgent: state.moveAgent,
+      bindAgent: state.bindAgent,
+      unbindAgent: state.unbindAgent,
       handleTopologyEvent: state.handleTopologyEvent,
       handleTaskEvent: state.handleTaskEvent,
       handleBlackboardEvent: state.handleBlackboardEvent,

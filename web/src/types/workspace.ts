@@ -32,6 +32,7 @@ export interface WorkspaceMember {
   id: string;
   workspace_id: string;
   user_id: string;
+  user_email?: string | undefined;
   role: WorkspaceMemberRole;
   invited_by?: string | undefined;
   created_at: string;

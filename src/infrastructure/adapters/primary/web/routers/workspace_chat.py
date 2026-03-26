@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
@@ -122,6 +123,7 @@ async def send_message(
                 message=message,
                 tenant_id=tenant_id,
                 project_id=project_id,
+                user_id=current_user.id,
             )
 
         return _to_response(message)
@@ -136,12 +138,16 @@ def _fire_mention_routing(
     message: WorkspaceMessage,
     tenant_id: str,
     project_id: str,
+    user_id: str,
 ) -> None:
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
         SqlConversationRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
+        SqlUserRepository,
     )
     from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
         SqlWorkspaceAgentRepository,
@@ -172,21 +178,25 @@ def _fire_mention_routing(
 
     event_publisher = _publish_event if redis_client is not None else None
 
-    def agent_repo_factory(db: AsyncSession) -> Any:
+    def agent_repo_factory(db: AsyncSession) -> SqlWorkspaceAgentRepository:
         return SqlWorkspaceAgentRepository(db)
 
-    def conversation_repo_factory(db: AsyncSession) -> Any:
+    def conversation_repo_factory(db: AsyncSession) -> SqlConversationRepository:
         return SqlConversationRepository(db)
 
-    def agent_service_factory(db: AsyncSession, llm: Any) -> Any:
+    def agent_service_factory(db: AsyncSession, llm: object) -> object:
         return container.with_db(db).agent_service(llm)
 
-    def message_service_factory(db: AsyncSession, publisher: Any) -> WorkspaceMessageService:
+    def message_service_factory(
+        db: AsyncSession,
+        publisher: Callable[[str, str, dict[str, Any]], Awaitable[None]] | None,
+    ) -> WorkspaceMessageService:
         return WorkspaceMessageService(
             message_repo=SqlWorkspaceMessageRepository(db),
             member_repo=SqlWorkspaceMemberRepository(db),
             agent_repo=SqlWorkspaceAgentRepository(db),
             workspace_event_publisher=publisher,
+            user_repo=SqlUserRepository(db),
         )
 
     mention_router = WorkspaceMentionRouter(
@@ -202,6 +212,7 @@ def _fire_mention_routing(
         message=message,
         tenant_id=tenant_id,
         project_id=project_id,
+        user_id=user_id,
         event_publisher=event_publisher,
     )
 

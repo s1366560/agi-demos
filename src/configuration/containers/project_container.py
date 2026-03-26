@@ -177,9 +177,11 @@ class ProjectContainer:
         ) = None,
     ) -> WorkspaceMessageService:
         """Get WorkspaceMessageService for chat message operations."""
+        user_repo = self._user_repository_factory() if self._user_repository_factory else None
         return WorkspaceMessageService(
             message_repo=self.workspace_message_repository(),
             member_repo=self.workspace_member_repository(),
             agent_repo=self.workspace_agent_repository(),
             workspace_event_publisher=workspace_event_publisher,
+            user_repo=user_repo,
         )

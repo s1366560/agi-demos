@@ -108,6 +108,7 @@ class WorkspaceMemberResponse(BaseModel):
     id: str
     workspace_id: str
     user_id: str
+    user_email: str | None = None
     role: WorkspaceRole
     invited_by: str | None
     created_at: datetime
@@ -172,11 +173,14 @@ def _to_workspace_response(workspace: Workspace) -> WorkspaceResponse:
     )
 
 
-def _to_member_response(member: WorkspaceMember) -> WorkspaceMemberResponse:
+def _to_member_response(
+    member: WorkspaceMember, user_email: str | None = None
+) -> WorkspaceMemberResponse:
     return WorkspaceMemberResponse(
         id=member.id,
         workspace_id=member.workspace_id,
         user_id=member.user_id,
+        user_email=user_email,
         role=member.role,
         invited_by=member.invited_by,
         created_at=member.created_at,
@@ -333,6 +337,7 @@ async def list_workspace_members(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
 ) -> list[WorkspaceMemberResponse]:
     try:
@@ -347,7 +352,21 @@ async def list_workspace_members(
             limit=limit,
             offset=offset,
         )
-        return [_to_member_response(member) for member in members]
+        # Batch-resolve user emails
+        from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
+            SqlUserRepository,
+        )
+
+        user_repo = SqlUserRepository(db)
+        email_map: dict[str, str] = {}
+        for member in members:
+            user = await user_repo.find_by_id(member.user_id)
+            if user:
+                email_map[member.user_id] = user.email
+        return [
+            _to_member_response(member, user_email=email_map.get(member.user_id))
+            for member in members
+        ]
     except Exception as exc:
         raise _map_error(exc) from exc
 

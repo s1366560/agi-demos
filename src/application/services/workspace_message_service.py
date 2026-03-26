@@ -9,6 +9,7 @@ from src.domain.model.workspace.workspace_message import (
     MessageSenderType,
     WorkspaceMessage,
 )
+from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
 )
@@ -21,7 +22,8 @@ from src.domain.ports.repositories.workspace.workspace_message_repository import
 
 logger = logging.getLogger(__name__)
 
-_MENTION_RE = re.compile(r"@([\w][\w\-.]{0,62}[\w]|[\w])")
+# Supports: @word, @word-with.dots, @"Multi Word Name"
+_MENTION_RE = re.compile(r'@"([^"]{1,64})"|@([\w][\w\-.]{0,62}[\w]|[\w])')
 
 
 class WorkspaceMessageService:
@@ -32,11 +34,13 @@ class WorkspaceMessageService:
         agent_repo: WorkspaceAgentRepository,
         workspace_event_publisher: Callable[[str, str, dict[str, Any]], Awaitable[None]]
         | None = None,
+        user_repo: UserRepository | None = None,
     ) -> None:
         self._message_repo = message_repo
         self._member_repo = member_repo
         self._agent_repo = agent_repo
         self._workspace_event_publisher = workspace_event_publisher
+        self._user_repo = user_repo
 
     async def send_message(
         self,
@@ -65,14 +69,17 @@ class WorkspaceMessageService:
                 workspace_id,
                 "workspace_message_created",
                 {
-                    "workspace_id": workspace_id,
-                    "message_id": saved.id,
-                    "sender_id": sender_id,
-                    "sender_type": sender_type.value,
-                    "sender_name": sender_name,
-                    "content": content,
-                    "mentions": mention_ids,
-                    "parent_message_id": parent_message_id,
+                    "message": {
+                        "id": saved.id,
+                        "workspace_id": workspace_id,
+                        "sender_id": sender_id,
+                        "sender_type": sender_type.value,
+                        "content": content,
+                        "mentions": mention_ids,
+                        "parent_message_id": parent_message_id,
+                        "metadata": saved.metadata,
+                        "created_at": saved.created_at.isoformat(),
+                    }
                 },
             )
 
@@ -96,9 +103,11 @@ class WorkspaceMessageService:
         return [m for m in all_messages if target_id in m.mentions][:limit]
 
     async def _resolve_mentions(self, workspace_id: str, content: str) -> list[str]:
-        raw_names = _MENTION_RE.findall(content)
-        if not raw_names:
+        raw_matches = _MENTION_RE.findall(content)
+        if not raw_matches:
             return []
+
+        raw_names = [quoted or plain for quoted, plain in raw_matches]
 
         members = await self._member_repo.find_by_workspace(workspace_id)
         agents = await self._agent_repo.find_by_workspace(workspace_id)
@@ -108,8 +117,7 @@ class WorkspaceMessageService:
             if agent.display_name:
                 name_to_id[agent.display_name.lower()] = agent.agent_id
 
-        for member in members:
-            name_to_id[member.user_id.lower()] = member.user_id
+        await self._populate_member_names(name_to_id, members)
 
         resolved: list[str] = []
         seen: set[str] = set()
@@ -121,3 +129,33 @@ class WorkspaceMessageService:
                 seen.add(target_id)
 
         return resolved
+
+    async def _populate_member_names(
+        self,
+        name_to_id: dict[str, str],
+        members: list[Any],
+    ) -> None:
+        if self._user_repo and members:
+            for member in members:
+                await self._register_user_aliases(name_to_id, member.user_id)
+        else:
+            for member in members:
+                name_to_id[member.user_id.lower()] = member.user_id
+
+    async def _register_user_aliases(
+        self,
+        name_to_id: dict[str, str],
+        user_id: str,
+    ) -> None:
+        user = await self._user_repo.find_by_id(user_id)  # type: ignore[union-attr]
+        if user is None:
+            return
+        email = getattr(user, "email", None)
+        if email:
+            name_to_id[email.lower()] = user_id
+            local_part = email.split("@")[0]
+            if local_part and local_part.lower() not in name_to_id:
+                name_to_id[local_part.lower()] = user_id
+        display_name = getattr(user, "display_name", None) or getattr(user, "name", None)
+        if display_name and display_name.lower() not in name_to_id:
+            name_to_id[display_name.lower()] = user_id

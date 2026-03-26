@@ -1,10 +1,16 @@
 import { useMemo, useRef, useEffect } from 'react';
+
 import { useFrame } from '@react-three/fiber';
 import { InstancedMesh, CylinderGeometry, Color, Object3D, BufferGeometry, Mesh } from 'three';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+
 import { hexToPixel } from '@/components/workspace/hex/useHexLayout';
-import type { HexCoordinates } from './useHex3DPick';
+
 import type { WorkspaceAgent, TopologyNode } from '@/types/workspace';
+
+import type { HexCoordinates } from './useHex3DPick';
+import type { ThreeEvent } from '@react-three/fiber';
+
 
 BufferGeometry.prototype.computeBoundsTree = computeBoundsTree as unknown as typeof BufferGeometry.prototype.computeBoundsTree;
 BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree as unknown as typeof BufferGeometry.prototype.disposeBoundsTree;
@@ -51,37 +57,39 @@ export function HexInstances({
     const set = new Set<string>();
     agents.forEach((a) => {
       if (a.hex_q !== undefined && a.hex_r !== undefined) {
-        set.add(`${a.hex_q},${a.hex_r}`);
+        set.add(String(a.hex_q) + ',' + String(a.hex_r));
       }
     });
     topologyNodes.forEach((n) => {
       if (n.hex_q !== undefined && n.hex_r !== undefined) {
-        set.add(`${n.hex_q},${n.hex_r}`);
+        set.add(String(n.hex_q) + ',' + String(n.hex_r));
       }
     });
     return set;
   }, [agents, topologyNodes]);
 
   useEffect(() => {
-    if (!meshRef.current) return;
+    const mesh = meshRef.current;
+    if (!mesh) return;
     
     nodes.forEach((node, i) => {
       const { x, y: z } = hexToPixel(node.q, node.r, hexSize);
       tempObject.position.set(x, 0.1, z);
       tempObject.rotation.y = Math.PI / 6;
       tempObject.updateMatrix();
-      meshRef.current!.setMatrixAt(i, tempObject.matrix);
+      mesh.setMatrixAt(i, tempObject.matrix);
     });
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    mesh.instanceMatrix.needsUpdate = true;
   }, [nodes, hexSize, tempObject]);
 
   useFrame(() => {
-    if (!meshRef.current) return;
+    const mesh = meshRef.current;
+    if (!mesh) return;
     
     nodes.forEach((node, i) => {
-      const isSelected = selectedHex?.q === node.q && selectedHex?.r === node.r;
-      const isHovered = hoveredHex?.q === node.q && hoveredHex?.r === node.r;
-      const isOccupied = occupiedSet.has(`${node.q},${node.r}`);
+      const isSelected = selectedHex !== null && selectedHex.q === node.q && selectedHex.r === node.r;
+      const isHovered = hoveredHex !== null && hoveredHex.q === node.q && hoveredHex.r === node.r;
+      const isOccupied = occupiedSet.has(String(node.q) + ',' + String(node.r));
 
       let color = colorDefault;
       if (isSelected) {
@@ -92,12 +100,14 @@ export function HexInstances({
         color = colorOccupied;
       }
 
-      meshRef.current!.setColorAt(i, color);
+      mesh.setColorAt(i, color);
     });
-    meshRef.current.instanceColor!.needsUpdate = true;
+    if (mesh.instanceColor) {
+      mesh.instanceColor.needsUpdate = true;
+    }
   });
 
-  const handlePointerMove = (e: any) => {
+  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     if (e.instanceId !== undefined) {
       const node = nodes[e.instanceId];
@@ -111,7 +121,7 @@ export function HexInstances({
     onHexHover(null, null);
   };
 
-  const handleClick = (e: any) => {
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (e.instanceId !== undefined) {
       const node = nodes[e.instanceId];
@@ -121,7 +131,7 @@ export function HexInstances({
     }
   };
 
-  const handleContextMenu = (e: any) => {
+  const handleContextMenu = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (e.instanceId !== undefined) {
       const node = nodes[e.instanceId];
@@ -132,7 +142,6 @@ export function HexInstances({
   };
 
   return (
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <instancedMesh
       ref={meshRef}
       args={[geometry, undefined, nodes.length]}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, Suspense, lazy } from 'react';
+import { useCallback, useEffect, useMemo, useState, Suspense, lazy } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
 import { Link, useParams } from 'react-router-dom';
@@ -15,8 +15,12 @@ import {
   useWorkspaceTopology,
   useWorkspaceObjectives,
   useWorkspaceGenes,
+  useWorkspaceStore,
 } from '@/stores/workspace';
 
+import { unifiedEventService } from '@/services/unifiedEventService';
+
+import { AddAgentModal } from '@/components/workspace/AddAgentModal';
 import { BlackboardPanel } from '@/components/workspace/BlackboardPanel';
 import { ChatPanel } from '@/components/workspace/chat/ChatPanel';
 import { GeneList } from '@/components/workspace/genes/GeneList';
@@ -38,13 +42,14 @@ export function WorkspaceDetail() {
   const currentProject = useCurrentProject();
   const currentWorkspace = useCurrentWorkspace();
   const isLoading = useWorkspaceLoading();
-  const { loadWorkspaceSurface, createObjective, deleteObjective, deleteGene, updateGene } = useWorkspaceActions();
+  const { loadWorkspaceSurface, createObjective, deleteObjective, deleteGene, updateGene, bindAgent } = useWorkspaceActions();
   const agents = useWorkspaceAgents();
   const topology = useWorkspaceTopology();
   const objectives = useWorkspaceObjectives();
   const genes = useWorkspaceGenes();
 
   const [showCreateObjective, setShowCreateObjective] = useState(false);
+  const [hexAgentModal, setHexAgentModal] = useState<{ q: number; r: number } | null>(null);
 
   const [contextMenu, setContextMenu] = useState<{
     q: number;
@@ -54,7 +59,7 @@ export function WorkspaceDetail() {
   } | null>(null);
 
   const [viewMode, setViewMode] = useState<'2D' | '3D'>(() => {
-    return (localStorage.getItem('workspace-view-mode') as '2D' | '3D') || '2D';
+    return (localStorage.getItem('workspace-view-mode') ?? '2D') as '2D' | '3D';
   });
 
   const handleViewModeChange = (val: '2D' | '3D') => {
@@ -77,11 +82,47 @@ export function WorkspaceDetail() {
     void loadWorkspaceSurface(tenantId, projectId, workspaceId);
   }, [tenantId, projectId, workspaceId, loadWorkspaceSurface]);
 
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const store = useWorkspaceStore.getState();
+    const unsubscribe = unifiedEventService.subscribeWorkspace(workspaceId, (event) => {
+      const type = event.type;
+      const data = event.data as Record<string, unknown>;
+
+      if (type === 'workspace_message_created') {
+        store.handleChatEvent({ type, data });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [workspaceId]);
+
   const handleSelectHex = (_q: number, _r: number) => {};
 
   const handleContextMenu = (q: number, r: number, e: ReactMouseEvent | MouseEvent) => {
     setContextMenu({ q, r, x: ('clientX' in e ? e.clientX : 0), y: ('clientY' in e ? e.clientY : 0) });
   };
+
+  const handleHexAction = useCallback((action: string, q: number, r: number) => {
+    if (action === 'assign_agent') {
+      setHexAgentModal({ q, r });
+    }
+  }, []);
+
+  const handleAddAgentFromHex = useCallback(
+    async (data: { agent_id: string; display_name?: string; description?: string }) => {
+      if (!tenantId || !projectId || !workspaceId) return;
+      await bindAgent(tenantId, projectId, workspaceId, {
+        ...data,
+        hex_q: hexAgentModal?.q,
+        hex_r: hexAgentModal?.r,
+      });
+    },
+    [bindAgent, tenantId, projectId, workspaceId, hexAgentModal]
+  );
 
   if (!tenantId || !projectId || !workspaceId) {
     return <div className="p-6 text-slate-500">Missing workspace context.</div>;
@@ -144,6 +185,7 @@ export function WorkspaceDetail() {
                 x={contextMenu.x}
                 y={contextMenu.y}
                 onClose={() => { setContextMenu(null); }}
+                onAction={handleHexAction}
               />
             )}
           </div>
@@ -168,7 +210,7 @@ export function WorkspaceDetail() {
                 children: (
                   <ObjectiveList
                     objectives={objectives}
-                    onDelete={(id) => deleteObjective(tenantId, projectId, workspaceId, id)}
+                    onDelete={(id) => { void deleteObjective(tenantId, projectId, workspaceId, id); }}
                     onCreate={() => { setShowCreateObjective(true); }}
                     loading={isLoading}
                   />
@@ -180,8 +222,8 @@ export function WorkspaceDetail() {
                 children: (
                   <GeneList
                     genes={genes}
-                    onDelete={(id) => deleteGene(tenantId, projectId, workspaceId, id)}
-                    onToggleActive={(id, active) => updateGene(tenantId, projectId, workspaceId, id, { is_active: active })}
+                    onDelete={(id) => { void deleteGene(tenantId, projectId, workspaceId, id); }}
+                    onToggleActive={(id, active) => { void updateGene(tenantId, projectId, workspaceId, id, { is_active: active }); }}
                     loading={isLoading}
                   />
                 ),
@@ -189,7 +231,7 @@ export function WorkspaceDetail() {
               {
                 key: '4',
                 label: 'Members',
-                children: <MemberPanel />,
+                children: <MemberPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />,
               },
               {
                 key: '5',
@@ -207,20 +249,26 @@ export function WorkspaceDetail() {
       <ObjectiveCreateModal
         open={showCreateObjective}
         onClose={() => { setShowCreateObjective(false); }}
-        onSubmit={async (data) => {
+        onSubmit={(data) => {
           const payload: {
             title: string;
             description?: string;
             obj_type?: CyberObjectiveType;
             parent_id?: string;
-          } = { title: data.title };
-          if (data.description != null) payload.description = data.description;
-          if (data.obj_type != null) payload.obj_type = data.obj_type;
-          if (data.parent_id != null) payload.parent_id = data.parent_id;
-          await createObjective(tenantId, projectId, workspaceId, payload);
-          setShowCreateObjective(false);
+          } = { title: data.title, obj_type: data.obj_type };
+          if (data.description !== undefined) payload.description = data.description;
+          if (data.parent_id !== undefined) payload.parent_id = data.parent_id;
+          void createObjective(tenantId, projectId, workspaceId, payload).then(() => {
+            setShowCreateObjective(false);
+          });
         }}
         parentObjectives={objectives}
+      />
+      <AddAgentModal
+        open={hexAgentModal != null}
+        onClose={() => { setHexAgentModal(null); }}
+        onSubmit={handleAddAgentFromHex}
+        hexCoords={hexAgentModal}
       />
     </div>
   );
