@@ -34,8 +34,11 @@ from src.infrastructure.adapters.primary.web.routers import (
     auth,
     background_tasks,
     billing,
+    blackboard,
     channels,
     cron,
+    cyber_genes,
+    cyber_objectives,
     data_export,
     enhanced_search,
     episodes,
@@ -58,6 +61,10 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenant_skill_configs,
     tenants,
     terminal,
+    topology,
+    workspace_chat,
+    workspace_tasks,
+    workspaces,
 )
 from src.infrastructure.adapters.primary.web.routers.agent import (
     router as agent_router,
@@ -369,12 +376,18 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(data_export.router)
     app.include_router(maintenance.router)
     app.include_router(tasks.router)
+    app.include_router(workspace_tasks.router)
+    app.include_router(workspaces.router)
     app.include_router(cron.router)
     app.include_router(ai_tools.router)
     app.include_router(background_tasks.router)
     app.include_router(billing.router)
     app.include_router(notifications.router)
     app.include_router(support.router)
+    app.include_router(blackboard.router)
+
+    # Workspace Chat (group messages + @mention routing)
+    app.include_router(workspace_chat.router)
 
     # Agent Capability System (L2 Skill + L3 SubAgent)
     app.include_router(skills.router)
@@ -401,6 +414,15 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Channel Configuration (IM integrations: Feishu, DingTalk, WeCom)
     app.include_router(channels.router, prefix="/api/v1")
+
+    # Workspace topology (nodes + edges)
+    app.include_router(topology.router)
+
+    # CyberOffice objectives (OKR-style objectives per workspace)
+    app.include_router(cyber_objectives.router)
+
+    # CyberOffice genes (skill packages per workspace)
+    app.include_router(cyber_genes.router)
 
     # Agent Pool Admin API (always registered, returns disabled status when pool not enabled)
     from src.infrastructure.agent.pool import create_pool_router

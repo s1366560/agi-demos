@@ -17,7 +17,6 @@ from src.domain.model.agent.routing_context import RoutingContext
 from src.domain.ports.agent.message_router_port import MessageRouterPort
 from src.infrastructure.agent.routing.default_message_router import DefaultMessageRouter
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

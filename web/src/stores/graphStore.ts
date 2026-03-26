@@ -65,16 +65,8 @@ interface GraphState {
     pattern: string,
     entryNodeIds: string[]
   ) => void;
-  runCompleted: (
-    graphRunId: string,
-    totalSteps: number,
-    durationSeconds: number | null
-  ) => void;
-  runFailed: (
-    graphRunId: string,
-    errorMessage: string,
-    failedNodeId: string | null
-  ) => void;
+  runCompleted: (graphRunId: string, totalSteps: number, durationSeconds: number | null) => void;
+  runFailed: (graphRunId: string, errorMessage: string, failedNodeId: string | null) => void;
   runCancelled: (graphRunId: string, reason: string) => void;
 
   // Node lifecycle actions
@@ -291,8 +283,7 @@ export const useGraphStore = create<GraphState>()(
         set((state) => {
           const next = new Map(state.runs);
           next.delete(graphRunId);
-          const newActiveRunId =
-            state.activeRunId === graphRunId ? null : state.activeRunId;
+          const newActiveRunId = state.activeRunId === graphRunId ? null : state.activeRunId;
           return { runs: next, activeRunId: newActiveRunId };
         });
       },
@@ -310,7 +301,7 @@ export const useGraphRuns = () =>
 
 export const useActiveGraphRun = () =>
   useGraphStore((state) =>
-    state.activeRunId ? state.runs.get(state.activeRunId) ?? null : null
+    state.activeRunId ? (state.runs.get(state.activeRunId) ?? null) : null
   );
 
 export const useGraphPanel = () => useGraphStore((state) => state.panelOpen);

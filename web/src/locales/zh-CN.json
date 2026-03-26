@@ -173,7 +173,8 @@
     "more": "更多",
     "cronJobs": "定时任务",
     "agentDefinitions": "智能体定义",
-    "agentBindings": "智能体绑定"
+    "agentBindings": "智能体绑定",
+    "workspaces": "工作空间"
   },
   "user": {
     "profile": "个人资料",

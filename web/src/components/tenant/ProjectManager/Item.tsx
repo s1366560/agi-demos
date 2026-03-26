@@ -58,7 +58,8 @@ export const Item: FC<ProjectManagerItemProps> = ({
   };
 
   // Base classes
-  const baseClasses = 'p-4 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform]';
+  const baseClasses =
+    'p-4 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform]';
 
   // Selected state classes
   const selectedClasses = isSelected

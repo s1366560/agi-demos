@@ -95,11 +95,9 @@ export const restApi = {
     projectId: string,
     config: { llm_model_override?: string | null; llm_overrides?: Record<string, unknown> | null }
   ): Promise<Conversation> {
-    return await api.patch<Conversation>(
-      `/agent/conversations/${conversationId}/config`,
-      config,
-      { params: { project_id: projectId } }
-    );
+    return await api.patch<Conversation>(`/agent/conversations/${conversationId}/config`, config, {
+      params: { project_id: projectId },
+    });
   },
 
   async generateConversationTitle(

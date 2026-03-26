@@ -104,6 +104,12 @@ const AgentWorkspace = lazy(() =>
     default: m.AgentWorkspace,
   }))
 );
+const WorkspaceList = lazy(() =>
+  import('./pages/tenant/WorkspaceList').then((m) => ({ default: m.WorkspaceList }))
+);
+const WorkspaceDetail = lazy(() =>
+  import('./pages/tenant/WorkspaceDetail').then((m) => ({ default: m.WorkspaceDetail }))
+);
 
 // Admin pages
 const PoolDashboard = lazy(() => import('./pages/admin/PoolDashboard'));
@@ -344,6 +350,14 @@ function App() {
                 }
               />
               <Route
+                path="workspaces"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <WorkspaceList />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="agents"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -566,6 +580,22 @@ function App() {
                     </Suspense>
                   }
                 />
+                <Route
+                  path="workspaces"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <WorkspaceList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="workspaces/:workspaceId"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <WorkspaceDetail />
+                    </Suspense>
+                  }
+                />
               </Route>
 
               {/* Tenant specific routes */}
@@ -598,6 +628,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <TaskDashboard />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/workspaces"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <WorkspaceList />
                   </Suspense>
                 }
               />
@@ -893,6 +931,22 @@ function App() {
                   element={
                     <Suspense fallback={<PageLoader />}>
                       <Support />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="workspaces"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <WorkspaceList />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="workspaces/:workspaceId"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <WorkspaceDetail />
                     </Suspense>
                   }
                 />

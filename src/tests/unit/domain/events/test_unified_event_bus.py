@@ -91,6 +91,14 @@ class TestRoutingKey:
         assert key.namespace == "system"
         assert str(key) == "system.health"
 
+    def test_workspace_factory(self):
+        """Test workspace routing key factory."""
+        key = RoutingKey.workspace("ws-123", "topology_updated")
+        assert key.namespace == "workspace"
+        assert key.entity_id == "ws-123"
+        assert key.sub_id == "topology_updated"
+        assert str(key) == "workspace.ws-123.topology_updated"
+
 
 class TestSubscriptionOptions:
     """Tests for SubscriptionOptions."""

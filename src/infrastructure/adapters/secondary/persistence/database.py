@@ -105,7 +105,7 @@ async def initialize_database() -> None:
     """
     # All model files must be imported before create_all() so that their
     # table definitions are registered with Base.metadata.
-    import src.infrastructure.adapters.secondary.persistence.attachment_model  # noqa: F401  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.adapters.secondary.persistence.attachment_model  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.adapters.secondary.persistence.channel_models  # noqa: F401  # pyright: ignore[reportUnusedImport]
     from src.infrastructure.adapters.secondary.persistence.models import Base
 
@@ -141,8 +141,9 @@ async def _stamp_alembic_head() -> None:
         import asyncio
         from pathlib import Path
 
-        from alembic import command
         from alembic.config import Config
+
+        from alembic import command
 
         project_root = Path(__file__).resolve().parents[5]
         alembic_cfg = Config(str(project_root / "alembic.ini"))

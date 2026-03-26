@@ -9,7 +9,6 @@ import pytest
 
 from src.domain.model.agent.subagent_run import SubAgentRun
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -28,9 +27,9 @@ def _make_redis_mock() -> AsyncMock:
     pipe.execute = AsyncMock(return_value=[])
     redis.pipeline = MagicMock(return_value=pipe)
 
-    async def _empty_scan_iter(*, match: str = "*", count: int = 100):  # noqa: ARG001
+    async def _empty_scan_iter(*, match: str = "*", count: int = 100):
         return
-        yield  # noqa: RET503
+        yield
 
     redis.scan_iter = _empty_scan_iter
     return redis
@@ -106,7 +105,7 @@ class TestRedisAgentNamespaceAdapter:
     async def test_list_keys_strips_prefix(self) -> None:
         redis = _make_redis_mock()
 
-        async def _scan(*, match: str = "*", count: int = 100):  # noqa: ARG001
+        async def _scan(*, match: str = "*", count: int = 100):
             yield "agent:ns:p:a:key1"
             yield "agent:ns:p:a:key2"
 
@@ -118,7 +117,7 @@ class TestRedisAgentNamespaceAdapter:
     async def test_list_keys_with_pattern(self) -> None:
         redis = _make_redis_mock()
 
-        async def _scan(*, match: str = "*", count: int = 100):  # noqa: ARG001
+        async def _scan(*, match: str = "*", count: int = 100):
             yield "agent:ns:p:a:config:x"
 
         redis.scan_iter = _scan
@@ -129,7 +128,7 @@ class TestRedisAgentNamespaceAdapter:
     async def test_clear_namespace_deletes_all(self) -> None:
         redis = _make_redis_mock()
 
-        async def _scan(*, match: str = "*", count: int = 100):  # noqa: ARG001
+        async def _scan(*, match: str = "*", count: int = 100):
             yield "agent:ns:p:a:k1"
             yield "agent:ns:p:a:k2"
 
@@ -143,7 +142,7 @@ class TestRedisAgentNamespaceAdapter:
         redis = _make_redis_mock()
         keys = [f"agent:ns:p:a:k{i}" for i in range(150)]
 
-        async def _scan(*, match: str = "*", count: int = 100):  # noqa: ARG001
+        async def _scan(*, match: str = "*", count: int = 100):
             for k in keys:
                 yield k
 
@@ -272,7 +271,7 @@ class TestRedisAgentCredentialScopeAdapter:
     async def test_list_credential_keys_strips_prefix(self) -> None:
         redis = _make_redis_mock()
 
-        async def _scan(*, match: str = "*", count: int = 100):  # noqa: ARG001
+        async def _scan(*, match: str = "*", count: int = 100):
             yield "agent:cred:p:a:api_key"
             yield "agent:cred:p:a:db_pass"
 
@@ -296,7 +295,7 @@ class TestRedisAgentCredentialScopeAdapter:
     async def test_clear_credentials_deletes_all(self) -> None:
         redis = _make_redis_mock()
 
-        async def _scan(*, match: str = "*", count: int = 100):  # noqa: ARG001
+        async def _scan(*, match: str = "*", count: int = 100):
             yield "agent:cred:p:a:k1"
             yield "agent:cred:p:a:k2"
 

@@ -979,26 +979,28 @@ export const useAgentV3Store = create<AgentV3State>()(
                   timelineToMessages,
                   tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
                   thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
-                  queueTimelineEvent: (event, stateUpdates) =>
-                    { queueTimelineEventRaw(conversationId, event, stateUpdates); },
-                  flushTimelineBufferSync: () =>
-                    { flushTimelineBufferSyncRaw(conversationId); },
+                  queueTimelineEvent: (event, stateUpdates) => {
+                    queueTimelineEventRaw(conversationId, event, stateUpdates);
+                  },
+                  flushTimelineBufferSync: () => {
+                    flushTimelineBufferSyncRaw(conversationId);
+                  },
                 }
               );
 
               agentService.subscribe(conversationId, streamHandler, {
                 message_id:
-                  typeof execStatus?.current_message_id === 'string'
-                    ? execStatus.current_message_id
+                  typeof (execStatus as any)?.current_message_id === 'string'
+                    ? (execStatus as any).current_message_id
                     : undefined,
                 from_time_us:
                   typeof execStatus?.last_event_time_us === 'number'
                     ? execStatus.last_event_time_us
-                    : lastTimeUs ?? undefined,
+                    : (lastTimeUs ?? undefined),
                 from_counter:
                   typeof execStatus?.last_event_counter === 'number'
                     ? execStatus.last_event_counter
-                    : response.last_counter ?? undefined,
+                    : (response.last_counter ?? undefined),
               });
               logger.debug(`[AgentV3] Subscribed to conversation ${conversationId}`);
             }
@@ -1227,10 +1229,12 @@ export const useAgentV3Store = create<AgentV3State>()(
               timelineToMessages,
               tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
               thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
-              queueTimelineEvent: (event, stateUpdates) =>
-                { queueTimelineEventRaw(handlerConversationId, event, stateUpdates); },
-              flushTimelineBufferSync: () =>
-                { flushTimelineBufferSyncRaw(handlerConversationId); },
+              queueTimelineEvent: (event, stateUpdates) => {
+                queueTimelineEventRaw(handlerConversationId, event, stateUpdates);
+              },
+              flushTimelineBufferSync: () => {
+                flushTimelineBufferSyncRaw(handlerConversationId);
+              },
             }
           );
 

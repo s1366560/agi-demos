@@ -47,6 +47,11 @@ __all__ = [
     "AgentSpawnedEvent",
     "AgentStoppedEvent",
     "AgentSuggestionsEvent",
+    "BlackboardPostCreatedEvent",
+    "BlackboardPostDeletedEvent",
+    "BlackboardPostUpdatedEvent",
+    "BlackboardReplyCreatedEvent",
+    "BlackboardReplyDeletedEvent",
     "ContextCompactedEvent",
     "GraphHandoffEvent",
     "GraphNodeCompletedEvent",
@@ -78,6 +83,19 @@ __all__ = [
     "SubAgentStartedEvent",
     "SubAgentSteeredEvent",
     "ToolPolicyDeniedEvent",
+    "TopologyUpdatedEvent",
+    "WorkspaceAgentBoundEvent",
+    "WorkspaceAgentUnboundEvent",
+    "WorkspaceDeletedEvent",
+    "WorkspaceMemberJoinedEvent",
+    "WorkspaceMemberLeftEvent",
+    "WorkspaceMessageCreatedEvent",
+    "WorkspaceTaskAssignedEvent",
+    "WorkspaceTaskCreatedEvent",
+    "WorkspaceTaskDeletedEvent",
+    "WorkspaceTaskStatusChangedEvent",
+    "WorkspaceTaskUpdatedEvent",
+    "WorkspaceUpdatedEvent",
     "get_frontend_event_types",
 ]
 
@@ -1473,6 +1491,184 @@ class GraphHandoffEvent(AgentDomainEvent):
     context_summary: str = ""
 
 
+# =========================================================================
+# Workspace Collaboration Events
+# =========================================================================
+
+
+class WorkspaceMemberJoinedEvent(AgentDomainEvent):
+    """Event: A member joined a workspace."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_MEMBER_JOINED
+    workspace_id: str
+    member_id: str
+    member_role: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceMemberLeftEvent(AgentDomainEvent):
+    """Event: A member left a workspace."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_MEMBER_LEFT
+    workspace_id: str
+    member_id: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceUpdatedEvent(AgentDomainEvent):
+    """Event: Workspace settings or metadata were updated."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_UPDATED
+    workspace_id: str
+    changes: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceDeletedEvent(AgentDomainEvent):
+    """Event: A workspace was deleted."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_DELETED
+    workspace_id: str
+
+
+class WorkspaceAgentBoundEvent(AgentDomainEvent):
+    """Event: An agent was bound to a workspace."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_AGENT_BOUND
+    workspace_id: str
+    agent_id: str
+    workspace_agent_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceAgentUnboundEvent(AgentDomainEvent):
+    """Event: An agent was unbound from a workspace."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_AGENT_UNBOUND
+    workspace_id: str
+    agent_id: str
+    workspace_agent_id: str | None = None
+
+
+class BlackboardPostCreatedEvent(AgentDomainEvent):
+    """Event: A new blackboard post was created."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_POST_CREATED
+    workspace_id: str
+    post_id: str
+    author_id: str | None = None
+    title: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BlackboardPostUpdatedEvent(AgentDomainEvent):
+    """Event: A blackboard post was updated."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_POST_UPDATED
+    workspace_id: str
+    post_id: str
+    changes: dict[str, Any] = Field(default_factory=dict)
+
+
+class BlackboardPostDeletedEvent(AgentDomainEvent):
+    """Event: A blackboard post was deleted."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_POST_DELETED
+    workspace_id: str
+    post_id: str
+
+
+class BlackboardReplyCreatedEvent(AgentDomainEvent):
+    """Event: A reply was added to a blackboard post."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_REPLY_CREATED
+    workspace_id: str
+    post_id: str
+    reply_id: str
+    author_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BlackboardReplyDeletedEvent(AgentDomainEvent):
+    """Event: A reply was deleted from a blackboard post."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_REPLY_DELETED
+    workspace_id: str
+    post_id: str
+    reply_id: str
+
+
+class WorkspaceTaskCreatedEvent(AgentDomainEvent):
+    """Event: A workspace task was created."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_TASK_CREATED
+    workspace_id: str
+    task_id: str
+    title: str | None = None
+    assignee_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceTaskUpdatedEvent(AgentDomainEvent):
+    """Event: A workspace task was updated."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_TASK_UPDATED
+    workspace_id: str
+    task_id: str
+    changes: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceTaskDeletedEvent(AgentDomainEvent):
+    """Event: A workspace task was deleted."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_TASK_DELETED
+    workspace_id: str
+    task_id: str
+
+
+class WorkspaceTaskStatusChangedEvent(AgentDomainEvent):
+    """Event: A workspace task status was changed."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_TASK_STATUS_CHANGED
+    workspace_id: str
+    task_id: str
+    old_status: str | None = None
+    new_status: str
+    changed_by: str | None = None
+
+
+class WorkspaceTaskAssignedEvent(AgentDomainEvent):
+    """Event: A workspace task was assigned to an agent or user."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_TASK_ASSIGNED
+    workspace_id: str
+    task_id: str
+    assignee_id: str
+    assigned_by: str | None = None
+
+
+class TopologyUpdatedEvent(AgentDomainEvent):
+    """Event: Workspace topology (nodes/edges) was updated."""
+
+    event_type: AgentEventType = AgentEventType.TOPOLOGY_UPDATED
+    workspace_id: str
+    action: str = ""
+    node_id: str | None = None
+    edge_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceMessageCreatedEvent(AgentDomainEvent):
+    """Event: A chat message was created in a workspace."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_MESSAGE_CREATED
+    workspace_id: str
+    message_id: str
+    sender_id: str
+    sender_type: str = "human"
+    content: str = ""
+    mentions: list[str] = Field(default_factory=list)
+
+
 # Event Type Utilities
 # =========================================================================
 
@@ -1576,6 +1772,24 @@ def get_event_type_docstring() -> str:
         GraphNodeFailedEvent,
         GraphNodeSkippedEvent,
         GraphHandoffEvent,
+        WorkspaceMemberJoinedEvent,
+        WorkspaceMemberLeftEvent,
+        WorkspaceUpdatedEvent,
+        WorkspaceDeletedEvent,
+        WorkspaceAgentBoundEvent,
+        WorkspaceAgentUnboundEvent,
+        BlackboardPostCreatedEvent,
+        BlackboardPostUpdatedEvent,
+        BlackboardPostDeletedEvent,
+        BlackboardReplyCreatedEvent,
+        BlackboardReplyDeletedEvent,
+        WorkspaceTaskCreatedEvent,
+        WorkspaceTaskUpdatedEvent,
+        WorkspaceTaskDeletedEvent,
+        WorkspaceTaskStatusChangedEvent,
+        WorkspaceTaskAssignedEvent,
+        TopologyUpdatedEvent,
+        WorkspaceMessageCreatedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

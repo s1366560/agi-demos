@@ -615,10 +615,11 @@ export const useSandboxStore = create<SandboxState>()(
               break;
             }
 
-            const sourceType = ((data.source_type || data.sourceType) as
-              | 'sandbox_internal'
-              | 'external_url'
-              | undefined) || 'sandbox_internal';
+            const sourceType =
+              ((data.source_type || data.sourceType) as
+                | 'sandbox_internal'
+                | 'external_url'
+                | undefined) || 'sandbox_internal';
             const eventStatus =
               type === 'http_service_stopped'
                 ? 'stopped'
@@ -637,7 +638,9 @@ export const useSandboxStore = create<SandboxState>()(
             const restartToken = (data.restart_token || data.restartToken) as string | undefined;
             const autoOpen = (data.auto_open ?? data.autoOpen ?? true) as boolean;
             const serviceName = (data.service_name || data.serviceName || serviceId) as string;
-            const updatedAt = (data.updated_at || data.updatedAt || new Date().toISOString()) as string;
+            const updatedAt = (data.updated_at ||
+              data.updatedAt ||
+              new Date().toISOString()) as string;
             const wsPreviewUrl = (data.ws_preview_url || data.wsPreviewUrl) as string | undefined;
             const serviceUrl = (data.service_url || data.serviceUrl || previewUrl) as string;
 

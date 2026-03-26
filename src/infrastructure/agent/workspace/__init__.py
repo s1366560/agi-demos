@@ -5,5 +5,6 @@ Inspired by OpenClaw's workspace.ts bootstrap system.
 """
 
 from src.infrastructure.agent.workspace.manager import WorkspaceFiles, WorkspaceManager
+from src.infrastructure.agent.workspace.workspace_context_builder import build_workspace_context
 
-__all__ = ["WorkspaceFiles", "WorkspaceManager"]
+__all__ = ["WorkspaceFiles", "WorkspaceManager", "build_workspace_context"]

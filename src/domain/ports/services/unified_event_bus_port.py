@@ -89,6 +89,11 @@ class RoutingKey:
         """Create system event routing key."""
         return cls("system", event_name)
 
+    @classmethod
+    def workspace(cls, workspace_id: str, event_name: str) -> "RoutingKey":
+        """Create workspace event routing key."""
+        return cls("workspace", workspace_id, event_name)
+
 
 @dataclass
 class SubscriptionOptions:

@@ -196,10 +196,7 @@ export const NewMemory: React.FC = () => {
       {/* Top Header / Breadcrumbs - Integrated into page since layout handles main header */}
       <div className="flex shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark px-6 py-3">
         <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Link
-            to={`${projectBasePath}/memories`}
-            className="hover:text-primary transition-colors"
-          >
+          <Link to={`${projectBasePath}/memories`} className="hover:text-primary transition-colors">
             {t('project.memories.title')}
           </Link>
           <span>/</span>

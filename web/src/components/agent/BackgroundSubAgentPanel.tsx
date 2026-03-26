@@ -5,7 +5,6 @@
 
 import { memo, useMemo, useState } from 'react';
 
-
 import { useTranslation } from 'react-i18next';
 
 import { Drawer, Progress } from 'antd';
@@ -45,11 +44,15 @@ const formatElapsed = (startedAt: number, completedAt?: number): string => {
 const StatusBadge = memo<{ status: BackgroundSubAgent['status'] }>(({ status }) => {
   switch (status) {
     case 'running':
-      return <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
+      return (
+        <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+      );
     case 'queued':
       return <Pause size={14} className="text-amber-500" />;
     case 'retrying':
-      return <RefreshCw size={14} className="text-orange-500 animate-spin motion-reduce:animate-none" />;
+      return (
+        <RefreshCw size={14} className="text-orange-500 animate-spin motion-reduce:animate-none" />
+      );
     case 'completed':
       return <CheckCircle2 size={14} className="text-emerald-500" />;
     case 'failed':

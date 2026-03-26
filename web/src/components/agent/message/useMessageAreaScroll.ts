@@ -53,7 +53,9 @@ export interface UseMessageAreaScrollReturn {
 // Hook
 // ========================================
 
-export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMessageAreaScrollReturn {
+export function useMessageAreaScroll(
+  params: UseMessageAreaScrollParams
+): UseMessageAreaScrollReturn {
   const {
     containerRef,
     timeline,
@@ -276,7 +278,6 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
     prevTimelineLengthRef.current = currentTimelineLength;
     // groupedItems.length is intentionally excluded from deps when virtualizer
     // is not available inside this hook -- the component passes it in
-     
   }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, containerRef]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: streamingContent and streamingThought are intentional trigger deps
@@ -297,13 +298,7 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
         }
       });
     }
-  }, [
-    streamingContent,
-    streamingThought,
-    isStreaming,
-    isThinkingStreaming,
-    containerRef,
-  ]);
+  }, [streamingContent, streamingThought, isStreaming, isThinkingStreaming, containerRef]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -317,7 +312,9 @@ export function useMessageAreaScroll(params: UseMessageAreaScrollParams): UseMes
   // Clear loading indicator when hasEarlierMessages becomes false
   useEffect(() => {
     if (!hasEarlierMessages) {
-      queueMicrotask(() => { setShowLoadingIndicator(false); });
+      queueMicrotask(() => {
+        setShowLoadingIndicator(false);
+      });
       if (loadingIndicatorTimeoutRef.current) {
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;

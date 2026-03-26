@@ -9,9 +9,9 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.application.services.mcp_runtime_service import MCPRuntimeService
 
 from .schemas import (
     MCPToolCallRequest,

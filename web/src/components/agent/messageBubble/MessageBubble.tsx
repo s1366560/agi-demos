@@ -1030,7 +1030,10 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 disabled={refreshingUrl}
                 className="touch-target flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
-                <RefreshCw size={12} className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''} />
+                <RefreshCw
+                  size={12}
+                  className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''}
+                />
                 {refreshingUrl
                   ? t('agent.messageBubble.refreshing', 'Refreshing...')
                   : t('agent.messageBubble.refreshLink', 'Refresh Link')}
@@ -1097,7 +1100,10 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 disabled={refreshingUrl}
                 className="touch-target flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
               >
-                <RefreshCw size={14} className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''} />
+                <RefreshCw
+                  size={14}
+                  className={refreshingUrl ? 'animate-spin motion-reduce:animate-none' : ''}
+                />
                 {refreshingUrl
                   ? t('agent.messageBubble.refreshing', 'Refreshing...')
                   : t('agent.messageBubble.refreshLink', 'Refresh')}

@@ -330,11 +330,31 @@ export const McpServerListV2: React.FC = () => {
 
         {/* Tab Content */}
         <div className="p-4">
-          {activeTab === 'servers' && <div id="tabpanel-servers" role="tabpanel"><McpServerTabV2 /></div>}
-          {activeTab === 'tools' && <div id="tabpanel-tools" role="tabpanel"><McpToolsTabV2 /></div>}
-          {activeTab === 'apps' && <div id="tabpanel-apps" role="tabpanel"><McpAppsTabV2 /></div>}
-          {activeTab === 'prompts' && <div id="tabpanel-prompts" role="tabpanel"><McpPromptsTabV2 /></div>}
-          {activeTab === 'logs' && <div id="tabpanel-logs" role="tabpanel"><McpLogsTabV2 /></div>}
+          {activeTab === 'servers' && (
+            <div id="tabpanel-servers" role="tabpanel">
+              <McpServerTabV2 />
+            </div>
+          )}
+          {activeTab === 'tools' && (
+            <div id="tabpanel-tools" role="tabpanel">
+              <McpToolsTabV2 />
+            </div>
+          )}
+          {activeTab === 'apps' && (
+            <div id="tabpanel-apps" role="tabpanel">
+              <McpAppsTabV2 />
+            </div>
+          )}
+          {activeTab === 'prompts' && (
+            <div id="tabpanel-prompts" role="tabpanel">
+              <McpPromptsTabV2 />
+            </div>
+          )}
+          {activeTab === 'logs' && (
+            <div id="tabpanel-logs" role="tabpanel">
+              <McpLogsTabV2 />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -84,8 +84,7 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
     }
   };
 
-  const firstEventTimestamp =
-    group.events.length > 0 ? (group.events[0]?.timestamp ?? 0) : 0;
+  const firstEventTimestamp = group.events.length > 0 ? (group.events[0]?.timestamp ?? 0) : 0;
   const displayName = group.subagentName || group.subagentId.slice(0, 8);
 
   return (

@@ -4,12 +4,14 @@ The DIContainer delegates to domain-specific sub-containers while preserving
 the exact same public interface for all callers.
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
+from src.application.services.blackboard_service import BlackboardService
 from src.application.services.cron_service import CronJobService
 from src.application.services.memory_service import MemoryService
 from src.application.services.project_service import ProjectService
@@ -18,7 +20,9 @@ from src.application.services.search_service import SearchService
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
 from src.application.services.tenant_service import TenantService
+from src.application.services.topology_service import TopologyService
 from src.application.services.workflow_learner import WorkflowLearner
+from src.application.services.workspace_message_service import WorkspaceMessageService
 from src.application.use_cases.agent import (
     ChatUseCase,
     ComposeToolsUseCase,
@@ -63,6 +67,30 @@ from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.tenant_repository import TenantRepository
 from src.domain.ports.repositories.user_repository import UserRepository
+from src.domain.ports.repositories.workspace.blackboard_repository import (
+    BlackboardRepository,
+)
+from src.domain.ports.repositories.workspace.cyber_gene_repository import (
+    CyberGeneRepository,
+)
+from src.domain.ports.repositories.workspace.cyber_objective_repository import (
+    CyberObjectiveRepository,
+)
+from src.domain.ports.repositories.workspace.topology_repository import (
+    TopologyRepository,
+)
+from src.domain.ports.repositories.workspace.workspace_agent_repository import (
+    WorkspaceAgentRepository,
+)
+from src.domain.ports.repositories.workspace.workspace_member_repository import (
+    WorkspaceMemberRepository,
+)
+from src.domain.ports.repositories.workspace.workspace_repository import (
+    WorkspaceRepository,
+)
+from src.domain.ports.repositories.workspace.workspace_task_repository import (
+    WorkspaceTaskRepository,
+)
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
@@ -288,6 +316,44 @@ class DIContainer:
 
     def tenant_service(self) -> TenantService:
         return self._project.tenant_service()
+
+    def workspace_repository(self) -> WorkspaceRepository:
+        return self._project.workspace_repository()
+
+    def workspace_member_repository(self) -> WorkspaceMemberRepository:
+        return self._project.workspace_member_repository()
+
+    def workspace_agent_repository(self) -> WorkspaceAgentRepository:
+        return self._project.workspace_agent_repository()
+
+    def blackboard_repository(self) -> BlackboardRepository:
+        return self._project.blackboard_repository()
+
+    def blackboard_service(self) -> BlackboardService:
+        return self._project.blackboard_service()
+
+    def workspace_task_repository(self) -> WorkspaceTaskRepository:
+        return self._project.workspace_task_repository()
+
+    def topology_repository(self) -> TopologyRepository:
+        return self._project.topology_repository()
+
+    def topology_service(self) -> TopologyService:
+        return self._project.topology_service()
+
+    def cyber_objective_repository(self) -> CyberObjectiveRepository:
+        return self._project.cyber_objective_repository()
+
+    def cyber_gene_repository(self) -> CyberGeneRepository:
+        return self._project.cyber_gene_repository()
+
+    def workspace_message_service(
+        self,
+        workspace_event_publisher: (
+            Callable[[str, str, dict[str, Any]], Awaitable[None]] | None
+        ) = None,
+    ) -> WorkspaceMessageService:
+        return self._project.workspace_message_service(workspace_event_publisher)
 
     # === Infra Container delegates ===
 

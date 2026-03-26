@@ -73,6 +73,8 @@ interface AgentChatContentProps {
   externalProjectId?: string | undefined;
   /** Base path for navigation (default: /project/{projectId}/agent) */
   basePath?: string | undefined;
+  /** Optional query string to preserve across conversation navigation */
+  navigationQuery?: string | undefined;
   /** Extra content to show in header area */
   headerExtra?: React.ReactNode | undefined;
 }
@@ -83,7 +85,13 @@ const INPUT_MAX_HEIGHT = 560;
 const INPUT_DEFAULT_HEIGHT = 180;
 
 export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
-  ({ className = '', externalProjectId, basePath: customBasePath, headerExtra }) => {
+  ({
+    className = '',
+    externalProjectId,
+    basePath: customBasePath,
+    navigationQuery,
+    headerExtra,
+  }) => {
     const { t } = useTranslation();
     const notification = useLazyNotification();
     const { projectId: urlProjectId, conversation: conversationId } = useParams<{
@@ -96,6 +104,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Use external project ID if provided, otherwise fall back to URL param
     const queryProjectId = searchParams.get('projectId');
+    const effectiveNavigationQuery =
+      navigationQuery || (queryProjectId ? `projectId=${queryProjectId}` : undefined);
+    const navigationSuffix = effectiveNavigationQuery ? `?${effectiveNavigationQuery}` : '';
     const projectId = externalProjectId || queryProjectId || urlProjectId;
 
     // Determine base path for navigation
@@ -168,13 +179,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     const handleResumeConversation = useCallback(
       (id: string) => {
-        if (customBasePath) {
-          void navigate(`${basePath}/${id}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
-        } else {
-          void navigate(`${basePath}/${id}`);
-        }
+        void navigate(`${basePath}/${id}${navigationSuffix}`);
       },
-      [navigate, basePath, customBasePath, queryProjectId]
+      [navigate, basePath, navigationSuffix]
     );
 
     const {
@@ -329,10 +336,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           const target = e.target as HTMLElement;
           const isInput =
             target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-            if (!isInput) {
-              e.preventDefault();
-              inputBarRef.current?.focus();
-            }
+          if (!isInput) {
+            e.preventDefault();
+            inputBarRef.current?.focus();
+          }
         }
       };
       window.addEventListener('keydown', handleKeyShortcut);
@@ -421,15 +428,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       if (!projectId) return;
       const newId = await createNewConversation(projectId);
       if (newId) {
-        if (customBasePath) {
-          void navigate(
-            `${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`
-          );
-        } else {
-          void navigate(`${basePath}/${newId}`);
-        }
+        void navigate(`${basePath}/${newId}${navigationSuffix}`);
       }
-    }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
+    }, [projectId, createNewConversation, navigate, basePath, navigationSuffix]);
 
     const handleSend = useCallback(
       async (
@@ -456,13 +457,7 @@ ${content}`;
           agentId: activeAgentId,
         });
         if (!conversationId && newId) {
-          if (customBasePath) {
-            void navigate(
-              `${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`
-            );
-          } else {
-            void navigate(`${basePath}/${newId}`);
-          }
+          void navigate(`${basePath}/${newId}${navigationSuffix}`);
         }
       },
       [
@@ -473,8 +468,7 @@ ${content}`;
         onObserve,
         navigate,
         basePath,
-        customBasePath,
-        queryProjectId,
+        navigationSuffix,
         activeAgentId,
       ]
     );
@@ -601,7 +595,6 @@ ${content}`;
       },
       [splitRatio, setSplitRatio]
     );
-
 
     // Plan Mode toggle
     const isPlanMode = useAgentV3Store((s) => s.isPlanMode);

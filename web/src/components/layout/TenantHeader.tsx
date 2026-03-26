@@ -39,6 +39,7 @@ import {
   Activity,
   ArrowLeft,
   ChevronRight,
+  LayoutGrid,
 } from 'lucide-react';
 
 import { useAuthActions, useUser } from '@/stores/auth';
@@ -73,10 +74,14 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   projectId,
 }) => {
   const { t } = useTranslation();
-  const basePath = `/tenant/${tenantId}`;
+  const location = useLocation();
+  const normalizedTenantId = tenantId?.trim();
+  const basePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
 
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projectBasePath = projectId ? `${basePath}/project/${projectId}` : null;
+  const isProjectScopedPath = location.pathname.includes('/project/');
+  const effectiveProjectId = projectId ?? (isProjectScopedPath ? currentProject?.id : undefined);
+  const projectBasePath = effectiveProjectId ? `${basePath}/project/${effectiveProjectId}` : null;
   const projectTabs = getProjectHeaderTabs();
 
   const allNav: NavItem[] = useMemo(
@@ -92,6 +97,14 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         label: t('nav.projects', 'Projects'),
         path: `${basePath}/projects`,
         icon: <Folder size={16} />,
+      },
+      {
+        id: 'workspaces',
+        label: t('nav.workspaces', 'Workspaces'),
+        path: effectiveProjectId
+          ? `${basePath}/project/${effectiveProjectId}/workspaces`
+          : `${basePath}/workspaces`,
+        icon: <LayoutGrid size={16} />,
       },
       {
         id: 'skills',
@@ -136,7 +149,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         icon: <Cpu size={16} />,
       },
     ],
-    [basePath, t]
+    [basePath, effectiveProjectId, t]
   );
 
   const MAX_VISIBLE_NAV_ITEMS = 6;

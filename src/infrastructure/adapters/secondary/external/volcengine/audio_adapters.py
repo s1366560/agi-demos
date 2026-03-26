@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, AsyncGenerator, BinaryIO, Optional
+from collections.abc import AsyncGenerator
+from typing import Any, BinaryIO
 
 from src.domain.ports.services.audio_service_port import ASRServicePort, TTSServicePort
 
@@ -27,7 +28,7 @@ class VolcengineASRAdapter(ASRServicePort):
         self,
         audio_file: BinaryIO,
         language: str = "zh-CN",
-        options: Optional[dict[str, Any]] = None,
+        options: dict[str, Any] | None = None,
     ) -> str:
         """Non-streaming: read all audio, send through streaming client, collect result."""
         from src.infrastructure.adapters.secondary.external.volcengine.asr_streaming_client import (
@@ -62,7 +63,7 @@ class VolcengineASRAdapter(ASRServicePort):
         self,
         audio_stream: AsyncGenerator[bytes, None],
         language: str = "zh-CN",
-        options: Optional[dict[str, Any]] = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming: yield interim/final results as audio chunks arrive."""
         from src.infrastructure.adapters.secondary.external.volcengine.asr_streaming_client import (
@@ -117,8 +118,8 @@ class VolcengineTTSAdapter(TTSServicePort):
     async def synthesize(
         self,
         text: str,
-        voice_type: Optional[str] = None,
-        options: Optional[dict[str, Any]] = None,
+        voice_type: str | None = None,
+        options: dict[str, Any] | None = None,
     ) -> bytes:
         """Non-streaming: collect all audio chunks into a single bytes object."""
         from src.infrastructure.adapters.secondary.external.volcengine.tts_streaming_client import (
@@ -139,8 +140,8 @@ class VolcengineTTSAdapter(TTSServicePort):
     async def synthesize_stream(
         self,
         text: str,
-        voice_type: Optional[str] = None,
-        options: Optional[dict[str, Any]] = None,
+        voice_type: str | None = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[bytes, None]:
         """Streaming: yield audio chunks as they arrive from the TTS client."""
         from src.infrastructure.adapters.secondary.external.volcengine.tts_streaming_client import (

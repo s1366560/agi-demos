@@ -139,7 +139,10 @@ export const AppLauncher: FC = () => {
           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           title="Refresh apps"
         >
-          <RefreshCw size={12} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} />
+          <RefreshCw
+            size={12}
+            className={loading ? 'animate-spin motion-reduce:animate-none' : ''}
+          />
         </button>
       </div>
 

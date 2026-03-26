@@ -9,7 +9,6 @@ import pytest
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -201,10 +200,9 @@ class TestSubAgentSpanServiceTraceRun:
         with patch(
             "src.infrastructure.agent.subagent.span_service.get_tracer",
             return_value=mock_tracer,
-        ):
-            with pytest.raises(RuntimeError, match="something broke"):
-                async with svc.trace_run(run):
-                    raise test_error
+        ), pytest.raises(RuntimeError, match="something broke"):
+            async with svc.trace_run(run):
+                raise test_error
 
         mock_span.record_exception.assert_called_once_with(test_error)
         mock_span.set_status.assert_called_once()
@@ -546,10 +544,9 @@ class TestSubAgentSpanServiceErrorResilience:
         with patch(
             "src.infrastructure.agent.subagent.span_service.get_tracer",
             return_value=mock_tracer,
-        ):
-            with pytest.raises(ValueError, match="deliberate"):
-                async with svc.trace_run(run):
-                    raise ValueError("deliberate")
+        ), pytest.raises(ValueError, match="deliberate"):
+            async with svc.trace_run(run):
+                raise ValueError("deliberate")
 
     def test_mark_span_completed_handles_span_exception(self) -> None:
         cls = _get_service()

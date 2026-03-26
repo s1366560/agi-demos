@@ -3,15 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge, Card, Dropdown, message, Spin, Switch, Tag, Tooltip } from 'antd';
-import {
-  Bot,
-  Edit2,
-  MoreVertical,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-} from 'lucide-react';
+import { Bot, Edit2, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
 import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModal';
 import {
@@ -147,7 +139,9 @@ export const AgentDefinitions: React.FC = () => {
         key: 'edit',
         label: t('common.edit', 'Edit'),
         icon: <Edit2 size={14} />,
-        onClick: () => { handleEdit(def); },
+        onClick: () => {
+          handleEdit(def);
+        },
       },
       { type: 'divider' },
       {
@@ -198,14 +192,13 @@ export const AgentDefinitions: React.FC = () => {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
         <div className="relative flex-1 max-w-sm">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            size={16}
-          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+            }}
             placeholder={t('common.search', 'Search...')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
           />
@@ -216,7 +209,9 @@ export const AgentDefinitions: React.FC = () => {
             <button
               key={sf}
               type="button"
-              onClick={() => { setStatusFilter(sf); }}
+              onClick={() => {
+                setStatusFilter(sf);
+              }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 statusFilter === sf
                   ? 'bg-primary text-white'
@@ -230,7 +225,9 @@ export const AgentDefinitions: React.FC = () => {
 
         <select
           value={sortField}
-          onChange={(e) => { setSortField(e.target.value as SortField); }}
+          onChange={(e) => {
+            setSortField(e.target.value as SortField);
+          }}
           className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
         >
           <option value="name">Name</option>
@@ -279,10 +276,7 @@ export const AgentDefinitions: React.FC = () => {
               className="hover:shadow-md transition-shadow dark:bg-slate-800 dark:border-slate-700"
               title={
                 <div className="flex items-center gap-2 min-w-0">
-                  <Badge
-                    status={def.enabled ? 'success' : 'default'}
-                    className="flex-shrink-0"
-                  />
+                  <Badge status={def.enabled ? 'success' : 'default'} className="flex-shrink-0" />
                   <Tooltip title={def.display_name ?? def.name}>
                     <span className="truncate font-medium text-sm">
                       {def.display_name ?? def.name}
@@ -297,10 +291,7 @@ export const AgentDefinitions: React.FC = () => {
                     checked={def.enabled}
                     onChange={(checked) => handleToggle(def.id, checked)}
                   />
-                  <Dropdown
-                    menu={{ items: getCardMenuItems(def) ?? [] }}
-                    trigger={['click']}
-                  >
+                  <Dropdown menu={{ items: getCardMenuItems(def) ?? [] }} trigger={['click']}>
                     <button
                       type="button"
                       className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -320,9 +311,7 @@ export const AgentDefinitions: React.FC = () => {
                 </p>
 
                 <div className="flex flex-wrap gap-1">
-                  {def.model && (
-                    <Tag className="text-[10px]">{def.model}</Tag>
-                  )}
+                  {def.model && <Tag className="text-[10px]">{def.model}</Tag>}
                   {def.can_spawn && (
                     <Tag color="blue" className="text-[10px]">
                       Spawn

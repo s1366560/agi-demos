@@ -36,7 +36,6 @@ import type {
   ModelOverrideRejectedEventData,
   MessageEventData,
   PermissionAskedEventData,
-
   ThoughtEventData,
   ToolCall,
   SubAgentQueuedEventData,
@@ -372,14 +371,14 @@ export function createStreamEventHandlers(
       if (!event.data?.provider_type) {
         console.warn(
           '[model-switch] Received model_switch_requested with no provider_type for model:',
-          model,
+          model
         );
       }
 
       const { getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const nextAppModelContext = {
-        ...((convState.appModelContext ?? {})),
+        ...(convState.appModelContext ?? {}),
         llm_model_override: model,
       };
 
@@ -395,12 +394,12 @@ export function createStreamEventHandlers(
         '[model-switch] Model override rejected by backend:',
         event.data?.model,
         'reason:',
-        event.data?.reason,
+        event.data?.reason
       );
 
       // Clear the rejected override from appModelContext
       const convState = getConversationState(handlerConversationId);
-      const currentCtx = (convState.appModelContext ?? {});
+      const currentCtx = convState.appModelContext ?? {};
       const { llm_model_override: _removed, ...restCtx } = currentCtx;
 
       queueTimelineEvent(event, {
@@ -711,9 +710,7 @@ export function createStreamEventHandlers(
             updateConversationState(handlerConversationId, {
               streamingAssistantContent: newContent,
               streamStatus: 'streaming',
-              ...(shouldClearThinking
-                ? { streamingThought: '', isThinkingStreaming: false }
-                : {}),
+              ...(shouldClearThinking ? { streamingThought: '', isThinkingStreaming: false } : {}),
             });
           }
         }, tokenBatchIntervalMs);
@@ -1727,10 +1724,7 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       if (!convState) return;
-      const updatedTimeline = appendSSEEventToTimeline(
-        convState.timeline,
-        event
-      );
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const data = event.data;
       const agentNodes = new Map(convState.agentNodes);
       const node: AgentNode = {
@@ -1766,10 +1760,7 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       if (!convState) return;
-      const updatedTimeline = appendSSEEventToTimeline(
-        convState.timeline,
-        event
-      );
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const data = event.data;
       const agentNodes = new Map(convState.agentNodes);
       const existing = agentNodes.get(data.agent_id);
@@ -1793,10 +1784,7 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       if (!convState) return;
-      const updatedTimeline = appendSSEEventToTimeline(
-        convState.timeline,
-        event
-      );
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const data = event.data;
       const agentNodes = new Map(convState.agentNodes);
       const existing = agentNodes.get(data.agent_id);
@@ -1831,7 +1819,9 @@ export function createStreamEventHandlers(
       if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
-      useGraphStore.getState().runCompleted(d.graph_run_id, d.total_steps, d.duration_seconds ?? null);
+      useGraphStore
+        .getState()
+        .runCompleted(d.graph_run_id, d.total_steps, d.duration_seconds ?? null);
       updateConversationState(handlerConversationId, { timeline: updatedTimeline });
     },
 

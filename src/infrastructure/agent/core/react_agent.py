@@ -1257,6 +1257,15 @@ class ReActAgent:
             except Exception as e:
                 logger.warning("Failed to load workspace persona: %s", e)
 
+        # Fetch dynamic workspace context (members, agents, messages, blackboard)
+        workspace_context: str | None = None
+        if project_id and tenant_id:
+            from src.infrastructure.agent.workspace.workspace_context_builder import (
+                build_workspace_context,
+            )
+
+            workspace_context = await build_workspace_context(project_id, tenant_id)
+
         # Build prompt context
         context = PromptContext(
             model_provider=model_provider,
@@ -1275,6 +1284,7 @@ class ReActAgent:
             memory_context=memory_context,
             persona=persona,
             heartbeat_prompt=heartbeat_prompt,
+            workspace_context=workspace_context,
         )
 
         # Use SystemPromptManager to build the prompt

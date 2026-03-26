@@ -12,7 +12,6 @@ from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.domain.ports.agent.agent_credential_scope_port import AgentCredentialScopePort
 from src.domain.ports.agent.agent_namespace_port import AgentNamespacePort
 
-
 # ---------------------------------------------------------------------------
 # SubAgentRun trace fields
 # ---------------------------------------------------------------------------

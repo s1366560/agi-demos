@@ -42,7 +42,12 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import { buildHostStyles } from './hostStyles';
 
-import type { MCPAppUIMetadata, MCPAppDisplayMode, MCPAppCapabilities, MCPAppTool } from '@/types/mcpApp';
+import type {
+  MCPAppUIMetadata,
+  MCPAppDisplayMode,
+  MCPAppCapabilities,
+  MCPAppTool,
+} from '@/types/mcpApp';
 
 /**
  * Prefix for synthetic (auto-discovered) MCP App IDs that have no DB record.
@@ -289,10 +294,7 @@ export const StandardMCPAppRenderer = forwardRef<
             return [];
           }
         },
-        callAppTool: async (
-          name: string,
-          args?: Record<string, unknown>
-        ): Promise<unknown> => {
+        callAppTool: async (name: string, args?: Record<string, unknown>): Promise<unknown> => {
           if (!appCapabilities?.tools) {
             throw new Error('App does not declare tools capability');
           }

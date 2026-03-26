@@ -11,7 +11,7 @@
 
 import { sseEventToTimeline } from '../../utils/sseEventAdapter';
 
-import type { AgentEvent, TimelineEvent , ActDeltaEventData } from '../../types/agent';
+import type { AgentEvent, TimelineEvent, ActDeltaEventData } from '../../types/agent';
 import type { ConversationState } from '../../types/conversationState';
 
 /**
@@ -166,10 +166,7 @@ function flushNow(conversationId: string, deps: TimelineBufferDeps): void {
 
 let _boundDeps: Map<string, TimelineBufferDeps> = new Map();
 
-export function bindTimelineBufferDeps(
-  conversationId: string,
-  deps: TimelineBufferDeps
-): void {
+export function bindTimelineBufferDeps(conversationId: string, deps: TimelineBufferDeps): void {
   _boundDeps.set(conversationId, deps);
 }
 

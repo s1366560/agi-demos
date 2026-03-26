@@ -270,12 +270,12 @@ export const ProjectOverview: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               {t('project.overview.activeMemories')}
             </h3>
-             <Link
-               to={`${projectBasePath}/memories`}
-               className="text-sm text-primary font-medium hover:text-primary/80"
-             >
-               {t('common.actions.viewAll')}
-             </Link>
+            <Link
+              to={`${projectBasePath}/memories`}
+              className="text-sm text-primary font-medium hover:text-primary/80"
+            >
+              {t('common.actions.viewAll')}
+            </Link>
           </div>
           <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -308,11 +308,11 @@ export const ProjectOverview: React.FC = () => {
                     memories.map((memory: Memory) => {
                       const status = getMemoryStatus(memory);
                       return (
-                       <tr
-                           key={memory.id}
-                           onClick={() => navigate(`${projectBasePath}/memory/${memory.id}`)}
-                           className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
-                         >
+                        <tr
+                          key={memory.id}
+                          onClick={() => navigate(`${projectBasePath}/memory/${memory.id}`)}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
+                        >
                           <td className="px-6 py-3">
                             <div className="flex items-center gap-3">
                               <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">

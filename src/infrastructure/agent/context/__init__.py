@@ -43,25 +43,18 @@ __all__ = [
     "AdaptiveThresholds",
     "AttachmentInjector",
     "CompressionHistory",
-    # Compression State & History
     "CompressionLevel",
     "CompressionRecord",
     "CompressionResult",
     "CompressionState",
-    # Compression Engine
     "ContextCompressionEngine",
-    # Facade (recommended entry point)
     "ContextFacade",
     "ContextFacadeConfig",
     "ContextWindowConfig",
-    # Default ContextEngine implementation
-    "DefaultContextEngine",
-    # Window Manager
     "ContextWindowManager",
     "ContextWindowResult",
-    # Compaction
+    "DefaultContextEngine",
     "Message",
-    # Builders
     "MessageBuilder",
     "ModelLimits",
     "SummaryChunk",

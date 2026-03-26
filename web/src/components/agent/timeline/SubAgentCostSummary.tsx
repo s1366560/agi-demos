@@ -125,7 +125,10 @@ export const SubAgentCostSummary = memo<SubAgentCostSummaryProps>(({ groups }) =
                 {stats.failed > 0 ? (
                   <XCircle size={12} className="text-red-500" />
                 ) : (
-                  <Loader2 size={12} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+                  <Loader2
+                    size={12}
+                    className="text-blue-500 animate-spin motion-reduce:animate-none"
+                  />
                 )}
                 <span className="text-[10px] font-medium text-slate-500">
                   {stats.failed > 0

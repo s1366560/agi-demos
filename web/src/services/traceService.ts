@@ -18,48 +18,36 @@ export interface ListRunsParams {
 export const traceAPI = {
   listRuns: async (
     conversationId: string,
-    params: ListRunsParams = {},
+    params: ListRunsParams = {}
   ): Promise<SubAgentRunListDTO> => {
     return await httpClient.get<SubAgentRunListDTO>(
       `${BASE_URL}/${encodeURIComponent(conversationId)}`,
-      { params },
+      { params }
     );
   },
 
-  getRun: async (
-    conversationId: string,
-    runId: string,
-  ): Promise<SubAgentRunDTO> => {
+  getRun: async (conversationId: string, runId: string): Promise<SubAgentRunDTO> => {
     return await httpClient.get<SubAgentRunDTO>(
-      `${BASE_URL}/${encodeURIComponent(conversationId)}/${encodeURIComponent(runId)}`,
+      `${BASE_URL}/${encodeURIComponent(conversationId)}/${encodeURIComponent(runId)}`
     );
   },
 
-  getTraceChain: async (
-    conversationId: string,
-    traceId: string,
-  ): Promise<TraceChainDTO> => {
+  getTraceChain: async (conversationId: string, traceId: string): Promise<TraceChainDTO> => {
     return await httpClient.get<TraceChainDTO>(
-      `${BASE_URL}/${encodeURIComponent(conversationId)}/trace/${encodeURIComponent(traceId)}`,
+      `${BASE_URL}/${encodeURIComponent(conversationId)}/trace/${encodeURIComponent(traceId)}`
     );
   },
 
-  getDescendants: async (
-    conversationId: string,
-    runId: string,
-  ): Promise<DescendantTreeDTO> => {
+  getDescendants: async (conversationId: string, runId: string): Promise<DescendantTreeDTO> => {
     return await httpClient.get<DescendantTreeDTO>(
-      `${BASE_URL}/${encodeURIComponent(conversationId)}/${encodeURIComponent(runId)}/descendants`,
+      `${BASE_URL}/${encodeURIComponent(conversationId)}/${encodeURIComponent(runId)}/descendants`
     );
   },
 
-  getActiveRunCount: async (
-    conversationId?: string,
-  ): Promise<ActiveRunCountDTO> => {
-    return await httpClient.get<ActiveRunCountDTO>(
-      `${BASE_URL}/active/count`,
-      { params: conversationId ? { conversation_id: conversationId } : undefined },
-    );
+  getActiveRunCount: async (conversationId?: string): Promise<ActiveRunCountDTO> => {
+    return await httpClient.get<ActiveRunCountDTO>(`${BASE_URL}/active/count`, {
+      params: conversationId ? { conversation_id: conversationId } : undefined,
+    });
   },
 };
 

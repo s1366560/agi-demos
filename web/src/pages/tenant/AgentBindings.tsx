@@ -207,9 +207,16 @@ export const AgentBindings: React.FC = () => {
         key: 'criteria',
         render: (_: unknown, record: BindingTraceEntry) => {
           const criteria = [];
-          if (record.channel_id) criteria.push(`${t('tenant.agentBindings.trace.channel', 'Channel')}: ${record.channel_id}`);
-          if (record.account_id) criteria.push(`${t('tenant.agentBindings.trace.account', 'Account')}: ${record.account_id}`);
-          if (record.peer_id) criteria.push(`${t('tenant.agentBindings.trace.peer', 'Peer')}: ${record.peer_id}`);
+          if (record.channel_id)
+            criteria.push(
+              `${t('tenant.agentBindings.trace.channel', 'Channel')}: ${record.channel_id}`
+            );
+          if (record.account_id)
+            criteria.push(
+              `${t('tenant.agentBindings.trace.account', 'Account')}: ${record.account_id}`
+            );
+          if (record.peer_id)
+            criteria.push(`${t('tenant.agentBindings.trace.peer', 'Peer')}: ${record.peer_id}`);
           return criteria.length > 0 ? (
             <span className="text-xs">{criteria.join(', ')}</span>
           ) : (
@@ -222,12 +229,21 @@ export const AgentBindings: React.FC = () => {
         key: 'status',
         render: (_: unknown, record: BindingTraceEntry) => {
           if (record.selected) {
-            return <Tag color="success" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800">{t('common.selected', 'Selected')}</Tag>;
+            return (
+              <Tag
+                color="success"
+                className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
+              >
+                {t('common.selected', 'Selected')}
+              </Tag>
+            );
           }
           if (record.eliminated) {
             return (
               <Tooltip title={record.elimination_reason}>
-                <Tag color="error" className="cursor-help">{t('common.eliminated', 'Eliminated')}</Tag>
+                <Tag color="error" className="cursor-help">
+                  {t('common.eliminated', 'Eliminated')}
+                </Tag>
               </Tooltip>
             );
           }
@@ -252,8 +268,7 @@ export const AgentBindings: React.FC = () => {
         title: t('tenant.agentBindings.columns.channelType', 'Channel Type'),
         dataIndex: 'channel_type',
         key: 'channel_type',
-        render: (val: string | null) =>
-          val ? <Tag>{val}</Tag> : <Tag color="default">Any</Tag>,
+        render: (val: string | null) => (val ? <Tag>{val}</Tag> : <Tag color="default">Any</Tag>),
       },
       {
         title: t('tenant.agentBindings.columns.channelId', 'Channel ID'),
@@ -362,7 +377,9 @@ export const AgentBindings: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => { setIsModalOpen(true); }}
+            onClick={() => {
+              setIsModalOpen(true);
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus size={16} />
@@ -379,14 +396,13 @@ export const AgentBindings: React.FC = () => {
 
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
         <div className="relative flex-1 max-w-sm">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            size={16}
-          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+            }}
             placeholder={t('common.search', 'Search...')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
           />
@@ -415,7 +431,9 @@ export const AgentBindings: React.FC = () => {
           {!search && (
             <button
               type="button"
-              onClick={() => { setIsModalOpen(true); }}
+              onClick={() => {
+                setIsModalOpen(true);
+              }}
               className="mt-4 text-primary hover:underline text-sm"
             >
               {t('tenant.agentBindings.createFirst', 'Create your first binding')}
@@ -465,9 +483,7 @@ export const AgentBindings: React.FC = () => {
               },
             ]}
           >
-            <select
-              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-            >
+            <select className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100">
               <option value="">
                 {t('tenant.agentBindings.testRouting.selectChannelType', 'Select channel type')}
               </option>
@@ -503,10 +519,7 @@ export const AgentBindings: React.FC = () => {
             />
           </Form.Item>
 
-          <Form.Item
-            name="peer_id"
-            label={t('tenant.agentBindings.testRouting.peerId', 'Peer ID')}
-          >
+          <Form.Item name="peer_id" label={t('tenant.agentBindings.testRouting.peerId', 'Peer ID')}>
             <Input
               placeholder={t(
                 'tenant.agentBindings.testRouting.peerIdPlaceholder',
@@ -569,18 +582,24 @@ export const AgentBindings: React.FC = () => {
               <button
                 type="button"
                 className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
-                onClick={() => { setShowTrace(!showTrace); }}
+                onClick={() => {
+                  setShowTrace(!showTrace);
+                }}
               >
-                {showTrace 
+                {showTrace
                   ? t('tenant.agentBindings.trace.hide', 'Hide Decision Trace')
                   : t('tenant.agentBindings.trace.show', 'Show Decision Trace')}
                 {testResult.trace && (
                   <span className="text-slate-500 text-xs font-normal ml-1">
-                    ({t('tenant.agentBindings.trace.candidatesCount', '{{count}} candidates', { count: testResult.trace.length })})
+                    (
+                    {t('tenant.agentBindings.trace.candidatesCount', '{{count}} candidates', {
+                      count: testResult.trace.length,
+                    })}
+                    )
                   </span>
                 )}
               </button>
-              
+
               {showTrace && testResult.trace && (
                 <div className="mt-3 overflow-x-auto">
                   <Table<BindingTraceEntry>

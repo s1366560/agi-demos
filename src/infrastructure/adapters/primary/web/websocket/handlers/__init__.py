@@ -43,6 +43,13 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_han
     SubscribeHandler,
     UnsubscribeHandler,
 )
+from src.infrastructure.adapters.primary.web.websocket.handlers.workspace_handler import (
+    SubscribeWorkspaceHandler,
+    UnsubscribeWorkspaceHandler,
+    WorkspaceHeartbeatHandler,
+    WorkspacePresenceJoinHandler,
+    WorkspacePresenceLeaveHandler,
+)
 
 __all__ = [
     # HITL
@@ -65,9 +72,15 @@ __all__ = [
     "SubscribeSandboxHandler",
     # Status
     "SubscribeStatusHandler",
+    "SubscribeWorkspaceHandler",
     "UnsubscribeHandler",
     "UnsubscribeLifecycleStateHandler",
     "UnsubscribeSandboxHandler",
     "UnsubscribeStatusHandler",
+    "UnsubscribeWorkspaceHandler",
     "WebSocketMessageHandler",
+    # Workspace Presence
+    "WorkspaceHeartbeatHandler",
+    "WorkspacePresenceJoinHandler",
+    "WorkspacePresenceLeaveHandler",
 ]

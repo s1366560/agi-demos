@@ -6,6 +6,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     auth,
     background_tasks,
     billing,
+    blackboard,
     data_export,
     enhanced_search,
     episodes,
@@ -23,6 +24,9 @@ from src.infrastructure.adapters.primary.web.routers import (
     support,
     tasks,
     tenants,
+    topology,
+    workspace_tasks,
+    workspaces,
 )
 
 # agent_websocket is imported lazily to avoid circular imports
@@ -34,6 +38,7 @@ __all__ = [
     "auth",
     "background_tasks",
     "billing",
+    "blackboard",
     "data_export",
     "enhanced_search",
     "episodes",
@@ -51,4 +56,7 @@ __all__ = [
     "support",
     "tasks",
     "tenants",
+    "topology",
+    "workspace_tasks",
+    "workspaces",
 ]

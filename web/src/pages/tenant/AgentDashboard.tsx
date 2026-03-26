@@ -302,7 +302,10 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                 Execution Traces
               </h3>
               {isTraceLoading && (
-                <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+                <Loader2
+                  size={14}
+                  className="text-blue-500 animate-spin motion-reduce:animate-none"
+                />
               )}
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
@@ -322,7 +325,9 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                 </h3>
                 <button
                   type="button"
-                  onClick={() => { setSelectedRun(null); }}
+                  onClick={() => {
+                    setSelectedRun(null);
+                  }}
                   className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   <X size={16} />
@@ -377,7 +382,10 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                 ))}
               </div>
               <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-                <button type="button" className="w-full py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  className="w-full py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2"
+                >
                   <Plus className="h-3 w-3" />
                   Add Custom Skills
                 </button>

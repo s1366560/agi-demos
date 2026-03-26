@@ -38,7 +38,10 @@ const formatDuration = (seconds: number | undefined): string => {
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 };
 
-const formatElapsedFromStart = (startedAt: number | undefined, completedAt: number | undefined): string => {
+const formatElapsedFromStart = (
+  startedAt: number | undefined,
+  completedAt: number | undefined
+): string => {
   if (startedAt == null) return '--';
   const ms = (completedAt ?? Date.now()) - startedAt;
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -51,7 +54,9 @@ const NodeStatusBadge = memo<{ status: GraphNodeState['status'] }>(({ status }) 
     case 'pending':
       return <Circle size={14} className="text-slate-400" />;
     case 'running':
-      return <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
+      return (
+        <Loader2 size={14} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+      );
     case 'completed':
       return <CheckCircle2 size={14} className="text-emerald-500" />;
     case 'failed':
@@ -88,7 +93,9 @@ const NodeItem = memo<{
   isExpanded: boolean;
   onToggleExpand: (id: string) => void;
 }>(({ node, isExpanded, onToggleExpand }) => {
-  const hasDetails = Boolean(node.errorMessage || node.skipReason || (node.outputKeys && node.outputKeys.length > 0));
+  const hasDetails = Boolean(
+    node.errorMessage || node.skipReason || (node.outputKeys && node.outputKeys.length > 0)
+  );
 
   const statusBg =
     node.status === 'running'
@@ -221,11 +228,7 @@ const AgentRosterDrawer = memo(() => {
       title={
         <div className="flex items-center gap-2">
           <Network size={16} className="text-indigo-500" />
-          <span>
-            {activeRun
-              ? activeRun.graphName
-              : t('agent.graph.title', 'Agent Graph')}
-          </span>
+          <span>{activeRun ? activeRun.graphName : t('agent.graph.title', 'Agent Graph')}</span>
           {activeRun && <RunStatusLabel status={activeRun.status} />}
           {runningCount > 0 && (
             <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">

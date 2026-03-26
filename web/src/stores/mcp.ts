@@ -407,9 +407,7 @@ export const useEnabledMCPServersCount = () =>
  * Get total tools count from all servers
  */
 export const useTotalMCPToolsCount = () =>
-  useMCPStore((state) =>
-    state.servers.reduce((sum, s) => sum + s.discovered_tools.length, 0)
-  );
+  useMCPStore((state) => state.servers.reduce((sum, s) => sum + s.discovered_tools.length, 0));
 
 /**
  * Get servers grouped by type

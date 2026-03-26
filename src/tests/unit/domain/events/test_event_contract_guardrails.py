@@ -42,6 +42,10 @@ class TestEventContractGuardrails:
             "mcp_app_registered",
             "memory_recalled",
             "memory_captured",
+            "workspace_member_joined",
+            "blackboard_post_created",
+            "workspace_task_assigned",
+            "topology_updated",
         }
 
         missing_event_types = expected_event_types - frontend_event_types

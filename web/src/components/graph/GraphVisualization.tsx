@@ -171,7 +171,11 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       ctx.beginPath();
       ctx.moveTo(sourceNode.x || 0, sourceNode.y || 0);
       ctx.lineTo(targetNode.x || 0, targetNode.y || 0);
-      ctx.strokeStyle = edge.color || (isDark ? resolveThemeColor('--color-text-muted', '#4B5563') : resolveThemeColor('--color-text-muted-light', '#9CA3AF'));
+      ctx.strokeStyle =
+        edge.color ||
+        (isDark
+          ? resolveThemeColor('--color-text-muted', '#4B5563')
+          : resolveThemeColor('--color-text-muted-light', '#9CA3AF'));
       ctx.lineWidth = (edge.weight || 1) * 2;
       ctx.stroke();
 
@@ -181,11 +185,15 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         const midY = ((sourceNode.y || 0) + (targetNode.y || 0)) / 2;
 
         // Label Background
-        ctx.fillStyle = isDark ? resolveThemeColor('--color-background-dark', '#111521') : resolveThemeColor('--color-background', '#FFFFFF');
+        ctx.fillStyle = isDark
+          ? resolveThemeColor('--color-background-dark', '#111521')
+          : resolveThemeColor('--color-background', '#FFFFFF');
         const textWidth = ctx.measureText(edge.label).width;
         ctx.fillRect(midX - textWidth / 2 - 4, midY - 14, textWidth + 8, 18);
 
-        ctx.fillStyle = isDark ? resolveThemeColor('--color-text-muted-light', '#9CA3AF') : resolveThemeColor('--color-text-secondary', '#374151');
+        ctx.fillStyle = isDark
+          ? resolveThemeColor('--color-text-muted-light', '#9CA3AF')
+          : resolveThemeColor('--color-text-secondary', '#374151');
         ctx.font = '10px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(edge.label, midX, midY - 2);
@@ -213,18 +221,24 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       ctx.fill();
 
       // Border
-      ctx.strokeStyle = isDark ? resolveThemeColor('--color-surface-dark-alt', '#1F2937') : resolveThemeColor('--color-background', '#FFFFFF');
+      ctx.strokeStyle = isDark
+        ? resolveThemeColor('--color-surface-dark-alt', '#1F2937')
+        : resolveThemeColor('--color-background', '#FFFFFF');
       ctx.lineWidth = 2;
       ctx.stroke();
 
       // Draw node label
       if (showLabels) {
-        ctx.fillStyle = isDark ? resolveThemeColor('--color-text-primary', '#E5E7EB') : resolveThemeColor('--color-surface-dark-alt', '#1F2937');
+        ctx.fillStyle = isDark
+          ? resolveThemeColor('--color-text-primary', '#E5E7EB')
+          : resolveThemeColor('--color-surface-dark-alt', '#1F2937');
         ctx.font = 'bold 12px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(node.label, x, y + size + 16);
 
-        ctx.fillStyle = isDark ? resolveThemeColor('--color-text-muted-light', '#9CA3AF') : resolveThemeColor('--color-text-muted', '#6B7280');
+        ctx.fillStyle = isDark
+          ? resolveThemeColor('--color-text-muted-light', '#9CA3AF')
+          : resolveThemeColor('--color-text-muted', '#6B7280');
         ctx.font = '10px Inter, sans-serif';
         ctx.fillText(node.type.toUpperCase(), x, y + size + 28);
       }

@@ -33904,5 +33904,290 @@
     "tenant_id": "tenant-1",
     "timestamp": "2026-03-24T13:34:44.254130+00:00",
     "trace_id": "plugin_manager:33b4b7a30bd242029aa5f73c311ce86f"
+  },
+  {
+    "action": "disable",
+    "details": {
+      "mutation_transaction": {
+        "action": "disable",
+        "plugin_name": "demo-plugin",
+        "project_id": "project-1",
+        "requirement": null,
+        "source": "plugin_manager",
+        "status": "plan",
+        "tenant_id": "tenant-1",
+        "timeline": [
+          {
+            "details": {},
+            "phase": "plan",
+            "timestamp": "2026-03-25T13:49:55.286816+00:00"
+          }
+        ],
+        "trace_id": "plugin_manager:a33b1975db964cd9a47276ce7f313a5a",
+        "transaction_id": "mutation:794650e9669a491ab9c81510a0c8e2e4"
+      },
+      "provenance": {
+        "added": [],
+        "after_count": 1,
+        "after_snapshot": [
+          {
+            "discovered": true,
+            "enabled": true,
+            "kind": null,
+            "manifest_id": null,
+            "name": "demo-plugin",
+            "package": null,
+            "providers": [],
+            "requirement": null,
+            "skills": [],
+            "source": null,
+            "version": null
+          }
+        ],
+        "before_count": 1,
+        "changed": [],
+        "removed": []
+      }
+    },
+    "dry_run": false,
+    "message": "plugin disabled",
+    "mutation_fingerprint": "tool=plugin_manager|action=disable|plugin_name=demo-plugin|tenant_id=tenant-1|project_id=project-1",
+    "plugin_name": "demo-plugin",
+    "project_id": "project-1",
+    "requirement": null,
+    "rollback": {
+      "action": "enable",
+      "available": true,
+      "inputs": {
+        "plugin_name": "demo-plugin"
+      },
+      "reason": "inverse disable by enabling the same plugin",
+      "source_action": "disable"
+    },
+    "source": "plugin_manager",
+    "status": "applied",
+    "tenant_id": "tenant-1",
+    "timestamp": "2026-03-25T13:49:55.295030+00:00",
+    "trace_id": "plugin_manager:a33b1975db964cd9a47276ce7f313a5a"
+  },
+  {
+    "action": "disable",
+    "details": {
+      "mutation_transaction": {
+        "action": "disable",
+        "plugin_name": "demo-plugin",
+        "project_id": "project-1",
+        "requirement": null,
+        "source": "plugin_manager",
+        "status": "plan",
+        "tenant_id": "tenant-1",
+        "timeline": [
+          {
+            "details": {},
+            "phase": "plan",
+            "timestamp": "2026-03-25T13:49:55.313530+00:00"
+          }
+        ],
+        "trace_id": "plugin_manager:a71d9cf35da44f5e94d3243a08ace9d8",
+        "transaction_id": "mutation:6fb1cc21b26d44c3b998379d4bc3c84f"
+      },
+      "provenance": {
+        "added": [],
+        "after_count": 1,
+        "after_snapshot": [
+          {
+            "discovered": true,
+            "enabled": false,
+            "kind": null,
+            "manifest_id": null,
+            "name": "demo-plugin",
+            "package": null,
+            "providers": [
+              "base"
+            ],
+            "requirement": null,
+            "skills": [],
+            "source": null,
+            "version": null
+          }
+        ],
+        "before_count": 1,
+        "changed": [
+          "demo-plugin"
+        ],
+        "removed": []
+      }
+    },
+    "dry_run": false,
+    "message": "plugin disabled",
+    "mutation_fingerprint": "tool=plugin_manager|action=disable|plugin_name=demo-plugin|tenant_id=tenant-1|project_id=project-1",
+    "plugin_name": "demo-plugin",
+    "project_id": "project-1",
+    "requirement": null,
+    "rollback": {
+      "action": "enable",
+      "available": true,
+      "inputs": {
+        "plugin_name": "demo-plugin"
+      },
+      "reason": "inverse disable by enabling the same plugin",
+      "source_action": "disable"
+    },
+    "source": "plugin_manager",
+    "status": "applied",
+    "tenant_id": "tenant-1",
+    "timestamp": "2026-03-25T13:49:55.320430+00:00",
+    "trace_id": "plugin_manager:a71d9cf35da44f5e94d3243a08ace9d8"
+  },
+  {
+    "action": "uninstall",
+    "details": {
+      "mutation_transaction": {
+        "action": "uninstall",
+        "plugin_name": "demo-plugin",
+        "project_id": "project-1",
+        "requirement": null,
+        "source": "plugin_manager",
+        "status": "plan",
+        "tenant_id": "tenant-1",
+        "timeline": [
+          {
+            "details": {},
+            "phase": "plan",
+            "timestamp": "2026-03-25T13:49:55.344083+00:00"
+          }
+        ],
+        "trace_id": "plugin_manager:64ae9460527e4b349f9241067c47a7f2",
+        "transaction_id": "mutation:12bc226b5ac745e1820ca5168ddd0a81"
+      },
+      "provenance": {
+        "added": [],
+        "after_count": 1,
+        "after_snapshot": [
+          {
+            "discovered": true,
+            "enabled": true,
+            "kind": null,
+            "manifest_id": null,
+            "name": "demo-plugin",
+            "package": null,
+            "providers": [],
+            "requirement": null,
+            "skills": [],
+            "source": null,
+            "version": null
+          }
+        ],
+        "before_count": 1,
+        "changed": [],
+        "removed": []
+      }
+    },
+    "dry_run": false,
+    "message": "plugin uninstalled",
+    "mutation_fingerprint": "tool=plugin_manager|action=uninstall|plugin_name=demo-plugin|tenant_id=tenant-1|project_id=project-1",
+    "plugin_name": "demo-plugin",
+    "project_id": "project-1",
+    "requirement": null,
+    "rollback": {
+      "action": null,
+      "available": false,
+      "inputs": {},
+      "reason": "missing package requirement for reinstall rollback",
+      "source_action": "uninstall"
+    },
+    "source": "plugin_manager",
+    "status": "applied",
+    "tenant_id": "tenant-1",
+    "timestamp": "2026-03-25T13:49:55.351088+00:00",
+    "trace_id": "plugin_manager:64ae9460527e4b349f9241067c47a7f2"
+  },
+  {
+    "action": "reload",
+    "details": {
+      "mutation_transaction": {
+        "action": "reload",
+        "plugin_name": null,
+        "project_id": "project-1",
+        "requirement": null,
+        "source": "plugin_manager",
+        "status": "dry_run",
+        "tenant_id": "tenant-1",
+        "timeline": [
+          {
+            "details": {},
+            "phase": "plan",
+            "timestamp": "2026-03-25T13:49:55.369911+00:00"
+          },
+          {
+            "details": {
+              "reload_plan": {
+                "action": "reload",
+                "diagnostics_count": 0,
+                "dry_run": true,
+                "inventory": {
+                  "discovered_plugins": 0,
+                  "enabled_plugins": 1,
+                  "total_plugins": 1
+                },
+                "plugin_name": null,
+                "reason": "manual reload request",
+                "steps": [
+                  "validate-action:reload",
+                  "skip-runtime-mutation"
+                ],
+                "trigger_scope": "tenant"
+              },
+              "rollback": {
+                "action": "reload",
+                "available": true,
+                "inputs": {},
+                "reason": "re-apply runtime discovery reload",
+                "source_action": "reload"
+              }
+            },
+            "phase": "dry_run",
+            "timestamp": "2026-03-25T13:49:55.374574+00:00"
+          }
+        ],
+        "trace_id": "plugin_manager:51258a8754de42a783de1437a94dd6c6",
+        "transaction_id": "mutation:41b204c52731400f99bcf6125f90705c"
+      },
+      "reload_plan": {
+        "action": "reload",
+        "diagnostics_count": 0,
+        "dry_run": true,
+        "inventory": {
+          "discovered_plugins": 0,
+          "enabled_plugins": 1,
+          "total_plugins": 1
+        },
+        "plugin_name": null,
+        "reason": "manual reload request",
+        "steps": [
+          "validate-action:reload",
+          "skip-runtime-mutation"
+        ],
+        "trigger_scope": "tenant"
+      }
+    },
+    "dry_run": true,
+    "message": "dry_run",
+    "mutation_fingerprint": "tool=plugin_manager|action=reload|tenant_id=tenant-1|project_id=project-1",
+    "plugin_name": null,
+    "project_id": "project-1",
+    "requirement": null,
+    "rollback": {
+      "action": "reload",
+      "available": true,
+      "inputs": {},
+      "reason": "re-apply runtime discovery reload",
+      "source_action": "reload"
+    },
+    "source": "plugin_manager",
+    "status": "dry_run",
+    "tenant_id": "tenant-1",
+    "timestamp": "2026-03-25T13:49:55.377786+00:00",
+    "trace_id": "plugin_manager:51258a8754de42a783de1437a94dd6c6"
   }
 ]

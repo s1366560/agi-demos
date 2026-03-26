@@ -123,7 +123,10 @@ export const MentionPopover = memo(
           <div ref={listRef} className="overflow-y-auto max-h-48">
             {loading ? (
               <div className="flex items-center justify-center py-6">
-                <Loader2 size={16} className="animate-spin motion-reduce:animate-none text-slate-400" />
+                <Loader2
+                  size={16}
+                  className="animate-spin motion-reduce:animate-none text-slate-400"
+                />
               </div>
             ) : items.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-slate-400">

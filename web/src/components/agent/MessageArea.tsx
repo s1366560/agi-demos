@@ -547,7 +547,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 </span>
               </button>
               {!pinnedCollapsed && (
-                <div id={pinnedSectionId} className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
+                <div
+                  id={pinnedSectionId}
+                  className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto"
+                >
                   {pinnedEvents.map((event) => {
                     const content =
                       ('content' in event ? (event as { content: string }).content : '') ||
@@ -562,13 +565,15 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           onClick={() => {
                             const targetId = event.id;
                             const el = Array.from(
-                              containerRef.current?.querySelectorAll<HTMLElement>('[data-msg-id]') ??
-                                []
+                              containerRef.current?.querySelectorAll<HTMLElement>(
+                                '[data-msg-id]'
+                              ) ?? []
                             ).find((node) => node.getAttribute('data-msg-id') === targetId);
                             if (el) {
                               el.scrollIntoView({
                                 block: 'center',
-                                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                                behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
+                                  .matches
                                   ? 'auto'
                                   : 'smooth',
                               });
@@ -642,8 +647,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                             <ExecutionTimeline
                               steps={item.steps}
                               isStreaming={
-                                isStreaming &&
-                                item.startIndex + item.steps.length >= timelineLen
+                                isStreaming && item.startIndex + item.steps.length >= timelineLen
                               }
                               defaultCollapsed={virtualRow.index !== lastTimelineGroupIndex}
                             />

@@ -325,7 +325,10 @@ export const McpServerTabV2: React.FC = () => {
                 className={`inline-flex items-center justify-center px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200`}
                 aria-label="refresh"
               >
-                <RefreshCw size={18} className={isLoading ? 'animate-spin motion-reduce:animate-none' : ''} />
+                <RefreshCw
+                  size={18}
+                  className={isLoading ? 'animate-spin motion-reduce:animate-none' : ''}
+                />
               </button>
             </Tooltip>
             <Tooltip title="与沙盒协调运行时">
@@ -334,7 +337,10 @@ export const McpServerTabV2: React.FC = () => {
                 disabled={isReconciling || !currentProject?.id}
                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200`}
               >
-                <RefreshCw size={16} className={isReconciling ? 'animate-spin motion-reduce:animate-none' : ''} />
+                <RefreshCw
+                  size={16}
+                  className={isReconciling ? 'animate-spin motion-reduce:animate-none' : ''}
+                />
                 <span className="text-xs font-medium">协调</span>
               </button>
             </Tooltip>

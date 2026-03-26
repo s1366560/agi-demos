@@ -229,7 +229,9 @@ const TaskDashboardInner: React.FC<{
             disabled={refreshing}
             className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+            <RefreshCw
+              className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+            />
             {t('tenant.tasks.refresh')}
           </button>
           <button className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors">
@@ -462,7 +464,9 @@ export const TaskDashboard: React.FC = () => {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    queueMicrotask(() => { setIsClient(true); });
+    queueMicrotask(() => {
+      setIsClient(true);
+    });
   }, []);
 
   if (!isClient) {

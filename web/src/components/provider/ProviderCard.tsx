@@ -261,7 +261,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               <MaterialIcon
                 name={isResettingCircuitBreaker ? 'progress_activity' : 'refresh'}
                 size={16}
-                className={isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : ''}
+                className={
+                  isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : ''
+                }
               />
               Reset
             </button>

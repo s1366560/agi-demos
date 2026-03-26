@@ -60,7 +60,9 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
 
     if (currentProjectId && currentPath.includes(`/project/${currentProjectId}`)) {
       // If we are already in a project context, preserve the sub-path
-      const subPath = currentPath.substring(currentPath.indexOf(`/project/${currentProjectId}`) + `/project/${currentProjectId}`.length);
+      const subPath = currentPath.substring(
+        currentPath.indexOf(`/project/${currentProjectId}`) + `/project/${currentProjectId}`.length
+      );
       navigate(`${tenantBasePath}/project/${project.id}${subPath}`);
     } else {
       // Default to overview

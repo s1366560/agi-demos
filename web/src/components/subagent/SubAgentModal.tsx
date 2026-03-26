@@ -750,7 +750,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 min={0}
                 max={32}
                 value={spawnPolicy.max_depth}
-                onChange={(v) => { setSpawnPolicy({ ...spawnPolicy, max_depth: v ?? 2 }); }}
+                onChange={(v) => {
+                  setSpawnPolicy({ ...spawnPolicy, max_depth: v ?? 2 });
+                }}
                 className="w-full"
               />
               <span className="text-xs text-slate-500">
@@ -763,7 +765,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 min={1}
                 max={32}
                 value={spawnPolicy.max_active_runs}
-                onChange={(v) => { setSpawnPolicy({ ...spawnPolicy, max_active_runs: v ?? 16 }); }}
+                onChange={(v) => {
+                  setSpawnPolicy({ ...spawnPolicy, max_active_runs: v ?? 16 });
+                }}
                 className="w-full"
               />
               <span className="text-xs text-slate-500">
@@ -781,16 +785,13 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 min={1}
                 max={16}
                 value={spawnPolicy.max_children_per_requester}
-                onChange={(v) =>
-                  { setSpawnPolicy({ ...spawnPolicy, max_children_per_requester: v ?? 8 }); }
-                }
+                onChange={(v) => {
+                  setSpawnPolicy({ ...spawnPolicy, max_children_per_requester: v ?? 8 });
+                }}
                 className="w-full"
               />
               <span className="text-xs text-slate-500">
-                {t(
-                  'tenant.subagents.modal.maxChildrenHint',
-                  'Per-parent cap on active children'
-                )}
+                {t('tenant.subagents.modal.maxChildrenHint', 'Per-parent cap on active children')}
               </span>
             </Form.Item>
           </div>
@@ -803,9 +804,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 'Select SubAgents that can spawn this one (empty = all)'
               )}
               value={spawnPolicy.allowed_subagents || []}
-              onChange={(v) =>
-                { setSpawnPolicy({ ...spawnPolicy, allowed_subagents: v.length > 0 ? v : null }); }
-              }
+              onChange={(v) => {
+                setSpawnPolicy({ ...spawnPolicy, allowed_subagents: v.length > 0 ? v : null });
+              }}
               filterOption={(input, option) =>
                 (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
               }
@@ -837,7 +838,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           <Form.Item label={t('tenant.subagents.modal.precedence', 'Precedence')}>
             <Radio.Group
               value={toolPolicy.precedence}
-              onChange={(e) => { setToolPolicy({ ...toolPolicy, precedence: e.target.value }); }}
+              onChange={(e) => {
+                setToolPolicy({ ...toolPolicy, precedence: e.target.value });
+              }}
             >
               <Radio.Button value="deny_first">
                 {t('tenant.subagents.modal.denyFirst', 'Deny First')}
@@ -868,7 +871,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                   'Tools to explicitly allow'
                 )}
                 value={toolPolicy.allow}
-                onChange={(v) => { setToolPolicy({ ...toolPolicy, allow: v }); }}
+                onChange={(v) => {
+                  setToolPolicy({ ...toolPolicy, allow: v });
+                }}
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
@@ -891,7 +896,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                   'Tools to explicitly deny'
                 )}
                 value={toolPolicy.deny}
-                onChange={(v) => { setToolPolicy({ ...toolPolicy, deny: v }); }}
+                onChange={(v) => {
+                  setToolPolicy({ ...toolPolicy, deny: v });
+                }}
                 filterOption={(input, option) =>
                   (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
                 }
@@ -945,15 +952,19 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             </p>
           </div>
 
-          <Form.Item label={t('tenant.subagents.modal.identityDescription', 'Identity Description')}>
+          <Form.Item
+            label={t('tenant.subagents.modal.identityDescription', 'Identity Description')}
+          >
             <TextArea
               rows={3}
               placeholder={t(
                 'tenant.subagents.modal.identityDescriptionPlaceholder',
-                'Describe this SubAgent\'s role and personality when spawning child agents...'
+                "Describe this SubAgent's role and personality when spawning child agents..."
               )}
               value={identityDescription}
-              onChange={(e) => { setIdentityDescription(e.target.value); }}
+              onChange={(e) => {
+                setIdentityDescription(e.target.value);
+              }}
             />
           </Form.Item>
 

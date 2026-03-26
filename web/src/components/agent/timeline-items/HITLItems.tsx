@@ -421,10 +421,16 @@ export const EnvVarRequestedItem = memo(
                     const fieldId = `${fieldIds}-${field.name}`;
                     return (
                       <div key={field.name}>
-                        <label htmlFor={fieldId} className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        <label
+                          htmlFor={fieldId}
+                          className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+                        >
                           {field.label}
                           {field.required && (
-                            <span className="text-red-500 ml-1" aria-label={t('common.forms.required')}>
+                            <span
+                              className="text-red-500 ml-1"
+                              aria-label={t('common.forms.required')}
+                            >
                               *
                             </span>
                           )}
@@ -438,7 +444,10 @@ export const EnvVarRequestedItem = memo(
                           <textarea
                             id={fieldId}
                             name={field.name}
-                            placeholder={field.placeholder || t('agent.hitl.validation.enter_field', { field: field.label })}
+                            placeholder={
+                              field.placeholder ||
+                              t('agent.hitl.validation.enter_field', { field: field.label })
+                            }
                             value={values[field.name] || field.default_value || ''}
                             onChange={(e) => {
                               handleChange(field.name, e.target.value);
@@ -452,7 +461,10 @@ export const EnvVarRequestedItem = memo(
                             id={fieldId}
                             name={field.name}
                             type={field.input_type === 'password' ? 'password' : 'text'}
-                            placeholder={field.placeholder || t('agent.hitl.validation.enter_field', { field: field.label })}
+                            placeholder={
+                              field.placeholder ||
+                              t('agent.hitl.validation.enter_field', { field: field.label })
+                            }
                             value={values[field.name] || field.default_value || ''}
                             onChange={(e) => {
                               handleChange(field.name, e.target.value);

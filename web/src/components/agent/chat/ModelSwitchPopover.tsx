@@ -26,207 +26,208 @@ const getDefaultProvider = (providers: ProviderConfig[]): ProviderConfig | undef
 
 export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
   ({ conversationId, projectId, disabled }) => {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-  const { providers, modelCatalog } = useProviderStore(
-    useShallow((s) => ({
-      providers: s.providers,
-      modelCatalog: s.modelCatalog,
-    }))
-  );
+    const { providers, modelCatalog } = useProviderStore(
+      useShallow((s) => ({
+        providers: s.providers,
+        modelCatalog: s.modelCatalog,
+      }))
+    );
 
-  const modelOverride = useAgentV3Store((state) => {
-    if (!conversationId) return null;
-    const convState = state.conversationStates.get(conversationId);
-    const ctx = convState?.appModelContext as Record<string, unknown> | null;
-    const raw = ctx?.llm_model_override;
-    if (typeof raw !== 'string') return null;
-    const trimmed = raw.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  });
-
-  const defaultProvider = useMemo(() => getDefaultProvider(providers), [providers]);
-  const defaultModel = defaultProvider?.llm_model?.trim() || null;
-  const activeProviderHints = useMemo(() => {
-    const hints = new Set<string>();
-    for (const p of providers) {
-      if (!p.is_active) continue;
-      const normalized = normalizeProviderType(p.provider_type);
-      if (normalized) hints.add(normalized);
-    }
-    return hints;
-  }, [providers]);
-  const overrideModelMeta = useMemo(
-    () => (modelOverride ? findModelInCatalog(modelOverride, modelCatalog) : null),
-    [modelCatalog, modelOverride]
-  );
-
-  const visibleModels = useMemo(() => {
-    let filtered = modelCatalog;
-    if (activeProviderHints.size > 0 && modelCatalog.length > 0) {
-      const providerFiltered = modelCatalog.filter((m) =>
-        activeProviderHints.has((m.provider || '').toLowerCase())
-      );
-      if (providerFiltered.length > 0) {
-        filtered = providerFiltered;
-      }
-    }
-
-    const names = new Set<string>();
-    filtered.forEach((m) => {
-      const name = m.name.trim();
-      if (name) names.add(name);
+    const modelOverride = useAgentV3Store((state) => {
+      if (!conversationId) return null;
+      const convState = state.conversationStates.get(conversationId);
+      const ctx = convState?.appModelContext as Record<string, unknown> | null;
+      const raw = ctx?.llm_model_override;
+      if (typeof raw !== 'string') return null;
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : null;
     });
-    if (defaultModel) names.add(defaultModel);
 
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [activeProviderHints, defaultModel, modelCatalog]);
+    const defaultProvider = useMemo(() => getDefaultProvider(providers), [providers]);
+    const defaultModel = defaultProvider?.llm_model?.trim() || null;
+    const activeProviderHints = useMemo(() => {
+      const hints = new Set<string>();
+      for (const p of providers) {
+        if (!p.is_active) continue;
+        const normalized = normalizeProviderType(p.provider_type);
+        if (normalized) hints.add(normalized);
+      }
+      return hints;
+    }, [providers]);
+    const overrideModelMeta = useMemo(
+      () => (modelOverride ? findModelInCatalog(modelOverride, modelCatalog) : null),
+      [modelCatalog, modelOverride]
+    );
 
-  const catalogLoaded = modelCatalog.length > 0;
-  const isOverrideValid = Boolean(
-    modelOverride &&
+    const visibleModels = useMemo(() => {
+      let filtered = modelCatalog;
+      if (activeProviderHints.size > 0 && modelCatalog.length > 0) {
+        const providerFiltered = modelCatalog.filter((m) =>
+          activeProviderHints.has((m.provider || '').toLowerCase())
+        );
+        if (providerFiltered.length > 0) {
+          filtered = providerFiltered;
+        }
+      }
+
+      const names = new Set<string>();
+      filtered.forEach((m) => {
+        const name = m.name.trim();
+        if (name) names.add(name);
+      });
+      if (defaultModel) names.add(defaultModel);
+
+      return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }, [activeProviderHints, defaultModel, modelCatalog]);
+
+    const catalogLoaded = modelCatalog.length > 0;
+    const isOverrideValid = Boolean(
+      modelOverride &&
       (!catalogLoaded ||
         (overrideModelMeta &&
           (activeProviderHints.size === 0 ||
             activeProviderHints.has((overrideModelMeta.provider || '').toLowerCase()))))
-  );
-  const activeModelOverride = isOverrideValid ? modelOverride : null;
-  const effectiveModel = activeModelOverride || defaultModel;
+    );
+    const activeModelOverride = isOverrideValid ? modelOverride : null;
+    const effectiveModel = activeModelOverride || defaultModel;
 
-  const ensureModelDataLoaded = useCallback(async () => {
-    const state = useProviderStore.getState();
+    const ensureModelDataLoaded = useCallback(async () => {
+      const state = useProviderStore.getState();
 
-    if (state.providers.length === 0) {
-      await state.fetchProviders();
-    }
+      if (state.providers.length === 0) {
+        await state.fetchProviders();
+      }
 
-    const catalog = useProviderStore.getState().modelCatalog;
-    if (catalog.length === 0) {
-      await useProviderStore.getState().fetchModelCatalog();
-    }
-  }, []);
+      const catalog = useProviderStore.getState().modelCatalog;
+      if (catalog.length === 0) {
+        await useProviderStore.getState().fetchModelCatalog();
+      }
+    }, []);
 
-  const handleOpenChange = useCallback(
-    (visible: boolean) => {
-      setOpen(visible);
-      if (!visible) return;
+    const handleOpenChange = useCallback(
+      (visible: boolean) => {
+        setOpen(visible);
+        if (!visible) return;
 
-      setLoading(true);
-      void ensureModelDataLoaded().finally(() => {
-        setLoading(false);
-      });
-    },
-    [ensureModelDataLoaded]
-  );
+        setLoading(true);
+        void ensureModelDataLoaded().finally(() => {
+          setLoading(false);
+        });
+      },
+      [ensureModelDataLoaded]
+    );
 
-  useEffect(() => {
-    if (loading || !conversationId || !modelOverride || !catalogLoaded) return;
-    if (!isOverrideValid) {
-      useAgentV3Store.getState().setLlmModelOverride(conversationId, null);
-      return;
-    }
-    if (overrideModelMeta && overrideModelMeta.name !== modelOverride) {
-      useAgentV3Store.getState().setLlmModelOverride(conversationId, overrideModelMeta.name);
-    }
-  }, [catalogLoaded, conversationId, isOverrideValid, loading, modelOverride, overrideModelMeta]);
+    useEffect(() => {
+      if (loading || !conversationId || !modelOverride || !catalogLoaded) return;
+      if (!isOverrideValid) {
+        useAgentV3Store.getState().setLlmModelOverride(conversationId, null);
+        return;
+      }
+      if (overrideModelMeta && overrideModelMeta.name !== modelOverride) {
+        useAgentV3Store.getState().setLlmModelOverride(conversationId, overrideModelMeta.name);
+      }
+    }, [catalogLoaded, conversationId, isOverrideValid, loading, modelOverride, overrideModelMeta]);
 
-  const handleSelect = useCallback(
-    (value: string | undefined) => {
+    const handleSelect = useCallback(
+      (value: string | undefined) => {
+        if (!conversationId) return;
+        const override = value ?? null;
+        useAgentV3Store.getState().setLlmModelOverride(conversationId, override);
+        if (projectId) {
+          agentService
+            .updateConversationConfig(conversationId, projectId, {
+              llm_model_override: override,
+            })
+            .catch(console.error);
+        }
+      },
+      [conversationId, projectId]
+    );
+
+    const handleReset = useCallback(() => {
       if (!conversationId) return;
-      const override = value ?? null;
-      useAgentV3Store.getState().setLlmModelOverride(conversationId, override);
+      useAgentV3Store.getState().setLlmModelOverride(conversationId, null);
       if (projectId) {
         agentService
           .updateConversationConfig(conversationId, projectId, {
-            llm_model_override: override,
+            llm_model_override: null,
           })
           .catch(console.error);
       }
-    },
-    [conversationId, projectId]
-  );
+    }, [conversationId, projectId]);
 
-  const handleReset = useCallback(() => {
-    if (!conversationId) return;
-    useAgentV3Store.getState().setLlmModelOverride(conversationId, null);
-    if (projectId) {
-      agentService
-        .updateConversationConfig(conversationId, projectId, {
-          llm_model_override: null,
-        })
-        .catch(console.error);
-    }
-  }, [conversationId, projectId]);
+    const isOverrideActive = Boolean(activeModelOverride);
 
-  const isOverrideActive = Boolean(activeModelOverride);
-
-  const content = (
-    <div className="w-[320px] flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col">
-          <span className="font-bold text-slate-800 dark:text-slate-100">Model</span>
-          {effectiveModel && (
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
-              {effectiveModel}
-            </span>
+    const content = (
+      <div className="w-[320px] flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="font-bold text-slate-800 dark:text-slate-100">Model</span>
+            {effectiveModel && (
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
+                {effectiveModel}
+              </span>
+            )}
+          </div>
+          {isOverrideActive && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+            >
+              Reset
+            </button>
           )}
         </div>
-        {isOverrideActive && (
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-          >
-            Reset
-          </button>
-        )}
+
+        <Select
+          showSearch
+          allowClear
+          loading={loading}
+          value={activeModelOverride || undefined}
+          placeholder={defaultModel ? `Default: ${defaultModel}` : 'Select a model'}
+          options={visibleModels.map((name) => ({ value: name, label: name }))}
+          onChange={(value) => {
+            handleSelect(value);
+          }}
+          notFoundContent={loading ? 'Loading models...' : 'No models available'}
+        />
       </div>
+    );
 
-      <Select
-        showSearch
-        allowClear
-        loading={loading}
-        value={activeModelOverride || undefined}
-        placeholder={defaultModel ? `Default: ${defaultModel}` : 'Select a model'}
-        options={visibleModels.map((name) => ({ value: name, label: name }))}
-        onChange={(value) => {
-          handleSelect(value);
-        }}
-        notFoundContent={loading ? 'Loading models...' : 'No models available'}
-      />
-    </div>
-  );
-
-  return (
-    <Popover
-      content={content}
-      trigger="click"
-      open={open}
-      onOpenChange={handleOpenChange}
-      placement="top"
-      styles={{ root: { width: 340 } }}
-      arrow={false}
-      destroyOnHidden
-    >
-      <div>
-        <LazyTooltip title="Switch Model">
-          <LazyButton
-            type="text"
-            size="small"
-            icon={<Bot size={18} />}
-            disabled={disabled}
-            className={`
+    return (
+      <Popover
+        content={content}
+        trigger="click"
+        open={open}
+        onOpenChange={handleOpenChange}
+        placement="top"
+        styles={{ root: { width: 340 } }}
+        arrow={false}
+        destroyOnHidden
+      >
+        <div>
+          <LazyTooltip title="Switch Model">
+            <LazyButton
+              type="text"
+              size="small"
+              icon={<Bot size={18} />}
+              disabled={disabled}
+              className={`
               text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
               hover:bg-slate-100 dark:hover:bg-slate-700/50
               rounded-lg h-8 w-8 flex items-center justify-center
               ${isOverrideActive ? 'text-primary bg-primary/5' : ''}
             `}
-          />
-        </LazyTooltip>
-      </div>
-    </Popover>
-  );
-});
+            />
+          </LazyTooltip>
+        </div>
+      </Popover>
+    );
+  }
+);
 
 ModelSwitchPopover.displayName = 'ModelSwitchPopover';

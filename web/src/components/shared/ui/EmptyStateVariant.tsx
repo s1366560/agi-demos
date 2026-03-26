@@ -260,9 +260,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
 
       {/* Context Content */}
       {contextContent && (
-        <div className="space-y-4 mb-6 max-w-2xl w-full relative z-10">
-          {contextContent}
-        </div>
+        <div className="space-y-4 mb-6 max-w-2xl w-full relative z-10">{contextContent}</div>
       )}
 
       {/* Suggestion Cards */}
@@ -274,7 +272,9 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
               <button
                 key={card.id}
                 type="button"
-                onClick={() => { handleCardClick(card); }}
+                onClick={() => {
+                  handleCardClick(card);
+                }}
                 className={`
                   group relative p-4 rounded-xl
                   bg-white dark:bg-slate-800/50
@@ -320,9 +320,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
       )}
 
       {/* Footer */}
-      {footer && (
-        <div className="mt-10 text-center relative z-10">{footer}</div>
-      )}
+      {footer && <div className="mt-10 text-center relative z-10">{footer}</div>}
     </div>
   );
 };

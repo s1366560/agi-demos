@@ -95,9 +95,14 @@ export const StatusBadge: React.FC<StatusBadgeProps> = memo(
         role="status"
       >
         {showAnimation ? (
-          <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse motion-reduce:animate-none`} />
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse motion-reduce:animate-none`}
+          />
         ) : (
-          <Icon size={size === 'sm' ? 11 : 14} className={showAnimation ? 'animate-spin motion-reduce:animate-none' : ''} />
+          <Icon
+            size={size === 'sm' ? 11 : 14}
+            className={showAnimation ? 'animate-spin motion-reduce:animate-none' : ''}
+          />
         )}
         <span>{label ?? status}</span>
         {duration !== undefined && status === 'success' && (

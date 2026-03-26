@@ -120,7 +120,11 @@ export function TopNavigation({
           {/* Notifications */}
           <button
             className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
-            aria-label={notificationCount > 0 ? `Notifications (${notificationCount} unread)` : 'Notifications'}
+            aria-label={
+              notificationCount > 0
+                ? `Notifications (${notificationCount} unread)`
+                : 'Notifications'
+            }
           >
             <MaterialIcon name="notifications" size={20} />
             {notificationCount > 0 && (

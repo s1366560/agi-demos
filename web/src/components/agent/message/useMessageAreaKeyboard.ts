@@ -12,7 +12,7 @@ export interface UseMessageAreaKeyboardReturn {
 }
 
 export function useMessageAreaKeyboard(
-  params: UseMessageAreaKeyboardParams,
+  params: UseMessageAreaKeyboardParams
 ): UseMessageAreaKeyboardReturn {
   const { containerRef, groupedItems } = params;
 

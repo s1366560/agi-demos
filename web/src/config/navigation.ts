@@ -165,6 +165,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'users', icon: 'group', label: 'nav.users', path: '/users' },
         { id: 'analytics', icon: 'monitoring', label: 'nav.analytics', path: '/analytics' },
         { id: 'tasks', icon: 'task', label: 'nav.tasks', path: '/tasks' },
+        { id: 'workspaces', icon: 'group_work', label: 'Workspaces', path: '/workspaces' },
         { id: 'agents', icon: 'support_agent', label: 'nav.agents', path: '/agents' },
         { id: 'subagents', icon: 'smart_toy', label: 'nav.subagents', path: '/subagents' },
         { id: 'skills', icon: 'psychology', label: 'nav.skills', path: '/skills' },
@@ -317,6 +318,7 @@ const SCHEMA_TABS: TabItem[] = [
  */
 const PROJECT_HEADER_TABS: TabItem[] = [
   { id: 'overview', label: 'nav.overview', path: '' },
+  { id: 'workspaces', label: 'nav.workspaces', path: 'workspaces' },
   { id: 'memories', label: 'nav.memories', path: 'memories' },
   { id: 'entities', label: 'nav.entities', path: 'entities' },
   { id: 'communities', label: 'nav.communities', path: 'communities' },

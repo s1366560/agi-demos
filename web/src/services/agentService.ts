@@ -569,11 +569,7 @@ class AgentServiceImpl implements AgentService {
     }
   }
 
-  subscribe(
-    conversationId: string,
-    handler: AgentStreamHandler,
-    options?: SubscribeOptions
-  ): void {
+  subscribe(conversationId: string, handler: AgentStreamHandler, options?: SubscribeOptions): void {
     const alreadySubscribed = this.subscriptions.has(conversationId);
     const previousOptions = this.subscriptionOptions.get(conversationId);
     this.handlers.set(conversationId, handler);

@@ -102,7 +102,11 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
 
   const getStatusIcon = () => {
     if (isThought) {
-      return <BulbOutlined className={`text-amber-500 ${isRunning ? 'animate-pulse motion-reduce:animate-none' : ''}`} />;
+      return (
+        <BulbOutlined
+          className={`text-amber-500 ${isRunning ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+        />
+      );
     }
     switch (status) {
       case 'running':
@@ -375,7 +379,9 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
 
   const header = (
     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-      <BulbOutlined className={isActive ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''} />
+      <BulbOutlined
+        className={isActive ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''}
+      />
       <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-medium`}>
         {isActive ? 'Processing...' : 'Activity Timeline'}
       </span>

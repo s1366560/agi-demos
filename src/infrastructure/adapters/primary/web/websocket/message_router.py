@@ -130,10 +130,15 @@ def get_message_router() -> MessageRouter:
             SubscribeLifecycleStateHandler,
             SubscribeSandboxHandler,
             SubscribeStatusHandler,
+            SubscribeWorkspaceHandler,
             UnsubscribeHandler,
             UnsubscribeLifecycleStateHandler,
             UnsubscribeSandboxHandler,
             UnsubscribeStatusHandler,
+            UnsubscribeWorkspaceHandler,
+            WorkspaceHeartbeatHandler,
+            WorkspacePresenceJoinHandler,
+            WorkspacePresenceLeaveHandler,
         )
 
         _message_router = MessageRouter()
@@ -157,6 +162,13 @@ def get_message_router() -> MessageRouter:
                 # Sandbox
                 SubscribeSandboxHandler(),
                 UnsubscribeSandboxHandler(),
+                # Workspace
+                SubscribeWorkspaceHandler(),
+                UnsubscribeWorkspaceHandler(),
+                # Workspace Presence
+                WorkspacePresenceJoinHandler(),
+                WorkspacePresenceLeaveHandler(),
+                WorkspaceHeartbeatHandler(),
                 # HITL
                 ClarificationRespondHandler(),
                 DecisionRespondHandler(),

@@ -28,7 +28,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import {
@@ -65,9 +64,7 @@ interface StatusConfigEntry {
 /**
  * Status configuration for different sandbox states
  */
-function getStatusConfig(
-  t: TFunction,
-): Record<ProjectSandboxStatus | 'none', StatusConfigEntry> {
+function getStatusConfig(t: TFunction): Record<ProjectSandboxStatus | 'none', StatusConfigEntry> {
   return {
     none: {
       label: t('agent.sandbox.status.not_started', 'Not started'),
@@ -105,7 +102,10 @@ function getStatusConfig(
       icon: AlertCircle,
       color: 'text-orange-500',
       bgColor: 'bg-orange-100 dark:bg-orange-900/30',
-      description: t('agent.sandbox.status.unhealthy_desc', 'Sandbox is unhealthy, may need restart'),
+      description: t(
+        'agent.sandbox.status.unhealthy_desc',
+        'Sandbox is unhealthy, may need restart'
+      ),
       clickable: true,
     },
     stopped: {
@@ -121,7 +121,10 @@ function getStatusConfig(
       icon: Power,
       color: 'text-slate-400',
       bgColor: 'bg-slate-100 dark:bg-slate-800',
-      description: t('agent.sandbox.status.terminated_desc', 'Sandbox terminated, click to create new'),
+      description: t(
+        'agent.sandbox.status.terminated_desc',
+        'Sandbox terminated, click to create new'
+      ),
       clickable: true,
     },
     error: {
@@ -238,10 +241,15 @@ const MetricsPopover: FC<{
       <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-slate-600 dark:text-slate-400" />
-          <span className="font-medium text-slate-800 dark:text-slate-200">{t('agent.sandbox.label', 'Sandbox environment')}</span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">
+            {t('agent.sandbox.label', 'Sandbox environment')}
+          </span>
         </div>
         <div className={`flex items-center gap-1 text-xs ${config.color}`}>
-          <config.icon size={12} className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''} />
+          <config.icon
+            size={12}
+            className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''}
+          />
           <span>{config.label}</span>
         </div>
       </div>
@@ -267,7 +275,11 @@ const MetricsPopover: FC<{
                   {stats.cpu_percent.toFixed(1)}%
                 </AnimatedValue>
               </div>
-              <SmoothProgressBar percent={stats.cpu_percent} color={themeColors.info} highColor={themeColors.error} />
+              <SmoothProgressBar
+                percent={stats.cpu_percent}
+                color={themeColors.info}
+                highColor={themeColors.error}
+              />
             </div>
           </div>
 
@@ -276,7 +288,9 @@ const MetricsPopover: FC<{
             <HardDrive size={14} className="text-purple-500 shrink-0" />
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600 dark:text-slate-400">{t('agent.sandbox.metrics.memory', 'Memory')}</span>
+                <span className="text-slate-600 dark:text-slate-400">
+                  {t('agent.sandbox.metrics.memory', 'Memory')}
+                </span>
                 <AnimatedValue className="text-slate-800 dark:text-slate-200 font-mono tabular-nums">
                   {formatBytes(stats.memory_usage)} / {formatBytes(stats.memory_limit)}
                 </AnimatedValue>
@@ -295,7 +309,9 @@ const MetricsPopover: FC<{
               <Network size={14} className="text-emerald-500 shrink-0" />
               <div className="flex-1 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-600 dark:text-slate-400">{t('agent.sandbox.metrics.network', 'Network')}</span>
+                  <span className="text-slate-600 dark:text-slate-400">
+                    {t('agent.sandbox.metrics.network', 'Network')}
+                  </span>
                   <span className="text-slate-800 dark:text-slate-200">
                     ↓{formatBytes(stats.network_rx_bytes || 0)} / ↑
                     {formatBytes(stats.network_tx_bytes || 0)}
@@ -308,7 +324,8 @@ const MetricsPopover: FC<{
           {/* Processes & Uptime */}
           <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-slate-700">
             <div className="text-slate-500">
-              {t('agent.sandbox.metrics.processes', 'Processes')}: <span className="text-slate-700 dark:text-slate-300">{stats.pids}</span>
+              {t('agent.sandbox.metrics.processes', 'Processes')}:{' '}
+              <span className="text-slate-700 dark:text-slate-300">{stats.pids}</span>
             </div>
             {stats.uptime_seconds !== undefined && (
               <div className="text-slate-500">
@@ -330,7 +347,10 @@ const MetricsPopover: FC<{
           disabled={loading}
           className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
         >
-          <RefreshCw size={12} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} />
+          <RefreshCw
+            size={12}
+            className={loading ? 'animate-spin motion-reduce:animate-none' : ''}
+          />
           {t('agent.sandbox.action.refresh', 'Refresh')}
         </button>
         {sandbox.status === 'running' && (
@@ -497,8 +517,13 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       message.success(t('agent.sandbox.toast.started', 'Sandbox started'));
     } catch (error) {
       logger.error('[SandboxStatusIndicator] Failed to start sandbox:', error);
-      const errMsg = error instanceof Error ? error.message : t('agent.sandbox.toast.unknown_error', 'Unknown error');
-      message.error(`${t('agent.sandbox.toast.start_failed', 'Failed to start sandbox')}: ${errMsg}`);
+      const errMsg =
+        error instanceof Error
+          ? error.message
+          : t('agent.sandbox.toast.unknown_error', 'Unknown error');
+      message.error(
+        `${t('agent.sandbox.toast.start_failed', 'Failed to start sandbox')}: ${errMsg}`
+      );
     } finally {
       setStarting(false);
     }
@@ -715,7 +740,10 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   const indicatorContent = (
     <>
-      <StatusIcon size={12} className={config.animate || starting ? 'animate-spin motion-reduce:animate-none' : ''} />
+      <StatusIcon
+        size={12}
+        className={config.animate || starting ? 'animate-spin motion-reduce:animate-none' : ''}
+      />
       <span>{starting ? t('agent.sandbox.status.starting', 'Starting') : config.label}</span>
       {sandbox?.status === 'running' && <PlayCircle size={10} className="text-emerald-500" />}
     </>

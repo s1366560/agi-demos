@@ -1418,7 +1418,11 @@ const CanvasToolbar = memo<{
           className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
           title={t('agent.canvas.save', 'Save (Ctrl+S)')}
         >
-          {saving ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" /> : <Save size={14} />}
+          {saving ? (
+            <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Save size={14} />
+          )}
         </button>
       )}
       <button

@@ -14,11 +14,7 @@ export type { StatusBadgeProps, StatusBadgeStatus } from './StatusBadge';
 
 // State Display - Loading/Empty/Error states compound component
 export { StateDisplay } from './StateDisplay';
-export type {
-  StateLoadingProps,
-  StateEmptyProps,
-  StateErrorProps,
-} from './StateDisplay';
+export type { StateLoadingProps, StateEmptyProps, StateErrorProps } from './StateDisplay';
 
 // Empty State Variants - Flexible empty state with simple and cards variants
 export { EmptyStateVariant, EmptyStateSimple, EmptyStateCards } from './EmptyStateVariant';

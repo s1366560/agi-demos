@@ -31,11 +31,7 @@ export interface AgentService {
   ): Promise<PaginatedConversationsResponse>;
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null>;
   chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void>;
-  subscribe(
-    conversationId: string,
-    handler: AgentStreamHandler,
-    options?: SubscribeOptions
-  ): void;
+  subscribe(conversationId: string, handler: AgentStreamHandler, options?: SubscribeOptions): void;
   unsubscribe(conversationId: string): void;
   stopChat(conversationId: string): boolean;
   connect(): Promise<void>;

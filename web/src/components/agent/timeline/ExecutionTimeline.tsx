@@ -185,7 +185,10 @@ const TimelineStepItem = memo<{
             style={{ minWidth: '24px', minHeight: '24px' }}
           >
             {step.status === 'running' ? (
-              <Loader2 size={11} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+              <Loader2
+                size={11}
+                className="text-blue-500 animate-spin motion-reduce:animate-none"
+              />
             ) : (
               <span className="animate-fade-in flex items-center justify-center">
                 <Brain
@@ -269,7 +272,7 @@ const TimelineStepItem = memo<{
       {/* Content */}
       <div className="flex-1 pb-1.5 min-w-0 flex flex-col">
         <div
-            className={`
+          className={`
             w-full rounded-md border px-2.5 py-1.5 transition-colors duration-300 motion-reduce:transition-none
             ${statusBg}
             hover:shadow-sm

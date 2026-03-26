@@ -12,7 +12,6 @@ import { useAuthStore } from '@/stores/auth';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
-
 import { getAgentConfig } from '@/config/navigation';
 
 import { AppSidebar } from './AppSidebar';

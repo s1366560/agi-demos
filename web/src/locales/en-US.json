@@ -173,7 +173,8 @@
     "more": "More",
     "cronJobs": "Scheduled Tasks",
     "agentDefinitions": "Agent Definitions",
-    "agentBindings": "Agent Bindings"
+    "agentBindings": "Agent Bindings",
+    "workspaces": "Workspaces"
   },
   "user": {
     "profile": "Profile",

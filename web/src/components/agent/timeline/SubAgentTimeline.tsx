@@ -112,7 +112,9 @@ export const StatusIcon = memo<{ status: string; size?: number | undefined }>(
   ({ status, size = 14 }) => {
     switch (status) {
       case 'running':
-        return <Loader2 size={size} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
+        return (
+          <Loader2 size={size} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+        );
       case 'success':
         return <CheckCircle2 size={size} className="text-emerald-500" />;
       case 'error':
@@ -128,7 +130,9 @@ export const StatusIcon = memo<{ status: string; size?: number | undefined }>(
       case 'depth_limited':
         return <ShieldAlert size={size} className="text-orange-500" />;
       default:
-        return <Loader2 size={size} className="text-slate-400 animate-spin motion-reduce:animate-none" />;
+        return (
+          <Loader2 size={size} className="text-slate-400 animate-spin motion-reduce:animate-none" />
+        );
     }
   }
 );
@@ -237,7 +241,10 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
                   {isDone ? (
                     <StatusIcon status={isSuccess ? 'success' : 'error'} size={12} />
                   ) : (
-                    <Loader2 size={12} className="text-blue-400 animate-spin motion-reduce:animate-none" />
+                    <Loader2
+                      size={12}
+                      className="text-blue-400 animate-spin motion-reduce:animate-none"
+                    />
                   )}
                   <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
                     {task.subagent_name}
@@ -585,13 +592,10 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800/70">
               <Bot size={9} />
-              <span className="truncate max-w-[160px]">
-                {displayName}
-              </span>
+              <span className="truncate max-w-[160px]">{displayName}</span>
             </span>
             <span className="inline-flex items-center rounded-full px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800/70">
-              {group.events.length}{' '}
-              {t('agent.subagent.detail.timeline_title', 'Lifecycle Events')}
+              {group.events.length} {t('agent.subagent.detail.timeline_title', 'Lifecycle Events')}
             </span>
           </div>
         </div>

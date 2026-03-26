@@ -86,7 +86,10 @@ export const ThreadView = memo<ThreadViewProps>(
           <div className="mt-2 pl-3 border-l-2 border-primary/20">
             {loading ? (
               <div className="py-2">
-                <Loader2 size={14} className="animate-spin motion-reduce:animate-none text-slate-400" />
+                <Loader2
+                  size={14}
+                  className="animate-spin motion-reduce:animate-none text-slate-400"
+                />
               </div>
             ) : (
               <>

@@ -19,7 +19,6 @@ from src.domain.model.agent.subagent_result import SubAgentResult
 from src.domain.ports.agent.context_engine_port import ContextEnginePort
 from src.infrastructure.agent.context.default_context_engine import DefaultContextEngine
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

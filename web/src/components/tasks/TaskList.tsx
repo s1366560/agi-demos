@@ -128,7 +128,9 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               disabled={refreshing}
               className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             >
-              <RefreshCw className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+              <RefreshCw
+                className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+              />
             </button>
           </div>
         </div>

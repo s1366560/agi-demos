@@ -161,7 +161,9 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
     const header = useMemo(
       () => (
         <div className="flex items-center gap-2 text-slate-500">
-          <BulbOutlined className={isThinking ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''} />
+          <BulbOutlined
+            className={isThinking ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''}
+          />
           <span className="text-xs font-medium">
             {isThinking ? 'Thinking...' : 'Thought Process'}
           </span>

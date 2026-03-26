@@ -29,7 +29,7 @@ import { createWebSocketUrl } from './client/urlUtils';
 /**
  * Topic types supported by the unified event service
  */
-export type TopicType = 'agent' | 'sandbox' | 'system' | 'lifecycle';
+export type TopicType = 'agent' | 'sandbox' | 'workspace' | 'system' | 'lifecycle';
 
 /**
  * WebSocket connection status
@@ -369,6 +369,13 @@ class UnifiedEventServiceImpl {
   }
 
   /**
+   * Subscribe to workspace-scoped realtime events.
+   */
+  subscribeWorkspace(workspaceId: string, handler: EventHandler): () => void {
+    return this.subscribe(`workspace:${workspaceId}`, handler);
+  }
+
+  /**
    * Subscribe to lifecycle state events for a project
    */
   subscribeLifecycle(projectId: string, handler: EventHandler): () => void {
@@ -452,27 +459,22 @@ class UnifiedEventServiceImpl {
     }
 
     if (topic) {
-      const handlers = this.subscriptions.get(topic);
-      if (handlers && handlers.size > 0) {
-        const event: UnifiedEvent = {
-          type,
-          routing_key,
-          conversation_id,
-          project_id,
-          data,
-          event_id: message.event_id,
-          event_time_us: message.event_time_us,
-          event_counter: message.event_counter,
-          timestamp: message.timestamp,
-        };
+      const event: UnifiedEvent = {
+        type,
+        routing_key,
+        conversation_id,
+        project_id,
+        data,
+        event_id: message.event_id,
+        event_time_us: message.event_time_us,
+        event_counter: message.event_counter,
+        timestamp: message.timestamp,
+      };
 
-        handlers.forEach((handler) => {
-          try {
-            handler(event);
-          } catch (err) {
-            logger.error(`[UnifiedWS] Handler error for ${topic}:`, err);
-          }
-        });
+      this.dispatchToTopic(topic, event);
+      if (routing_key?.startsWith('workspace:')) {
+        const workspaceTopic = routing_key.split(':').slice(0, 2).join(':');
+        this.dispatchToTopic(workspaceTopic, event);
       }
     }
 
@@ -490,6 +492,20 @@ class UnifiedEventServiceImpl {
     }
   }
 
+  private dispatchToTopic(topic: string, event: UnifiedEvent): void {
+    const handlers = this.subscriptions.get(topic);
+    if (!handlers || handlers.size === 0) {
+      return;
+    }
+    handlers.forEach((handler) => {
+      try {
+        handler(event);
+      } catch (err) {
+        logger.error(`[UnifiedWS] Handler error for ${topic}:`, err);
+      }
+    });
+  }
+
   private sendSubscribeMessage(topicType: string, topic: string): void {
     const parts = topic.split(':');
     switch (topicType) {
@@ -503,6 +519,12 @@ class UnifiedEventServiceImpl {
         this.sendOrQueue({
           type: 'subscribe_sandbox',
           project_id: parts[1],
+        });
+        break;
+      case 'workspace':
+        this.sendOrQueue({
+          type: 'subscribe_workspace',
+          workspace_id: parts[1],
         });
         break;
       case 'lifecycle':
@@ -527,6 +549,12 @@ class UnifiedEventServiceImpl {
         this.sendOrQueue({
           type: 'unsubscribe_sandbox',
           project_id: parts[1],
+        });
+        break;
+      case 'workspace':
+        this.sendOrQueue({
+          type: 'unsubscribe_workspace',
+          workspace_id: parts[1],
         });
         break;
       case 'lifecycle':
@@ -612,6 +640,7 @@ class UnifiedEventServiceImpl {
     const topicsByType: Record<string, number> = {
       agent: 0,
       sandbox: 0,
+      workspace: 0,
       lifecycle: 0,
       system: 0,
     };

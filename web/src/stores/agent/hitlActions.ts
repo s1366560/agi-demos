@@ -78,10 +78,12 @@ async function ensureConnectedAndSubscribe(
     timelineToMessages: deps.timelineToMessages,
     tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
     thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
-    queueTimelineEvent: (event, stateUpdates) =>
-      { queueTimelineEventRaw(conversationId, event, stateUpdates); },
-    flushTimelineBufferSync: () =>
-      { flushTimelineBufferSyncRaw(conversationId); },
+    queueTimelineEvent: (event, stateUpdates) => {
+      queueTimelineEventRaw(conversationId, event, stateUpdates);
+    },
+    flushTimelineBufferSync: () => {
+      flushTimelineBufferSyncRaw(conversationId);
+    },
   });
 
   agentService.subscribe(conversationId, handler);

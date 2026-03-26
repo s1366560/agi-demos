@@ -38,6 +38,11 @@ vi.mock('@/stores/theme', () => ({
     selector({ theme: 'light', setTheme }),
 }));
 
+vi.mock('@/stores/project', () => ({
+  useProjectStore: (selector: (state: { currentProject: { id: string } | null }) => unknown) =>
+    selector({ currentProject: { id: 'project-from-store' } }),
+}));
+
 describe('TenantHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,6 +61,63 @@ describe('TenantHeader', () => {
     expect(screen.getByRole('link', { name: 'Agent Workspace' })).toHaveAttribute(
       'href',
       '/tenant/tenant-1/agent-workspace'
+    );
+  });
+
+  it('renders workspace entry in top navigation', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        projectId="project-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'Workspaces' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/project/project-1/workspaces'
+    );
+  });
+
+  it('uses tenant workspace path when route projectId is absent', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'Workspaces' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/workspaces'
+    );
+  });
+
+  it('falls back to /tenant base path when tenantId is empty', () => {
+    render(
+      <TenantHeader
+        tenantId=""
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'Agent Workspace' })).toHaveAttribute(
+      'href',
+      '/tenant/agent-workspace'
+    );
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/tenant/projects'
+    );
+    expect(screen.getByRole('link', { name: 'Workspaces' })).toHaveAttribute(
+      'href',
+      '/tenant/workspaces'
     );
   });
 });

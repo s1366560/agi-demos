@@ -28,7 +28,10 @@ const makeProvider = (overrides: Partial<ProviderConfig> = {}): ProviderConfig =
   ...overrides,
 });
 
-const makeModel = (name: string, overrides: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry => ({
+const makeModel = (
+  name: string,
+  overrides: Partial<ModelCatalogEntry> = {}
+): ModelCatalogEntry => ({
   name,
   provider: 'openai',
   family: 'test',
@@ -105,9 +108,7 @@ describe('useActiveModelCapabilities', () => {
       modelSearchResults: [],
     });
 
-    const { result } = renderHook(() =>
-      useActiveModelCapabilities('anthropic/claude-3-5-haiku')
-    );
+    const { result } = renderHook(() => useActiveModelCapabilities('anthropic/claude-3-5-haiku'));
     expect(result.current.model?.name).toBe('openai/gpt-4o-mini');
     expect(result.current.supportsAttachment).toBe(true);
   });

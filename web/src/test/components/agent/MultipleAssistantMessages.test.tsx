@@ -88,13 +88,7 @@ const mockTimeline: TimelineEvent[] = [
 
 describe('Multiple Assistant Messages Rendering', () => {
   it('should render each assistant_message as a separate bubble', () => {
-    render(
-      <MessageArea
-        timeline={mockTimeline}
-        isStreaming={false}
-        isLoading={false}
-      />
-    );
+    render(<MessageArea timeline={mockTimeline} isStreaming={false} isLoading={false} />);
 
     // Verify each assistant event is rendered as a distinct bubble node
     expect(screen.getByTestId('message-assistant_message-203')).toBeInTheDocument();

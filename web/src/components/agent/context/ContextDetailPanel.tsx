@@ -108,7 +108,9 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distrib
             <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
               {formatTokens(seg.value)}
             </span>
-            <span style={{ color: tc.mutedLight }}>({((seg.value / total) * 100).toFixed(0)}%)</span>
+            <span style={{ color: tc.mutedLight }}>
+              ({((seg.value / total) * 100).toFixed(0)}%)
+            </span>
           </span>
         ))}
       </div>

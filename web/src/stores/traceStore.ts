@@ -97,10 +97,7 @@ export const useTraceStore = create<TraceState>()(
       listRuns: async (conversationId: string, params?: ListRunsParams) => {
         set({ isLoading: true, error: null, conversationId });
         try {
-          const response: SubAgentRunListDTO = await traceAPI.listRuns(
-            conversationId,
-            params,
-          );
+          const response: SubAgentRunListDTO = await traceAPI.listRuns(conversationId, params);
           set({
             runs: response.runs,
             total: response.total,
@@ -129,10 +126,7 @@ export const useTraceStore = create<TraceState>()(
       getTraceChain: async (conversationId: string, traceId: string) => {
         set({ isChainLoading: true, error: null });
         try {
-          const chain: TraceChainDTO = await traceAPI.getTraceChain(
-            conversationId,
-            traceId,
-          );
+          const chain: TraceChainDTO = await traceAPI.getTraceChain(conversationId, traceId);
           set({ traceChain: chain, isChainLoading: false });
         } catch (error: unknown) {
           const msg = getErrorMessage(error, 'Failed to get trace chain');
@@ -144,10 +138,7 @@ export const useTraceStore = create<TraceState>()(
       getDescendants: async (conversationId: string, runId: string) => {
         set({ isDescendantsLoading: true, error: null });
         try {
-          const tree: DescendantTreeDTO = await traceAPI.getDescendants(
-            conversationId,
-            runId,
-          );
+          const tree: DescendantTreeDTO = await traceAPI.getDescendants(conversationId, runId);
           set({ descendants: tree, isDescendantsLoading: false });
         } catch (error: unknown) {
           const msg = getErrorMessage(error, 'Failed to get descendants');
@@ -158,8 +149,7 @@ export const useTraceStore = create<TraceState>()(
 
       fetchActiveRunCount: async (conversationId?: string) => {
         try {
-          const response: ActiveRunCountDTO =
-            await traceAPI.getActiveRunCount(conversationId);
+          const response: ActiveRunCountDTO = await traceAPI.getActiveRunCount(conversationId);
           set({ activeRunCount: response.active_count });
         } catch (error: unknown) {
           const msg = getErrorMessage(error, 'Failed to fetch active run count');
@@ -191,8 +181,8 @@ export const useTraceStore = create<TraceState>()(
     {
       name: 'TraceStore',
       enabled: import.meta.env.DEV,
-    },
-  ),
+    }
+  )
 );
 
 // ---------------------------------------------------------------------------
@@ -206,8 +196,7 @@ export const useTraceChain = () => useTraceStore((state) => state.traceChain);
 export const useTraceDescendants = () => useTraceStore((state) => state.descendants);
 export const useActiveRunCount = () => useTraceStore((state) => state.activeRunCount);
 export const useTraceTotal = () => useTraceStore((state) => state.total);
-export const useTraceConversationId = () =>
-  useTraceStore((state) => state.conversationId);
+export const useTraceConversationId = () => useTraceStore((state) => state.conversationId);
 
 // Loading selectors
 export const useTraceLoading = () => useTraceStore((state) => state.isLoading);
@@ -222,14 +211,10 @@ export const useTraceError = () => useTraceStore((state) => state.error);
 export const useListTraceRuns = () => useTraceStore((state) => state.listRuns);
 export const useGetTraceRun = () => useTraceStore((state) => state.getRun);
 export const useGetTraceChain = () => useTraceStore((state) => state.getTraceChain);
-export const useGetTraceDescendants = () =>
-  useTraceStore((state) => state.getDescendants);
-export const useFetchActiveRunCount = () =>
-  useTraceStore((state) => state.fetchActiveRunCount);
-export const useSetCurrentTraceRun = () =>
-  useTraceStore((state) => state.setCurrentRun);
-export const useSetTraceConversationId = () =>
-  useTraceStore((state) => state.setConversationId);
+export const useGetTraceDescendants = () => useTraceStore((state) => state.getDescendants);
+export const useFetchActiveRunCount = () => useTraceStore((state) => state.fetchActiveRunCount);
+export const useSetCurrentTraceRun = () => useTraceStore((state) => state.setCurrentRun);
+export const useSetTraceConversationId = () => useTraceStore((state) => state.setConversationId);
 export const useClearTraceError = () => useTraceStore((state) => state.clearError);
 export const useResetTraceStore = () => useTraceStore((state) => state.reset);
 
@@ -250,6 +235,4 @@ export const useRunsByTraceId = () =>
   });
 
 export const useRunningRunsCount = () =>
-  useTraceStore(
-    (state) => state.runs.filter((r) => r.status === 'running').length,
-  );
+  useTraceStore((state) => state.runs.filter((r) => r.status === 'running').length);

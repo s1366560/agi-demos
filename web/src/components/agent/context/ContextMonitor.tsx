@@ -20,10 +20,18 @@ const levelLabels: Record<string, string> = {
 };
 
 const levelColors: Record<string, string> = {
-  get none() { return resolveThemeColor('--color-success', '#52c41a'); },
-  get l1_prune() { return resolveThemeColor('--color-warning', '#faad14'); },
-  get l2_summarize() { return resolveThemeColor('--color-warning-dark', '#fa8c16'); },
-  get l3_deep_compress() { return resolveThemeColor('--color-error', '#f5222d'); },
+  get none() {
+    return resolveThemeColor('--color-success', '#52c41a');
+  },
+  get l1_prune() {
+    return resolveThemeColor('--color-warning', '#faad14');
+  },
+  get l2_summarize() {
+    return resolveThemeColor('--color-warning-dark', '#fa8c16');
+  },
+  get l3_deep_compress() {
+    return resolveThemeColor('--color-error', '#f5222d');
+  },
 };
 
 function getOccupancyColor(pct: number): string {

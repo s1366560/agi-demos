@@ -12,6 +12,114 @@ async def v2_db_session(db_session: AsyncSession) -> AsyncSession:
     return db_session
 
 
+@pytest.fixture
+async def workspace_test_seed(v2_db_session: AsyncSession) -> dict[str, str]:
+    """Seed minimal tenant/project/user/agent data for workspace repository tests."""
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentDefinitionModel,
+        Project as DBProject,
+        Tenant as DBTenant,
+        User as DBUser,
+        WorkspaceModel,
+    )
+
+    user_1 = DBUser(
+        id="user-1",
+        email="workspace-user-1@example.com",
+        full_name="Workspace User 1",
+        hashed_password="hash",
+        is_active=True,
+    )
+    user_2 = DBUser(
+        id="user-2",
+        email="workspace-user-2@example.com",
+        full_name="Workspace User 2",
+        hashed_password="hash",
+        is_active=True,
+    )
+    tenant = DBTenant(
+        id="tenant-1",
+        name="Workspace Tenant",
+        slug="workspace-tenant",
+        description="Workspace tenant for tests",
+        owner_id="user-1",
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1073741824,
+    )
+    project = DBProject(
+        id="project-1",
+        tenant_id="tenant-1",
+        name="Workspace Project",
+        description="Workspace project for tests",
+        owner_id="user-1",
+        memory_rules={},
+        graph_config={},
+        sandbox_type="cloud",
+        sandbox_config={},
+        is_public=False,
+    )
+
+    agent_1 = AgentDefinitionModel(
+        id="agent-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="workspace-agent-one",
+        display_name="Workspace Agent One",
+        system_prompt="You are workspace agent one.",
+        allowed_tools=[],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+    )
+    agent_2 = AgentDefinitionModel(
+        id="agent-2",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="workspace-agent-two",
+        display_name="Workspace Agent Two",
+        system_prompt="You are workspace agent two.",
+        allowed_tools=[],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+    )
+    workspaces = [
+        WorkspaceModel(
+            id=workspace_id,
+            tenant_id="tenant-1",
+            project_id="project-1",
+            name=f"Seed Workspace {index}",
+            description="Seed workspace for tests",
+            created_by="user-1",
+            is_archived=False,
+            metadata_json={},
+        )
+        for index, workspace_id in enumerate(
+            [
+                "workspace-1",
+                "workspace-a",
+                "workspace-b",
+                "workspace-list",
+                "workspace-other",
+                "workspace-upd",
+            ],
+            start=1,
+        )
+    ]
+
+    v2_db_session.add_all([user_1, user_2, tenant, project, agent_1, agent_2, *workspaces])
+    await v2_db_session.flush()
+
+    return {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "owner_user_id": "user-1",
+        "member_user_id": "user-2",
+        "agent_id": "agent-1",
+        "agent_id_2": "agent-2",
+    }
+
+
 def make_agent_execution(
     execution_id: str = "exec-1",
     conversation_id: str = "conv-1",

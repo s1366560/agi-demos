@@ -60,9 +60,7 @@ const matchesProvider = (
   return (model.provider ?? '').toLowerCase() === providerHint;
 };
 
-export function useActiveModelCapabilities(
-  modelOverride?: string | null
-): ActiveModelCapabilities {
+export function useActiveModelCapabilities(modelOverride?: string | null): ActiveModelCapabilities {
   const { providers, modelCatalog } = useProviderStore(
     useShallow((s) => ({
       providers: s.providers,
@@ -121,7 +119,8 @@ export function useActiveModelCapabilities(
       supportsResponseFormat: model.supports_response_format === true,
       temperatureRange: model.temperature_range ?? DEFAULT_TEMPERATURE_RANGE,
       topPRange: model.top_p_range ?? DEFAULT_TOP_P_RANGE,
-      maxOutputTokens: model.max_output_tokens > 0 ? model.max_output_tokens : DEFAULT_MAX_OUTPUT_TOKENS,
+      maxOutputTokens:
+        model.max_output_tokens > 0 ? model.max_output_tokens : DEFAULT_MAX_OUTPUT_TOKENS,
     };
   }, [modelOverride, providers, modelCatalog]);
 }

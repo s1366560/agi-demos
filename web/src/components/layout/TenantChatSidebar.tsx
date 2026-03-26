@@ -14,7 +14,7 @@ import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, NavLink } from 'react-router-dom';
+import { useLocation, useNavigate, NavLink } from 'react-router-dom';
 
 import { Modal } from 'antd';
 import {
@@ -55,6 +55,26 @@ import type { MenuProps } from 'antd';
 interface ConversationWithProject extends Conversation {
   projectId: string;
   projectName: string;
+}
+
+export function buildAgentWorkspacePath({
+  tenantId,
+  conversationId,
+  projectId,
+  workspaceId,
+}: {
+  tenantId?: string | undefined;
+  conversationId?: string | undefined;
+  projectId?: string | undefined;
+  workspaceId?: string | null | undefined;
+}): string {
+  const basePath = tenantId ? `/tenant/${tenantId}/agent-workspace` : '/tenant/agent-workspace';
+  const conversationPath = conversationId ? `${basePath}/${conversationId}` : basePath;
+  const params = new URLSearchParams();
+  if (projectId) params.set('projectId', projectId);
+  if (workspaceId) params.set('workspaceId', workspaceId);
+  const query = params.toString();
+  return query ? `${conversationPath}?${query}` : conversationPath;
 }
 
 interface ConversationItemProps {
@@ -230,6 +250,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   mobile = false,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
 
   // Use ref for width during drag to avoid re-renders
@@ -321,6 +342,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const isLoadingMoreRef = useRef(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const workspaceIdFromQuery = useMemo(() => {
+    if (!location.search) return null;
+    return new URLSearchParams(location.search).get('workspaceId');
+  }, [location.search]);
 
   const loadMore = useCallback(async () => {
     if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
@@ -349,13 +374,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const handleSelectConversation = useCallback(
     (id: string, projectId: string) => {
-      if (tenantId) {
-        navigate(`/tenant/${tenantId}/agent-workspace/${id}?projectId=${projectId}`);
-      } else {
-        navigate(`/tenant/agent-workspace/${id}?projectId=${projectId}`);
-      }
+      navigate(
+        buildAgentWorkspacePath({
+          tenantId,
+          conversationId: id,
+          projectId,
+          workspaceId: workspaceIdFromQuery,
+        })
+      );
     },
-    [navigate, tenantId]
+    [navigate, tenantId, workspaceIdFromQuery]
   );
 
   // Preserve sidebar scroll position across re-renders triggered by conversation switch.
@@ -400,13 +428,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (!selectedProjectId) return;
     const newId = await createNewConversation(selectedProjectId);
     if (newId) {
-      if (tenantId) {
-        navigate(`/tenant/${tenantId}/agent-workspace/${newId}?projectId=${selectedProjectId}`);
-      } else {
-        navigate(`/tenant/agent-workspace/${newId}?projectId=${selectedProjectId}`);
-      }
+      navigate(
+        buildAgentWorkspacePath({
+          tenantId,
+          conversationId: newId,
+          projectId: selectedProjectId,
+          workspaceId: workspaceIdFromQuery,
+        })
+      );
     }
-  }, [selectedProjectId, createNewConversation, navigate, tenantId]);
+  }, [selectedProjectId, createNewConversation, navigate, tenantId, workspaceIdFromQuery]);
 
   const handleDeleteConversation = useCallback(
     (id: string, e: React.MouseEvent) => {
@@ -420,16 +451,25 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         onOk: async () => {
           await deleteConversation(id, selectedProjectId);
           if (activeConversationId === id) {
-            if (tenantId) {
-              navigate(`/tenant/${tenantId}/agent-workspace`);
-            } else {
-              navigate(`/tenant/agent-workspace`);
-            }
+            navigate(
+              buildAgentWorkspacePath({
+                tenantId,
+                projectId: selectedProjectId,
+                workspaceId: workspaceIdFromQuery,
+              })
+            );
           }
         },
       });
     },
-    [selectedProjectId, activeConversationId, deleteConversation, navigate, tenantId]
+    [
+      selectedProjectId,
+      activeConversationId,
+      deleteConversation,
+      navigate,
+      tenantId,
+      workspaceIdFromQuery,
+    ]
   );
 
   // Rename conversation state and handlers

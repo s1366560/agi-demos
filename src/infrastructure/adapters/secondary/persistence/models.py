@@ -259,6 +259,281 @@ class UserProject(Base):
     project: Mapped["Project"] = relationship(back_populates="users")
 
 
+class WorkspaceModel(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, ForeignKey("tenants.id"), nullable=False)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    office_status: Mapped[str] = mapped_column(String(20), default="inactive", nullable=False)
+    hex_layout_config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    members: Mapped[list["WorkspaceMemberModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    agents: Mapped[list["WorkspaceAgentModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    blackboard_posts: Mapped[list["BlackboardPostModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    tasks: Mapped[list["WorkspaceTaskModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    topology_nodes: Mapped[list["TopologyNodeModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    topology_edges: Mapped[list["TopologyEdgeModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    objectives: Mapped[list["CyberObjectiveModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    genes: Mapped[list["CyberGeneModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+    messages: Mapped[list["WorkspaceMessageModel"]] = relationship(
+        foreign_keys="[WorkspaceMessageModel.workspace_id]", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_workspaces_project_name"),
+        Index("ix_workspaces_tenant_project", "tenant_id", "project_id"),
+    )
+
+
+class WorkspaceMemberModel(Base):
+    __tablename__ = "workspace_members"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="viewer", nullable=False)
+    invited_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    inviter: Mapped[Optional["User"]] = relationship(foreign_keys=[invited_by])
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_members_workspace_user"),
+        Index("ix_workspace_members_workspace_role", "workspace_id", "role"),
+    )
+
+
+class WorkspaceAgentModel(Base):
+    __tablename__ = "workspace_agents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agent_definitions.id"), nullable=False, index=True
+    )
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    hex_q: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hex_r: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    theme_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="idle", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="agents")
+    agent: Mapped["AgentDefinitionModel"] = relationship(foreign_keys=[agent_id])
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "agent_id", name="uq_workspace_agents_workspace_agent"),
+        Index("ix_workspace_agents_workspace_active", "workspace_id", "is_active"),
+    )
+
+
+class BlackboardPostModel(Base):
+    __tablename__ = "blackboard_posts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="blackboard_posts")
+    author: Mapped["User"] = relationship(foreign_keys=[author_id])
+    replies: Mapped[list["BlackboardReplyModel"]] = relationship(
+        back_populates="post", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_blackboard_posts_workspace_created", "workspace_id", "created_at"),
+        Index("ix_blackboard_posts_workspace_pinned_status", "workspace_id", "is_pinned", "status"),
+    )
+
+
+class BlackboardReplyModel(Base):
+    __tablename__ = "blackboard_replies"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    post_id: Mapped[str] = mapped_column(
+        String, ForeignKey("blackboard_posts.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    post: Mapped["BlackboardPostModel"] = relationship(back_populates="replies")
+    workspace: Mapped["WorkspaceModel"] = relationship(foreign_keys=[workspace_id])
+    author: Mapped["User"] = relationship(foreign_keys=[author_id])
+
+    __table_args__ = (Index("ix_blackboard_replies_post_created", "post_id", "created_at"),)
+
+
+class WorkspaceTaskModel(Base):
+    __tablename__ = "workspace_tasks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    assignee_user_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True
+    )
+    assignee_agent_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("agent_definitions.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="todo", nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    estimated_effort: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    blocker_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="tasks")
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    assignee_user: Mapped[Optional["User"]] = relationship(foreign_keys=[assignee_user_id])
+    assignee_agent: Mapped[Optional["AgentDefinitionModel"]] = relationship(
+        foreign_keys=[assignee_agent_id]
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_tasks_workspace_status", "workspace_id", "status"),
+        Index("ix_workspace_tasks_workspace_created", "workspace_id", "created_at"),
+    )
+
+
+class TopologyNodeModel(Base):
+    __tablename__ = "topology_nodes"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    node_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    ref_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    position_x: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    position_y: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    hex_q: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hex_r: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    tags_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="topology_nodes")
+
+    __table_args__ = (
+        Index("ix_topology_nodes_workspace_type", "workspace_id", "node_type"),
+        Index("ix_topology_nodes_workspace_ref", "workspace_id", "ref_id"),
+    )
+
+
+class TopologyEdgeModel(Base):
+    __tablename__ = "topology_edges"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    source_node_id: Mapped[str] = mapped_column(
+        String, ForeignKey("topology_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    target_node_id: Mapped[str] = mapped_column(
+        String, ForeignKey("topology_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_hex_q: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_hex_r: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_hex_q: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_hex_r: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    auto_created: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="topology_edges")
+    source_node: Mapped["TopologyNodeModel"] = relationship(foreign_keys=[source_node_id])
+    target_node: Mapped["TopologyNodeModel"] = relationship(foreign_keys=[target_node_id])
+
+    __table_args__ = (
+        Index("ix_topology_edges_workspace", "workspace_id"),
+        Index("ix_topology_edges_source_target", "source_node_id", "target_node_id"),
+    )
+
+
 class Memory(Base):
     __tablename__ = "memories"
 
@@ -1863,6 +2138,96 @@ class NodeExecutionModel(Base, IdGeneratorMixin):
     __table_args__ = (
         Index("ix_node_executions_run_node", "graph_run_id", "node_id"),
         Index("ix_node_executions_status", "graph_run_id", "status"),
+    )
+
+
+class CyberObjectiveModel(Base):
+    __tablename__ = "cyber_objectives"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    obj_type: Mapped[str] = mapped_column(String(20), default="objective", nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("cyber_objectives.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    progress: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="objectives")
+    parent: Mapped["CyberObjectiveModel | None"] = relationship(
+        remote_side="CyberObjectiveModel.id", foreign_keys=[parent_id]
+    )
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+
+    __table_args__ = (
+        Index("ix_cyber_objectives_workspace", "workspace_id"),
+        Index(
+            "ix_cyber_objectives_workspace_type",
+            "workspace_id",
+            "obj_type",
+        ),
+        Index("ix_cyber_objectives_parent", "parent_id"),
+    )
+
+
+class CyberGeneModel(Base):
+    __tablename__ = "cyber_genes"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), default="skill", nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[str] = mapped_column(String(50), default="1.0.0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="genes")
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+
+    __table_args__ = (
+        Index("ix_cyber_genes_workspace", "workspace_id"),
+        Index("ix_cyber_genes_workspace_category", "workspace_id", "category"),
+    )
+
+
+class WorkspaceMessageModel(Base):
+    __tablename__ = "workspace_messages"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_id: Mapped[str] = mapped_column(String, nullable=False)
+    sender_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    mentions_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    parent_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    workspace: Mapped["WorkspaceModel"] = relationship(foreign_keys=[workspace_id])
+
+    __table_args__ = (
+        Index("ix_workspace_messages_workspace_created", "workspace_id", "created_at"),
+        Index("ix_workspace_messages_parent", "parent_message_id"),
     )
 
 

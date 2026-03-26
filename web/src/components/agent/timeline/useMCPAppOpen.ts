@@ -43,8 +43,7 @@ export const useMCPAppOpen = (step: TimelineStep) => {
         const projectStoreId = useProjectStore.getState().currentProject?.id;
         const conversationProjectId =
           useConversationsStore.getState().currentConversation?.project_id;
-        const currentProjectId =
-          ui.project_id || projectStoreId || conversationProjectId || '';
+        const currentProjectId = ui.project_id || projectStoreId || conversationProjectId || '';
         const tabId = `mcp-app-${ui.resource_uri}`;
 
         // Look up cached HTML from mcp_app_result event

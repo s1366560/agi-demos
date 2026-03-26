@@ -60,10 +60,8 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.commands.types import CommandResult
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
 
-from src.domain.ports.agent.control_channel_port import ControlChannelPort
-
-
 from src.domain.model.agent.hitl_types import HITLType
+from src.domain.ports.agent.control_channel_port import ControlChannelPort
 
 from ..core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from ..core.message import Message, MessageRole, ToolPart, ToolState
@@ -843,6 +841,26 @@ class SessionProcessor:
             self._last_process_result = ProcessorResult.COMPLETE
             return
 
+        full_text = self._current_message.get_full_text().strip() if self._current_message else ""
+        delegate_match = self._detect_delegate_or_escalate(full_text) if full_text else None
+        if delegate_match is not None:
+            action, agent_name, task_text = delegate_match
+            logger.info(f"[Processor] Detected {action}:{agent_name} in text response")
+            tool_input: dict[str, Any] = {
+                "subagent_name": agent_name,
+                "task": task_text or full_text,
+            }
+            if action == "escalate":
+                tool_input["escalate"] = True
+            yield AgentActEvent(
+                tool_name="delegate_to_subagent",
+                tool_input=tool_input,
+                status="running",
+            )
+            self._no_progress_steps = 0
+            self._last_process_result = ProcessorResult.CONTINUE
+            return
+
         if self._is_conversational_response():
             # Text-only response without tool calls and without an
             # explicit goal_achieved=false signal -- treat as a
@@ -1102,6 +1120,24 @@ class SessionProcessor:
         # If the text contains a goal_achieved JSON signal, it's a structured
         # goal-check response, not conversational text.
         return "goal_achieved" not in full_text
+
+    _DELEGATE_ESCALATE_RE = re.compile(r"(?i)\b(delegate|escalate)\s*:\s*([A-Za-z0-9_\-]+)")
+
+    def _detect_delegate_or_escalate(self, full_text: str) -> tuple[str, str, str] | None:
+        """Detect delegate:AgentName or escalate:AgentName in LLM text.
+
+        Returns (action, agent_name, remaining_text) or None if not found.
+        ``action`` is one of ``"delegate"`` or ``"escalate"``; ``agent_name``
+        is the target agent; ``remaining_text`` is everything after the match
+        (used as task context for the delegate).
+        """
+        m = self._DELEGATE_ESCALATE_RE.search(full_text)
+        if m is None:
+            return None
+        action = m.group(1).lower()
+        agent_name = m.group(2)
+        remaining = full_text[m.end() :].strip()
+        return action, agent_name, remaining
 
     def _classify_tool_by_description(self, tool_name: str, tool_def: ToolDefinition) -> str:
         """Classify tool into a category based on its description."""

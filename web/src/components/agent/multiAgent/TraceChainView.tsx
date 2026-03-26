@@ -42,7 +42,12 @@ function StatusIcon({ status }: { status: string }) {
     case 'failed':
       return <AlertCircle size={16} className="text-red-600 dark:text-red-400" />;
     case 'running':
-      return <Loader2 size={16} className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />;
+      return (
+        <Loader2
+          size={16}
+          className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none"
+        />
+      );
     case 'cancelled':
       return <XCircle size={16} className="text-amber-600 dark:text-amber-400" />;
     default:
@@ -77,9 +82,7 @@ const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
         <div className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-600 flex items-center justify-center z-10">
           <StatusIcon status={run.status} />
         </div>
-        {!isLast && (
-          <div className="w-0.5 flex-1 bg-slate-200 dark:bg-slate-700" />
-        )}
+        {!isLast && <div className="w-0.5 flex-1 bg-slate-200 dark:bg-slate-700" />}
       </div>
 
       <button
@@ -99,9 +102,7 @@ const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
           </span>
         </div>
 
-        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">
-          {run.task}
-        </p>
+        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">{run.task}</p>
 
         <div className="flex items-center gap-4 text-[10px] text-slate-400 dark:text-slate-500">
           <span className="flex items-center gap-1">
@@ -216,18 +217,12 @@ export const TraceChainView: FC<TraceChainViewProps> = memo(
     }
 
     const sortedRuns = [...runs].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
     const label = getChainLabel(data);
-    const totalDuration = sortedRuns.reduce(
-      (sum, r) => sum + (r.execution_time_ms ?? 0),
-      0,
-    );
-    const totalTokens = sortedRuns.reduce(
-      (sum, r) => sum + (r.tokens_used ?? 0),
-      0,
-    );
+    const totalDuration = sortedRuns.reduce((sum, r) => sum + (r.execution_time_ms ?? 0), 0);
+    const totalTokens = sortedRuns.reduce((sum, r) => sum + (r.tokens_used ?? 0), 0);
 
     return (
       <div>
@@ -267,6 +262,6 @@ export const TraceChainView: FC<TraceChainViewProps> = memo(
         </div>
       </div>
     );
-  },
+  }
 );
 TraceChainView.displayName = 'TraceChainView';

@@ -284,19 +284,19 @@ class TestPhase3Wave2EventTypes:
 @pytest.mark.unit
 class TestPhase3Wave2Exports:
     def test_routing_context_importable_from_agent_init(self) -> None:
-        from src.domain.model.agent import RoutingContext as RC
+        from src.domain.model.agent import RoutingContext as RoutingContextAlias
 
-        assert RC is RoutingContext
+        assert RoutingContextAlias is RoutingContext
 
     def test_context_engine_port_importable_from_ports_init(self) -> None:
-        from src.domain.ports.agent import ContextEnginePort as CEP
+        from src.domain.ports.agent import ContextEnginePort as ContextEnginePortAlias
 
-        assert CEP is ContextEnginePort
+        assert ContextEnginePortAlias is ContextEnginePort
 
     def test_message_router_port_importable_from_ports_init(self) -> None:
-        from src.domain.ports.agent import MessageRouterPort as MRP
+        from src.domain.ports.agent import MessageRouterPort as MessageRouterPortAlias
 
-        assert MRP is MessageRouterPort
+        assert MessageRouterPortAlias is MessageRouterPort
 
     def test_events_in_all_export(self) -> None:
         from src.domain.events import agent_events

@@ -644,7 +644,11 @@ export const ProviderList: React.FC = () => {
                                     : 'monitor_heart'
                                 }
                                 size={18}
-                                className={checkingHealth === provider.id ? 'animate-spin motion-reduce:animate-none' : ''}
+                                className={
+                                  checkingHealth === provider.id
+                                    ? 'animate-spin motion-reduce:animate-none'
+                                    : ''
+                                }
                               />
                             </button>
                             <button

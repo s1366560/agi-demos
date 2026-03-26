@@ -198,9 +198,7 @@ export const InputToolbar = memo<InputToolbarProps>(
           </LazyTooltip>
           <VoiceWaveform active={isListening} />
 
-          <LazyTooltip
-            title={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}
-          >
+          <LazyTooltip title={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}>
             <LazyButton
               type="text"
               size="small"

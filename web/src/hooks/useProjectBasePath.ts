@@ -23,9 +23,7 @@ export function useProjectBasePath(): ProjectBasePathResult {
   const { tenantId, projectId } = useParams();
 
   const tenantBasePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
-  const projectBasePath = projectId
-    ? `${tenantBasePath}/project/${projectId}`
-    : tenantBasePath;
+  const projectBasePath = projectId ? `${tenantBasePath}/project/${projectId}` : tenantBasePath;
 
   return {
     projectBasePath,

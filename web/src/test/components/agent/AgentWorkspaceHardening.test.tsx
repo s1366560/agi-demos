@@ -91,30 +91,29 @@ vi.mock('@/components/ui/lazyAntd', () => ({
     icon?: React.ReactNode;
     className?: string;
   }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={className}
-      {...rest}
-    >
+    <button type="button" onClick={onClick} disabled={disabled} className={className} {...rest}>
       {icon}
       {children}
     </button>
   ),
-  LazyTooltip: ({
-    children,
-  }: {
-    title?: React.ReactNode;
-    children: React.ReactNode;
-  }) => <>{children}</>,
+  LazyTooltip: ({ children }: { title?: React.ReactNode; children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock('antd', async (importOriginal) => {
   const actual = await importOriginal<typeof import('antd')>();
   return {
     ...actual,
-    Popover: ({ children, content, open }: { children: React.ReactNode; content: React.ReactNode; open?: boolean }) => (
+    Popover: ({
+      children,
+      content,
+      open,
+    }: {
+      children: React.ReactNode;
+      content: React.ReactNode;
+      open?: boolean;
+    }) => (
       <div>
         {children}
         {open ? <div data-testid="popover-content">{content}</div> : null}
@@ -193,13 +192,7 @@ describe('Agent Workspace hardening', () => {
       ),
     }));
 
-    render(
-      <MessageArea
-        timeline={timeline}
-        isStreaming
-        isLoading={false}
-      />
-    );
+    render(<MessageArea timeline={timeline} isStreaming isLoading={false} />);
 
     expect(screen.queryByTestId('thinking-block')).not.toBeInTheDocument();
   });
@@ -238,13 +231,7 @@ describe('Agent Workspace hardening', () => {
       ),
     }));
 
-    render(
-      <MessageArea
-        timeline={timeline}
-        isStreaming
-        isLoading={false}
-      />
-    );
+    render(<MessageArea timeline={timeline} isStreaming isLoading={false} />);
 
     expect(screen.queryByTestId('thinking-block')).not.toBeInTheDocument();
   });
@@ -283,15 +270,11 @@ describe('Agent Workspace hardening', () => {
       ),
     }));
 
-    render(
-      <MessageArea
-        timeline={timeline}
-        isStreaming
-        isLoading={false}
-      />
-    );
+    render(<MessageArea timeline={timeline} isStreaming isLoading={false} />);
 
-    expect(screen.getByTestId('thinking-block')).toHaveTextContent('完整思考内容 full thought content');
+    expect(screen.getByTestId('thinking-block')).toHaveTextContent(
+      '完整思考内容 full thought content'
+    );
   });
 
   it('renders ThinkingBlock while thought is streaming without assistant text', () => {
@@ -328,13 +311,7 @@ describe('Agent Workspace hardening', () => {
       ),
     }));
 
-    render(
-      <MessageArea
-        timeline={timeline}
-        isStreaming
-        isLoading={false}
-      />
-    );
+    render(<MessageArea timeline={timeline} isStreaming isLoading={false} />);
 
     expect(screen.getByTestId('thinking-block')).toBeInTheDocument();
   });
@@ -351,13 +328,7 @@ describe('Agent Workspace hardening', () => {
       } as any,
     ];
 
-    render(
-      <MessageArea
-        timeline={timeline}
-        isStreaming={false}
-        isLoading={false}
-      />
-    );
+    render(<MessageArea timeline={timeline} isStreaming={false} isLoading={false} />);
 
     const anchor = document.querySelector('[data-subagent-start-index="0"]');
     expect(anchor).toBeTruthy();

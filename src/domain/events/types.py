@@ -282,6 +282,28 @@ class AgentEventType(str, Enum):
     GRAPH_NODE_SKIPPED = "graph_node_skipped"
     GRAPH_HANDOFF = "graph_handoff"
 
+    # =========================================================================
+    # Workspace collaboration events
+    # =========================================================================
+    WORKSPACE_MEMBER_JOINED = "workspace_member_joined"
+    BLACKBOARD_POST_CREATED = "blackboard_post_created"
+    WORKSPACE_TASK_ASSIGNED = "workspace_task_assigned"
+    TOPOLOGY_UPDATED = "topology_updated"
+    WORKSPACE_TASK_CREATED = "workspace_task_created"
+    WORKSPACE_TASK_UPDATED = "workspace_task_updated"
+    WORKSPACE_TASK_DELETED = "workspace_task_deleted"
+    WORKSPACE_TASK_STATUS_CHANGED = "workspace_task_status_changed"
+    BLACKBOARD_POST_UPDATED = "blackboard_post_updated"
+    BLACKBOARD_POST_DELETED = "blackboard_post_deleted"
+    BLACKBOARD_REPLY_CREATED = "blackboard_reply_created"
+    BLACKBOARD_REPLY_DELETED = "blackboard_reply_deleted"
+    WORKSPACE_UPDATED = "workspace_updated"
+    WORKSPACE_DELETED = "workspace_deleted"
+    WORKSPACE_MEMBER_LEFT = "workspace_member_left"
+    WORKSPACE_AGENT_BOUND = "workspace_agent_bound"
+    WORKSPACE_AGENT_UNBOUND = "workspace_agent_unbound"
+    WORKSPACE_MESSAGE_CREATED = "workspace_message_created"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -439,6 +461,25 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.GRAPH_NODE_FAILED: EventCategory.AGENT,
     AgentEventType.GRAPH_NODE_SKIPPED: EventCategory.AGENT,
     AgentEventType.GRAPH_HANDOFF: EventCategory.AGENT,
+    # Workspace collaboration events
+    AgentEventType.WORKSPACE_MEMBER_JOINED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_POST_CREATED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_TASK_ASSIGNED: EventCategory.AGENT,
+    AgentEventType.TOPOLOGY_UPDATED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_TASK_CREATED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_TASK_UPDATED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_TASK_DELETED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_TASK_STATUS_CHANGED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_POST_UPDATED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_POST_DELETED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_REPLY_CREATED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_REPLY_DELETED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_UPDATED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_DELETED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_MEMBER_LEFT: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_AGENT_BOUND: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_AGENT_UNBOUND: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_MESSAGE_CREATED: EventCategory.AGENT,
 }
 
 

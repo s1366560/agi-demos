@@ -9,18 +9,7 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  Modal,
-  Form,
-  Input,
-  Select,
-  Tabs,
-  InputNumber,
-  Switch,
-  Tag,
-  message,
-  Slider,
-} from 'antd';
+import { Modal, Form, Input, Select, Tabs, InputNumber, Switch, Tag, message, Slider } from 'antd';
 
 import { agentService } from '../../services/agentService';
 import { mcpAPI } from '../../services/mcpService';
@@ -32,7 +21,11 @@ import {
 } from '../../stores/agentDefinitions';
 
 import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
-import type { AgentDefinition, CreateDefinitionRequest, UpdateDefinitionRequest } from '../../types/multiAgent';
+import type {
+  AgentDefinition,
+  CreateDefinitionRequest,
+  UpdateDefinitionRequest,
+} from '../../types/multiAgent';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -104,7 +97,12 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           setAvailableMcpServers(mcpRes || []);
         } catch (error) {
           console.error('Failed to fetch resources:', error);
-          message.error(t('tenant.agentDefinitions.modal.resourceFetchError', 'Failed to load available resources'));
+          message.error(
+            t(
+              'tenant.agentDefinitions.modal.resourceFetchError',
+              'Failed to load available resources'
+            )
+          );
         } finally {
           setLoadingResources(false);
         }
@@ -138,7 +136,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           max_retries: definition.max_retries,
           workspace_config: definition.workspace_config ?? { type: 'shared' },
           spawn_policy_max_active_runs: definition.metadata?.spawn_policy_max_active_runs,
-          spawn_policy_max_children_per_requester: definition.metadata?.spawn_policy_max_children_per_requester,
+          spawn_policy_max_children_per_requester:
+            definition.metadata?.spawn_policy_max_children_per_requester,
           spawn_policy_allowed_subagents: definition.metadata?.spawn_policy_allowed_subagents,
           tool_policy_allow: definition.metadata?.tool_policy_allow,
           tool_policy_deny: definition.metadata?.tool_policy_deny,
@@ -193,7 +192,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           },
         };
         await updateDefinition(definition.id, data);
-        message.success(t('tenant.agentDefinitions.messages.updateSuccess', 'Agent definition updated'));
+        message.success(
+          t('tenant.agentDefinitions.messages.updateSuccess', 'Agent definition updated')
+        );
       } else {
         const data: CreateDefinitionRequest = {
           name: values.name,
@@ -222,7 +223,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           },
         };
         await createDefinition(data);
-        message.success(t('tenant.agentDefinitions.messages.createSuccess', 'Agent definition created'));
+        message.success(
+          t('tenant.agentDefinitions.messages.createSuccess', 'Agent definition created')
+        );
       }
       onSuccess();
     } catch (error: unknown) {
@@ -232,7 +235,11 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
         if (firstErrorField) {
           if (['name', 'display_name', 'system_prompt', 'model'].includes(firstErrorField)) {
             setActiveTab('basic');
-          } else if (['allowed_tools', 'max_tokens', 'temperature', 'max_iterations'].includes(firstErrorField)) {
+          } else if (
+            ['allowed_tools', 'max_tokens', 'temperature', 'max_iterations'].includes(
+              firstErrorField
+            )
+          ) {
             setActiveTab('permissions');
           }
         }
@@ -265,8 +272,17 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             name="name"
             label={t('tenant.agentDefinitions.modal.name', 'Name')}
             rules={[
-              { required: true, message: t('tenant.agentDefinitions.modal.nameRequired', 'Name is required') },
-              { pattern: /^[a-z][a-z0-9_]*$/, message: t('tenant.agentDefinitions.modal.namePattern', 'Lowercase letters, digits, underscores. Must start with letter.') },
+              {
+                required: true,
+                message: t('tenant.agentDefinitions.modal.nameRequired', 'Name is required'),
+              },
+              {
+                pattern: /^[a-z][a-z0-9_]*$/,
+                message: t(
+                  'tenant.agentDefinitions.modal.namePattern',
+                  'Lowercase letters, digits, underscores. Must start with letter.'
+                ),
+              },
             ]}
           >
             <Input placeholder="e.g., customer_support" disabled={isEditMode} />
@@ -276,7 +292,13 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             name="display_name"
             label={t('tenant.agentDefinitions.modal.displayName', 'Display Name')}
             rules={[
-              { required: true, message: t('tenant.agentDefinitions.modal.displayNameRequired', 'Display name is required') },
+              {
+                required: true,
+                message: t(
+                  'tenant.agentDefinitions.modal.displayNameRequired',
+                  'Display name is required'
+                ),
+              },
             ]}
           >
             <Input placeholder="e.g., Customer Support Agent" />
@@ -286,10 +308,22 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             name="system_prompt"
             label={t('tenant.agentDefinitions.modal.systemPrompt', 'System Prompt')}
             rules={[
-              { required: true, message: t('tenant.agentDefinitions.modal.systemPromptRequired', 'System prompt is required') },
+              {
+                required: true,
+                message: t(
+                  'tenant.agentDefinitions.modal.systemPromptRequired',
+                  'System prompt is required'
+                ),
+              },
             ]}
           >
-            <TextArea rows={6} placeholder={t('tenant.agentDefinitions.modal.systemPromptPlaceholder', 'Define the agent\'s role, capabilities, and behavior...')} />
+            <TextArea
+              rows={6}
+              placeholder={t(
+                'tenant.agentDefinitions.modal.systemPromptPlaceholder',
+                "Define the agent's role, capabilities, and behavior..."
+              )}
+            />
           </Form.Item>
 
           <div className="grid grid-cols-2 gap-4">
@@ -331,7 +365,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               <Input
                 placeholder={t('tenant.agentDefinitions.modal.addKeyword', 'Add keyword...')}
                 value={keywordInput}
-                onChange={(e) => { setKeywordInput(e.target.value); }}
+                onChange={(e) => {
+                  setKeywordInput(e.target.value);
+                }}
                 onPressEnter={handleAddKeyword}
               />
               <button
@@ -347,7 +383,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
                 <Tag
                   key={keyword}
                   closable
-                  onClose={() => { handleRemoveKeyword(keyword); }}
+                  onClose={() => {
+                    handleRemoveKeyword(keyword);
+                  }}
                   className="px-2 py-1"
                 >
                   {keyword}
@@ -410,7 +448,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           <Form.Item
             name="allowed_tools"
             label={t('tenant.agentDefinitions.modal.allowedTools', 'Allowed Tools')}
-            tooltip={t('tenant.agentDefinitions.modal.allowedToolsTooltip', 'Tools this agent can use. Select * for all.')}
+            tooltip={t(
+              'tenant.agentDefinitions.modal.allowedToolsTooltip',
+              'Tools this agent can use. Select * for all.'
+            )}
             initialValue={['*']}
           >
             <Select
@@ -434,7 +475,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           <Form.Item
             name="allowed_skills"
             label={t('tenant.agentDefinitions.modal.allowedSkills', 'Allowed Skills')}
-            tooltip={t('tenant.agentDefinitions.modal.allowedSkillsTooltip', 'Skills this agent can activate.')}
+            tooltip={t(
+              'tenant.agentDefinitions.modal.allowedSkillsTooltip',
+              'Skills this agent can activate.'
+            )}
           >
             <Select
               mode="multiple"
@@ -454,7 +498,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           <Form.Item
             name="allowed_mcp_servers"
             label={t('tenant.agentDefinitions.modal.allowedMcpServers', 'MCP Servers')}
-            tooltip={t('tenant.agentDefinitions.modal.allowedMcpServersTooltip', 'MCP servers this agent can access.')}
+            tooltip={t(
+              'tenant.agentDefinitions.modal.allowedMcpServersTooltip',
+              'MCP servers this agent can access.'
+            )}
           >
             <Select
               mode="multiple"
@@ -512,14 +559,23 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               <Form.Item
                 name="spawn_policy_max_active_runs"
                 label={t('tenant.agentDefinitions.modal.maxActiveRuns', 'Max Active Runs')}
-                tooltip={t('tenant.agentDefinitions.modal.maxActiveRunsTooltip', 'Maximum number of active subagent runs')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.maxActiveRunsTooltip',
+                  'Maximum number of active subagent runs'
+                )}
               >
                 <InputNumber min={0} className="w-full" />
               </Form.Item>
               <Form.Item
                 name="spawn_policy_max_children_per_requester"
-                label={t('tenant.agentDefinitions.modal.maxChildrenPerRequester', 'Max Children Per Requester')}
-                tooltip={t('tenant.agentDefinitions.modal.maxChildrenPerRequesterTooltip', 'Maximum subagents allowed per requester')}
+                label={t(
+                  'tenant.agentDefinitions.modal.maxChildrenPerRequester',
+                  'Max Children Per Requester'
+                )}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.maxChildrenPerRequesterTooltip',
+                  'Maximum subagents allowed per requester'
+                )}
               >
                 <InputNumber min={0} className="w-full" />
               </Form.Item>
@@ -527,7 +583,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             <Form.Item
               name="spawn_policy_allowed_subagents"
               label={t('tenant.agentDefinitions.modal.allowedSubagents', 'Allowed Subagents')}
-              tooltip={t('tenant.agentDefinitions.modal.allowedSubagentsTooltip', 'Allowed subagent names or IDs')}
+              tooltip={t(
+                'tenant.agentDefinitions.modal.allowedSubagentsTooltip',
+                'Allowed subagent names or IDs'
+              )}
             >
               <Select mode="tags" placeholder={t('common.add', 'Add...')} />
             </Form.Item>
@@ -552,7 +611,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               <Form.Item
                 name={['workspace_config', 'base_dir']}
                 label={t('tenant.agentDefinitions.modal.workspaceBaseDir', 'Base Directory')}
-                tooltip={t('tenant.agentDefinitions.modal.workspaceBaseDirTooltip', 'Custom workspace directory path')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.workspaceBaseDirTooltip',
+                  'Custom workspace directory path'
+                )}
               >
                 <Input placeholder="/path/to/dir" />
               </Form.Item>
@@ -567,14 +629,20 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               <Form.Item
                 name="tool_policy_allow"
                 label={t('tenant.agentDefinitions.modal.toolPolicyAllow', 'Allow List')}
-                tooltip={t('tenant.agentDefinitions.modal.toolPolicyAllowTooltip', 'Allowed tool patterns')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.toolPolicyAllowTooltip',
+                  'Allowed tool patterns'
+                )}
               >
                 <Select mode="tags" placeholder={t('common.add', 'Add...')} />
               </Form.Item>
               <Form.Item
                 name="tool_policy_deny"
                 label={t('tenant.agentDefinitions.modal.toolPolicyDeny', 'Deny List')}
-                tooltip={t('tenant.agentDefinitions.modal.toolPolicyDenyTooltip', 'Denied tool patterns')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.toolPolicyDenyTooltip',
+                  'Denied tool patterns'
+                )}
               >
                 <Select mode="tags" placeholder={t('common.add', 'Add...')} />
               </Form.Item>

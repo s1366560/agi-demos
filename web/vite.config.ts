@@ -83,6 +83,10 @@ export default defineConfig({
             if (id.includes("chart.js") || id.includes("react-chartjs")) {
               return "vendor-charts";
             }
+            // 3D visualization (R3F)
+            if (id.includes("three") || id.includes("@react-three")) {
+              return "vendor-3d";
+            }
             // Graph visualization
             if (id.includes("cytoscape")) {
               return "vendor-graph";

@@ -16,7 +16,6 @@ import React, { useCallback, useEffect, useState, useMemo, useContext, useRef, m
 
 import { useParams, Link } from 'react-router-dom';
 
-
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDebounce } from 'use-debounce';
 
@@ -354,7 +353,7 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
   return (
     <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
       <div className="flex flex-col gap-1">
-         <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
           {TEXTS.title}
         </h1>
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>

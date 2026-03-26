@@ -87,7 +87,9 @@ export const McpPromptsTabV2: React.FC = () => {
     if (servers.length > 0) {
       void fetchPrompts();
     } else {
-      queueMicrotask(() => { setIsLoading(false); });
+      queueMicrotask(() => {
+        setIsLoading(false);
+      });
     }
   }, [servers]);
 
@@ -227,10 +229,7 @@ export const McpPromptsTabV2: React.FC = () => {
                   }}
                 >
                   <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <MessageSquare
-                      size={16}
-                      className="text-indigo-600 dark:text-indigo-400"
-                    />
+                    <MessageSquare size={16} className="text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -264,10 +263,7 @@ export const McpPromptsTabV2: React.FC = () => {
                     </p>
                     <div className="space-y-2">
                       {prompt.arguments!.map((arg) => (
-                        <div
-                          key={arg.name}
-                          className="flex items-start gap-2 text-sm"
-                        >
+                        <div key={arg.name} className="flex items-start gap-2 text-sm">
                           <code className="text-xs font-mono bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
                             {arg.name}
                           </code>

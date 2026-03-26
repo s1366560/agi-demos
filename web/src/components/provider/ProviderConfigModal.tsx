@@ -875,13 +875,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             Voice & Video Call Settings (RTC)
                           </span>
                         </div>
-                        <MaterialIcon
-                          name="expand_more"
-                          size={18}
-                          className="text-slate-400"
-                        />
+                        <MaterialIcon name="expand_more" size={18} className="text-slate-400" />
                       </button>
-                      <div id="rtc-config-section" className="hidden p-4 space-y-3 border-t border-slate-200 dark:border-slate-600">
+                      <div
+                        id="rtc-config-section"
+                        className="hidden p-4 space-y-3 border-t border-slate-200 dark:border-slate-600"
+                      >
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
                           Configure Volcengine RTC for real-time voice and video AI conversations.
                           Leave blank to use environment variables as fallback.
@@ -958,7 +957,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             type="text"
                             value={(formData.config?.speech_app_id as string) || ''}
                             onChange={(e) => {
-                              const newConfig = { ...formData.config, speech_app_id: e.target.value };
+                              const newConfig = {
+                                ...formData.config,
+                                speech_app_id: e.target.value,
+                              };
                               setFormData({ ...formData, config: newConfig });
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
@@ -974,7 +976,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             type="password"
                             value={(formData.config?.speech_access_token as string) || ''}
                             onChange={(e) => {
-                              const newConfig = { ...formData.config, speech_access_token: e.target.value };
+                              const newConfig = {
+                                ...formData.config,
+                                speech_access_token: e.target.value,
+                              };
                               setFormData({ ...formData, config: newConfig });
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
@@ -1042,7 +1047,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               <div className="space-y-4">
                 {isLoadingModels && (
                   <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-                    <MaterialIcon name="sync" size={16} className="animate-spin motion-reduce:animate-none" />
+                    <MaterialIcon
+                      name="sync"
+                      size={16}
+                      className="animate-spin motion-reduce:animate-none"
+                    />
                     Fetching available models...
                   </div>
                 )}
@@ -1883,71 +1892,71 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       (formData.config?.rtc_app_id ||
                         formData.config?.volc_ak ||
                         formData.config?.doubao_endpoint_id) && (
-                      <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <MaterialIcon name="call" size={14} className="text-primary" />
-                          <span className="text-xs font-medium text-slate-500">
-                            Voice & Video Call (RTC)
-                          </span>
+                        <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <MaterialIcon name="call" size={14} className="text-primary" />
+                            <span className="text-xs font-medium text-slate-500">
+                              Voice & Video Call (RTC)
+                            </span>
+                          </div>
+                          {formData.config?.rtc_app_id && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">RTC App ID:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {String(formData.config.rtc_app_id)}
+                              </span>
+                            </div>
+                          )}
+                          {formData.config?.rtc_app_key && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">RTC App Key:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                ********
+                              </span>
+                            </div>
+                          )}
+                          {formData.config?.volc_ak && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Access Key:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                ********
+                              </span>
+                            </div>
+                          )}
+                          {formData.config?.volc_sk && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Secret Key:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                ********
+                              </span>
+                            </div>
+                          )}
+                          {formData.config?.speech_app_id && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Speech App ID:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {String(formData.config.speech_app_id)}
+                              </span>
+                            </div>
+                          )}
+                          {formData.config?.speech_access_token && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Speech Access Token:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                ********
+                              </span>
+                            </div>
+                          )}
+                          {formData.config?.doubao_endpoint_id && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Endpoint ID:</span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {String(formData.config.doubao_endpoint_id)}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        {formData.config?.rtc_app_id && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">RTC App ID:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              {String(formData.config.rtc_app_id)}
-                            </span>
-                          </div>
-                        )}
-                        {formData.config?.rtc_app_key && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">RTC App Key:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              ********
-                            </span>
-                          </div>
-                        )}
-                        {formData.config?.volc_ak && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Access Key:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              ********
-                            </span>
-                          </div>
-                        )}
-                        {formData.config?.volc_sk && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Secret Key:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              ********
-                            </span>
-                          </div>
-                        )}
-                        {formData.config?.speech_app_id && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Speech App ID:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              {String(formData.config.speech_app_id)}
-                            </span>
-                          </div>
-                        )}
-                        {formData.config?.speech_access_token && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Speech Access Token:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              ********
-                            </span>
-                          </div>
-                        )}
-                        {formData.config?.doubao_endpoint_id && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">Endpoint ID:</span>
-                            <span className="font-medium text-slate-900 dark:text-white">
-                              {String(formData.config.doubao_endpoint_id)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
                   </div>
                 </div>
               </div>
@@ -1986,7 +1995,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 >
                   {isSubmitting ? (
                     <span className="flex items-center gap-2">
-                      <MaterialIcon name="progress_activity" size={18} className="animate-spin motion-reduce:animate-none" />
+                      <MaterialIcon
+                        name="progress_activity"
+                        size={18}
+                        className="animate-spin motion-reduce:animate-none"
+                      />
                       Saving...
                     </span>
                   ) : (

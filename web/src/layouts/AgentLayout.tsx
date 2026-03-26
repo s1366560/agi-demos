@@ -21,7 +21,6 @@ import React, { useState, useEffect } from 'react';
 
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 
-
 import { Search, History, GitBranch } from 'lucide-react';
 
 import { useProjectStore } from '@/stores/project';

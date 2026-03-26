@@ -10,7 +10,9 @@ import type { BillingInfo } from '../../services/billingService';
 // Loading state component
 const LoadingState = memo<{ message: string }>(({ message }) => (
   <div className="p-8 text-center text-slate-500">
-    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none mr-2">progress_activity</span>
+    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none mr-2">
+      progress_activity
+    </span>
     {message}
   </div>
 ));

@@ -1,6 +1,14 @@
 import { memo, useMemo } from 'react';
 
-import { Network, Clock, CheckCircle2, AlertCircle, XCircle, PlayCircle, Loader2 } from 'lucide-react';
+import {
+  Network,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+  PlayCircle,
+  Loader2,
+} from 'lucide-react';
 
 import { useActiveGraphRun, useActiveGraphRunNodes, useGraphPanel } from '../../stores/graphStore';
 
@@ -17,7 +25,9 @@ const StatusIcon = memo(({ status }: { status: string }) => {
     case 'completed':
       return <CheckCircle2 size={16} className="text-emerald-500" />;
     case 'running':
-      return <Loader2 size={16} className="text-blue-500 animate-spin motion-reduce:animate-none" />;
+      return (
+        <Loader2 size={16} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+      );
     case 'failed':
       return <XCircle size={16} className="text-red-500" />;
     case 'cancelled':

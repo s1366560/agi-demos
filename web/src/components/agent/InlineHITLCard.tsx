@@ -102,9 +102,7 @@ const getHITLIcon = (type: HITLType) => {
   }
 };
 
-const getHITLTitleKey = (
-  type: HITLType
-): { key: string; fallback: string } => {
+const getHITLTitleKey = (type: HITLType): { key: string; fallback: string } => {
   switch (type) {
     case 'clarification':
       return { key: 'agent.hitl.title.clarification', fallback: 'Needs clarification' };
@@ -205,8 +203,7 @@ const formatTimeAgoKey = (
   const time = new Date(timestamp).getTime();
   const diff = Math.floor((now - time) / 1000);
 
-  if (diff < 60)
-    return { key: 'agent.hitl.time.just_now', fallback: 'just now' };
+  if (diff < 60) return { key: 'agent.hitl.time.just_now', fallback: 'just now' };
   if (diff < 3600)
     return {
       key: 'agent.hitl.time.minutes_ago',
@@ -823,9 +820,13 @@ const EnvVarContent: React.FC<{
                     ? [
                         {
                           required: true,
-                          message: t('agent.hitl.validation.enter_field', 'Please enter {{field}}', {
-                            field: field.label,
-                          }),
+                          message: t(
+                            'agent.hitl.validation.enter_field',
+                            'Please enter {{field}}',
+                            {
+                              field: field.label,
+                            }
+                          ),
                         },
                       ]
                     : []
@@ -969,11 +970,18 @@ const PermissionContent: React.FC<{
         </div>
         {isAnswered ? (
           <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
-            {wasGranted ? t('agent.hitl.permission.granted', 'Granted') : t('agent.hitl.permission.denied', 'Denied')}
+            {wasGranted
+              ? t('agent.hitl.permission.granted', 'Granted')
+              : t('agent.hitl.permission.denied', 'Denied')}
           </LazyTag>
         ) : data.risk_level ? (
           <LazyTag color={risk?.color} className="text-xs">
-            {t('agent.hitl.risk.label', 'Risk')}: {data.risk_level === 'low' ? t('agent.hitl.risk.level.low', 'low') : data.risk_level === 'medium' ? t('agent.hitl.risk.level.medium', 'medium') : t('agent.hitl.risk.level.high', 'high')}
+            {t('agent.hitl.risk.label', 'Risk')}:{' '}
+            {data.risk_level === 'low'
+              ? t('agent.hitl.risk.level.low', 'low')
+              : data.risk_level === 'medium'
+                ? t('agent.hitl.risk.level.medium', 'medium')
+                : t('agent.hitl.risk.level.high', 'high')}
           </LazyTag>
         ) : null}
       </div>
@@ -1006,10 +1014,14 @@ const PermissionContent: React.FC<{
           <div className="flex items-center gap-2">
             <CheckCircle2 className={`w-4 h-4 ${wasGranted ? 'text-green-500' : 'text-red-500'}`} />
             <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-              {wasGranted ? t('agent.hitl.status.granted_executed', 'Granted - executed') : t('agent.hitl.status.denied_executed', 'Denied - executed')}
+              {wasGranted
+                ? t('agent.hitl.status.granted_executed', 'Granted - executed')
+                : t('agent.hitl.status.denied_executed', 'Denied - executed')}
             </span>
             <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
-              {wasGranted ? t('agent.hitl.action.allowed', 'Allow') : t('agent.hitl.action.denied', 'Deny')}
+              {wasGranted
+                ? t('agent.hitl.action.allowed', 'Allow')
+                : t('agent.hitl.action.denied', 'Deny')}
             </LazyTag>
           </div>
         </div>
@@ -1106,7 +1118,9 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
 
     // Priority: prop from timeline event > local state from submission > fallback
     const answeredValue =
-      answeredValueProp || localAnsweredValue || (isAnsweredFromStore ? t('agent.hitl.status.submitted', 'Submitted') : undefined);
+      answeredValueProp ||
+      localAnsweredValue ||
+      (isAnsweredFromStore ? t('agent.hitl.status.submitted', 'Submitted') : undefined);
 
     const isCurrentlySubmitting =
       localSubmitting || (isSubmitting && submittingRequestId === requestId);
@@ -1191,7 +1205,9 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
         <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
           <div
             className={`${bgClass} border rounded-xl overflow-hidden shadow-sm ${
-              !isAnswered ? 'hover:shadow-md transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200' : ''
+              !isAnswered
+                ? 'hover:shadow-md transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200'
+                : ''
             }`}
           >
             {/* Header - Unified style */}
@@ -1214,7 +1230,8 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                 )}
               </div>
               {isAnswered ? (
-                createdAt && (() => {
+                createdAt &&
+                (() => {
                   const timeInfo = formatTimeAgoKey(createdAt);
                   return (
                     <span className="text-xs text-slate-500 dark:text-slate-400">

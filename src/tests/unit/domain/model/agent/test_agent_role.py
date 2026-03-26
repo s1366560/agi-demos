@@ -3,10 +3,10 @@
 import pytest
 
 from src.domain.model.agent.agent_role import (
+    ROLE_DEFAULTS,
     AgentRole,
     AgentRoleResolver,
     RoleCapabilities,
-    ROLE_DEFAULTS,
 )
 
 

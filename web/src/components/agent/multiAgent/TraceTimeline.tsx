@@ -60,7 +60,12 @@ function StatusIcon({ status }: { status: string }) {
     case 'failed':
       return <AlertCircle size={14} className="text-red-600 dark:text-red-400" />;
     case 'running':
-      return <Loader2 size={14} className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />;
+      return (
+        <Loader2
+          size={14}
+          className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none"
+        />
+      );
     case 'cancelled':
       return <AlertCircle size={14} className="text-amber-600 dark:text-amber-400" />;
     default:
@@ -122,9 +127,7 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
         </span>
       </div>
 
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-        {run.task}
-      </p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{run.task}</p>
 
       <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500">
         <span className="flex items-center gap-1">
@@ -144,9 +147,7 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
       </div>
 
       {run.error && (
-        <p className="mt-1 text-[10px] text-red-500 dark:text-red-400 line-clamp-1">
-          {run.error}
-        </p>
+        <p className="mt-1 text-[10px] text-red-500 dark:text-red-400 line-clamp-1">{run.error}</p>
       )}
 
       {run.summary && run.status === 'completed' && (
@@ -166,65 +167,59 @@ interface TraceGroupProps {
   onSelectRun: (run: SubAgentRunDTO) => void;
 }
 
-const TraceGroup: FC<TraceGroupProps> = memo(
-  ({ traceId, runs, selectedRunId, onSelectRun }) => {
-    const [expanded, setExpanded] = useState(true);
+const TraceGroup: FC<TraceGroupProps> = memo(({ traceId, runs, selectedRunId, onSelectRun }) => {
+  const [expanded, setExpanded] = useState(true);
 
-    const toggleExpand = useCallback(() => {
-      setExpanded((prev) => !prev);
-    }, []);
+  const toggleExpand = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
 
-    const completedCount = runs.filter((r) => r.status === 'completed').length;
-    const failedCount = runs.filter((r) => r.status === 'failed').length;
-    const runningCount = runs.filter((r) => r.status === 'running').length;
+  const completedCount = runs.filter((r) => r.status === 'completed').length;
+  const failedCount = runs.filter((r) => r.status === 'failed').length;
+  const runningCount = runs.filter((r) => r.status === 'running').length;
 
-    return (
-      <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-        <button
-          type="button"
-          onClick={toggleExpand}
-          className="w-full flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/50
+  return (
+    <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={toggleExpand}
+        className="w-full flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/50
             hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        >
-          {expanded ? (
-            <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />
-          ) : (
-            <ChevronRight size={14} className="text-slate-500 flex-shrink-0" />
-          )}
-          <Activity size={14} className="text-blue-500 flex-shrink-0" />
-          <span className="text-xs font-mono text-slate-600 dark:text-slate-300 truncate flex-1 text-left">
-            {traceId === 'no-trace' ? 'Untraced Runs' : traceId.slice(0, 12)}
-          </span>
-          <div className="flex items-center gap-2 text-[10px] flex-shrink-0">
-            <span className="text-slate-400">{runs.length} runs</span>
-            {runningCount > 0 && (
-              <span className="text-blue-500 font-medium">{runningCount} active</span>
-            )}
-            {completedCount > 0 && (
-              <span className="text-green-500">{completedCount} done</span>
-            )}
-            {failedCount > 0 && (
-              <span className="text-red-500">{failedCount} failed</span>
-            )}
-          </div>
-        </button>
-
-        {expanded && (
-          <div className="p-2 space-y-1">
-            {runs.map((run) => (
-              <RunItem
-                key={run.run_id}
-                run={run}
-                selected={selectedRunId === run.run_id}
-                onSelect={onSelectRun}
-              />
-            ))}
-          </div>
+      >
+        {expanded ? (
+          <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />
+        ) : (
+          <ChevronRight size={14} className="text-slate-500 flex-shrink-0" />
         )}
-      </div>
-    );
-  },
-);
+        <Activity size={14} className="text-blue-500 flex-shrink-0" />
+        <span className="text-xs font-mono text-slate-600 dark:text-slate-300 truncate flex-1 text-left">
+          {traceId === 'no-trace' ? 'Untraced Runs' : traceId.slice(0, 12)}
+        </span>
+        <div className="flex items-center gap-2 text-[10px] flex-shrink-0">
+          <span className="text-slate-400">{runs.length} runs</span>
+          {runningCount > 0 && (
+            <span className="text-blue-500 font-medium">{runningCount} active</span>
+          )}
+          {completedCount > 0 && <span className="text-green-500">{completedCount} done</span>}
+          {failedCount > 0 && <span className="text-red-500">{failedCount} failed</span>}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="p-2 space-y-1">
+          {runs.map((run) => (
+            <RunItem
+              key={run.run_id}
+              run={run}
+              selected={selectedRunId === run.run_id}
+              onSelect={onSelectRun}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
 TraceGroup.displayName = 'TraceGroup';
 
 interface TraceTimelineProps {
@@ -256,13 +251,13 @@ export const TraceTimeline: FC<TraceTimelineProps> = memo(
         setInternalSelectedId(run.run_id);
         onSelectRun?.(run);
       },
-      [onSelectRun],
+      [onSelectRun]
     );
 
     const grouped = useMemo(() => {
       const map = new Map<string, SubAgentRunDTO[]>();
       const sorted = [...runs].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
       for (const run of sorted) {
         const key = run.trace_id ?? 'no-trace';
@@ -299,6 +294,6 @@ export const TraceTimeline: FC<TraceTimelineProps> = memo(
         })}
       </div>
     );
-  },
+  }
 );
 TraceTimeline.displayName = 'TraceTimeline';

@@ -134,10 +134,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
         {/* Subtitle */}
         <p className="text-slate-400 dark:text-slate-500 max-w-md mx-auto mb-8 text-sm leading-relaxed">
-          {t(
-            'agent.emptyState.subtitle',
-            'Start a conversation or pick a suggestion below.'
-          )}
+          {t('agent.emptyState.subtitle', 'Start a conversation or pick a suggestion below.')}
         </p>
 
         {/* New Chat Button */}

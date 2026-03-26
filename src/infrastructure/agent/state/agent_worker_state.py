@@ -457,6 +457,9 @@ async def get_or_create_tools(
     # 16. Add Multi-Agent tools (behind feature flag)
     _add_agent_tools(tools, project_id)
 
+    # 17. Add Workspace Chat tools
+    await _add_workspace_chat_tools(tools, tenant_id, project_id)
+
     return tools
 
 
@@ -1480,6 +1483,74 @@ def _add_session_comm_tools(
         )
     except Exception as e:
         logger.warning("Agent Worker: Failed to add session comm tools: %s", e)
+
+
+async def _add_workspace_chat_tools(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Configure and register workspace chat tools if a workspace exists."""
+    try:
+        from src.application.services.workspace_message_service import (
+            WorkspaceMessageService,
+        )
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
+            SqlWorkspaceAgentRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
+            SqlWorkspaceMemberRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
+            SqlWorkspaceMessageRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
+            SqlWorkspaceRepository,
+        )
+        from src.infrastructure.agent.tools.workspace_chat_tool import (
+            configure_workspace_chat,
+            workspace_chat_read_tool,
+            workspace_chat_send_tool,
+        )
+
+        async with async_session_factory() as db:
+            workspace_repo = SqlWorkspaceRepository(db)
+            workspaces = await workspace_repo.find_by_project(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                limit=1,
+            )
+            if not workspaces:
+                return
+
+            workspace = workspaces[0]
+
+            message_repo = SqlWorkspaceMessageRepository(db)
+            member_repo = SqlWorkspaceMemberRepository(db)
+            agent_repo = SqlWorkspaceAgentRepository(db)
+
+            service = WorkspaceMessageService(
+                message_repo=message_repo,
+                member_repo=member_repo,
+                agent_repo=agent_repo,
+            )
+            configure_workspace_chat(service, workspace.id)
+
+        tools[workspace_chat_send_tool.name] = workspace_chat_send_tool
+        tools[workspace_chat_read_tool.name] = workspace_chat_read_tool
+        logger.info(
+            "Agent Worker: Workspace chat tools added for project %s (workspace %s)",
+            project_id,
+            workspace.id,
+        )
+    except Exception as e:
+        logger.warning(
+            "Agent Worker: Failed to add workspace chat tools: %s",
+            e,
+        )
 
 
 def _add_session_status_tool(

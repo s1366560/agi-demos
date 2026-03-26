@@ -53,8 +53,12 @@ const LoadingComponent: FC<StateLoadingProps> = ({
 
   const content = (
     <div className={`flex flex-col items-center justify-center gap-3 ${config.padding}`}>
-      <Loader2 className={`${config.spinner} animate-spin motion-reduce:animate-none text-primary`} />
-      {message && <span className={`${config.text} text-slate-600 dark:text-slate-400`}>{message}</span>}
+      <Loader2
+        className={`${config.spinner} animate-spin motion-reduce:animate-none text-primary`}
+      />
+      {message && (
+        <span className={`${config.text} text-slate-600 dark:text-slate-400`}>{message}</span>
+      )}
     </div>
   );
 

@@ -93,7 +93,7 @@ export const ConversationPickerModal = memo(
             <h3 className="text-sm font-medium text-slate-700 dark:text-slate-200">
               {t('comparison.selectConversation', 'Select conversation to compare')}
             </h3>
-             <button
+            <button
               type="button"
               onClick={onClose}
               aria-label={t('common.close', 'Close')}

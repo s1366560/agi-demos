@@ -767,7 +767,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 cursor-help
               `}
             >
-              <StatusIcon size={12} className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''} />
+              <StatusIcon
+                size={12}
+                className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''}
+              />
               <span className="hidden sm:inline">{config.label}</span>
               {status.resources.activeCalls > 0 ? (
                 <span className="ml-0.5">({status.resources.activeCalls})</span>
@@ -1102,7 +1105,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
             ) : status.resources.activeCalls > 0 ? (
               <>
-                <Activity size={12} className="text-blue-500 animate-pulse motion-reduce:animate-none" />
+                <Activity
+                  size={12}
+                  className="text-blue-500 animate-pulse motion-reduce:animate-none"
+                />
                 <span className="hidden sm:inline text-blue-500">
                   {status.resources.activeCalls} active
                 </span>

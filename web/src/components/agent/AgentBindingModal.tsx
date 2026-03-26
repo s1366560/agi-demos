@@ -6,10 +6,7 @@ import { Modal, Form, Input, InputNumber, Progress, Select, Tag, message } from 
 
 import { useThemeColors } from '@/hooks/useThemeColor';
 
-import {
-  useCreateBinding,
-  useBindingSubmitting,
-} from '../../stores/agentBindings';
+import { useCreateBinding, useBindingSubmitting } from '../../stores/agentBindings';
 import { useDefinitions, useListDefinitions } from '../../stores/agentDefinitions';
 
 import type { CreateBindingRequest } from '../../types/multiAgent';
@@ -100,11 +97,13 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
 
   useEffect(() => {
     if (isOpen && !definitionsLoaded) {
-      listDefinitions({ enabled_only: true }).then(() => {
-        setDefinitionsLoaded(true);
-      }).catch(() => {
-        // Error handled by store
-      });
+      listDefinitions({ enabled_only: true })
+        .then(() => {
+          setDefinitionsLoaded(true);
+        })
+        .catch(() => {
+          // Error handled by store
+        });
     }
   }, [isOpen, definitionsLoaded, listDefinitions]);
 
@@ -127,16 +126,12 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
         priority: values.priority,
       };
       await createBinding(data);
-      message.success(
-        t('tenant.agentBindings.messages.createSuccess', 'Binding created')
-      );
+      message.success(t('tenant.agentBindings.messages.createSuccess', 'Binding created'));
       onSuccess();
     } catch (error: unknown) {
       const err = error as { errorFields?: unknown[] | undefined };
       if (!err.errorFields) {
-        message.error(
-          t('tenant.agentBindings.messages.createError', 'Failed to create binding')
-        );
+        message.error(t('tenant.agentBindings.messages.createError', 'Failed to create binding'));
       }
     }
   }, [form, createBinding, onSuccess, t]);
@@ -160,18 +155,12 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
           rules={[
             {
               required: true,
-              message: t(
-                'tenant.agentBindings.modal.agentRequired',
-                'Please select an agent'
-              ),
+              message: t('tenant.agentBindings.modal.agentRequired', 'Please select an agent'),
             },
           ]}
         >
           <Select
-            placeholder={t(
-              'tenant.agentBindings.modal.selectAgent',
-              'Select an agent definition'
-            )}
+            placeholder={t('tenant.agentBindings.modal.selectAgent', 'Select an agent definition')}
             showSearch
             filterOption={(input, option) =>
               (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())

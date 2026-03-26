@@ -23,6 +23,7 @@ class TopicType(str, Enum):
 
     AGENT = "agent"
     SANDBOX = "sandbox"
+    WORKSPACE = "workspace"
     SYSTEM = "system"
     LIFECYCLE = "lifecycle"
 

@@ -125,7 +125,15 @@ export const mcpAPI = {
   /**
    * Get prompts from an MCP server (SEP-1865 P2-2)
    */
-  getPrompts: async (serverId: string): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: Array<{ name: string; description?: string; required?: boolean }> }> }> => {
+  getPrompts: async (
+    serverId: string
+  ): Promise<{
+    prompts: Array<{
+      name: string;
+      description?: string;
+      arguments?: Array<{ name: string; description?: string; required?: boolean }>;
+    }>;
+  }> => {
     return await api.get(`/mcp/${serverId}/prompts`);
   },
 
@@ -139,7 +147,11 @@ export const mcpAPI = {
   /**
    * Get recent logs from an MCP server (SEP-1865 P2-3)
    */
-  getLogs: async (serverId: string): Promise<{ logs: Array<{ level: string; logger?: string; data?: unknown; timestamp?: string }> }> => {
+  getLogs: async (
+    serverId: string
+  ): Promise<{
+    logs: Array<{ level: string; logger?: string; data?: unknown; timestamp?: string }>;
+  }> => {
     return await api.get(`/mcp/${serverId}/logs`);
   },
 };

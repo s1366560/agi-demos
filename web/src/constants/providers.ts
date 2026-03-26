@@ -367,8 +367,7 @@ export const PROVIDERS: ProviderMeta[] = [
     value: 'volcengine',
     label: 'Volcengine \u706B\u5C71\u5F15\u64CE',
     icon: '\uD83C\uDF0B',
-    description:
-      'Doubao Seed 2.0 / 1.5 series, Vision, Embedding, Reranker, Seedream, Seedance',
+    description: 'Doubao Seed 2.0 / 1.5 series, Vision, Embedding, Reranker, Seedream, Seedance',
     apiKeyEnvVar: 'VOLCENGINE_API_KEY',
     apiKeyPlaceholder: 'Enter your Volcengine API key',
     hasEmbedding: true,

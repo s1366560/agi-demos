@@ -27,9 +27,7 @@ import { useThemeStore } from '@/stores/theme';
 
 function resolveVar(property: string, fallback = ''): string {
   if (typeof window === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(property)
-    .trim();
+  const value = getComputedStyle(document.documentElement).getPropertyValue(property).trim();
   return value || fallback;
 }
 
@@ -42,15 +40,15 @@ export function useThemeColor(property: string, fallback = ''): string {
     const id = requestAnimationFrame(() => {
       setResolved(resolveVar(property, fallback));
     });
-    return () => { cancelAnimationFrame(id); };
+    return () => {
+      cancelAnimationFrame(id);
+    };
   }, [property, fallback, computedTheme]);
 
   return resolved;
 }
 
-export function useThemeColors<K extends string>(
-  tokenMap: Record<K, string>,
-): Record<K, string> {
+export function useThemeColors<K extends string>(tokenMap: Record<K, string>): Record<K, string> {
   const computedTheme = useThemeStore((s) => s.computedTheme);
   const tokenMapRef = useRef(tokenMap);
   useEffect(() => {
@@ -80,7 +78,9 @@ export function useThemeColors<K extends string>(
     const id = requestAnimationFrame(() => {
       setResolved(resolve());
     });
-    return () => { cancelAnimationFrame(id); };
+    return () => {
+      cancelAnimationFrame(id);
+    };
   }, [resolve, computedTheme]);
 
   return resolved;

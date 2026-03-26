@@ -88,9 +88,12 @@ interface AgentSpawnCardProps {
 
 function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnCardProps) {
   const agentName =
-    (result?.['agent_name'] as string | undefined) ?? (params['agent_id'] as string | undefined) ?? 'Agent';
+    (result?.['agent_name'] as string | undefined) ??
+    (params['agent_id'] as string | undefined) ??
+    'Agent';
   const sessionId = result?.['session_id'] as string | undefined;
-  const mode = (result?.['mode'] as string | undefined) ?? (params['mode'] as string | undefined) ?? 'run';
+  const mode =
+    (result?.['mode'] as string | undefined) ?? (params['mode'] as string | undefined) ?? 'run';
   const message = params['message'] as string | undefined;
 
   return (
@@ -114,7 +117,9 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
           <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
             Agent
           </span>
-          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">{agentName}</span>
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+            {agentName}
+          </span>
         </div>
         {sessionId && (
           <div className="flex items-center gap-2">
@@ -166,9 +171,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
         <span className="material-symbols-outlined text-[16px] text-red-600 dark:text-red-400">
           stop_circle
         </span>
-        <span className="text-xs font-semibold text-red-800 dark:text-red-200">
-          Stop Agent
-        </span>
+        <span className="text-xs font-semibold text-red-800 dark:text-red-200">Stop Agent</span>
         {cascade && (
           <span className="text-[10px] text-red-600/70 dark:text-red-400/60 bg-red-200/60 dark:bg-red-800/40 px-1.5 py-0.5 rounded">
             cascade
@@ -220,7 +223,8 @@ interface AgentSendCardProps {
 function AgentSendCard({ params, result, status, error, duration }: AgentSendCardProps) {
   const agentId = params['agent_id'] as string | undefined;
   const message = params['message'] as string | undefined;
-  const targetSession = (result?.['session_id'] as string | undefined) ?? (params['session_id'] as string | undefined);
+  const targetSession =
+    (result?.['session_id'] as string | undefined) ?? (params['session_id'] as string | undefined);
 
   return (
     <div className="rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden">
@@ -228,9 +232,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         <span className="material-symbols-outlined text-[16px] text-blue-600 dark:text-blue-400">
           send
         </span>
-        <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">
-          Send Message
-        </span>
+        <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Send Message</span>
         <div className="ml-auto">
           <StatusBadge status={status} duration={duration} />
         </div>
@@ -308,7 +310,10 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
         <div className="px-3 py-2 space-y-1.5">
           {agents.map((agent, i) => {
             const a = agent as Record<string, unknown>;
-            const name = (a['display_name'] as string | undefined) ?? (a['name'] as string | undefined) ?? 'Unknown';
+            const name =
+              (a['display_name'] as string | undefined) ??
+              (a['name'] as string | undefined) ??
+              'Unknown';
             const canSpawn = a['can_spawn'] as boolean | undefined;
             const id = (a['id'] as string | undefined) ?? String(i);
             return (
@@ -511,7 +516,9 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
           {messages.length > 3 && (
             <button
               type="button"
-              onClick={() => { setExpanded((v) => !v); }}
+              onClick={() => {
+                setExpanded((v) => !v);
+              }}
               className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer px-2 py-0.5"
             >
               {expanded ? 'Show less' : `Show ${String(messages.length - 3)} more...`}
@@ -588,23 +595,11 @@ export const AgentToolStepCard = memo(function AgentToolStepCard({
       );
       break;
     case 'agent_list':
-      card = (
-        <AgentListCard
-          result={parsed}
-          status={status}
-          error={errorMsg}
-          duration={duration}
-        />
-      );
+      card = <AgentListCard result={parsed} status={status} error={errorMsg} duration={duration} />;
       break;
     case 'agent_sessions':
       card = (
-        <AgentSessionsCard
-          result={parsed}
-          status={status}
-          error={errorMsg}
-          duration={duration}
-        />
+        <AgentSessionsCard result={parsed} status={status} error={errorMsg} duration={duration} />
       );
       break;
     case 'agent_history':
@@ -682,23 +677,11 @@ export const AgentToolCard = memo(function AgentToolCard({
       );
       break;
     case 'agent_list':
-      card = (
-        <AgentListCard
-          result={parsed}
-          status={status}
-          error={errorMsg}
-          duration={duration}
-        />
-      );
+      card = <AgentListCard result={parsed} status={status} error={errorMsg} duration={duration} />;
       break;
     case 'agent_sessions':
       card = (
-        <AgentSessionsCard
-          result={parsed}
-          status={status}
-          error={errorMsg}
-          duration={duration}
-        />
+        <AgentSessionsCard result={parsed} status={status} error={errorMsg} duration={duration} />
       );
       break;
     case 'agent_history':
@@ -718,7 +701,11 @@ export const AgentToolCard = memo(function AgentToolCard({
 
   return (
     <div className="flex flex-col gap-1">
-      <AgentSection icon="smart_toy" iconBg="bg-indigo-100 dark:bg-indigo-800/30" opacity={status !== 'running'}>
+      <AgentSection
+        icon="smart_toy"
+        iconBg="bg-indigo-100 dark:bg-indigo-800/30"
+        opacity={status !== 'running'}
+      >
         {card}
       </AgentSection>
       <div className="pl-12">

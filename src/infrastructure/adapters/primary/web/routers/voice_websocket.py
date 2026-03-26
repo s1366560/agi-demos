@@ -71,7 +71,7 @@ async def voice_chat_endpoint(
     # 3. Receive initial config message
     try:
         config_msg = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
-    except (asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, Exception) as e:
         logger.warning("[Voice WS] Failed to receive config: %s", e)
         await _send_error(websocket, "Expected voice_config message within 10 seconds")
         await websocket.close(code=4000)
@@ -330,7 +330,7 @@ async def _asr_processor(
             # new ASR messages arrive.
             try:
                 result = await asyncio.wait_for(asr_client.receive(), timeout=0.3)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # No new ASR data -- check silence timeout
                 if asr_buffer and (time.monotonic() - last_growth_time) > _ASR_SILENCE_THRESHOLD:
                     logger.info(
@@ -452,7 +452,7 @@ async def _agent_bridge(
             # Wait for a final transcript from ASR
             try:
                 asr_text = await asyncio.wait_for(asr_final_queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
             logger.info(
@@ -577,7 +577,7 @@ async def _tts_sender(
         while not shutdown.is_set():
             try:
                 text = await asyncio.wait_for(tts_text_queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
             if text is None:

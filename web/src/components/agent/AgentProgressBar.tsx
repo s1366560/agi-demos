@@ -197,7 +197,11 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
           strokeColor={{
             '0%': status === 'failed' ? tc.error : status === 'completed' ? tc.success : tc.info,
             '100%':
-              status === 'failed' ? tc.errorLight : status === 'completed' ? tc.successLight : tc.infoLight,
+              status === 'failed'
+                ? tc.errorLight
+                : status === 'completed'
+                  ? tc.successLight
+                  : tc.infoLight,
           }}
           className={`progress-fill ${config.class} ${animate ? 'animate-progress' : ''} ${status === 'step_executing' || status === 'acting' ? 'progress-striped' : ''}`}
           style={{ marginBottom: showSteps && !compact ? 8 : 0 }}

@@ -50,10 +50,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
     const delayStyle = { animationDelay: `${String(Math.min(index ?? 0, 5) * 50)}ms` };
 
     // Pre-compute text_end existence to avoid O(n) check per text_delta event
-    const hasTextEnd = useMemo(
-      () => events.some((e) => e.type === 'text_end'),
-      [events]
-    );
+    const hasTextEnd = useMemo(() => events.some((e) => e.type === 'text_end'), [events]);
 
     switch (event.type) {
       case 'user_message':
@@ -281,7 +278,10 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       default:
         if (import.meta.env.DEV) {
-          console.warn('Unknown event type in TimelineEventItem:', (event as { type: string }).type);
+          console.warn(
+            'Unknown event type in TimelineEventItem:',
+            (event as { type: string }).type
+          );
         }
         return null;
     }

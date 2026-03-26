@@ -17,7 +17,6 @@ import {
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
-
 import { useSchemaData } from '../../../hooks/useSwr';
 
 // Memoized entity card component to prevent unnecessary re-renders

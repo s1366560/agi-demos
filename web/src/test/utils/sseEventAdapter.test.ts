@@ -31,7 +31,6 @@ import type {
 } from '../../types/agent';
 
 describe('SSE Event Adapter', () => {
-
   describe('Typewriter Effect Support (text_*)', () => {
     it('should support text_delta event type', () => {
       expect(isSupportedEventType('text_delta')).toBe(true);
@@ -261,7 +260,6 @@ describe('SSE Event Adapter', () => {
     });
   });
 
-
   describe('SSE to TimelineEvent Conversion', () => {
     it('should convert user message event', () => {
       const sseEvent: AgentEvent<MessageEventData> = {
@@ -464,7 +462,6 @@ describe('SSE Event Adapter', () => {
     });
   });
 
-
   describe('Batch Conversion', () => {
     it('should convert multiple SSE events to timeline', () => {
       const sseEvents: AgentEvent<any>[] = [
@@ -529,7 +526,6 @@ describe('SSE Event Adapter', () => {
       expect(timelineEvents[1].type).toBe('assistant_message');
     });
   });
-
 
   describe('Edge Cases', () => {
     it('should handle empty batch', () => {

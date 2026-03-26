@@ -80,7 +80,7 @@ class AgentTrigger:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentTrigger":
+    def from_dict(cls, data: dict[str, Any]) -> AgentTrigger:
         """Create from dictionary."""
         return cls(
             description=data.get("description", ""),
@@ -328,7 +328,7 @@ class SubAgent:
             return list(available_tools)
         return [t for t in available_tools if t in self.allowed_tools]
 
-    def record_execution(self, execution_time_ms: float, success: bool) -> "SubAgent":
+    def record_execution(self, execution_time_ms: float, success: bool) -> SubAgent:
         """
         Record an execution of this subagent.
 
@@ -426,7 +426,7 @@ class SubAgent:
         return result
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "SubAgent":
+    def from_dict(cls, data: dict[str, Any]) -> SubAgent:
         """Create from dictionary (e.g., from database)."""
         trigger_data = data.get("trigger", {})
         if isinstance(trigger_data, dict):
@@ -495,7 +495,7 @@ class SubAgent:
         spawn_policy: SpawnPolicy | None = None,
         tool_policy: ToolPolicy | None = None,
         identity: AgentIdentity | None = None,
-    ) -> "SubAgent":
+    ) -> SubAgent:
         """
         Create a new subagent.
 

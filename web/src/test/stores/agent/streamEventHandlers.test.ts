@@ -92,7 +92,10 @@ describe('streamEventHandlers', () => {
       tokenBatchIntervalMs: 50,
       thoughtBatchIntervalMs: 50,
       queueTimelineEvent: vi.fn((event, stateUpdates) => {
-        const nextTimeline = appendSSEEventToTimeline(mockState.timeline as any, event as any) as any;
+        const nextTimeline = appendSSEEventToTimeline(
+          mockState.timeline as any,
+          event as any
+        ) as any;
         mockUpdateConversationState(conversationId, {
           timeline: nextTimeline,
           ...(stateUpdates || {}),
@@ -421,7 +424,9 @@ describe('streamEventHandlers', () => {
     const updateCallCountAfterFlush = mockUpdateConversationState.mock.calls.length;
     vi.advanceTimersByTime(400);
 
-    expect(mockUpdateConversationState.mock.calls.length).toBeGreaterThan(updateCallCountAfterFlush);
+    expect(mockUpdateConversationState.mock.calls.length).toBeGreaterThan(
+      updateCallCountAfterFlush
+    );
     expect(mockUpdateConversationState).toHaveBeenLastCalledWith(conversationId, {
       isThinkingStreaming: false,
     });

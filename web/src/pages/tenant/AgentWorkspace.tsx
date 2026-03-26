@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Empty as AntEmpty } from 'antd';
 
@@ -31,6 +31,7 @@ export const AgentWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
+  const [searchParams] = useSearchParams();
 
   // Store subscriptions - select only what we need
   const user = useAuthStore((state) => state.user);
@@ -48,6 +49,15 @@ export const AgentWorkspace: React.FC = () => {
   );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const queryProjectId = searchParams.get('projectId');
+  const queryWorkspaceId = searchParams.get('workspaceId');
+  const navigationQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (queryProjectId) params.set('projectId', queryProjectId);
+    if (queryWorkspaceId) params.set('workspaceId', queryWorkspaceId);
+    const serialized = params.toString();
+    return serialized.length > 0 ? serialized : undefined;
+  }, [queryProjectId, queryWorkspaceId]);
 
   // Get effective tenant ID - memoized to prevent recalculation
   const tenantId = useMemo(
@@ -82,8 +92,10 @@ export const AgentWorkspace: React.FC = () => {
     if (!projects.length) return;
 
     const init = () => {
-      // Try to restore last selected project from localStorage (now using cached hook)
-      if (lastProjectId && projects.find((p: Project) => p.id === lastProjectId)) {
+      if (queryProjectId && projects.find((p: Project) => p.id === queryProjectId)) {
+        setSelectedProjectId(queryProjectId);
+      } else if (lastProjectId && projects.find((p: Project) => p.id === lastProjectId)) {
+        // Try to restore last selected project from localStorage (now using cached hook)
         setSelectedProjectId(lastProjectId);
       } else if (currentProject) {
         setSelectedProjectId(currentProject.id);
@@ -94,7 +106,7 @@ export const AgentWorkspace: React.FC = () => {
       setInitializing(false);
     };
     init();
-  }, [projects, currentProject, lastProjectId]);
+  }, [projects, currentProject, lastProjectId, queryProjectId]);
 
   // Load conversations when project changes
   useEffect(() => {
@@ -148,7 +160,11 @@ export const AgentWorkspace: React.FC = () => {
     <div className="w-full h-full">
       {effectiveProjectId ? (
         <>
-          <AgentChatContent externalProjectId={effectiveProjectId} basePath={basePath} />
+          <AgentChatContent
+            externalProjectId={effectiveProjectId}
+            basePath={basePath}
+            navigationQuery={navigationQuery}
+          />
           <ContextDetailPanel />
         </>
       ) : (

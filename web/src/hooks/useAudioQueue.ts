@@ -112,7 +112,7 @@ export const useAudioQueue = (): UseAudioQueueReturn => {
       source.start(nextStartTimeRef.current);
       nextStartTimeRef.current += buffer.duration;
     },
-    [getOrCreateContext, removeSource],
+    [getOrCreateContext, removeSource]
   );
 
   const stop = useCallback(() => {

@@ -22,7 +22,16 @@ interface LogEntry {
   timestamp?: string;
 }
 
-const LOG_LEVELS = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'] as const;
+const LOG_LEVELS = [
+  'debug',
+  'info',
+  'notice',
+  'warning',
+  'error',
+  'critical',
+  'alert',
+  'emergency',
+] as const;
 
 function getLevelColor(level: string): string {
   switch (level.toLowerCase()) {
@@ -226,7 +235,7 @@ export const McpLogsTabV2: React.FC = () => {
                       <pre className="whitespace-pre-wrap break-all max-w-xl">
                         {typeof log.data === 'string'
                           ? log.data
-                          : JSON.stringify(log.data, null, 2) ?? '-'}
+                          : (JSON.stringify(log.data, null, 2) ?? '-')}
                       </pre>
                     </td>
                     <td className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">

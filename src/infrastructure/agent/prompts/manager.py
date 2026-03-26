@@ -88,6 +88,9 @@ class PromptContext:
     # Heartbeat context (injected when a heartbeat check is due)
     heartbeat_prompt: str | None = None
 
+    # Dynamic workspace context (members, agents, messages, blackboard posts)
+    workspace_context: str | None = None
+
     @property
     def is_last_step(self) -> bool:
         """Check if this is the last allowed step."""
@@ -229,7 +232,7 @@ class SystemPromptManager:
         is_forced_skill: bool,
     ) -> None:
         """Build base prompt, memory context, and forced skill sections.
-        
+
         Loads the core (non-behavioral) base prompt, then conditionally
         loads the behavioral/personality prompt only when no custom SOUL
         exists (i.e. project or tenant SOUL.md overrides the default).
@@ -347,14 +350,10 @@ class SystemPromptManager:
             )
 
         if persona.agents.is_loaded:
-            parts.append(
-                f"## AGENTS.md\n<agents>\n{persona.agents.content}\n</agents>"
-            )
+            parts.append(f"## AGENTS.md\n<agents>\n{persona.agents.content}\n</agents>")
 
         if persona.tools.is_loaded:
-            parts.append(
-                f"## TOOLS.md\n<tools>\n{persona.tools.content}\n</tools>"
-            )
+            parts.append(f"## TOOLS.md\n<tools>\n{persona.tools.content}\n</tools>")
 
         if parts:
             body = "\n\n".join(parts)
@@ -386,6 +385,8 @@ class SystemPromptManager:
         context: PromptContext,
     ) -> None:
         """Build workspace guidelines, mode reminder, max steps warning, and custom rules."""
+        if context.workspace_context:
+            sections.append(context.workspace_context)
         workspace_guidelines = await self._load_file("sections/workspace.txt")
         if workspace_guidelines:
             sections.append(workspace_guidelines)

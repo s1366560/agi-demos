@@ -50,10 +50,10 @@ export const SchemaLayout: React.FC = () => {
         </div>
       </div>
 
-       {/* Content Area */}
-       <div className="flex-1 overflow-hidden min-h-0 relative">
-         <RouteErrorBoundary context="Schema" fallbackPath={`${projectBasePath}/schema`}>
-           <Outlet />
+      {/* Content Area */}
+      <div className="flex-1 overflow-hidden min-h-0 relative">
+        <RouteErrorBoundary context="Schema" fallbackPath={`${projectBasePath}/schema`}>
+          <Outlet />
         </RouteErrorBoundary>
       </div>
     </div>
