@@ -71,11 +71,12 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({
     try {
       const values = await form.validateFields();
       setSubmitting(true);
-      await onSubmit({
+      const payload: Parameters<typeof onSubmit>[0] = {
         agent_id: values.agent_id,
-        display_name: values.display_name || undefined,
-        description: values.description || undefined,
-      });
+      };
+      if (values.display_name) payload.display_name = values.display_name;
+      if (values.description) payload.description = values.description;
+      await onSubmit(payload);
       message.success('Agent added to workspace');
       onClose();
     } catch (error: unknown) {

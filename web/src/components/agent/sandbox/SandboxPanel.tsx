@@ -29,8 +29,8 @@
 
 import { useState, useCallback, Children } from 'react';
 
-import { CodeOutlined, FileTextOutlined, DesktopOutlined, CloseOutlined } from '@ant-design/icons';
 import { Tabs, Empty, Button, Tooltip, Badge, Space } from 'antd';
+import { Code, FileText, Monitor, X } from 'lucide-react';
 
 import { useSandboxStore } from '../../../stores/sandbox';
 
@@ -110,7 +110,7 @@ function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderPr
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50">
       <div className="flex items-center gap-2">
-        <CodeOutlined className="text-slate-500" />
+        <Code size={16} className="text-slate-500" />
         <span className="font-medium text-slate-700">Sandbox</span>
         {sandboxId && <span className="text-xs text-slate-400">({sandboxId.slice(0, 12)})</span>}
       </div>
@@ -124,7 +124,7 @@ function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderPr
           <Button
             type="text"
             size="small"
-            icon={<CloseOutlined />}
+            icon={<X size={16} />}
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600"
           />
@@ -308,7 +308,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       key: 'terminal',
       label: (
         <Space size={4}>
-          <CodeOutlined />
+          <Code size={16} />
           <span>Terminal</span>
         </Space>
       ),
@@ -321,7 +321,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       key: 'desktop',
       label: (
         <Space size={4}>
-          <DesktopOutlined />
+          <Monitor size={16} />
           <span>Desktop</span>
           {desktopStatus?.running && <Badge status="success" className="ml-1" />}
         </Space>
@@ -335,7 +335,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       key: 'control',
       label: (
         <Space size={4}>
-          <DesktopOutlined />
+          <Monitor size={16} />
           <span>Control</span>
         </Space>
       ),
@@ -360,7 +360,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       key: 'output',
       label: (
         <Space size={4}>
-          <FileTextOutlined />
+          <FileText size={16} />
           <span>Output</span>
           {toolExecutions.length > 0 && (
             <Badge count={toolExecutions.length} size="small" className="ml-1" />

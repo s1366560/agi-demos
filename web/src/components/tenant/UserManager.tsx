@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Users, UserPlus, Shield, Trash2, Edit3, Search, Mail, Calendar } from 'lucide-react';
+import { Users, UserPlus, Shield, Trash2, Edit3, Search, Mail, Calendar, Loader2 } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 
@@ -40,6 +40,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
 
   const loadTenantUsers = useCallback(async () => {
     if (!currentTenant) return;
@@ -116,6 +117,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
   const handleRemoveUser = async (userId: string) => {
     if (!window.confirm(t('tenant.users.remove_confirm'))) return;
 
+    setRemovingUserId(userId);
     try {
       if (context === 'tenant' && currentTenant) {
         await tenantService.removeMember(currentTenant.id, userId);
@@ -132,6 +134,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
     } catch (error) {
       console.error('Failed to remove user:', error);
       alert(t('tenant.users.remove_error'));
+    } finally {
+      setRemovingUserId(null);
     }
   };
 
@@ -205,7 +209,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
           </div>
           <button
             onClick={handleInviteUser}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-sm"
           >
             <UserPlus className="h-4 w-4" />
             <span>{t('tenant.users.inviteMember')}</span>
@@ -262,7 +266,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
             {!searchTerm && filterRole === 'all' && (
               <button
                 onClick={handleInviteUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               >
                 {t('tenant.users.empty.invite')}
               </button>
@@ -317,18 +321,23 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                     onClick={() => {
                       handleEditUser(user);
                     }}
-                    className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                    className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     title={t('tenant.users.actions.edit')}
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
                   {user.role !== 'owner' && (
-                    <button
-                      onClick={() => handleRemoveUser(user.id)}
-                      className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                      title={t('tenant.users.actions.remove')}
-                    >
-                      <Trash2 className="h-4 w-4" />
+                      <button
+                        onClick={() => handleRemoveUser(user.id)}
+                        disabled={removingUserId === user.id}
+                        className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={t('tenant.users.actions.remove')}
+                      >
+                      {removingUserId === user.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </button>
                   )}
                 </div>
@@ -353,7 +362,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                 onClick={() => {
                   setIsInviteModalOpen(false);
                 }}
-                className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+                className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 <span className="text-xl">×</span>
               </button>
@@ -400,13 +409,13 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                   onClick={() => {
                     setIsInviteModalOpen(false);
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                 >
                   {t('tenant.users.invite_modal.cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                 >
                   {t('tenant.users.invite_modal.submit')}
                 </button>

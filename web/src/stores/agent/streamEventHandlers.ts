@@ -32,11 +32,13 @@ import type {
   ExecutionNarrativeEntry,
   MemoryCapturedEventData,
   MemoryRecalledEventData,
+  Message,
   ModelSwitchRequestedEventData,
   ModelOverrideRejectedEventData,
   MessageEventData,
   PermissionAskedEventData,
   ThoughtEventData,
+  TimelineEvent,
   ToolCall,
   SubAgentQueuedEventData,
   SubAgentKilledEventData,
@@ -80,7 +82,7 @@ export interface StreamHandlerDeps {
   getDeltaBuffer: (conversationId: string) => DeltaBufferState;
   clearDeltaBuffers: (conversationId: string) => void;
   clearAllDeltaBuffers: () => void;
-  timelineToMessages: (timeline: any[]) => any[];
+  timelineToMessages: (timeline: TimelineEvent[]) => Message[];
   tokenBatchIntervalMs: number;
   thoughtBatchIntervalMs: number;
   queueTimelineEvent: (
@@ -117,7 +119,13 @@ export function createStreamEventHandlers(
   } = deps;
 
   // Type-safe wrapper for set to handle both object and updater forms
-  const setState = set as any;
+  const setState = set as (updater: Parameters<typeof set>[0]) => void;
+  // Shared timeline event type for requestId access
+  interface TimelineEventWithRequestId {
+    type: string;
+    requestId?: string;
+  }
+
   const THINKING_IDLE_RESET_MS = 400;
   let thoughtIdleResetTimer: ReturnType<typeof setTimeout> | null = null;
   const clearThoughtIdleResetTimer = () => {
@@ -153,7 +161,7 @@ export function createStreamEventHandlers(
   // Keep the most recent execution diagnostics while bounding per-conversation memory usage.
   const EXECUTION_NARRATIVE_LIMIT = 40;
   const buildNarrativeId = (stage: ExecutionNarrativeEntry['stage'], traceId?: string): string =>
-    `${stage}-${traceId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`;
+    `${stage}-${traceId ?? `${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`}`;
   const appendExecutionNarrativeEntry = (
     entries: ConversationState['executionNarrative'],
     entry: ExecutionNarrativeEntry
@@ -170,8 +178,8 @@ export function createStreamEventHandlers(
   ): ConversationState['timeline'] => {
     const payload = sourceEvent.data as Record<string, unknown>;
     const eventTimeUs =
-      typeof payload?.event_time_us === 'number' ? payload.event_time_us : Date.now() * 1000;
-    const eventCounter = typeof payload?.event_counter === 'number' ? payload.event_counter : 0;
+      typeof payload.event_time_us === 'number' ? payload.event_time_us : Date.now() * 1000;
+    const eventCounter = typeof payload.event_counter === 'number' ? payload.event_counter : 0;
 
     return appendSSEEventToTimeline(timeline, {
       type: 'thought',
@@ -189,7 +197,7 @@ export function createStreamEventHandlers(
       const messageData = event.data as MessageEventData & {
         metadata?: { source?: string | undefined } | undefined;
       };
-      const source = messageData?.metadata?.source;
+      const source = messageData.metadata?.source;
       if (source !== 'channel_inbound') {
         return;
       }
@@ -322,7 +330,7 @@ export function createStreamEventHandlers(
       const data = event.data as { conversation_id: string; tasks: unknown[] };
       console.log('[TaskSync] task_list_updated received:', {
         conversationId: handlerConversationId,
-        taskCount: data.tasks?.length ?? 0,
+        taskCount: data.tasks.length,
       });
       const { updateConversationState } = get();
       updateConversationState(handlerConversationId, {
@@ -343,7 +351,7 @@ export function createStreamEventHandlers(
       });
       const { getConversationState, updateConversationState } = get();
       const state = getConversationState(handlerConversationId);
-      const tasks = (state?.tasks ?? []).map((t: import('../../types/agent').AgentTask) =>
+      const tasks = state.tasks.map((t: import('../../types/agent').AgentTask) =>
         t.id === data.task_id
           ? {
               ...t,
@@ -365,10 +373,10 @@ export function createStreamEventHandlers(
     },
 
     onModelSwitchRequested: (event: AgentEvent<ModelSwitchRequestedEventData>) => {
-      const model = (event.data?.model || '').trim();
+      const model = (event.data.model || '').trim();
       if (!model) return;
 
-      if (!event.data?.provider_type) {
+      if (!event.data.provider_type) {
         console.warn(
           '[model-switch] Received model_switch_requested with no provider_type for model:',
           model
@@ -392,9 +400,9 @@ export function createStreamEventHandlers(
 
       console.warn(
         '[model-switch] Model override rejected by backend:',
-        event.data?.model,
+        event.data.model,
         'reason:',
-        event.data?.reason
+        event.data.reason
       );
 
       // Clear the rejected override from appModelContext
@@ -445,8 +453,10 @@ export function createStreamEventHandlers(
       const selection = event.data;
       const convState = getConversationState(handlerConversationId);
       const budgetText =
-        typeof selection.tool_budget === 'number' ? `, budget=${selection.tool_budget}` : '';
-      const insight = `[Selection] kept ${selection.final_count}/${selection.initial_count}, removed ${selection.removed_total}${budgetText}`;
+        typeof selection.tool_budget === 'number'
+          ? `, budget=${String(selection.tool_budget)}`
+          : '';
+      const insight = `[Selection] kept ${String(selection.final_count)}/${String(selection.initial_count)}, removed ${String(selection.removed_total)}${budgetText}`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
       const narrativeEntry: ExecutionNarrativeEntry = {
         id: buildNarrativeId('selection', selection.trace_id),
@@ -476,7 +486,7 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const filtered = event.data;
       const convState = getConversationState(handlerConversationId);
-      const insight = `[Policy] filtered ${filtered.removed_total} tools across ${filtered.stage_count} stages`;
+      const insight = `[Policy] filtered ${String(filtered.removed_total)} tools across ${String(filtered.stage_count)} stages`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
       const narrativeEntry: ExecutionNarrativeEntry = {
         id: buildNarrativeId('policy', filtered.trace_id),
@@ -516,7 +526,7 @@ export function createStreamEventHandlers(
           : '';
       const refreshCountText =
         typeof changed.refreshed_tool_count === 'number'
-          ? ` (${changed.refreshed_tool_count} tools)`
+          ? ` (${String(changed.refreshed_tool_count)} tools)`
           : '';
       const insight = `[Toolset] ${actionText}${pluginText}${refreshStateText}${refreshCountText}`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
@@ -732,7 +742,10 @@ export function createStreamEventHandlers(
       const fullText = event.data.full_text;
       const finalContent = fullText || convState.streamingAssistantContent + remainingBuffer;
 
-      const textEndEvent: AgentEvent<any> = {
+      interface TextEndEventData {
+        full_text: string;
+      }
+      const textEndEvent: AgentEvent<TextEndEventData> = {
         type: 'text_end',
         data: { full_text: finalContent },
       };
@@ -794,7 +807,8 @@ export function createStreamEventHandlers(
 
       // Merge answer into the existing asked card in timeline
       const updatedTimeline = convState.timeline.map((te) =>
-        te.type === 'clarification_asked' && (te as any).requestId === requestId
+        te.type === 'clarification_asked' &&
+        (te as TimelineEventWithRequestId).requestId === requestId
           ? { ...te, answered: true, answer: event.data.answer }
           : te
       );
@@ -820,7 +834,7 @@ export function createStreamEventHandlers(
       const requestId = event.data.request_id;
 
       const updatedTimeline = convState.timeline.map((te) =>
-        te.type === 'decision_asked' && (te as any).requestId === requestId
+        te.type === 'decision_asked' && (te as TimelineEventWithRequestId).requestId === requestId
           ? { ...te, answered: true, decision: event.data.decision }
           : te
       );
@@ -846,7 +860,8 @@ export function createStreamEventHandlers(
       const requestId = event.data.request_id;
 
       const updatedTimeline = convState.timeline.map((te) =>
-        te.type === 'env_var_requested' && (te as any).requestId === requestId
+        te.type === 'env_var_requested' &&
+        (te as TimelineEventWithRequestId).requestId === requestId
           ? {
               ...te,
               answered: true,
@@ -926,7 +941,7 @@ export function createStreamEventHandlers(
       const requestId = event.data.request_id;
 
       const updatedTimeline = convState.timeline.map((te) =>
-        te.type === 'permission_asked' && (te as any).requestId === requestId
+        te.type === 'permission_asked' && (te as TimelineEventWithRequestId).requestId === requestId
           ? { ...te, answered: true, granted: event.data.granted }
           : te
       );
@@ -1061,7 +1076,7 @@ export function createStreamEventHandlers(
     onArtifactsBatch: (event) => {
       const data = event.data;
 
-      if (!data.artifacts || !Array.isArray(data.artifacts)) return;
+      if (!Array.isArray(data.artifacts)) return;
 
       // Queue the batch event itself
       queueTimelineEvent(event);
@@ -1082,7 +1097,7 @@ export function createStreamEventHandlers(
             tool_execution_id: data.tool_execution_id,
           },
         };
-        queueTimelineEvent(artifactEvent as any);
+        queueTimelineEvent(artifactEvent as AgentEvent<unknown>);
       }
       flushTimelineBufferSync();
 
@@ -1113,7 +1128,15 @@ export function createStreamEventHandlers(
     },
 
     onArtifactOpen: (event) => {
-      const data = event.data as any;
+      interface ArtifactOpenEventData {
+        artifact_id: string;
+        content: string;
+        title?: string;
+        content_type?: string;
+        language?: string;
+        url?: string;
+      }
+      const data = event.data as ArtifactOpenEventData;
       if (!data.artifact_id || !data.content) return;
 
       const title = data.title || 'Untitled';
@@ -1125,7 +1148,15 @@ export function createStreamEventHandlers(
       useCanvasStore.getState().openTab({
         id: data.artifact_id,
         title: title,
-        type: isPreviewFile ? 'preview' : data.content_type || 'code',
+        type: isPreviewFile
+          ? 'preview'
+          : ((data.content_type ?? 'code') as
+              | 'code'
+              | 'markdown'
+              | 'preview'
+              | 'data'
+              | 'a2ui-surface'
+              | 'mcp-app'),
         content: data.content,
         language: data.language,
         artifactId: data.artifact_id,
@@ -1141,19 +1172,27 @@ export function createStreamEventHandlers(
     },
 
     onArtifactUpdate: (event) => {
-      const data = event.data as any;
+      interface ArtifactUpdateEventData {
+        artifact_id: string;
+        content?: string;
+        append?: boolean;
+      }
+      const data = event.data as ArtifactUpdateEventData;
       if (!data.artifact_id || data.content === undefined) return;
 
       const store = useCanvasStore.getState();
       const tab = store.tabs.find((t) => t.id === data.artifact_id);
       if (tab) {
-        const newContent = data.append ? tab.content + data.content : data.content;
+        const newContent = data.append === true ? tab.content + data.content : (data.content ?? '');
         store.updateContent(data.artifact_id, newContent);
       }
     },
 
     onArtifactClose: (event) => {
-      const data = event.data as any;
+      interface ArtifactCloseEventData {
+        artifact_id: string;
+      }
+      const data = event.data as ArtifactCloseEventData;
       if (!data.artifact_id) return;
 
       useCanvasStore.getState().closeTab(data.artifact_id);
@@ -1174,8 +1213,12 @@ export function createStreamEventHandlers(
         generated_by?: string | undefined;
       };
 
-      setState((state: any) => {
-        const updatedList = state.conversations.map((c: any) =>
+      interface StateWithConversations {
+        conversations: Array<{ id: string; title?: string }>;
+      }
+      setState((state: unknown) => {
+        const typedState = state as StateWithConversations;
+        const updatedList = typedState.conversations.map((c) =>
           c.id === data.conversation_id ? { ...c, title: data.title } : c
         );
         return { conversations: updatedList };
@@ -1185,7 +1228,10 @@ export function createStreamEventHandlers(
     onSuggestions: (event) => {
       const { updateConversationState } = get();
 
-      const suggestions = (event.data as any)?.suggestions ?? [];
+      interface SuggestionsEventData {
+        suggestions?: string[];
+      }
+      const suggestions = (event.data as SuggestionsEventData).suggestions ?? [];
 
       updateConversationState(handlerConversationId, {
         suggestions,
@@ -1218,7 +1264,7 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-      const subagentIdToClear = event.data?.subagent_id;
+      const subagentIdToClear = event.data.subagent_id;
       let subagentPreviews = convState.subagentPreviews;
       if (subagentIdToClear && subagentPreviews.has(subagentIdToClear)) {
         subagentPreviews = new Map(subagentPreviews);
@@ -1247,7 +1293,7 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-      const subagentIdToClear = event.data?.subagent_id;
+      const subagentIdToClear = event.data.subagent_id;
       let subagentPreviews = convState.subagentPreviews;
       if (subagentIdToClear && subagentPreviews.has(subagentIdToClear)) {
         subagentPreviews = new Map(subagentPreviews);
@@ -1280,7 +1326,7 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-      const subagentIdToClear = event.data?.subagent_id;
+      const subagentIdToClear = event.data.subagent_id;
       let subagentPreviews = convState.subagentPreviews;
       if (subagentIdToClear && subagentPreviews.has(subagentIdToClear)) {
         subagentPreviews = new Map(subagentPreviews);
@@ -1333,8 +1379,8 @@ export function createStreamEventHandlers(
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
       // Store live preview from status_message
-      const subagentId = event.data?.subagent_id;
-      const statusMessage = event.data?.status_message;
+      const subagentId = event.data.subagent_id;
+      const statusMessage = event.data.status_message;
       let subagentPreviews = convState.subagentPreviews;
       if (subagentId && statusMessage) {
         subagentPreviews = new Map(convState.subagentPreviews);
@@ -1422,20 +1468,34 @@ export function createStreamEventHandlers(
 
     // MCP App handlers
     onMCPAppResult: (event) => {
-      const data = event.data as any;
+      interface MCPAppResultEventData {
+        app_id?: string;
+        resource_html?: string;
+        ui_metadata?: Record<string, unknown>;
+        resource_uri?: string;
+        tool_name?: string;
+        project_id?: string;
+        server_name?: string;
+        structured_content?: unknown;
+        tool_result?: unknown;
+        tool_input?: unknown;
+      }
+      const data = event.data as MCPAppResultEventData;
       const appId = data.app_id || '';
       const htmlContent = data.resource_html || undefined;
       const uiMetadata =
         data.ui_metadata && typeof data.ui_metadata === 'object' ? data.ui_metadata : {};
       const resourceUri =
-        data.resource_uri || uiMetadata.resourceUri || uiMetadata.resource_uri || undefined;
-      const toolName = data.tool_name || '';
-      const projectId = data.project_id || uiMetadata.project_id || '';
-      const serverName = data.server_name || uiMetadata.server_name || '';
+        data.resource_uri ??
+        (uiMetadata.resourceUri as string | undefined) ??
+        (uiMetadata.resource_uri as string | undefined);
+      const projectId = data.project_id ?? (uiMetadata.project_id as string | undefined);
+      const toolName = data.tool_name ?? '';
+      const serverName = data.server_name ?? (uiMetadata.server_name as string | undefined);
 
       // Cache HTML by URI for timeline "Open App" lookup
       if (resourceUri && htmlContent) {
-        import('../mcpAppStore').then(({ useMCPAppStore }) => {
+        void import('../mcpAppStore').then(({ useMCPAppStore }) => {
           useMCPAppStore.getState().cacheHtmlByUri(resourceUri, htmlContent);
         });
       }
@@ -1443,10 +1503,12 @@ export function createStreamEventHandlers(
       // SEP-1865: Merge structuredContent into tool result for the renderer
       const toolResult = data.structured_content
         ? {
-            ...((typeof data.tool_result === 'object' && data.tool_result) || {}),
+            ...(typeof data.tool_result === 'object' && data.tool_result !== null
+              ? (data.tool_result as Record<string, unknown>)
+              : {}),
             structuredContent: data.structured_content,
           }
-        : data.tool_result;
+        : (data.tool_result as string | undefined);
 
       const openMCPAppTab = (
         resolvedResourceUri?: string,
@@ -1457,7 +1519,7 @@ export function createStreamEventHandlers(
           uiMetadata?: Record<string, unknown> | undefined;
         }
       ) => {
-        const tabKey = resolvedResourceUri || appId || `app-${Date.now()}`;
+        const tabKey = resolvedResourceUri ?? appId ?? `app-${String(Date.now())}`;
         const tabId = `mcp-app-${tabKey}`;
         useCanvasStore.getState().openTab({
           id: tabId,
@@ -1467,12 +1529,15 @@ export function createStreamEventHandlers(
           mcpAppId: appId || undefined,
           mcpAppHtml: htmlContent,
           mcpAppToolResult: toolResult,
-          mcpAppToolInput: (typeof data.tool_input === 'object' && data.tool_input) || undefined,
+          mcpAppToolInput:
+            typeof data.tool_input === 'object' && data.tool_input !== null
+              ? (data.tool_input as Record<string, unknown>)
+              : undefined,
           mcpAppUiMetadata: options?.uiMetadata || uiMetadata,
           mcpResourceUri: resolvedResourceUri,
           mcpToolName: options?.toolName || toolName || undefined,
-          mcpProjectId: projectId || undefined,
-          mcpServerName: options?.serverName || serverName || undefined,
+          mcpProjectId: projectId,
+          mcpServerName: options?.serverName ?? serverName,
         });
         useLayoutModeStore.getState().setMode('canvas');
       };
@@ -1485,31 +1550,36 @@ export function createStreamEventHandlers(
       // must avoid the sync path also opening a tab with a different tabKey,
       // which would create a duplicate.
       if (appId) {
-        import('../mcpAppStore').then(({ useMCPAppStore }) => {
+        void import('../mcpAppStore').then(({ useMCPAppStore }) => {
           const store = useMCPAppStore.getState();
           store.invalidateResource(appId);
 
-          const app = store.apps[appId];
+          const app = store.apps[appId] as
+            | { ui_metadata?: Record<string, unknown>; tool_name?: string; server_name?: string }
+            | undefined;
           // Prefer resourceUri from the event, then from the store, then undefined
-          const resolvedUri = resourceUri || app?.ui_metadata?.resourceUri;
+          const resolvedUri = resourceUri ?? (app?.ui_metadata?.resourceUri as string | undefined);
 
           if (resolvedUri || htmlContent) {
             openMCPAppTab(resolvedUri, {
               title:
-                (app?.ui_metadata?.title as string) || uiMetadata.title || toolName || 'MCP App',
-              toolName: app?.tool_name || toolName || undefined,
-              serverName: app?.server_name || serverName || undefined,
-              uiMetadata: (app?.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
+                (app?.ui_metadata?.title as string | undefined) ??
+                (uiMetadata.title as string | undefined) ??
+                toolName ??
+                'MCP App',
+              toolName: app?.tool_name ?? toolName ?? undefined,
+              serverName: app?.server_name ?? serverName ?? undefined,
+              uiMetadata: app?.ui_metadata ?? uiMetadata,
             });
           } else if (shouldWaitForStoreLookup) {
             // No URI and no HTML — only open if the app has UI hints
             const hasUiHint = !!(app?.ui_metadata?.title || app?.tool_name);
             if (hasUiHint) {
               openMCPAppTab(undefined, {
-                title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
-                toolName: app?.tool_name || toolName || undefined,
-                serverName: app?.server_name || serverName || undefined,
-                uiMetadata: (app?.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
+                title: (app?.ui_metadata?.title as string | undefined) ?? toolName ?? 'MCP App',
+                toolName: app?.tool_name ?? toolName ?? undefined,
+                serverName: app?.server_name ?? serverName ?? undefined,
+                uiMetadata: app?.ui_metadata ?? uiMetadata,
               });
             }
           }
@@ -1519,18 +1589,26 @@ export function createStreamEventHandlers(
         // Only open a Canvas tab if we have actual content to display.
         // Non-UI tools (e.g. echo) produce no htmlContent and no resourceUri,
         // and opening an empty tab causes 'content length: 0' errors.
-        openMCPAppTab(resourceUri, {
-          title: uiMetadata.title || toolName || 'MCP App',
+        openMCPAppTab(resourceUri ?? undefined, {
+          title: (uiMetadata.title as string | undefined) ?? toolName ?? 'MCP App',
           uiMetadata,
         });
       }
     },
 
     onMCPAppRegistered: (event) => {
-      const data = event.data as any;
+      interface MCPAppRegisteredEventData {
+        app_id: string;
+        server_name?: string;
+        tool_name?: string;
+        resource_uri?: string;
+        title?: string;
+        source?: string;
+      }
+      const data = event.data as unknown as MCPAppRegisteredEventData;
       if (!data.app_id) return;
       // Dynamically import to avoid circular deps
-      import('../mcpAppStore').then(({ useMCPAppStore }) => {
+      void import('../mcpAppStore').then(({ useMCPAppStore }) => {
         const store = useMCPAppStore.getState();
         // Invalidate cached resource so re-registration picks up new HTML
         store.invalidateResource(data.app_id);
@@ -1545,7 +1623,7 @@ export function createStreamEventHandlers(
             resourceUri: data.resource_uri || '',
             title: data.title,
           },
-          source: data.source || 'user_added',
+          source: (data.source ?? 'user_added') as 'user_added' | 'agent_developed',
           status: 'discovered',
           has_resource: false,
         });
@@ -1581,12 +1659,12 @@ export function createStreamEventHandlers(
           title: data.block.title,
           type: tabType,
           content: data.block.content,
-          language: data.block.metadata?.language,
-          mimeType: data.block.metadata?.mime_type,
+          language: data.block.metadata.language,
+          mimeType: data.block.metadata.mime_type,
           ...(tabType === 'a2ui-surface'
             ? {
                 a2uiSurfaceId:
-                  typeof data.block.metadata?.surface_id === 'string'
+                  typeof data.block.metadata.surface_id === 'string'
                     ? data.block.metadata.surface_id
                     : data.block.id,
                 a2uiMessages: data.block.content,
@@ -1610,7 +1688,7 @@ export function createStreamEventHandlers(
             canvasStore.updateTab(data.block_id, {
               a2uiMessages: mergedA2UI,
               a2uiSurfaceId:
-                (typeof data.block.metadata?.surface_id === 'string'
+                (typeof data.block.metadata.surface_id === 'string'
                   ? data.block.metadata.surface_id
                   : undefined) ??
                 existingTab.a2uiSurfaceId ??
@@ -1642,12 +1720,12 @@ export function createStreamEventHandlers(
             title: data.block.title,
             type: fallbackTabType,
             content: data.block.content,
-            language: data.block.metadata?.language,
-            mimeType: data.block.metadata?.mime_type,
+            language: data.block.metadata.language,
+            mimeType: data.block.metadata.mime_type,
             ...(fallbackTabType === 'a2ui-surface'
               ? {
                   a2uiSurfaceId:
-                    typeof data.block.metadata?.surface_id === 'string'
+                    typeof data.block.metadata.surface_id === 'string'
                       ? data.block.metadata.surface_id
                       : data.block.id,
                   a2uiMessages: data.block.content,
@@ -1677,8 +1755,8 @@ export function createStreamEventHandlers(
 
     // A2UI interactive action handler
     onA2UIActionAsked: (event: AgentEvent<A2UIActionAskedEventData>) => {
-      const blockId = event.data?.block_id;
-      const requestId = event.data?.request_id;
+      const blockId = event.data.block_id;
+      const requestId = event.data.request_id;
       if (!blockId || !requestId) return;
 
       // Store the server-assigned request_id into the canvas tab so the
@@ -1703,7 +1781,7 @@ export function createStreamEventHandlers(
       if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       updateConversationState(handlerConversationId, {
-        recalledMemories: event.data?.memories ?? null,
+        recalledMemories: event.data.memories ?? null,
         timeline: updatedTimeline,
       });
     },
@@ -1743,12 +1821,14 @@ export function createStreamEventHandlers(
       };
       agentNodes.set(data.agent_id, node);
       if (data.parent_agent_id && agentNodes.has(data.parent_agent_id)) {
-        const parent = agentNodes.get(data.parent_agent_id)!;
-        agentNodes.set(data.parent_agent_id, {
-          ...parent,
-          children: [...parent.children, data.agent_id],
-          lastUpdateAt: Date.now(),
-        });
+        const parent = agentNodes.get(data.parent_agent_id);
+        if (parent) {
+          agentNodes.set(data.parent_agent_id, {
+            ...parent,
+            children: [...parent.children, data.agent_id],
+            lastUpdateAt: Date.now(),
+          });
+        }
       }
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -1925,15 +2005,19 @@ export function createStreamEventHandlers(
       // Remove transient streaming control events.
       // Keep text_end events intact so their IDs stay stable and avoid
       // text_end -> assistant_message remount flicker at stream completion.
+      interface TextEndTimelineEvent {
+        type: string;
+        fullText?: string;
+      }
       const hasTextEndMessages = convState.timeline.some(
-        (e) => e.type === 'text_end' && !!(e as any).fullText?.trim()
+        (e) => e.type === 'text_end' && !!(e as TextEndTimelineEvent).fullText?.trim()
       );
       const cleanedTimeline = convState.timeline.filter((e) => {
         if (e.type === 'text_start' || e.type === 'text_delta') {
           return false;
         }
         if (e.type === 'text_end') {
-          return !!(e as any).fullText?.trim();
+          return !!(e as TextEndTimelineEvent).fullText?.trim();
         }
         return true;
       });
@@ -1941,7 +2025,10 @@ export function createStreamEventHandlers(
       // Only add assistant_message from complete event when no text_end segment exists,
       // to avoid duplicating final output.
       const completeEvent: AgentEvent<CompleteEventData> = event;
-      const hasContent = !!(completeEvent.data as any)?.content?.trim();
+      interface CompleteEventWithContent {
+        content?: string;
+      }
+      const hasContent = !!(completeEvent.data as CompleteEventWithContent).content?.trim();
       const updatedTimeline =
         hasContent && !hasTextEndMessages
           ? appendSSEEventToTimeline(cleanedTimeline, completeEvent)
@@ -1973,10 +2060,13 @@ export function createStreamEventHandlers(
       // Fallback: fetch tasks from REST API after stream completes.
       // SSE task events may be lost due to timing/Redis issues, so always
       // reconcile with the DB as the source of truth.
-      (async () => {
+      void (async () => {
         try {
           const { httpClient } = await import('../../services/client/httpClient');
-          const res = (await httpClient.get(`/agent/plan/tasks/${handlerConversationId}`)) as any;
+          interface TaskResponse {
+            tasks?: unknown[];
+          }
+          const res = await httpClient.get<TaskResponse>(`/agent/plan/tasks/${handlerConversationId}`);
           if (res && Array.isArray(res.tasks) && res.tasks.length > 0) {
             const { updateConversationState } = get();
             updateConversationState(handlerConversationId, {
@@ -1984,7 +2074,7 @@ export function createStreamEventHandlers(
             });
             console.log(
               '[TaskSync] onComplete fallback: fetched',
-              res.tasks.length,
+              String(res.tasks.length),
               'tasks from API'
             );
           }

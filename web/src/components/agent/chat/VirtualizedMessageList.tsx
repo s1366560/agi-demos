@@ -22,6 +22,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 
+import { SkeletonLoader } from '@/components/common/SkeletonLoader';
+
 import { ChatMessage } from '../types/message';
 
 import { MessageRenderer } from './MessageRenderer';
@@ -202,12 +204,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   if (isLoading) {
     return (
       <div className={`flex items-center justify-center h-full ${className}`}>
-        {loadingState || (
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
-            <p className="text-slate-500 dark:text-slate-400">Loading messages...</p>
-          </div>
-        )}
+        {loadingState || <SkeletonLoader type="chat" />}
       </div>
     );
   }

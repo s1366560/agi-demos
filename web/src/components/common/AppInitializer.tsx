@@ -9,6 +9,9 @@ import React, { useState, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { Brain } from 'lucide-react';
+
+
 interface AppInitializerProps {
   children: React.ReactNode;
 }
@@ -23,7 +26,7 @@ const InitialLoadingScreen: React.FC = () => {
         {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 p-3 rounded-xl">
-            <span className="material-symbols-outlined text-primary text-3xl">memory</span>
+            <Brain size={30} className="text-primary" />
           </div>
           <h1 className="text-slate-900 dark:text-white text-2xl font-bold">
             MemStack<span className="text-primary">.ai</span>

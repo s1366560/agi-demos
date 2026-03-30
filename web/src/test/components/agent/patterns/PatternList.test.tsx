@@ -262,9 +262,8 @@ describe('PatternList', () => {
     it('should show icon in empty state', () => {
       const { container } = render(<PatternList patterns={[]} />);
 
-      const icon = container.querySelector('.material-symbols-outlined');
+      const icon = container.querySelector('svg');
       expect(icon).toBeInTheDocument();
-      expect(icon).toHaveTextContent('account_tree');
     });
   });
 

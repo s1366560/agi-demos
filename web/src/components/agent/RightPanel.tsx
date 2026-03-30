@@ -117,17 +117,17 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
               {executionPathDecision.reason}
             </div>
             {executionPathDecision.route_id ? (
-              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
                 route_id: <span className="font-mono">{executionPathDecision.route_id}</span>
               </div>
             ) : null}
             {traceId ? (
-              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
                 trace_id: <span className="font-mono">{traceId}</span>
               </div>
             ) : null}
             {lane ? (
-              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
                 domain_lane: <span className="font-medium">{lane}</span>
               </div>
             ) : null}
@@ -147,7 +147,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
               {selectionTrace.stages.length} stage(s) executed
             </div>
             {typeof selectionTrace.tool_budget === 'number' ? (
-              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
                 tool_budget: <span className="font-medium">{selectionTrace.tool_budget}</span>
               </div>
             ) : null}
@@ -165,7 +165,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
               stage(s)
             </div>
             {policyFiltered.budget_exceeded_stages?.length ? (
-              <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+              <div className="mt-1 text-xs-plus text-amber-600 dark:text-amber-400">
                 budget_exceeded: {policyFiltered.budget_exceeded_stages.join(', ')}
               </div>
             ) : null}
@@ -188,7 +188,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
                 : ''}
             </div>
             {latestToolsetChange.trace_id ? (
-              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
                 trace_id: <span className="font-mono">{latestToolsetChange.trace_id}</span>
               </div>
             ) : null}
@@ -209,7 +209,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
                   key={entry.id}
                   className="rounded border border-slate-200/70 dark:border-slate-700/70 p-2"
                 >
-                  <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div className="text-xs-plus uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {entry.stage}
                   </div>
                   <div className="text-xs text-slate-700 dark:text-slate-200">{entry.summary}</div>

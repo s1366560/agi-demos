@@ -25,7 +25,7 @@ class SubAgentSpanService:
     def __init__(self, component_name: str = "subagent") -> None:
         self._component_name = component_name
 
-    def _get_tracer(self) -> Any:
+    def _get_tracer(self) -> Any:  # noqa: ANN401
         return get_tracer(self._component_name)
 
     @asynccontextmanager

@@ -1,8 +1,10 @@
+import { memo } from 'react';
+
+import { Bot } from 'lucide-react';
 /**
  * TextItems - Streaming text delta and text end event rendering
  */
 
-import { memo } from 'react';
 
 import {
   ASSISTANT_AVATAR_CLASSES,
@@ -26,7 +28,7 @@ export const TextDeltaItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3.5">
           <div className={ASSISTANT_AVATAR_CLASSES}>
-            <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
+            <Bot size={18} className="text-primary" />
           </div>
           <div
             className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES} break-words [overflow-wrap:anywhere]`}
@@ -66,7 +68,7 @@ export const TextEndItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3.5">
           <div className={ASSISTANT_AVATAR_CLASSES}>
-            <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
+            <Bot size={18} className="text-primary" />
           </div>
           <div
             className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES} break-words [overflow-wrap:anywhere]`}

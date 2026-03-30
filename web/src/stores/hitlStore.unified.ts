@@ -20,6 +20,10 @@ import type {
   ClarificationOption,
   DecisionOption,
   EnvVarField,
+  ClarificationType,
+  DecisionType,
+  RiskLevel,
+  PermissionAction,
 } from '../types/hitl.unified';
 
 // =============================================================================
@@ -426,7 +430,7 @@ function createRequestFromSSE(
   const requestId = data.request_id as string;
   if (!requestId) return null;
 
-  const timeoutSeconds = (data.timeout_seconds as number) || 300;
+  const timeoutSeconds = (data.timeout_seconds as number | undefined) ?? 300;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + timeoutSeconds * 1000);
 
@@ -439,87 +443,118 @@ function createRequestFromSSE(
     timeoutSeconds,
     createdAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),
-    question: (data.question as string) || '',
+    question: (data.question as string | undefined) ?? '',
   };
 
   switch (hitlType) {
     case 'clarification':
       return {
         ...base,
-        question: (data.question as string) || '',
+        question: (data.question as string | undefined) ?? '',
         clarificationData: {
-          question: (data.question as string) || '',
+          question: (data.question as string | undefined) ?? '',
           clarificationType:
-            (data.clarification_type as any) || (data.clarificationType as any) || 'custom',
-          options: (data.options as ClarificationOption[]) || [],
-          allowCustom: (data.allow_custom as boolean) ?? (data.allowCustom as boolean) ?? true,
-          context: (data.context as Record<string, unknown>) || {},
+            (data.clarification_type as ClarificationType | undefined) ??
+            (data.clarificationType as ClarificationType | undefined) ??
+            'custom',
+          options: (data.options as ClarificationOption[] | undefined) ?? [],
+          allowCustom:
+            (data.allow_custom as boolean | undefined) ??
+            (data.allowCustom as boolean | undefined) ??
+            true,
+          context: (data.context as Record<string, unknown> | undefined) ?? {},
           defaultValue:
-            (data.default_value as string) || (data.defaultValue as string) || undefined,
+            (data.default_value as string | undefined) ?? (data.defaultValue as string | undefined),
         },
       };
 
     case 'decision':
       return {
         ...base,
-        question: (data.question as string) || '',
+        question: (data.question as string | undefined) ?? '',
         decisionData: {
-          question: (data.question as string) || '',
+          question: (data.question as string | undefined) ?? '',
           decisionType:
-            (data.decision_type as any) || (data.decisionType as any) || 'single_choice',
-          options: (data.options as DecisionOption[]) || [],
-          allowCustom: (data.allow_custom as boolean) ?? (data.allowCustom as boolean) ?? false,
+            (data.decision_type as DecisionType | undefined) ??
+            (data.decisionType as DecisionType | undefined) ??
+            'single_choice',
+          options: (data.options as DecisionOption[] | undefined) ?? [],
+          allowCustom:
+            (data.allow_custom as boolean | undefined) ??
+            (data.allowCustom as boolean | undefined) ??
+            false,
           defaultOption:
-            (data.default_option as string) || (data.defaultOption as string) || undefined,
+            (data.default_option as string | undefined) ??
+            (data.defaultOption as string | undefined),
           maxSelections:
-            (data.max_selections as number) || (data.maxSelections as number) || undefined,
-          context: (data.context as Record<string, unknown>) || {},
+            (data.max_selections as number | undefined) ??
+            (data.maxSelections as number | undefined),
+          context: (data.context as Record<string, unknown> | undefined) ?? {},
         },
       };
 
     case 'env_var': {
-      // 尝试多个可能的字段名，以兼容不同的后端版本
+      // 尝试多个可能的字段名,以兼容不同的后端版本
       // 后端可能使用 'message' 或 'question' 字段
       const envMessage =
-        (data.message as string) ||
-        (data.question as string) ||
+        (data.message as string | undefined) ??
+        (data.question as string | undefined) ??
         'Please provide environment variables';
 
       return {
         ...base,
         question: envMessage,
         envVarData: {
-          toolName: (data.tool_name as string) || (data.toolName as string) || 'unknown',
-          fields: (data.fields as EnvVarField[]) || [],
+          toolName:
+            (data.tool_name as string | undefined) ??
+            (data.toolName as string | undefined) ??
+            'unknown',
+          fields: (data.fields as EnvVarField[] | undefined) ?? [],
           message: envMessage,
-          allowSave: (data.allow_save as boolean) ?? (data.allowSave as boolean) ?? true,
-          context: (data.context as Record<string, unknown>) || {},
+          allowSave:
+            (data.allow_save as boolean | undefined) ??
+            (data.allowSave as boolean | undefined) ??
+            true,
+          context: (data.context as Record<string, unknown> | undefined) ?? {},
         },
       };
     }
 
     case 'permission': {
-      const toolName = (data.tool_name as string) || (data.toolName as string) || 'unknown';
+      const toolName =
+        (data.tool_name as string | undefined) ??
+        (data.toolName as string | undefined) ??
+        'unknown';
       const action =
-        (data.action as string) || (data.permission_type as string) || 'perform action';
-      const description = (data.description as string) || (data.desc as string);
+        (data.action as string | undefined) ??
+        (data.permission_type as string | undefined) ??
+        'perform action';
+      const description =
+        (data.description as string | undefined) ?? (data.desc as string | undefined);
 
       return {
         ...base,
-        question: description || `Allow ${toolName} to ${action}?`,
+        question: description ?? `Allow ${toolName} to ${action}?`,
         permissionData: {
           toolName: toolName,
           action: action,
-          riskLevel: (data.risk_level as any) || (data.riskLevel as any) || 'medium',
+          riskLevel:
+            (data.risk_level as RiskLevel | undefined) ??
+            (data.riskLevel as RiskLevel | undefined) ??
+            'medium',
           details:
-            (data.details as Record<string, unknown>) ||
-            (data.context as Record<string, unknown>) ||
+            (data.details as Record<string, unknown> | undefined) ??
+            (data.context as Record<string, unknown> | undefined) ??
             {},
           description: description,
           allowRemember:
-            (data.allow_remember as boolean) ?? (data.allowRemember as boolean) ?? true,
-          defaultAction: (data.default_action as any) || (data.defaultAction as any),
-          context: (data.context as Record<string, unknown>) || {},
+            (data.allow_remember as boolean | undefined) ??
+            (data.allowRemember as boolean | undefined) ??
+            true,
+          defaultAction:
+            (data.default_action as PermissionAction | undefined) ??
+            (data.defaultAction as PermissionAction | undefined),
+          context: (data.context as Record<string, unknown> | undefined) ?? {},
         },
       };
     }

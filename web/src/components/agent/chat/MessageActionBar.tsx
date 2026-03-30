@@ -267,7 +267,7 @@ export const CodeBlockCopyButton: React.FC<{ code: string }> = memo(({ code }) =
       <button
         type="button"
         onClick={handleCopy}
-        className="p-1 rounded hover:bg-slate-600 transition-colors text-slate-400 hover:text-slate-200"
+        className="p-1 rounded hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-400 hover:text-slate-200"
         aria-label={t('agent.actions.copyCode', 'Copy code')}
       >
         {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}

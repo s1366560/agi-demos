@@ -298,7 +298,7 @@ export default function EdgeMapList() {
                 <thead>
                   <tr>
                     {/* Sticky Corner */}
-                    <th className="sticky left-0 top-0 z-50 bg-slate-50 dark:bg-surface-dark p-4 border-b border-r border-slate-200 dark:border-border-dark min-w-[200px] shadow-md">
+                    <th className="sticky left-0 top-0 z-50 bg-slate-50 dark:bg-surface-dark p-4 border-b border-r border-slate-200 dark:border-border-dark min-w-50 shadow-md">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500 dark:text-text-muted text-xs font-normal">

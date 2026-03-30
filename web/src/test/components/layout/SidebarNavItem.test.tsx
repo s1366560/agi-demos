@@ -71,8 +71,8 @@ describe('SidebarNavItem', () => {
       renderItem({ label: 'Dashboard', icon: 'dashboard', path: '' });
 
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
-      const icon = document.querySelector('.material-symbols-outlined');
-      expect(icon?.textContent).toBe('dashboard');
+      const icon = document.querySelector('svg');
+      expect(icon).toBeTruthy();
     });
 
     it('should render a link with correct href', () => {

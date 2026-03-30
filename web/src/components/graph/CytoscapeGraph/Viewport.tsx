@@ -6,6 +6,8 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
+import { Loader2, AlertCircle } from 'lucide-react';
+
 import { useThemeStore } from '@/stores/theme';
 
 import { graphService } from '@/services/graphService';
@@ -21,9 +23,7 @@ import type { GraphConfig, NodeData, CytoscapeElement } from './types';
 const ViewportLoading: React.FC = () => (
   <div className="flex-1 flex items-center justify-center">
     <div className="text-center">
-      <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin motion-reduce:animate-none">
-        progress_activity
-      </span>
+      <Loader2 size={36} className="text-blue-600 animate-spin motion-reduce:animate-none mx-auto" />
       <p className="text-slate-600 dark:text-slate-400 mt-2">Loading graph visualization...</p>
     </div>
   </div>
@@ -255,9 +255,7 @@ export function CytoscapeGraphViewport({
       {loading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
           <div className="text-center">
-            <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin motion-reduce:animate-none">
-              progress_activity
-            </span>
+            <Loader2 size={36} className="text-blue-600 animate-spin motion-reduce:animate-none mx-auto" />
             <p className="text-slate-600 dark:text-slate-400 mt-2">Loading graph...</p>
           </div>
         </div>
@@ -266,9 +264,10 @@ export function CytoscapeGraphViewport({
       {error && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
           <div className="text-center">
-            <span className="material-symbols-outlined text-4xl text-red-600">error</span>
+            <AlertCircle size={36} className="text-red-600 mx-auto" />
             <p className="text-slate-600 dark:text-slate-400 mt-2">{error}</p>
             <button
+              type="button"
               onClick={loadGraphData}
               className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500"
             >

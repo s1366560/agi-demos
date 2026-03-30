@@ -137,9 +137,10 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
       return (
         <Tooltip title={conversation.title || 'Untitled'}>
           <button
+            type="button"
             onClick={onSelect}
             className={`
-            w-10 h-10 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200
+            w-10 h-10 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1
             flex items-center justify-center relative mx-auto
             ${
               isActive
@@ -159,9 +160,17 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
 
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
         className={`
-        group relative p-3 rounded-xl mb-1 cursor-pointer
+        group relative p-3 rounded-xl mb-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
         transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 border
         ${
           isActive
@@ -195,7 +204,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
                 <LazyBadge status="processing" className="flex-shrink-0" />
               )}
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5 truncate">
               {conversation.projectName} · {timeAgo}
             </p>
           </div>
@@ -680,10 +689,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             title={projects.find((p) => p.id === selectedProjectId)?.name || 'Select Project'}
           >
             <button
+              type="button"
               onClick={() => {
                 setCollapsed(false);
               }}
-              className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               <FolderOpen size={20} className="text-slate-500" />
             </button>
@@ -763,7 +773,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Mobile Navigation Links - shown only in mobile drawer */}
       {mobile && tenantId && (
         <div className="border-t border-slate-100 dark:border-slate-800/50 px-3 py-2">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1">
+          <p className="text-2xs font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1">
             {t('nav.navigation', 'Navigation')}
           </p>
           {[
@@ -807,7 +817,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
+                `flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
                   isActive
                     ? 'bg-primary/10 text-primary font-medium'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'

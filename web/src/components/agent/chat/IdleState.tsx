@@ -1,3 +1,4 @@
+import { LineChart, FileText, ShieldCheck, ArrowLeftRight } from 'lucide-react';
 /**
  * IdleState - Agent workspace idle state
  *
@@ -5,7 +6,6 @@
  * Matches design from docs/statics/project workbench/agent/start/
  */
 
-import { MaterialIcon } from '../shared';
 
 export interface StarterTile {
   id: string;
@@ -25,6 +25,14 @@ export interface IdleStateProps {
   /** Optional subtitle */
   subtitle?: string | undefined;
 }
+
+
+const ICON_MAP: Record<string, React.ComponentType<{ size?: number }>> = {
+  analytics: LineChart,
+  summarize: FileText,
+  verified_user: ShieldCheck,
+  compare_arrows: ArrowLeftRight,
+};
 
 const DEFAULT_STARTER_TILES: StarterTile[] = [
   {
@@ -125,7 +133,10 @@ export function IdleState({
               className={`group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 cursor-pointer text-left`}
             >
               <div className={`mb-4 p-2 rounded-lg ${colors.bg} ${colors.text}`}>
-                <MaterialIcon name={tile.icon as any} size={24} />
+                {(() => {
+                  const Icon = ICON_MAP[tile.icon] || LineChart;
+                  return <Icon size={24} />;
+                })()}
               </div>
               <h3 className={`text-sm font-semibold mb-1 ${colors.hoverText} transition-colors`}>
                 {tile.title}

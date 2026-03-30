@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 
-import { MaterialIcon } from '../shared';
+import { Check, Copy, Hourglass, FileDown, Share2 } from 'lucide-react';
 
 export interface ExportActionsProps {
   /** Content to export */
@@ -109,25 +109,27 @@ export function ExportActions({
     <div className={variant === 'sidebar' ? 'space-y-1' : 'flex items-center gap-2'}>
       {/* Copy to Clipboard */}
       <button
+        type="button"
         onClick={handleCopy}
         disabled={!content}
         className={buttonClass}
         aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
         title="Copy to clipboard"
       >
-        <MaterialIcon name={copied ? 'check' : 'content_copy'} size={18} />
+        {copied ? <Check size={18} /> : <Copy size={18} />}
         {showLabels && <span className="text-sm font-medium">{copied ? 'Copied!' : 'Copy'}</span>}
       </button>
 
       {/* Export to PDF */}
       <button
+        type="button"
         onClick={handleExportPDF}
         disabled={exporting}
         className={buttonClass}
         aria-label={exporting ? 'Exporting PDF' : 'Export as PDF'}
         title="Export to PDF"
       >
-        <MaterialIcon name={exporting ? 'hourglass_empty' : 'picture_as_pdf'} size={18} />
+        {exporting ? <Hourglass size={18} /> : <FileDown size={18} />}
         {showLabels && (
           <span className="text-sm font-medium">{exporting ? 'Exporting...' : 'PDF'}</span>
         )}
@@ -135,13 +137,14 @@ export function ExportActions({
 
       {/* Share */}
       <button
+        type="button"
         onClick={handleShare}
         disabled={!conversationId}
         className={buttonClass}
         aria-label={copied ? 'Link copied' : 'Share conversation link'}
         title="Share link"
       >
-        <MaterialIcon name={copied ? 'check' : 'share'} size={18} />
+        {copied ? <Check size={18} /> : <Share2 size={18} />}
         {showLabels && (
           <span className="text-sm font-medium">{copied ? 'Link copied!' : 'Share'}</span>
         )}

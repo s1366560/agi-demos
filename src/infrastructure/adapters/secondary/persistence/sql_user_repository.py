@@ -15,6 +15,7 @@ Migration Benefits:
 """
 
 import logging
+from typing import override
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +50,7 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
 
     # === Interface implementation (user-specific queries) ===
 
+    @override
     async def find_by_email(self, email: str) -> User | None:
         """Find a user by email address."""
         query = select(DBUser).where(DBUser.email == email)
@@ -56,6 +58,7 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
         db_user = result.scalar_one_or_none()
         return self._to_domain(db_user)
 
+    @override
     async def list_all(self, limit: int = 50, offset: int = 0, **filters: object) -> list[User]:
         """List all users with pagination."""
         # Use the parent class list_all method via super() to avoid recursion
@@ -63,7 +66,8 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_user: DBUser | None) -> User | None:
+    @override
+    def _to_domain(self, db_model: DBUser | None) -> User | None:
         """
         Convert database model to domain model.
 
@@ -71,24 +75,26 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
         while domain model uses 'name' and 'password_hash'.
 
         Args:
-            db_user: Database model instance or None
+            db_model: Database model instance or None
 
         Returns:
             Domain model instance or None
         """
-        if db_user is None:
+        if db_model is None:
             return None
 
         return User(
-            id=db_user.id,
-            email=db_user.email,
-            name=db_user.full_name or "",  # Map DB column to domain field
-            password_hash=db_user.hashed_password,  # Map DB column to domain field
-            is_active=db_user.is_active,
+            id=db_model.id,
+            email=db_model.email,
+            name=db_model.full_name or "",  # Map DB column to domain field
+            password_hash=db_model.hashed_password,  # Map DB column to domain field
+            is_active=db_model.is_active,
+            must_change_password=db_model.must_change_password,
             profile={},  # Default empty dict since DB doesn't have this column
-            created_at=db_user.created_at,
+            created_at=db_model.created_at,
         )
 
+    @override
     def _to_db(self, domain_entity: User) -> DBUser:
         """
         Convert domain entity to database model.
@@ -107,9 +113,11 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
             full_name=domain_entity.name,  # Map domain field to DB column
             hashed_password=domain_entity.password_hash,  # Map domain field to DB column
             is_active=domain_entity.is_active,
+            must_change_password=domain_entity.must_change_password,
             created_at=domain_entity.created_at,
         )
 
+    @override
     def _update_fields(self, db_model: DBUser, domain_entity: User) -> None:
         """
         Update database model fields from domain entity.
@@ -126,3 +134,4 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
         if domain_entity.password_hash:
             db_model.hashed_password = domain_entity.password_hash
         db_model.is_active = domain_entity.is_active
+        db_model.must_change_password = domain_entity.must_change_password

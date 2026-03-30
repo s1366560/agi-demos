@@ -221,3 +221,22 @@ class AuthService:
     async def get_user_by_email(self, email: str) -> User | None:
         """Get a user by email."""
         return await self._user_repo.find_by_email(email)
+
+    async def change_password(
+        self,
+        user_id: str,
+        old_password: str,
+        new_password: str,
+    ) -> User:
+        """Change user password and clear must_change_password flag."""
+        user = await self._user_repo.find_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        if not self.verify_password(old_password, user.password_hash):
+            raise ValueError("Current password is incorrect")
+
+        user.password_hash = self.get_password_hash(new_password)
+        user.must_change_password = False
+        await self._user_repo.save(user)
+        return user

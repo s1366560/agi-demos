@@ -70,7 +70,7 @@ class ErrorResponse:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON response."""
-        response = {
+        response: dict[str, Any] = {
             "error": {
                 "type": self.error_type,
                 "message": self.message,

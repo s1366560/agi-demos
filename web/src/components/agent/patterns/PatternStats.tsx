@@ -4,7 +4,7 @@
  * Displays key metrics: Total Patterns, Success Rate, Deprecated Patterns.
  */
 
-import { MaterialIcon } from '../shared';
+import { Network, BarChart3, Archive, TrendingUp, TrendingDown, LucideIcon } from 'lucide-react';
 
 export interface PatternStatsProps {
   /** Total number of patterns */
@@ -27,7 +27,7 @@ interface StatCard {
   id: string;
   label: string;
   value: string | number;
-  icon: string;
+  icon: LucideIcon;
   color: string;
   trend?: number | undefined;
 }
@@ -57,7 +57,7 @@ export function PatternStats({
   };
 
   const getTrendIcon = (value: number) => {
-    return value >= 0 ? 'trending_up' : 'trending_down';
+    return value >= 0 ? TrendingUp : TrendingDown;
   };
 
   const getTrendColor = (value: number, positive: boolean) => {
@@ -73,7 +73,7 @@ export function PatternStats({
       id: 'total',
       label: 'Total Patterns Learned',
       value: totalPatterns,
-      icon: 'account_tree',
+      icon: Network,
       color: 'bg-blue-500',
       trend: totalTrend,
     },
@@ -81,7 +81,7 @@ export function PatternStats({
       id: 'success',
       label: 'Avg. Success Rate',
       value: `${successRate}%`,
-      icon: 'analytics',
+      icon: BarChart3,
       color: 'bg-emerald-500',
       trend: successTrend,
     },
@@ -89,7 +89,7 @@ export function PatternStats({
       id: 'deprecated',
       label: 'Deprecated Patterns',
       value: deprecatedCount,
-      icon: 'deprecated',
+      icon: Archive,
       color: 'bg-slate-500',
       trend: deprecatedTrend,
     },
@@ -97,40 +97,44 @@ export function PatternStats({
 
   return (
     <div className={`grid ${compact ? 'grid-cols-3 gap-3' : 'grid-cols-1 md:grid-cols-3 gap-4'}`}>
-      {stats.map((stat) => (
-        <div
-          key={stat.id}
-          className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4"
-        >
-          <div className="flex items-start justify-between">
-            {/* Icon */}
-            <div
-              className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center text-white`}
-            >
-              <MaterialIcon name={stat.icon as any} size={20} />
+      {stats.map((stat) => {
+        const TrendIcon = stat.trend !== undefined ? getTrendIcon(stat.trend) : null;
+        
+        return (
+          <div
+            key={stat.id}
+            className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4"
+          >
+            <div className="flex items-start justify-between">
+              {/* Icon */}
+              <div
+                className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center text-white`}
+              >
+                <stat.icon size={20} />
+              </div>
+
+              {/* Trend Indicator */}
+              {stat.trend !== undefined && TrendIcon && (
+                <div
+                  className={`flex items-center gap-1 text-sm font-medium ${getTrendColor(
+                    stat.trend,
+                    stat.id !== 'deprecated'
+                  )}`}
+                >
+                  <TrendIcon size={16} />
+                  <span>{formatTrend(stat.trend)}</span>
+                </div>
+              )}
             </div>
 
-            {/* Trend Indicator */}
-            {stat.trend !== undefined && (
-              <div
-                className={`flex items-center gap-1 text-sm font-medium ${getTrendColor(
-                  stat.trend,
-                  stat.id !== 'deprecated'
-                )}`}
-              >
-                <MaterialIcon name={getTrendIcon(stat.trend) as any} size={16} />
-                <span>{formatTrend(stat.trend)}</span>
-              </div>
-            )}
+            {/* Value */}
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
+            </div>
           </div>
-
-          {/* Value */}
-          <div className="mt-3">
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

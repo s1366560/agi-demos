@@ -13,6 +13,30 @@
     "error": "错误",
     "add": "添加",
     "confirm": "确认",
+    "yes": "是",
+    "no": "否",
+    "copy": "复制",
+    "notFound": "未找到",
+    "back": "返回",
+    "previous": "上一页",
+    "next": "下一页",
+    "remove": "移除",
+    "actions": {
+      "viewAll": "查看全部",
+      "showMore": "显示更多",
+      "confirmDelete": "确定要删除吗？",
+      "invite": "邀请",
+      "add": "添加",
+      "retry": "重试",
+      "checkHealth": "检查健康",
+      "deleteMemory": "删除记忆",
+      "deleteMemoryConfirm": "您确定要删除此记忆吗？此操作无法撤消，并将删除所有关联的图谱数据。"
+    },
+    "noTenant": "未选择租户",
+    "requiredFields": "请填写所有必填项",
+    "pagination": {
+      "total": "共 {{total}} 条"
+    },
     "status": {
       "active": "活跃",
       "inactive": "非活跃",
@@ -64,17 +88,6 @@
       "systemStatus": "系统状态",
       "successRate": "成功率",
       "success": "成功次数"
-    },
-    "actions": {
-      "viewAll": "查看全部",
-      "showMore": "显示更多",
-      "confirmDelete": "确定要删除吗？",
-      "invite": "邀请",
-      "add": "添加",
-      "retry": "重试",
-      "checkHealth": "检查健康",
-      "deleteMemory": "删除记忆",
-      "deleteMemoryConfirm": "您确定要删除此记忆吗？此操作无法撤消，并将删除所有关联的图谱数据。"
     },
     "forms": {
       "name": "名称",
@@ -132,6 +145,20 @@
       "title": "演示账户 (点击填充)",
       "admin": "管理员",
       "user": "普通用户"
+    },
+    "oauth": {
+      "processing": "正在完成登录...",
+      "authenticating": "正在认证...",
+      "authenticatingWith": "正在通过 {{provider}} 认证...",
+      "success": "登录成功！",
+      "redirecting": "正在跳转...",
+      "failed": "登录失败",
+      "tryAgain": "重试",
+      "errors": {
+        "noCode": "未找到授权码",
+        "noProvider": "未指定 OAuth 提供商",
+        "exchangeFailed": "OAuth 认证失败"
+      }
     }
   },
   "nav": {
@@ -165,6 +192,8 @@
     "providers": "模型服务",
     "platform": "平台",
     "administration": "管理",
+    "events": "事件日志",
+    "webhooks": "Webhooks",
     "billing": "账单",
     "profile": "个人资料",
     "mcpServers": "MCP",
@@ -174,7 +203,15 @@
     "cronJobs": "定时任务",
     "agentDefinitions": "智能体定义",
     "agentBindings": "智能体绑定",
-    "workspaces": "工作空间"
+    "workspaces": "工作空间",
+    "infrastructure": "基础设施",
+    "instances": "实例管理",
+    "clusters": "集群管理",
+    "deploy": "部署",
+    "genes": "基因市场",
+    "instanceTemplates": "实例模板",
+    "auditLogs": "审计日志",
+    "orgSettings": "组织设置"
   },
   "user": {
     "profile": "个人资料",
@@ -386,7 +423,24 @@
       "subtitle": "将智能体绑定到渠道，控制哪个智能体处理哪些对话",
       "createNew": "创建绑定",
       "createFirst": "创建您的第一个绑定",
-      "testRouting": "测试路由",
+      "testRouting": {
+        "title": "测试路由解析",
+        "test": "测试",
+        "channelType": "渠道类型",
+        "channelTypeRequired": "请选择渠道类型",
+        "selectChannelType": "选择渠道类型",
+        "channelId": "渠道 ID",
+        "channelIdPlaceholder": "可选：特定渠道标识符",
+        "accountId": "账户 ID",
+        "accountIdPlaceholder": "可选：用户账户标识符",
+        "peerId": "对等 ID",
+        "peerIdPlaceholder": "可选：对等标识符",
+        "result": "路由结果",
+        "matchedAgent": "匹配的智能体",
+        "specificity": "特异度分数",
+        "confidence": "置信度",
+        "noMatch": "没有找到匹配此上下文的绑定"
+      },
       "search": "搜索绑定...",
       "empty": "暂无智能体绑定",
       "noResults": "没有匹配的绑定",
@@ -426,24 +480,6 @@
         "priorityTooltip": "优先级越高的绑定越先匹配。默认为 0。",
         "specificityPreview": "特异度预览",
         "specificityHint": "特异度越高 = 路由优先级越高。填写的字段越多，分数越高。"
-      },
-      "testRouting": {
-        "title": "测试路由解析",
-        "test": "测试",
-        "channelType": "渠道类型",
-        "channelTypeRequired": "请选择渠道类型",
-        "selectChannelType": "选择渠道类型",
-        "channelId": "渠道 ID",
-        "channelIdPlaceholder": "可选：特定渠道标识符",
-        "accountId": "账户 ID",
-        "accountIdPlaceholder": "可选：用户账户标识符",
-        "peerId": "对等 ID",
-        "peerIdPlaceholder": "可选：对等标识符",
-        "result": "路由结果",
-        "matchedAgent": "匹配的智能体",
-        "specificity": "特异度分数",
-        "confidence": "置信度",
-        "noMatch": "没有找到匹配此上下文的绑定"
       },
       "specificity": {
         "veryHigh": "非常高",
@@ -792,6 +828,712 @@
         "addMetadata": "添加元数据",
         "testKeywords": "测试关键词匹配"
       }
+    },
+    "instances": {
+      "title": "实例管理",
+      "subtitle": "管理您的 AI 智能体实例",
+      "createNew": "创建实例",
+      "searchPlaceholder": "搜索实例...",
+      "restartSuccess": "实例重启成功",
+      "deleteSuccess": "实例删除成功",
+      "scaleSuccess": "实例扩缩容成功",
+      "tokenCopied": "代理令牌已复制到剪贴板",
+      "columns": {
+        "name": "名称",
+        "status": "状态",
+        "imageVersion": "镜像版本",
+        "replicas": "副本数",
+        "clusterId": "集群",
+        "createdAt": "创建时间",
+        "actions": "操作",
+        "userId": "用户 ID",
+        "role": "角色"
+      },
+      "actions": {
+        "view": "查看",
+        "restart": "重启",
+        "restartConfirm": "确定要重启此实例吗？",
+        "delete": "删除",
+        "deleteConfirm": "确定要删除此实例吗？此操作不可撤销。",
+        "scale": "扩缩容",
+        "removeMember": "移除"
+      },
+      "stats": {
+        "total": "总实例数",
+        "running": "运行中",
+        "stopped": "已停止"
+      },
+      "status": {
+        "all": "所有状态",
+        "provisioning": "配置中",
+        "running": "运行中",
+        "stopped": "已停止",
+        "error": "错误",
+        "terminated": "已终止"
+      },
+      "detail": {
+        "status": "状态",
+        "replicas": "副本数",
+        "imageVersion": "镜像版本",
+        "runtime": "运行时",
+        "proxyToken": "代理令牌",
+        "resources": "资源",
+        "cpu": "CPU",
+        "memory": "内存",
+        "storage": "存储",
+        "quota": "配额",
+        "members": "成员",
+        "config": "配置",
+        "envVars": "环境变量",
+        "advancedConfig": "高级配置"
+      },
+      "create": {
+        "title": "创建实例",
+        "success": "实例创建成功",
+        "error": "实例创建失败",
+        "steps": {
+          "basic": {
+            "title": "基本信息"
+          },
+          "infra": {
+            "title": "基础设施"
+          },
+          "resources": {
+            "title": "资源配置"
+          },
+          "storage": {
+            "title": "存储与配额"
+          },
+          "config": {
+            "title": "配置"
+          },
+          "review": {
+            "title": "确认"
+          }
+        },
+        "basic": {
+          "name": "实例名称",
+          "slug": "标识符",
+          "agent_display_name": "智能体显示名",
+          "agent_label": "智能体标签",
+          "theme_color": "主题色"
+        },
+        "infra": {
+          "cluster_id": "集群",
+          "namespace": "命名空间",
+          "image_version": "镜像版本",
+          "runtime": "运行时",
+          "compute_provider": "计算供应商"
+        },
+        "resources": {
+          "replicas": "副本数",
+          "cpu_request": "CPU 请求",
+          "cpu_limit": "CPU 限制",
+          "mem_request": "内存请求",
+          "mem_limit": "内存限制",
+          "service_type": "服务类型",
+          "ingress_domain": "入口域名"
+        },
+        "storage": {
+          "storage_class": "存储类",
+          "storage_size": "存储大小",
+          "quota_cpu": "CPU 配额",
+          "quota_memory": "内存配额",
+          "quota_max_pods": "最大 Pod 数"
+        },
+        "config": {
+          "env_vars": "环境变量",
+          "advanced_config": "高级配置",
+          "llm_providers": "LLM 供应商"
+        },
+        "actions": {
+          "back": "上一步",
+          "cancel": "取消",
+          "next": "下一步",
+          "submit": "创建实例"
+        }
+      },
+      "members": {
+        "title": "实例成员",
+        "description": "管理谁可以访问此实例",
+        "addMember": "添加成员",
+        "searchUser": "搜索用户",
+        "searchUserPlaceholder": "按邮箱或姓名搜索...",
+        "searchPlaceholder": "筛选成员...",
+        "colUser": "用户",
+        "colRole": "角色",
+        "colJoined": "加入时间",
+        "totalMembers": "总成员数",
+        "admins": "管理员",
+        "viewers": "观察者",
+        "noMembers": "未找到成员",
+        "roleUpdated": "成员角色已更新",
+        "removeSuccess": "成员已移除",
+        "addSuccess": "成员已添加",
+        "removeConfirm": "确定要移除此成员吗？"
+      },
+      "settings": {
+        "title": "实例设置",
+        "description": "配置您的实例设置",
+        "generalSettings": "常规设置",
+        "descriptionLabel": "描述",
+        "descriptionPlaceholder": "输入此实例的描述...",
+        "updateSuccess": "实例更新成功",
+        "dangerZone": "危险区域",
+        "dangerZoneDescription": "不可逆的危险操作",
+        "deleteInstance": "删除此实例",
+        "deleteInstanceDescription": "删除后，所有数据将被永久移除。",
+        "deleteConfirm": "确定要删除此实例吗？此操作不可撤销。",
+        "deleteSuccess": "实例删除成功",
+        "llmConfig": "LLM 配置",
+        "llmConfigDescription": "配置此实例的 LLM 提供商和模型",
+        "llmProvider": "提供商",
+        "llmProviderPlaceholder": "选择提供商",
+        "llmModel": "模型",
+        "llmModelPlaceholder": "选择模型",
+        "llmApiKeyOverride": "API Key 覆盖",
+        "llmApiKeyOverridePlaceholder": "留空则使用默认提供商密钥",
+        "llmApiKeyOverrideHint": "仅为此实例覆盖提供商 API 密钥",
+        "llmApiKeySet": "已设置 API Key 覆盖",
+        "llmConfigUpdateSuccess": "LLM 配置更新成功",
+        "llmConfigLoadError": "加载 LLM 配置失败"
+      }
+    },
+    "deploy": {
+      "listTitle": "部署记录",
+      "detailTitle": "部署详情",
+      "notFound": "未找到部署记录",
+      "defaultDescription": "新部署",
+      "empty": "暂无部署记录",
+      "states": {
+        "created": "已创建",
+        "inProgress": "进行中",
+        "success": "成功",
+        "failed": "失败",
+        "cancelled": "已取消",
+        "completed": "已完成"
+      },
+      "fields": {
+        "id": "部署 ID",
+        "image": "镜像",
+        "triggeredBy": "触发者",
+        "config": "配置快照"
+      },
+      "actions": {
+        "back": "返回列表",
+        "cancel": "取消部署",
+        "markSuccess": "标记成功",
+        "markFailed": "标记失败",
+        "new": "新建部署"
+      }
+    },
+    "auditLogs": {
+      "title": "审计日志",
+      "description": "查看组织中的所有活动和变更记录",
+      "filterActionPlaceholder": "按操作筛选...",
+      "filterResourceType": "资源类型",
+      "filterFromDate": "起始日期",
+      "filterToDate": "截止日期",
+      "exportCsv": "导出 CSV",
+      "exportJson": "导出 JSON",
+      "exportSuccess": "导出已开始",
+      "stats": {
+        "total": "总事件数",
+        "thisPage": "本页条数",
+        "pages": "总页数"
+      },
+      "colTimestamp": "时间",
+      "colActor": "操作者",
+      "colAction": "操作",
+      "colResourceType": "资源类型",
+      "colResourceId": "资源 ID",
+      "noLogs": "暂无审计日志",
+      "viewDetails": "详情",
+      "detailTitle": "审计日志详情",
+      "details": "详细信息",
+      "showing": "显示第 {{from}}-{{to}} 条，共 {{total}} 条"
+    },
+    "clusters": {
+      "title": "集群管理",
+      "subtitle": "管理您的 Kubernetes 集群",
+      "createButton": "添加集群",
+      "deletedSuccess": "集群删除成功",
+      "updatedSuccess": "集群更新成功",
+      "createdSuccess": "集群创建成功",
+      "invalidJsonError": "无效的 JSON 格式",
+      "deleteConfirm": "确定要删除此集群吗？",
+      "createTitle": "添加集群",
+      "editTitle": "编辑集群",
+      "columns": {
+        "name": "名称",
+        "provider": "供应商",
+        "region": "区域",
+        "apiEndpoint": "API 端点",
+        "status": "状态",
+        "nodeCount": "节点数",
+        "actions": "操作"
+      },
+      "actions": {
+        "healthCheck": "健康检查",
+        "edit": "编辑",
+        "delete": "删除"
+      },
+      "stats": {
+        "total": "总集群数",
+        "healthy": "健康",
+        "unhealthy": "不健康"
+      },
+      "form": {
+        "name": "集群名称",
+        "nameRequired": "集群名称不能为空",
+        "provider": "供应商",
+        "region": "区域",
+        "apiEndpoint": "API 端点",
+        "authConfig": "认证配置 (JSON)",
+        "metadata": "元数据 (JSON)"
+      },
+      "healthDrawer": {
+        "title": "集群健康状况",
+        "loading": "正在检查集群健康状况...",
+        "status": "状态",
+        "nodeCount": "节点数",
+        "cpuUsage": "CPU 使用率",
+        "memoryUsage": "内存使用率",
+        "checkedAt": "检查时间",
+        "noData": "暂无健康数据"
+      },
+      "status": {
+        "active": "活跃",
+        "pending": "待处理",
+        "connected": "已连接",
+        "disconnected": "已断开",
+        "maintenance": "维护中",
+        "error": "错误",
+        "healthy": "健康",
+        "unhealthy": "不健康",
+        "provisioning": "配置中",
+        "warning": "警告"
+      },
+      "detail": {
+        "backToList": "返回集群列表",
+        "provider": "提供商",
+        "name": "名称",
+        "status": "状态",
+        "healthStatus": "健康状态",
+        "endpoint": "端点",
+        "lastHealthCheck": "最后健康检查",
+        "createdAt": "创建时间",
+        "updatedAt": "更新时间",
+        "createdBy": "创建者",
+        "cpuUsage": "CPU 使用率",
+        "memoryUsage": "内存使用率",
+        "notConfigured": "未配置",
+        "info": "集群信息",
+        "providerConfig": "提供商配置",
+        "noEvents": "暂无近期事件",
+        "nodes": {
+          "title": "集群节点",
+          "empty": "暂无节点信息",
+          "name": "节点名称",
+          "status": "状态",
+          "cpu": "CPU",
+          "memory": "内存",
+          "roles": "角色",
+          "version": "版本"
+        },
+        "events": {
+          "title": "近期事件"
+        }
+      }
+    },
+    "genes": {
+      "title": "基因市场",
+      "subtitle": "发现并安装实例基因",
+      "publishButton": "发布基因",
+      "searchPlaceholder": "搜索基因...",
+      "loading": "加载基因中...",
+      "ratings": "评分",
+      "genesCount": "个基因",
+      "fetchError": "获取基因详情失败",
+      "installSuccess": "基因安装成功",
+      "invalidJson": "无效的 JSON 格式",
+      "rateSuccess": "评分提交成功",
+      "notFound": "基因未找到",
+      "back": "返回市场",
+      "rateAction": "评分",
+      "installAction": "安装",
+      "downloads": "下载量",
+      "averageRating": "平均评分",
+      "tags": "标签",
+      "noTags": "暂无标签",
+      "description": "描述",
+      "noDescription": "暂无描述",
+      "manifest": "清单",
+      "evolutionHistory": "进化历史",
+      "triggeredBy": "触发者",
+      "noEvolutionEvents": "暂无进化事件",
+      "installGene": "安装基因",
+      "instanceId": "实例 ID",
+      "instanceIdRequired": "实例 ID 不能为空",
+      "instanceIdPlaceholder": "请输入实例 ID",
+      "configOverride": "配置覆盖 (JSON)",
+      "configOverrideTooltip": "可选的 JSON 配置，用于覆盖基因默认值",
+      "rateGene": "评价基因",
+      "rating": "评分",
+      "ratingRequired": "评分不能为空",
+      "comment": "评论",
+      "commentPlaceholder": "留下评论...",
+      "filters": {
+        "allCategories": "所有类别",
+        "catAi": "AI",
+        "catTool": "工具",
+        "allVisibility": "所有可见性",
+        "visPublic": "公开",
+        "visPrivate": "私有"
+      },
+      "tabs": {
+        "genes": "基因",
+        "genomes": "基因组"
+      },
+      "actions": {
+        "install": "安装",
+        "rate": "评分"
+      }
+    },
+    "templates": {
+      "title": "实例模板",
+      "subtitle": "创建和管理实例模板",
+      "createTemplate": "创建模板",
+      "searchPlaceholder": "搜索模板...",
+      "filterAll": "全部",
+      "filterPublished": "已发布",
+      "filterDraft": "草稿",
+      "empty": "暂无模板",
+      "publishConfirm": "确定要发布此模板吗？",
+      "deleteConfirm": "确定要删除此模板吗？",
+      "fetchError": "获取模板失败",
+      "createSuccess": "模板创建成功",
+      "invalidJson": "无效的 JSON 格式",
+      "cloneSuccess": "模板克隆成功",
+      "publishSuccess": "模板发布成功",
+      "deleteSuccess": "模板删除成功",
+      "statusPublished": "已发布",
+      "statusDraft": "草稿",
+      "noDescription": "暂无描述",
+      "name": "模板名称",
+      "nameRequired": "模板名称不能为空",
+      "namePlaceholder": "请输入模板名称",
+      "description": "描述",
+      "descriptionPlaceholder": "请输入模板描述",
+      "tags": "标签",
+      "tagsTooltip": "按回车添加标签",
+      "tagsPlaceholder": "添加标签...",
+      "baseConfig": "基础配置 (JSON)"
+    },
+    "evolution": {
+      "noInstance": "未提供实例 ID",
+      "title": "演化日志",
+      "filterByType": "按类型筛选",
+      "types": {
+        "installed": "已安装",
+        "uninstalled": "已卸载",
+        "upgraded": "已升级",
+        "downgraded": "已降级",
+        "configChanged": "配置变更",
+        "error": "错误"
+      },
+      "empty": "暂无演化事件",
+      "trigger": "触发"
+    },
+    "genomeDetail": {
+      "notFound": "未找到基因组",
+      "fields": {
+        "id": "基因组 ID",
+        "visibility": "可见性",
+        "description": "描述",
+        "rating": "评分",
+        "createdAt": "创建时间"
+      },
+      "genesTitle": "包含的基因",
+      "noGenes": "该基因组暂无基因",
+      "configTitle": "配置"
+    },
+    "templateDetail": {
+      "notFound": "未找到模板",
+      "published": "已发布",
+      "fields": {
+        "id": "模板 ID",
+        "cloneCount": "克隆次数",
+        "description": "描述",
+        "tags": "标签",
+        "createdAt": "创建时间"
+      },
+      "itemsTitle": "基因分配",
+      "noItems": "暂无基因分配",
+      "hasConfigOverride": "有配置覆盖",
+      "defaultConfig": "默认配置",
+      "baseConfigTitle": "基础配置",
+      "deployFromTemplate": "从模板部署",
+      "clone": "克隆模板",
+      "cloneSuccess": "模板克隆成功",
+      "cloneError": "克隆模板失败"
+    },
+    "orgSettings": {
+      "title": "组织设置",
+      "subtitle": "管理您的组织设置和配置",
+      "info": {
+        "title": "组织信息",
+        "general": "常规设置",
+        "logo": "组织标识",
+        "uploadLogo": "上传标识",
+        "logoHint": "JPG、PNG 或 GIF，最大 2MB",
+        "name": "组织名称",
+        "description": "描述",
+        "statistics": "统计信息",
+        "created": "创建时间",
+        "plan": "套餐",
+        "tenantId": "组织 ID",
+        "stats": {
+          "projects": "项目",
+          "members": "成员",
+          "clusters": "集群",
+          "storage": "存储"
+        }
+      },
+      "members": {
+        "title": "成员管理",
+        "description": "管理组织成员及其角色",
+        "invite": "邀请成员",
+        "inviteMember": "邀请新成员",
+        "email": "邮箱地址",
+        "emailPlaceholder": "请输入成员邮箱",
+        "role": "角色",
+        "searchPlaceholder": "搜索成员...",
+        "filterByRole": "按角色筛选",
+        "allRoles": "所有角色",
+        "colUser": "用户",
+        "colRole": "角色",
+        "colJoined": "加入时间",
+        "roleUpdated": "成员角色已更新",
+        "removeSuccess": "成员已移除",
+        "removeConfirm": "确定要移除此成员吗？",
+        "inviteSuccess": "邀请已发送",
+        "inviteError": "邀请发送失败",
+        "noMembers": "未找到成员",
+        "stats": {
+          "total": "总成员数",
+          "owners": "所有者",
+          "admins": "管理员",
+          "editors": "编辑者",
+          "viewers": "查看者"
+        }
+      },
+      "clusters": {
+        "title": "集群概览",
+        "description": "组织集群概览",
+        "manage": "管理集群",
+        "viewDetails": "查看详情",
+        "addCluster": "添加集群",
+        "noClusters": "未配置集群",
+        "nodes": "节点",
+        "cpu": "CPU",
+        "memory": "内存",
+        "endpoint": "端点",
+        "stats": {
+          "total": "总数",
+          "active": "活跃",
+          "maintenance": "维护中",
+          "error": "异常"
+        }
+      },
+      "audit": {
+        "title": "审计日志",
+        "description": "组织级审计追踪",
+        "exportCsv": "导出 CSV",
+        "exportJson": "导出 JSON",
+        "exportSuccess": "导出完成",
+        "filterUser": "按用户筛选...",
+        "filterAction": "按操作筛选",
+        "filterResourceType": "资源类型",
+        "filterFromDate": "开始日期",
+        "filterToDate": "结束日期",
+        "colTimestamp": "时间",
+        "colActor": "操作者",
+        "colAction": "操作",
+        "colResourceType": "资源类型",
+        "colResourceId": "资源 ID",
+        "viewDetails": "查看详情",
+        "detailTitle": "审计日志详情",
+        "details": "详细信息",
+        "noLogs": "未找到审计日志",
+        "showing": "显示第 {{from}}-{{to}} 条，共 {{total}} 条",
+        "stats": {
+          "total": "总日志数",
+          "thisPage": "本页",
+          "pages": "总页数"
+        }
+      },
+      "registry": {
+        "title": "容器镜像仓库",
+        "description": "管理容器镜像仓库配置",
+        "addRegistry": "添加镜像仓库",
+        "editRegistry": "编辑镜像仓库",
+        "addFirstRegistry": "添加您的第一个镜像仓库",
+        "noRegistries": "未配置镜像仓库",
+        "default": "默认",
+        "deleteConfirm": "确定要删除此镜像仓库吗？",
+        "deleteSuccess": "镜像仓库已删除",
+        "createSuccess": "镜像仓库创建成功",
+        "updateSuccess": "镜像仓库更新成功",
+        "testConnection": "测试",
+        "testSuccess": "连接成功",
+        "testFailed": "连接失败",
+        "colName": "名称",
+        "colType": "类型",
+        "colUrl": "地址",
+        "colStatus": "状态",
+        "colLastChecked": "上次检查",
+        "stats": {
+          "total": "总数",
+          "connected": "已连接",
+          "error": "异常"
+        },
+        "form": {
+          "name": "镜像仓库名称",
+          "namePlaceholder": "请输入镜像仓库名称",
+          "type": "镜像仓库类型",
+          "url": "镜像仓库地址",
+          "urlPlaceholder": "例如：https://registry.example.com",
+          "username": "用户名",
+          "usernamePlaceholder": "请输入用户名（可选）",
+          "password": "密码/令牌",
+          "passwordPlaceholder": "请输入密码或访问令牌",
+          "passwordPlaceholderEdit": "留空保持原密码",
+          "passwordHint": "留空以保留当前密码",
+          "setAsDefault": "设为默认镜像仓库"
+        }
+      },
+      "smtp": {
+        "title": "SMTP 配置",
+        "description": "配置发送邮件的服务器设置",
+        "serverSettings": "服务器设置",
+        "host": "SMTP 主机",
+        "port": "端口",
+        "username": "用户名",
+        "password": "密码",
+        "passwordRequired": "新配置需要输入密码",
+        "passwordPlaceholder": "请输入 SMTP 密码",
+        "passwordHint": "留空以保留当前密码",
+        "fromEmail": "发件人邮箱",
+        "fromName": "发件人名称",
+        "useTls": "使用 TLS",
+        "saveSuccess": "SMTP 配置保存成功",
+        "saveError": "SMTP 配置保存失败",
+        "deleteSuccess": "SMTP 配置已删除",
+        "deleteError": "SMTP 配置删除失败",
+        "testTitle": "测试邮件",
+        "testDescription": "发送测试邮件以验证 SMTP 设置",
+        "recipientRequired": "收件人邮箱为必填项",
+        "recipientEmail": "收件人邮箱",
+        "testSuccess": "测试邮件发送成功",
+        "testError": "测试邮件发送失败",
+        "sendTest": "发送测试"
+      },
+      "genes": {
+        "title": "基因策略",
+        "description": "管理组织基因策略以配置智能体行为",
+        "addPolicy": "添加策略",
+        "addTitle": "添加基因策略",
+        "editTitle": "编辑基因策略",
+        "policyKey": "策略键",
+        "policyValue": "策略值 (JSON)",
+        "policyDescription": "描述",
+        "descriptionPlaceholder": "简要描述此策略",
+        "empty": "尚未配置基因策略",
+        "emptyHint": "添加策略以配置组织的智能体行为。",
+        "updatedAt": "更新于",
+        "keyRequired": "策略键为必填项",
+        "invalidJson": "策略值必须是有效的 JSON",
+        "saveSuccess": "基因策略保存成功",
+        "saveError": "基因策略保存失败",
+        "deleteSuccess": "基因策略已删除",
+        "deleteError": "基因策略删除失败",
+        "fetchError": "加载基因策略失败"
+      }
+    },
+    "pluginHub": {
+      "title": "插件中心",
+      "subtitle": "发现、安装和管理工作区的插件",
+      "selectProject": "选择项目",
+      "selectProjectPlaceholder": "选择项目",
+      "tabs": {
+        "plugins": "插件",
+        "channels": "渠道"
+      },
+      "pluginsLoading": "加载插件中...",
+      "channelsLoading": "加载渠道中...",
+      "pluginsList": {
+        "installedPlugins": "已安装的插件",
+        "available": "可用",
+        "noPluginsAvailable": "没有可用的插件",
+        "searchPlaceholder": "搜索插件...",
+        "installRequirement": "从 PyPI 安装",
+        "installPlaceholder": "例：memstack-plugin-template==0.1.0",
+        "install": "安装",
+        "enable": "启用",
+        "disable": "禁用",
+        "uninstall": "卸载",
+        "reload": "重新加载",
+        "confirmUninstall": "您确定要卸载此插件吗？",
+        "noPluginsInstalled": "还未安装任何插件"
+      },
+      "channelsList": {
+        "configuredChannels": "已配置的渠道",
+        "addChannel": "添加渠道",
+        "channels": "渠道",
+        "channelType": "渠道类型",
+        "accountId": "账户 ID",
+        "peerId": "对等体 ID",
+        "status": "状态",
+        "actions": "操作",
+        "edit": "编辑",
+        "delete": "删除",
+        "deleteConfirm": "您确定要删除此渠道吗？",
+        "deleteSuccess": "渠道删除成功",
+        "deleteFailed": "删除渠道失败",
+        "noChannelsConfigured": "还未配置任何渠道",
+        "selectChannelType": "选择渠道类型"
+      },
+      "configModal": {
+        "title": "渠道配置",
+        "save": "保存",
+        "cancel": "取消",
+        "saving": "保存中...",
+        "saveSuccess": "渠道配置保存成功",
+        "saveFailed": "保存渠道配置失败"
+      },
+      "error": "错误",
+      "errorMessage": "发生错误。请重试。"
+    },
+    "workspaceList": {
+      "title": "工作空间",
+      "subtitle": "管理您的工作空间和其资源",
+      "createButton": "创建工作空间",
+      "searchPlaceholder": "搜索工作空间...",
+      "empty": "未找到工作空间"
+    },
+    "workflowPatterns": {
+      "title": "工作流模式",
+      "subtitle": "管理您工作空间的工作流模式",
+      "createButton": "创建模式",
+      "searchPlaceholder": "搜索模式...",
+      "deleteButton": "删除",
+      "editButton": "编辑",
+      "empty": "未找到模式",
+      "loading": "正在加载模式...",
+      "deleteConfirm": "确定要删除此模式吗？",
+      "deleteSuccess": "模式删除成功",
+      "createSuccess": "模式创建成功"
     }
   },
   "project": {
@@ -830,59 +1572,48 @@
     },
     "settings": {
       "title": "项目设置",
-      "no_project": "请先选择一个项目",
-      "basic": {
-        "title": "基本设置",
-        "name": "项目名称",
-        "description": "项目描述",
-        "public": "公开项目（任何人都可以查看）",
-        "save": "保存基本设置",
-        "saving": "保存中..."
-      },
-      "memory": {
-        "title": "记忆规则",
-        "max_episodes": "最大 Episodes 数",
-        "retention": "保留天数",
-        "auto_refresh": "自动刷新",
-        "interval": "刷新间隔（小时）",
-        "save": "保存记忆规则"
-      },
-      "graph": {
-        "title": "图配置",
-        "max_nodes": "最大节点数",
-        "max_edges": "最大边数",
-        "threshold": "相似度阈值: {{value}}",
-        "community": "启用社区检测",
-        "save": "保存图配置"
-      },
-      "advanced": {
-        "title": "高级操作",
-        "export": "导出项目数据",
-        "clear_cache": "清除图缓存",
-        "rebuild": "重建社区",
-        "confirm_clear": "确定要清除图缓存吗？这将重建社区检测。",
-        "confirm_rebuild": "确定要重建社区吗？这可能需要一些时间。"
-      },
-      "danger": {
-        "title": "危险区域",
-        "desc": "删除此项目及其所有数据，包括记忆、图谱和设置。",
-        "warning": "此操作不可恢复！",
-        "delete": "删除项目",
-        "confirm_prompt": "此操作不可恢复！请输入项目名称以确认删除：",
-        "name_mismatch": "项目名称不匹配，取消删除。",
-        "success": "项目已删除",
-        "fail": "删除失败，请稍后再试。"
-      },
-      "messages": {
-        "saved": "设置已保存！",
-        "failed": "保存失败：{{error}}",
-        "export_success": "数据导出成功！",
-        "export_fail": "导出数据失败，请重试。",
-        "cache_cleared": "图缓存清除任务已提交！",
-        "cache_fail": "清除缓存失败，请重试。",
-        "rebuild_submitted": "社区重建任务已提交！",
-        "rebuild_fail": "重建社区失败，请重试。"
-      }
+      "noProject": "未选择项目",
+      "saved": "设置保存成功",
+      "failed": "保存设置失败",
+      "basicTitle": "基本设置",
+      "basicName": "项目名称",
+      "basicDescription": "描述",
+      "basicPublic": "使项目公开",
+      "basicSave": "保存",
+      "basicSaving": "保存中...",
+      "memoryTitle": "记忆规则",
+      "memoryMaxEpisodes": "最大事件数",
+      "memoryRetention": "保留天数",
+      "memoryAutoRefresh": "自动刷新",
+      "memoryInterval": "刷新间隔（小时）",
+      "memorySave": "保存",
+      "graphTitle": "图配置",
+      "graphMaxNodes": "最大节点数",
+      "graphMaxEdges": "最大边数",
+      "graphThreshold": "相似度阈值",
+      "graphSave": "保存",
+      "advancedTitle": "高级选项",
+      "advancedExport": "导出数据",
+      "advancedClearCache": "清除缓存",
+      "advancedRebuild": "重建社区",
+      "advancedConfirmClear": "您确定要清除缓存吗？",
+      "advancedConfirmRebuild": "您确定要重建社区吗？",
+      "dangerTitle": "危险区域",
+      "dangerDesc": "删除项目后无法恢复。请谨慎操作。",
+      "dangerWarning": "此操作无法撤消。",
+      "dangerDelete": "删除项目",
+      "dangerConfirmPrompt": "输入项目名称确认：",
+      "dangerNameMismatch": "项目名称不匹配。",
+      "dangerSuccess": "项目删除成功。",
+      "dangerFail": "删除项目失败。",
+      "sandboxTitle": "沙盒配置",
+      "sandboxDesc": "配置此项目的沙盒环境",
+      "sandboxProvider": "沙盒提供商",
+      "sandboxTimeout": "超时（秒）",
+      "sandboxResourceLimit": "资源限制",
+      "sandboxMemory": "内存（MB）",
+      "sandboxCPU": "CPU 核数",
+      "sandboxSave": "保存"
     },
     "search": {
       "options": {
@@ -1456,6 +2187,50 @@
         "delete_confirm": "您确定吗？这将删除边类型定义。",
         "save_error": "保存失败。请检查名称是否唯一。"
       },
+      "edgeTypeList": {
+        "title": "边类型",
+        "subtitle": "定义知识图谱中关系的结构",
+        "createButton": "创建边类型",
+        "searchPlaceholder": "搜索边类型...",
+        "systemActive": "系统活跃",
+        "masterActive": "活跃",
+        "masterNoDescription": "未提供描述",
+        "masterAttributesCount": "{{count}} 个属性",
+        "masterEmpty": "还没有定义边类型。创建第一个来开始。",
+        "detailSelectPrompt": "从列表中选择一个边类型来查看详情",
+        "detailNoDescription": "未提供描述",
+        "detailDelete": "删除",
+        "detailEdit": "编辑",
+        "detailAttributesTitle": "边属性",
+        "detailAddAttribute": "添加属性",
+        "detailTableName": "名称",
+        "detailTableType": "类型",
+        "detailTableDescription": "描述",
+        "detailTableEmpty": "此边类型未定义属性。",
+        "modalTitleNew": "新建边类型",
+        "modalTitleEdit": "编辑 {{name}}",
+        "modalNameLabel": "名称",
+        "modalNamePlaceholder": "例如：KNOWS、WORKS_FOR、LOCATED_IN",
+        "modalDescLabel": "描述",
+        "modalDescPlaceholder": "这个关系代表什么？",
+        "modalTabAttributes": "属性",
+        "modalBasicInfo": "基本信息",
+        "modalDefinedAttributes": "已定义属性",
+        "modalAddAttribute": "添加属性",
+        "modalAttributeTitle": "属性 #{{index}}",
+        "modalDeleteField": "删除",
+        "modalAttrNameLabel": "属性名称",
+        "modalAttrNamePlaceholder": "例如：since、strength、context",
+        "modalDataTypeLabel": "数据类型",
+        "modalDocstringLabel": "文档",
+        "modalDocstringPlaceholder": "描述此属性代表什么",
+        "modalLastSaved": "最后保存：{{time}}",
+        "modalNeverSaved": "从未",
+        "modalDiscard": "放弃",
+        "modalSave": "保存",
+        "deleteConfirm": "确定要删除此边类型吗？",
+        "loading": "加载中..."
+      },
       "mappings": {
         "title": "边类型映射",
         "subtitle": "配置源和目标实体类型之间允许的有效关系类型。定义知识图谱的“物理规则”。",
@@ -1583,6 +2358,198 @@
           }
         }
       }
+    },
+    "entityTypeList": {
+      "title": "实体类型",
+      "subtitle": "定义您的知识图中实体的结构",
+      "create": "创建实体类型",
+      "searchPlaceholder": "搜索实体类型...",
+      "filterProject": "过滤项目",
+      "listView": "列表视图",
+      "gridView": "网格视图",
+      "entityType": "实体类型",
+      "internalId": "内部 ID",
+      "schemaDefinition": "架构定义",
+      "status": "状态",
+      "source": "来源",
+      "lastModified": "最后修改",
+      "actions": "操作",
+      "moreAttributes": "+{{count}} 更多",
+      "noAttributes": "无属性",
+      "empty": "还没有定义实体类型。创建第一个以开始使用。",
+      "newTitle": "新建实体类型",
+      "editTitle": "编辑 {{name}}",
+      "basicInfo": "基本信息",
+      "nameLabel": "名称",
+      "namePlaceholder": "例：人物、组织、位置",
+      "descLabel": "描述",
+      "descPlaceholder": "该实体类型代表什么？",
+      "infoTitle": "属性定义您的实体数据的结构。",
+      "infoDesc": "每个属性都有名称、数据类型和可选的验证规则。",
+      "definedAttributes": "已定义的属性",
+      "addAttribute": "添加属性",
+      "attributeTitle": "属性 #{{index}}",
+      "deleteField": "移除",
+      "attrNameLabel": "属性名称",
+      "attrNamePlaceholder": "例：邮箱、电话、年龄",
+      "dataTypeLabel": "数据类型",
+      "docstringLabel": "文档",
+      "docstringPlaceholder": "描述此属性代表什么",
+      "lastSaved": "最后保存：{{time}}",
+      "neverSaved": "从未",
+      "discard": "丢弃",
+      "save": "保存",
+      "edit": "编辑",
+      "delete": "删除",
+      "deleteConfirm": "您确定要删除此实体类型吗？",
+      "loading": "加载中...",
+      "generalSettings": "基本设置",
+      "attributesSchema": "属性与架构",
+      "relationships": "关系",
+      "relationshipsComingSoon": "定义此实体类型如何连接到其他实体。此功能将在下次更新中推出。",
+      "relationshipMapping": "关系映射",
+      "validationRules": "验证规则（{{type}}）",
+      "minVal": "最小值（ge）",
+      "maxVal": "最大值（le）",
+      "minLen": "最小长度",
+      "maxLen": "最大长度",
+      "regex": "正则表达式",
+      "regexPlaceholder": "例：^[a-z]+$"
+    },
+    "communities": {
+      "title": "社区",
+      "subtitle": "知识图中自动检测的相关实体组",
+      "rebuild": "重建社区",
+      "rebuilding": "重建中...",
+      "refresh": "刷新",
+      "confirmRebuild": "这将从头开始重建所有社区。继续？",
+      "cancel": "取消",
+      "dismiss": "关闭",
+      "progress": "进度",
+      "communitiesCount": "社区",
+      "connectionsCount": "连接",
+      "error": "错误",
+      "taskError": "错误",
+      "showing": "显示 {{count}} 个，共 {{total}} 个社区",
+      "page": "第 {{current}} 页，共 {{total}} 页",
+      "loading": "加载社区中...",
+      "emptyTitle": "未找到社区",
+      "emptyDesc": "添加更多事件以启用社区检测",
+      "communityDetails": "社区详情",
+      "name": "名称",
+      "members": "成员",
+      "summary": "摘要",
+      "uuid": "标识符",
+      "created": "创建时间",
+      "tasks": "任务",
+      "communityMembers": "社区成员",
+      "noMembers": "未加载成员",
+      "selectPrompt": "选择一个社区查看详情",
+      "clickPrompt": "点击任意社区卡片查看其成员",
+      "infoTitle": "关于社区",
+      "infoDesc": "社区是知识图中自动检测的相关实体组。"
+    },
+    "cronJobs": {
+      "updateSuccess": "定时任务更新成功",
+      "createSuccess": "定时任务创建成功",
+      "saveFailed": "保存任务失败",
+      "toggleSuccessEnabled": "任务已启用",
+      "toggleSuccessDisabled": "任务已禁用",
+      "toggleFailed": "切换任务失败",
+      "triggerSuccess": "任务执行已触发",
+      "deleteFailed": "删除任务失败",
+      "deleteConfirm": "您确定要删除此任务吗？",
+      "deleteSuccess": "任务删除成功",
+      "triggerFailed": "任务执行失败"
+    },
+    "channelConfig": {
+      "title": "频道配置",
+      "addChannelConfig": "添加频道配置",
+      "editChannelConfig": "编辑频道配置",
+      "channelConfigurations": "频道配置列表",
+      "selectChannelType": "请选择频道类型",
+      "configNamePlaceholder": "频道配置名称",
+      "pleaseEnterName": "请输入配置名称",
+      "channelDescription": "频道描述",
+      "optionalDescription": "该频道的可选描述",
+      "pluginHub": "插件中心",
+      "pluginHubDescription": "安装和管理你的频道插件",
+      "pluginRequirementPlaceholder": "输入插件要求 (例如: plugin-name==1.0.0)",
+      "pluginType": {
+        "toolOnly": "仅工具"
+      },
+      "pluginSource": {
+        "local": "本地"
+      },
+      "connectionMode": "连接模式",
+      "domain": {
+        "feishuChina": "飞书（中国）",
+        "larkIntl": "Lark 国际版"
+      },
+      "appId": "应用 ID",
+      "pleaseEnterAppId": "请输入应用 ID",
+      "appSecret": "应用秘钥",
+      "pleaseEnterAppSecret": "请输入应用秘钥",
+      "enterAppSecret": "输入应用秘钥",
+      "leaveUnchanged": "保持不变以保留现有秘钥 (__MEMSTACK_SECRET_UNCHANGED__)",
+      "encryptKey": "加密密钥",
+      "forWebhookVerification": "用于 Webhook 验证",
+      "verificationToken": "验证令牌",
+      "webhookUrl": "Webhook 网址",
+      "dmPolicy": "私信策略",
+      "dmAllowlist": "私信允许列表（用户 ID）",
+      "dmAllowlistTooltip": "允许发送私信的用户 ID，用逗号分隔",
+      "enterUserIds": "输入用户 ID，用逗号分隔",
+      "groupPolicy": "群组策略",
+      "groupAllowlist": "群组允许列表（群聊 ID）",
+      "groupAllowlistTooltip": "允许发送群组消息的群聊 ID，用逗号分隔",
+      "enterGroupChatIds": "输入群聊 ID，用逗号分隔",
+      "rateLimit": "速率限制",
+      "rateLimitTooltip": "每分钟最大请求数",
+      "accessControl": "访问控制",
+      "diagnostics": "诊断信息",
+      "loadingSchema": "加载中...",
+      "columns": {
+        "channels": "频道",
+        "plugin": "插件",
+        "source": "来源",
+        "connection": "连接状态",
+        "created": "创建时间",
+        "lastError": "最后错误"
+      },
+      "actions": {
+        "addChannel": "添加频道",
+        "testConnection": "测试连接",
+        "enable": "启用",
+        "disable": "禁用",
+        "install": "安装",
+        "reload": "重新加载"
+      },
+      "status": {
+        "connected": "已连接",
+        "disconnected": "已断开连接",
+        "circuitOpen": "熔断器打开"
+      },
+      "messages": {
+        "configCreated": "配置创建成功",
+        "configUpdated": "配置更新成功",
+        "configDeleted": "配置删除成功",
+        "failedToDelete": "删除配置失败",
+        "failedToSave": "保存配置失败",
+        "testFailed": "连接测试失败",
+        "projectIdRequired": "需要项目 ID",
+        "enterPluginRequirement": "请输入插件要求",
+        "pluginInstallFailed": "安装插件失败",
+        "pluginReloadFailed": "重新加载插件失败",
+        "pluginActionFailed": "插件操作失败",
+        "pluginEnabled": "插件 {{name}} 已启用",
+        "pluginDisabled": "插件 {{name}} 已禁用"
+      },
+      "errors": {
+        "failedToLoadPlugins": "加载插件失败",
+        "failedToLoadSchema": "加载方案失败"
+      },
+      "pleaseEnter": "请输入 {{field}}"
     }
   },
   "dashboard": {
@@ -1729,6 +2696,69 @@
         "error": "错误",
         "sandbox": "沙盒",
         "planMode": "计划模式"
+      },
+      "pool": {
+        "title": "Agent 池管理",
+        "tier": "层级",
+        "status": "状态",
+        "health": "健康",
+        "activeRequests": "活跃请求",
+        "totalRequests": "总请求",
+        "memory": "内存",
+        "noInstance": "尚未创建实例 - 首次请求时自动分配",
+        "pending": "待分配",
+        "tiers": {
+          "hot": "高频项目 - 独立资源池，优先响应",
+          "warm": "中频项目 - 共享资源池，LRU 缓存",
+          "cold": "低频项目 - 按需创建，节省资源"
+        }
+      },
+      "stats": {
+        "toolStats": "工具统计",
+        "totalTools": "总工具",
+        "builtinTools": "内置工具",
+        "mcpTools": "MCP 工具",
+        "skillStats": "技能统计",
+        "totalSkills": "总技能",
+        "loaded": "已加载",
+        "messageCount": "对话消息数",
+        "taskProgress": "任务进度",
+        "completed": "已完成",
+        "inProgress": "进行中",
+        "pending": "待处理"
+      },
+      "controls": {
+        "pause": "暂停 Agent (停止接收新请求)",
+        "resume": "恢复 Agent",
+        "stop": "停止",
+        "stopAgent": "停止 Agent",
+        "terminateInstance": "终止实例",
+        "restart": "重启",
+        "restartAgent": "重启 Agent (刷新工具和配置)",
+        "confirmTerminate": "确定要终止 Agent 实例吗？实例将被释放。",
+        "confirmStop": "确定要停止 Agent 吗？正在进行的任务将被中断。",
+        "confirmRestart": "重启将刷新工具和配置。确定要重启吗？",
+        "cancel": "取消"
+      },
+      "messages": {
+        "terminating": "正在终止 Agent 实例...",
+        "stopping": "正在停止 Agent...",
+        "stopFailed": "停止 Agent 失败",
+        "restarting": "正在重启 Agent 实例...",
+        "restartingAgent": "正在重启 Agent...",
+        "restartFailed": "重启 Agent 失败",
+        "pausing": "正在暂停 Agent 实例...",
+        "pauseFailed": "暂停 Agent 失败",
+        "resuming": "正在恢复 Agent 实例...",
+        "resumeFailed": "恢复 Agent 失败"
+      },
+      "error": {
+        "label": "错误",
+        "prefix": "错误"
+      },
+      "planMode": {
+        "tooltip": "{{mode}} 模式 - Agent 正在创建详细计划",
+        "label": "计划"
       }
     },
     "chat": {
@@ -2352,5 +3382,399 @@
     "noResults": "未找到对话",
     "exitCompare": "退出对比",
     "compare": "对比"
+  },
+  "inviteAccept": {
+    "roles": {
+      "admin": "管理员",
+      "member": "成员",
+      "viewer": "访客"
+    },
+    "errors": {
+      "missingToken": "邀请令牌缺失",
+      "invalidToken": "此邀请无效",
+      "verifyFailed": "验证邀请失败",
+      "acceptFailed": "接受邀请失败"
+    },
+    "expired": {
+      "title": "邀请已过期",
+      "description": "此邀请已过期，请联系工作空间管理员获取新的邀请。"
+    },
+    "invalid": {
+      "title": "无效邀请",
+      "description": "此邀请链接无效或已被使用。"
+    },
+    "error": {
+      "title": "错误",
+      "description": "处理您的邀请时发生错误。"
+    },
+    "accepted": {
+      "title": "欢迎！",
+      "description": "您已成功加入工作空间。"
+    },
+    "login": {
+      "title": "接受邀请",
+      "prompt": "请登录以接受此邀请"
+    },
+    "authenticated": {
+      "title": "工作空间邀请"
+    },
+    "emailMismatch": {
+      "title": "邮箱不匹配",
+      "description": "此邀请发送至 {{invitedEmail}}，但您当前登录的是 {{currentEmail}}。您仍可接受此邀请。"
+    },
+    "fields": {
+      "invitedEmail": "受邀邮箱",
+      "workspaceId": "工作空间 ID",
+      "role": "角色",
+      "expiresAt": "过期时间"
+    },
+    "actions": {
+      "accept": "接受邀请",
+      "decline": "拒绝",
+      "goHome": "返回首页",
+      "goToWorkspace": "进入工作空间"
+    },
+    "accepting": "正在接受邀请..."
+  },
+  "workspaceSettings": {
+    "title": "工作空间设置",
+    "description": "管理工作空间配置和成员。",
+    "generalSettings": "基本设置",
+    "nameLabel": "工作空间名称",
+    "namePlaceholder": "输入工作空间名称",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "输入工作空间描述",
+    "updateSuccess": "工作空间更新成功。",
+    "updateFailed": "更新工作空间失败。",
+    "members": {
+      "title": "成员管理",
+      "description": "管理谁可以访问此工作空间。",
+      "email": "邮箱",
+      "role": "角色",
+      "actions": "操作",
+      "addMember": "添加成员",
+      "addMemberPlaceholder": "输入用户邮箱或 ID",
+      "addSuccess": "成员添加成功。",
+      "addFailed": "添加成员失败。",
+      "removeConfirm": "确定要移除此成员吗？",
+      "removeSuccess": "成员移除成功。",
+      "removeFailed": "移除成员失败。",
+      "roleUpdateSuccess": "成员角色更新成功。",
+      "roleUpdateFailed": "更新成员角色失败。",
+      "noMembers": "暂无成员。",
+      "owner": "所有者",
+      "editor": "编辑者",
+      "viewer": "查看者"
+    },
+    "dangerZone": {
+      "title": "危险区域",
+      "description": "不可逆的破坏性操作。",
+      "deleteWorkspace": "删除此工作空间",
+      "deleteDescription": "删除后，此工作空间中的所有数据将被永久移除。",
+      "deleteConfirm": "确定要删除此工作空间吗？此操作无法撤销。",
+      "deleteSuccess": "工作空间删除成功。",
+      "deleteFailed": "删除工作空间失败。"
+    }
+  },
+  "workspaceDetail": {
+    "title": "工作空间",
+    "missingContext": "缺少工作空间上下文。",
+    "openInAgentWorkspace": "在 Agent 工作空间中打开",
+    "loadingSurface": "正在加载工作空间...",
+    "loading3DView": "正在加载 3D 视图...",
+    "errorLoadingWorkspace": "加载工作空间失败，请重试。",
+    "tabs": {
+      "overview": "概览",
+      "board": "看板",
+      "objectives": "目标",
+      "genes": "基因",
+      "members": "成员",
+      "chat": "聊天",
+      "settings": "设置"
+    },
+    "blackboard": {
+      "title": "公告板",
+      "postTitle": "帖子标题",
+      "postContent": "帖子内容",
+      "addPost": "发布",
+      "reply": "回复",
+      "replyPlaceholder": "回复",
+      "status": "状态",
+      "createPostFailed": "创建帖子失败",
+      "createReplyFailed": "创建回复失败"
+    },
+    "members": {
+      "title": "成员与 Agent",
+      "membersLabel": "成员",
+      "agentsLabel": "Agent",
+      "add": "添加",
+      "removeAgentConfirm": "确定移除此 Agent？",
+      "remove": "移除",
+      "cancel": "取消",
+      "agentRemoved": "Agent 已移除",
+      "removeAgentFailed": "移除 Agent 失败"
+    },
+    "taskBoard": {
+      "title": "任务看板",
+      "taskTitlePlaceholder": "任务标题...",
+      "priority": "优先级",
+      "effort": "工作量",
+      "add": "添加",
+      "unassigned": "未分配",
+      "statusTodo": "待办",
+      "statusInProgress": "进行中",
+      "statusBlocked": "已阻塞",
+      "statusDone": "已完成",
+      "taskIsBlocked": "任务被阻塞",
+      "createFailed": "创建任务失败",
+      "updateStatusFailed": "更新任务状态失败",
+      "assignFailed": "分配 Agent 失败"
+    },
+    "chat": {
+      "noMessages": "暂无消息，开始对话吧！"
+    },
+    "objectives": {
+      "title": "目标与关键成果",
+      "addObjective": "添加目标",
+      "noObjectives": "暂无目标",
+      "createFirst": "创建你的第一个目标"
+    },
+    "genes": {
+      "title": "赛博基因",
+      "createGene": "创建基因",
+      "all": "全部",
+      "skill": "技能",
+      "knowledge": "知识",
+      "tool": "工具",
+      "workflow": "工作流",
+      "noGenes": "暂无基因",
+      "createFirst": "创建你的第一个基因"
+    },
+    "presence": {
+      "online": "在线"
+    }
+  },
+  "forceChangePassword": {
+    "title": "修改密码",
+    "subtitle": "管理员要求您在继续操作前修改密码。",
+    "currentPassword": "当前密码",
+    "currentPasswordPlaceholder": "请输入当前密码",
+    "newPassword": "新密码",
+    "newPasswordPlaceholder": "请输入新密码",
+    "confirmPassword": "确认新密码",
+    "confirmPasswordPlaceholder": "请再次输入新密码",
+    "submit": "修改密码",
+    "loading": "正在修改密码...",
+    "success": "密码修改成功。",
+    "failed": "密码修改失败。",
+    "passwordMismatch": "两次输入的密码不一致。",
+    "passwordRequired": "密码为必填项。",
+    "passwordMinLength": "密码长度至少为 8 个字符。"
+  },
+  "admin": {
+    "poolDashboard": {
+      "title": "Agent 池仪表板",
+      "autoRefresh": "自动刷新",
+      "activeInstances": "活跃实例",
+      "filterByTier": "按层级筛选",
+      "tierDistribution": "层级分布",
+      "resourceUsage": "资源使用情况",
+      "prewarmPool": "预热池",
+      "errors": {
+        "failedToLoadPoolStatus": "加载池状态失败"
+      },
+      "status": {
+        "totalInstances": "总实例数",
+        "ready": "就绪",
+        "executing": "执行中",
+        "unhealthy": "不健康"
+      },
+      "tiers": {
+        "hot": "热层",
+        "warm": "温层",
+        "cold": "冷层"
+      },
+      "columns": {
+        "instanceKey": "实例密钥",
+        "tier": "层级",
+        "status": "状态",
+        "health": "健康状态",
+        "requests": "请求数",
+        "active": "活跃",
+        "total": "总计",
+        "memory": "内存",
+        "lastRequest": "最后请求",
+        "actions": "操作"
+      },
+      "actions": {
+        "pause": "暂停",
+        "resume": "恢复",
+        "terminate": "终止"
+      },
+      "confirm": {
+        "terminateInstance": "确定要终止此实例吗？"
+      },
+      "messages": {
+        "instancePaused": "实例已暂停",
+        "failedToPause": "暂停实例失败",
+        "instanceResumed": "实例已恢复",
+        "failedToResume": "恢复实例失败",
+        "instanceTerminated": "实例已终止",
+        "failedToTerminate": "终止实例失败"
+      },
+      "resources": {
+        "memory": "内存",
+        "cpu": "CPU"
+      },
+      "prewarm": {
+        "l1": "L1（热）",
+        "l2": "L2（温）",
+        "l3": "L3（冷）",
+        "instances": "个实例"
+      },
+      "pagination": {
+        "total": "共 {{count}} 个实例"
+      }
+    },
+    "deadLetterQueue": {
+      "title": "死信队列",
+      "description": "管理失败的消息并处理异常",
+      "errors": {
+        "failedToLoadStats": "加载统计数据失败",
+        "failedToLoadMessages": "加载消息失败",
+        "failedToRetryMessage": "重试消息失败",
+        "failedToRetryMessages": "重试所选消息失败",
+        "failedToDiscardMessages": "丢弃所选消息失败",
+        "failedToCleanupExpired": "清理过期消息失败",
+        "failedToCleanupResolved": "清理已解决消息失败",
+        "reasonRequired": "请提供丢弃原因"
+      },
+      "messages": {
+        "retryInitiated": "重试已启动",
+        "messageDiscarded": "消息已丢弃",
+        "retryBatchResult": "{{count}} 条消息已重试",
+        "discardBatchResult": "{{count}} 条消息已丢弃",
+        "cleanupExpiredResult": "{{count}} 条过期消息已清理",
+        "cleanupResolvedResult": "{{count}} 条已解决消息已清理"
+      },
+      "columns": {
+        "id": "ID",
+        "eventType": "事件类型",
+        "errorType": "错误类型",
+        "error": "错误",
+        "status": "状态",
+        "retries": "重试次数",
+        "age": "年龄",
+        "actions": "操作"
+      },
+      "actions": {
+        "viewDetails": "查看详情",
+        "retry": "重试",
+        "discard": "丢弃",
+        "cleanupExpired": "清理过期",
+        "cleanupResolved": "清理已解决",
+        "retrySelected": "重试所选",
+        "discardSelected": "丢弃所选"
+      },
+      "stats": {
+        "totalMessages": "总消息数",
+        "pending": "待处理",
+        "retrying": "重试中",
+        "resolved": "已解决",
+        "discarded": "已丢弃",
+        "oldestAge": "最早年龄"
+      },
+      "statuses": {
+        "pending": "待处理",
+        "retrying": "重试中",
+        "discarded": "已丢弃",
+        "expired": "已过期",
+        "resolved": "已解决"
+      },
+      "filters": {
+        "label": "按状态筛选",
+        "status": "状态",
+        "eventType": "事件类型",
+        "errorType": "错误类型",
+        "selected": "已选择"
+      },
+      "detail": {
+        "title": "消息详情",
+        "eventId": "事件 ID",
+        "routingKey": "路由密钥",
+        "retryCount": "重试次数",
+        "firstFailed": "首次失败",
+        "lastFailed": "最后失败",
+        "nextRetry": "下次重试",
+        "eventData": "事件数据",
+        "stackTrace": "堆栈跟踪"
+      },
+      "discard": {
+        "title": "丢弃消息",
+        "confirmMessage": "你即将丢弃 {{count}} 条消息。此操作无法撤销。",
+        "reasonLabel": "请提供丢弃原因：",
+        "reasonPlaceholder": "例如，重复事件、过期数据、已应用手动修复..."
+      },
+      "confirm": {
+        "cleanupExpired": "清理过期消息",
+        "cleanupExpiredDesc": "这将永久删除所有过期消息。此操作无法撤销。",
+        "cleanupResolved": "清理已解决消息",
+        "cleanupResolvedDesc": "这将永久删除所有已解决消息。此操作无法撤销。"
+      },
+      "errorTypeDistribution": "错误类型分布"
+    }
+  },
+  "system": {
+    "featureDisabled": "该功能在您当前的版本中不可用",
+    "edition": "版本",
+    "features": "功能"
+  },
+  "org": {
+    "setupRequired": "请完成您的组织设置",
+    "setupRequiredDescription": "在访问其他功能之前，您需要配置您的组织"
+  },
+  "gene": {
+    "reviews": "评价",
+    "reviewsCount": "{{count}} 条评价",
+    "writeReview": "写评价",
+    "editReview": "编辑评价",
+    "deleteReview": "删除评价",
+    "deleteReviewConfirm": "确定要删除这条评价吗？",
+    "reviewPlaceholder": "分享您对这个基因的想法...",
+    "reviewSubmitSuccess": "评价提交成功",
+    "reviewDeleteSuccess": "评价删除成功",
+    "noReviews": "暂无评价。成为第一个评价的人吧！",
+    "yourRating": "您的评分",
+    "reviewContent": "评价内容"
+  },
+  "webhooks": {
+    "name": "名称",
+    "nameRequired": "请输入名称",
+    "url": "URL",
+    "urlRequired": "请输入URL",
+    "urlInvalid": "请输入有效的URL",
+    "events": "事件",
+    "eventsRequired": "请至少选择一个事件",
+    "selectEvents": "选择事件",
+    "active": "激活",
+    "inactive": "未激活",
+    "secret": "密钥",
+    "create": "创建Webhook",
+    "edit": "编辑Webhook",
+    "fetchError": "获取Webhook失败",
+    "createSuccess": "Webhook创建成功",
+    "updateSuccess": "Webhook更新成功",
+    "deleteConfirm": "确定要删除此Webhook吗？",
+    "deleteSuccess": "Webhook删除成功",
+    "deleteError": "删除Webhook失败"
+  },
+  "events": {
+    "title": "事件日志",
+    "type": "类型",
+    "message": "消息",
+    "source": "来源",
+    "date": "时间",
+    "filterByType": "按类型过滤",
+    "noEvents": "暂无事件"
   }
 }

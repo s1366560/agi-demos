@@ -10,10 +10,10 @@ export interface PresenceAvatarProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  online: '#52c41a',
-  idle: '#8c8c8c',
-  busy: '#1890ff',
-  error: '#ff4d4f',
+  online: 'bg-green-500',
+  idle: 'bg-slate-400',
+  busy: 'bg-blue-500',
+  error: 'bg-red-500',
 };
 
 export const PresenceAvatar: FC<PresenceAvatarProps> = ({
@@ -23,40 +23,21 @@ export const PresenceAvatar: FC<PresenceAvatarProps> = ({
   themeColor,
 }) => {
   const initial = displayName.charAt(0).toUpperCase();
-  const bgColor = themeColor ?? (type === 'agent' ? '#722ed1' : '#1677ff');
-  const statusColor = STATUS_COLORS[status] ?? STATUS_COLORS.online;
+  const defaultBgClass = type === 'agent' ? 'bg-purple-600' : 'bg-blue-600';
+  const borderClass = type === 'agent' ? 'border-2 border-purple-300' : 'border-2 border-slate-200';
+  const statusColorClass = STATUS_COLORS[status] ?? 'bg-green-500';
 
   return (
     <Tooltip title={`${displayName} (${status})`}>
-      <div style={{ position: 'relative', display: 'inline-block' }}>
+      <div className="relative inline-block">
         <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            backgroundColor: bgColor,
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 14,
-            fontWeight: 600,
-            border: type === 'agent' ? '2px solid #d3adf7' : '2px solid #e6e6e6',
-          }}
+          className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-semibold ${borderClass} ${!themeColor ? defaultBgClass : ''}`}
+          style={themeColor ? { backgroundColor: themeColor } : undefined}
         >
           {initial}
         </div>
         <div
-          style={{
-            position: 'absolute',
-            bottom: -1,
-            right: -1,
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            backgroundColor: statusColor,
-            border: '2px solid #fff',
-          }}
+          className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${statusColorClass}`}
         />
       </div>
     </Tooltip>

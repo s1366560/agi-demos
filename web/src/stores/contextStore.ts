@@ -89,6 +89,48 @@ const defaultStatus: ContextStatus = {
   messagesInSummary: 0,
 };
 
+/**
+ * Type guard to check if a value is a number
+ */
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number';
+}
+
+/**
+ * Type guard to check if a value is a string
+ */
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+/**
+ * Type guard to check if a value is a boolean
+ */
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+/**
+ * Safely extract a number from unknown data with a default value
+ */
+function extractNumber(value: unknown, defaultValue: number): number {
+  return isNumber(value) ? value : defaultValue;
+}
+
+/**
+ * Safely extract a string from unknown data with a default value
+ */
+function extractString(value: unknown, defaultValue: string): string {
+  return isString(value) ? value : defaultValue;
+}
+
+/**
+ * Safely extract a boolean from unknown data with a default value
+ */
+function extractBoolean(value: unknown, defaultValue: boolean): boolean {
+  return isBoolean(value) ? value : defaultValue;
+}
+
 export const useContextStore = create<ContextState>()(
   devtools(
     (set, get) => ({
@@ -100,17 +142,18 @@ export const useContextStore = create<ContextState>()(
         const incomingHistory = data.compression_history_summary as
           | CompressionHistorySummary
           | undefined;
-        const hasHistory = incomingHistory && (incomingHistory.total_compressions ?? 0) > 0;
+        const hasHistory = incomingHistory !== undefined && incomingHistory.total_compressions > 0;
         const status: ContextStatus = {
-          currentTokens: (data.current_tokens as number) ?? 0,
-          tokenBudget: (data.token_budget as number) ?? 128000,
-          occupancyPct: (data.occupancy_pct as number) ?? 0,
-          compressionLevel: (data.compression_level as string) ?? 'none',
+          currentTokens: extractNumber(data.current_tokens, 0),
+          tokenBudget: extractNumber(data.token_budget, 128000),
+          occupancyPct: extractNumber(data.occupancy_pct, 0),
+          compressionLevel: extractString(data.compression_level, 'none'),
           tokenDistribution:
-            (data.token_distribution as TokenDistribution) ?? defaultStatus.tokenDistribution,
+            (data.token_distribution as TokenDistribution | undefined) ??
+            defaultStatus.tokenDistribution,
           compressionHistory: hasHistory ? incomingHistory : prevHistory,
-          fromCache: (data.from_cache as boolean) ?? false,
-          messagesInSummary: (data.messages_in_summary as number) ?? 0,
+          fromCache: extractBoolean(data.from_cache, false),
+          messagesInSummary: extractNumber(data.messages_in_summary, 0),
         };
         set({ status });
       },
@@ -120,17 +163,17 @@ export const useContextStore = create<ContextState>()(
         const incomingHistory = data.compression_history_summary as
           | CompressionHistorySummary
           | undefined;
-        const hasHistory = incomingHistory && (incomingHistory.total_compressions ?? 0) > 0;
+        const hasHistory = incomingHistory !== undefined && incomingHistory.total_compressions > 0;
 
         set({
           status: {
             ...prev,
-            currentTokens: (data.estimated_tokens as number) ?? prev.currentTokens,
-            tokenBudget: (data.token_budget as number) ?? prev.tokenBudget,
-            occupancyPct: (data.budget_utilization_pct as number) ?? prev.occupancyPct,
-            compressionLevel: (data.compression_level as string) ?? prev.compressionLevel,
+            currentTokens: extractNumber(data.estimated_tokens, prev.currentTokens),
+            tokenBudget: extractNumber(data.token_budget, prev.tokenBudget),
+            occupancyPct: extractNumber(data.budget_utilization_pct, prev.occupancyPct),
+            compressionLevel: extractString(data.compression_level, prev.compressionLevel),
             tokenDistribution:
-              (data.token_distribution as TokenDistribution) ?? prev.tokenDistribution,
+              (data.token_distribution as TokenDistribution | undefined) ?? prev.tokenDistribution,
             compressionHistory: hasHistory ? incomingHistory : prev.compressionHistory,
           },
         });
@@ -138,8 +181,9 @@ export const useContextStore = create<ContextState>()(
 
       handleCostUpdate: (data) => {
         const prev = get().status ?? { ...defaultStatus };
-        const totalTokens =
-          ((data.input_tokens as number) ?? 0) + ((data.output_tokens as number) ?? 0);
+        const inputTokens = extractNumber(data.input_tokens, 0);
+        const outputTokens = extractNumber(data.output_tokens, 0);
+        const totalTokens = inputTokens + outputTokens;
         set({
           status: {
             ...prev,
@@ -150,7 +194,6 @@ export const useContextStore = create<ContextState>()(
 
       fetchContextStatus: async (conversationId, projectId) => {
         const data = await agentService.getContextStatus(conversationId, projectId);
-        if (!data) return;
 
         const prev = get().status;
         set({

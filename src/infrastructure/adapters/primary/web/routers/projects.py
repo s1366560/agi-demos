@@ -188,11 +188,11 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
             .where(Memory.project_id.in_(project_ids_in_page))
             .group_by(Memory.project_id)
         )
-        memory_stats = {
+        memory_stats: dict[str, dict[str, Any]] = {
             row.project_id: {
-                "count": row.count,
-                "size": row.size or 0,
-                "last_created": row.last_created,
+                "count": int(getattr(row, "count", 0) or 0),
+                "size": int(getattr(row, "size", 0) or 0),
+                "last_created": getattr(row, "last_created", None),
             }
             for row in memory_stats_result.fetchall()
         }
@@ -246,16 +246,18 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
 
             # Calculate last active
             last_active = project.updated_at
-            if m_stats["last_created"]:
-                if not last_active or m_stats["last_created"] > last_active:
-                    last_active = m_stats["last_created"]
+            last_created = m_stats.get("last_created")
+            if last_created:
+                last_created_dt = datetime.fromisoformat(str(last_created)) if isinstance(last_created, str) else last_created
+                if not last_active or last_created_dt > last_active:
+                    last_active = last_created_dt
 
             # Get node count from Graphiti
             node_count = node_stats.get(project.id, 0)
 
             p_resp.stats = ProjectStats(
-                memory_count=m_stats["count"],
-                storage_used=m_stats["size"],
+                memory_count=int(m_stats.get("count", 0) or 0),
+                storage_used=int(m_stats.get("size", 0) or 0),
                 node_count=node_count,
                 member_count=int(member_count),
                 last_active=last_active,
@@ -703,8 +705,8 @@ async def get_project_stats(
             ).where(Memory.project_id == project_id)
         )
         memory_stats = memory_stats_result.one()
-        memory_count = memory_stats.count
-        storage_used = memory_stats.size or 0
+        memory_count = int(getattr(memory_stats, "count", 0) or 0)
+        storage_used = int(getattr(memory_stats, "size", 0) or 0)
 
         # Get member count
         member_count_result = await db.execute(

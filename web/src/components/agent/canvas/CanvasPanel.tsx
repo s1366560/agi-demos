@@ -17,7 +17,7 @@ import { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
-import { Table as AntTable } from 'antd';
+import { message, Table as AntTable } from 'antd';
 import {
   X,
   Copy,
@@ -191,7 +191,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
               className={`
               group flex items-center gap-1.5 px-3 py-2 text-xs font-medium
               border-r border-slate-200/60 dark:border-slate-700/60
-              transition-colors whitespace-nowrap max-w-[180px] cursor-pointer
+              transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset whitespace-nowrap max-w-[180px] cursor-pointer
               ${
                 tab.id === activeTabId
                   ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200'
@@ -212,7 +212,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                   e.stopPropagation();
                   togglePin(tab.id);
                 }}
-                className={`ml-0.5 p-0.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                className={`ml-0.5 p-0.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                   tab.pinned
                     ? 'text-primary opacity-100'
                     : 'opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -227,7 +227,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
                     e.stopPropagation();
                     handleClose(tab.id);
                   }}
-                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                  className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={12} />
                 </button>
@@ -237,7 +237,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
           <button
             type="button"
             onClick={handleNewTab}
-            className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             title={t('agent.canvas.newTab', 'New tab')}
           >
             <Plus size={14} />
@@ -248,7 +248,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undef
           onClick={() => {
             setMode('chat');
           }}
-          className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={t('agent.canvas.backToChat', 'Back to chat')}
         >
           <PanelLeftClose size={16} />
@@ -490,7 +490,7 @@ const OfficeDownloadFallback = memo<{ src: string; title: string; message: strin
             href={src}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
           >
             <Download size={14} />
             Download File
@@ -627,7 +627,7 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
               onClick={() => {
                 setActiveSheet(i);
               }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-t whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-t whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
                 i === activeSheet
                   ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-b-0 border-slate-200 dark:border-slate-700'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -1003,7 +1003,7 @@ const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
           {model.labels.map((label, index) => (
             <div
               key={`${label}-${index}`}
-              className="flex flex-col items-center gap-2 min-w-[52px]"
+              className="flex flex-col items-center gap-2 min-w-13"
             >
               <div className="h-48 flex items-end gap-1">
                 {model.datasets.map((dataset) => {
@@ -1019,9 +1019,9 @@ const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
                   );
                 })}
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 text-center max-w-[56px] truncate">
-                {label}
-              </span>
+                   <span className="text-2xs text-slate-500 dark:text-slate-400 text-center max-w-[56px] truncate">
+                 {label}
+               </span>
             </div>
           ))}
         </div>
@@ -1128,7 +1128,7 @@ const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => (
           </div>
         );
       })}
-      <p className="pt-1 text-xs text-slate-400 dark:text-slate-500">Read-only form preview</p>
+       <p className="pt-1 text-2xs text-slate-400 dark:text-slate-500">Read-only form preview</p>
     </div>
   </div>
 ));
@@ -1342,17 +1342,21 @@ const CanvasToolbar = memo<{
         setCopied(false);
       }, 2000);
     } catch {
-      // fallback
-      const textarea = document.createElement('textarea');
-      textarea.value = tab.content;
-      document.body.appendChild(textarea);
-      textarea.select();
-      (document as unknown as { execCommand: (cmd: string) => boolean }).execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
+      // fallback — clipboard API not available
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = tab.content;
+        document.body.appendChild(textarea);
+        textarea.select();
+        (document as unknown as { execCommand: (cmd: string) => boolean }).execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      } catch {
+        void message.warning('Failed to copy to clipboard');
+      }
     }
   }, [tab.content]);
 
@@ -1387,8 +1391,11 @@ const CanvasToolbar = memo<{
         ...tab,
         artifactUrl: result.url || tab.artifactUrl,
       });
-    } catch {
-      // silent fail — user can retry
+    } catch (err: unknown) {
+      void message.error(
+        err instanceof Error ? err.message : 'Failed to save artifact'
+      );
+      console.error('CanvasPanel: save failed', err);
     } finally {
       setSaving(false);
     }
@@ -1402,11 +1409,11 @@ const CanvasToolbar = memo<{
       <div className="flex-1 flex items-center gap-2">
         <span className="text-primary">{typeIcon(tab.type)}</span>
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{tab.title}</span>
-        {tab.language && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded">
-            {tab.language}
-          </span>
-        )}
+           {tab.language && (
+             <span className="text-2xs px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded">
+               {tab.language}
+             </span>
+           )}
       </div>
       {canSave && (
         <button
@@ -1415,7 +1422,7 @@ const CanvasToolbar = memo<{
             void handleSave();
           }}
           disabled={saving}
-          className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+          className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
           title={t('agent.canvas.save', 'Save (Ctrl+S)')}
         >
           {saving ? (
@@ -1431,7 +1438,7 @@ const CanvasToolbar = memo<{
           undo(tab.id);
         }}
         disabled={!canUndo(tab.id)}
-        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.undo', 'Undo (Ctrl+Z)')}
       >
         <Undo2 size={14} />
@@ -1442,7 +1449,7 @@ const CanvasToolbar = memo<{
           redo(tab.id);
         }}
         disabled={!canRedo(tab.id)}
-        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.redo', 'Redo (Ctrl+Shift+Z)')}
       >
         <Redo2 size={14} />
@@ -1451,7 +1458,7 @@ const CanvasToolbar = memo<{
         <button
           type="button"
           onClick={onToggleEdit}
-          className={`p-1.5 rounded-md transition-colors ${
+          className={`p-1.5 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
             editMode
               ? 'bg-primary/10 text-primary'
               : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400'
@@ -1470,7 +1477,7 @@ const CanvasToolbar = memo<{
         onClick={() => {
           void handleCopy();
         }}
-        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         title={t('agent.canvas.copy', 'Copy')}
       >
         {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
@@ -1478,7 +1485,7 @@ const CanvasToolbar = memo<{
       <button
         type="button"
         onClick={handleDownload}
-        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         title={t('agent.canvas.download', 'Download')}
       >
         <Download size={14} />
@@ -1555,7 +1562,7 @@ const QuickActions = memo<{
           onClick={() => {
             onSendPrompt(action.prompt);
           }}
-          className="px-2 py-1 text-xs rounded-md bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
+          className="px-2 py-1 text-xs rounded-md bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 whitespace-nowrap"
         >
           {action.label}
         </button>
@@ -1598,7 +1605,7 @@ const CanvasEmptyState = memo(() => {
           onClick={() => {
             handleNew('code', 'untitled.py');
           }}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <FileCode2 size={14} />
           {t('agent.canvas.newCode', 'New Code')}
@@ -1608,7 +1615,7 @@ const CanvasEmptyState = memo(() => {
           onClick={() => {
             handleNew('markdown', 'untitled.md');
           }}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <FileText size={14} />
           {t('agent.canvas.newMarkdown', 'New Markdown')}
@@ -1618,7 +1625,7 @@ const CanvasEmptyState = memo(() => {
           onClick={() => {
             handleNew('data', 'notes.txt');
           }}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <StickyNote size={14} />
           {t('agent.canvas.newNote', 'New Note')}

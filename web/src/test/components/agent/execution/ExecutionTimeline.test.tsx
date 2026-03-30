@@ -48,22 +48,7 @@ vi.mock('../../../../components/agent/execution/SimpleExecutionView', () => ({
   ),
 }));
 
-// Mock MaterialIcon
-vi.mock('../../../../components/agent/shared', () => ({
-  MaterialIcon: ({
-    name,
-    size,
-    className,
-  }: {
-    name: string;
-    size?: number | undefined;
-    className?: string | undefined;
-  }) => (
-    <span data-testid={`icon-${name}`} className={className} data-size={size}>
-      {name}
-    </span>
-  ),
-}));
+
 
 import { getDisplayMode } from '../../../../components/agent/execution/ExecutionTimeline';
 

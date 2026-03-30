@@ -96,6 +96,7 @@ export const NotificationPanel: React.FC = () => {
       <button
         onClick={togglePanel}
         className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        aria-label="Notifications"
         title="通知"
       >
         <Bell className="w-5 h-5 text-gray-600 dark:text-slate-400" />
@@ -119,13 +120,13 @@ export const NotificationPanel: React.FC = () => {
                   全部已读
                 </button>
               )}
-              <button onClick={closePanel}>
+              <button onClick={closePanel} aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto" aria-live="polite">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin motion-reduce:animate-none text-blue-600 dark:text-blue-400" />
@@ -142,7 +143,10 @@ export const NotificationPanel: React.FC = () => {
                   className={`p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer ${
                     !notification.is_read ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                   }`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleNotificationClick(notification)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(notification); } }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -163,6 +167,7 @@ export const NotificationPanel: React.FC = () => {
                             handleInlineMarkAsRead(e, notification.id);
                           }}
                           className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
+                          aria-label="Mark as read"
                           title="标记为已读"
                         >
                           <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
@@ -173,6 +178,7 @@ export const NotificationPanel: React.FC = () => {
                           handleInlineDelete(e, notification.id);
                         }}
                         className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                        aria-label="Delete notification"
                         title="删除"
                       >
                         <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />

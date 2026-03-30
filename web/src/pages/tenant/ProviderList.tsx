@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { App } from 'antd';
+import { Activity, AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Bot, ChevronDown, ExternalLink, LayoutGrid, List, Loader2, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import {
@@ -14,7 +15,6 @@ import {
   ModelAssignment,
 } from '@/components/provider';
 
-import { MaterialIcon } from '../../components/agent/shared/MaterialIcon';
 import { PROVIDERS } from '../../constants/providers';
 import { providerAPI } from '../../services/api';
 import { useProviderStore } from '../../stores/provider';
@@ -255,7 +255,7 @@ export const ProviderList: React.FC = () => {
           }}
           className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
         >
-          <MaterialIcon name="add" size={20} />
+          <Plus size={20} />
           {t('tenant.providers.addProvider')}
         </button>
       </div>
@@ -312,7 +312,7 @@ export const ProviderList: React.FC = () => {
           {/* Error State */}
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
-              <MaterialIcon name="error" size={20} className="text-red-600" />
+              <AlertCircle size={20} className="text-red-600" />
               <span className="text-red-800 dark:text-red-200">{error}</span>
               <button
                 onClick={loadProviders}
@@ -329,7 +329,7 @@ export const ProviderList: React.FC = () => {
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center bg-slate-50/50 dark:bg-slate-800/30">
               <div className="relative w-full lg:w-96">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <MaterialIcon name="search" size={20} className="text-slate-400" />
+                  <Search size={20} className="text-slate-400" />
                 </div>
                 <input
                   className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg leading-5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform]"
@@ -363,7 +363,7 @@ export const ProviderList: React.FC = () => {
                     <option value="mistral">Mistral</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                    <MaterialIcon name="expand_more" size={16} />
+                    <ChevronDown size={16} />
                   </div>
                 </div>
                 <div className="relative shrink-0">
@@ -381,7 +381,7 @@ export const ProviderList: React.FC = () => {
                     <option value="unhealthy">{t('common.status.unhealthy')}</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                    <MaterialIcon name="expand_more" size={16} />
+                    <ChevronDown size={16} />
                   </div>
                 </div>
 
@@ -394,7 +394,7 @@ export const ProviderList: React.FC = () => {
                     className={`p-2 transition-colors ${viewMode === 'cards' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                     title="Card View"
                   >
-                    <MaterialIcon name="grid_view" size={18} />
+                    <LayoutGrid size={18} />
                   </button>
                   <button
                     onClick={() => {
@@ -403,7 +403,7 @@ export const ProviderList: React.FC = () => {
                     className={`p-2 transition-colors ${viewMode === 'table' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                     title="Table View"
                   >
-                    <MaterialIcon name="view_list" size={18} />
+                    <List size={18} />
                   </button>
                 </div>
               </div>
@@ -412,18 +412,14 @@ export const ProviderList: React.FC = () => {
             {/* Content Area */}
             {isLoading ? (
               <div className="p-12 text-center">
-                <MaterialIcon
-                  name="progress_activity"
-                  size={32}
-                  className="animate-spin motion-reduce:animate-none text-primary mx-auto"
-                />
+                <Loader2 size={32} className="animate-spin motion-reduce:animate-none text-primary mx-auto" />
                 <p className="mt-4 text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
               </div>
             ) : filteredAndSortedProviders.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
-                    <MaterialIcon name="smart_toy" size={32} className="text-slate-400" />
+                    <Bot size={32} className="text-slate-400" />
                   </div>
                   <div>
                     <p className="text-lg font-medium text-slate-900 dark:text-white">
@@ -439,7 +435,7 @@ export const ProviderList: React.FC = () => {
                     }}
                     className="mt-2 inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium"
                   >
-                    <MaterialIcon name="add" size={18} />
+                    <Plus size={18} />
                     {t('tenant.providers.addFirstProvider')}
                   </button>
                 </div>
@@ -476,16 +472,7 @@ export const ProviderList: React.FC = () => {
                       >
                         <div className="flex items-center gap-2">
                           Provider
-                          <MaterialIcon
-                            name={
-                              sortField === 'name'
-                                ? sortOrder === 'asc'
-                                  ? 'arrow_upward'
-                                  : 'arrow_downward'
-                                : 'swap_vert'
-                            }
-                            size={14}
-                          />
+                          {sortField === 'name' || sortField === 'health' || sortField === 'responseTime' ? (sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
                         </div>
                       </th>
                       <th
@@ -508,16 +495,7 @@ export const ProviderList: React.FC = () => {
                       >
                         <div className="flex items-center gap-2">
                           {t('common.stats.healthStatus')}
-                          <MaterialIcon
-                            name={
-                              sortField === 'health'
-                                ? sortOrder === 'asc'
-                                  ? 'arrow_upward'
-                                  : 'arrow_downward'
-                                : 'swap_vert'
-                            }
-                            size={14}
-                          />
+                          {sortField === 'name' || sortField === 'health' || sortField === 'responseTime' ? (sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
                         </div>
                       </th>
                       <th
@@ -528,16 +506,7 @@ export const ProviderList: React.FC = () => {
                       >
                         <div className="flex items-center gap-2">
                           Response Time
-                          <MaterialIcon
-                            name={
-                              sortField === 'responseTime'
-                                ? sortOrder === 'asc'
-                                  ? 'arrow_upward'
-                                  : 'arrow_downward'
-                                : 'swap_vert'
-                            }
-                            size={14}
-                          />
+                          {sortField === 'name' || sortField === 'health' || sortField === 'responseTime' ? (sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
                         </div>
                       </th>
                       <th className="relative px-6 py-3" scope="col">
@@ -555,7 +524,7 @@ export const ProviderList: React.FC = () => {
                           <div className="flex items-center gap-3">
                             <div className="flex-shrink-0">
                               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                                <MaterialIcon name="smart_toy" size={20} className="text-primary" />
+                                <Bot size={20} className="text-primary" />
                               </div>
                             </div>
                             <div>
@@ -565,7 +534,7 @@ export const ProviderList: React.FC = () => {
                                 </span>
                                 {provider.is_default && (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                                    <MaterialIcon name="star" size={10} filled />
+                                     <Star size={10} fill="currentColor" />
                                     <span className="ml-0.5">Default</span>
                                   </span>
                                 )}
@@ -637,19 +606,7 @@ export const ProviderList: React.FC = () => {
                               className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50"
                               title={t('common.actions.checkHealth')}
                             >
-                              <MaterialIcon
-                                name={
-                                  checkingHealth === provider.id
-                                    ? 'progress_activity'
-                                    : 'monitor_heart'
-                                }
-                                size={18}
-                                className={
-                                  checkingHealth === provider.id
-                                    ? 'animate-spin motion-reduce:animate-none'
-                                    : ''
-                                }
-                              />
+                              {checkingHealth === provider.id ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" /> : <Activity size={18} />}
                             </button>
                             <button
                               onClick={() => {
@@ -658,14 +615,14 @@ export const ProviderList: React.FC = () => {
                               className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.edit')}
                             >
-                              <MaterialIcon name="edit" size={18} />
+                              <Pencil size={18} />
                             </button>
                             <button
                               onClick={() => handleDelete(provider.id)}
                               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.delete')}
                             >
-                              <MaterialIcon name="delete" size={18} />
+                              <Trash2 size={18} />
                             </button>
                           </div>
                         </td>
@@ -703,7 +660,7 @@ export const ProviderList: React.FC = () => {
                   rel="noopener noreferrer"
                   className="text-sm text-slate-500 hover:text-primary flex items-center gap-1"
                 >
-                  Docs <MaterialIcon name="open_in_new" size={14} />
+                  Docs <ExternalLink size={14} />
                 </a>
                 <button
                   onClick={() => {
@@ -711,7 +668,7 @@ export const ProviderList: React.FC = () => {
                   }}
                   className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                 >
-                  <MaterialIcon name="add" size={16} />
+                  <Plus size={16} />
                   Connect
                 </button>
               </div>

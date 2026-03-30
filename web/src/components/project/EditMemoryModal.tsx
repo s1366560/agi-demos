@@ -107,8 +107,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">编辑记忆</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             disabled={isSaving}
             aria-label="Close"
           >
@@ -191,7 +192,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                     onClick={() => {
                       handleRemoveTag(tag);
                     }}
-                    className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50"
+                    className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     disabled={isSaving}
                     aria-label={`移除标签 ${tag}`}
                   >
@@ -217,7 +218,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               <button
                 type="button"
                 onClick={handleAddTag}
-                className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
                 disabled={isSaving}
               >
                 添加
@@ -238,7 +239,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
             disabled={isSaving}
           >
             取消
@@ -246,7 +247,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
           <button
             type="button"
             onClick={handleSubmit}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             disabled={isSaving}
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}

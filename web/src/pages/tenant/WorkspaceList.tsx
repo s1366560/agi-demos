@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react';
 
 import { Link, useParams } from 'react-router-dom';
 
+import { LayoutGrid } from 'lucide-react';
+
 import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
 import { useWorkspaceActions, useWorkspaceLoading, useWorkspaces } from '@/stores/workspace';
+
+import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
 export function WorkspaceList() {
   const params = useParams<{ tenantId?: string; projectId?: string }>();
@@ -62,16 +66,24 @@ export function WorkspaceList() {
       </div>
       {isLoading ? <div className="text-sm text-slate-500">Loading...</div> : null}
       <div className="grid gap-2">
-        {workspaces.map((workspace) => (
-          <Link
-            key={workspace.id}
-            to={`/tenant/${tenantId}/project/${projectId}/workspaces/${workspace.id}`}
-            className="border rounded p-3 bg-white hover:border-primary"
-          >
-            <div className="font-medium">{workspace.name}</div>
-            <div className="text-xs text-slate-500">{workspace.id}</div>
-          </Link>
-        ))}
+        {!isLoading && workspaces.length === 0 ? (
+          <EmptyStateSimple
+            icon={LayoutGrid}
+            title="No workspaces"
+            description="Create a workspace to organize your agents"
+          />
+        ) : (
+          workspaces.map((workspace) => (
+            <Link
+              key={workspace.id}
+              to={`/tenant/${tenantId}/project/${projectId}/workspaces/${workspace.id}`}
+              className="border rounded p-3 bg-white hover:border-primary"
+            >
+              <div className="font-medium">{workspace.name}</div>
+              <div className="text-xs text-slate-500">{workspace.id}</div>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   );

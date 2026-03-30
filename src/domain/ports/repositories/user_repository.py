@@ -7,11 +7,11 @@ class UserRepository(ABC):
     """Repository interface for User entity"""
 
     @abstractmethod
-    async def save(self, user: User) -> User:
+    async def save(self, domain_entity: User) -> User:
         """Save a user (create or update). Returns the saved user."""
 
     @abstractmethod
-    async def find_by_id(self, user_id: str) -> User | None:
+    async def find_by_id(self, entity_id: str) -> User | None:
         """Find a user by ID"""
 
     @abstractmethod
@@ -23,5 +23,5 @@ class UserRepository(ABC):
         """List all users with pagination"""
 
     @abstractmethod
-    async def delete(self, user_id: str) -> bool:
+    async def delete(self, entity_id: str) -> bool:
         """Delete a user. Returns True if deleted, False if not found."""

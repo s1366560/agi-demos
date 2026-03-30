@@ -38,6 +38,8 @@
 import React, { useRef, memo, useMemo } from 'react';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Tags } from 'lucide-react';
+
 
 export interface VirtualGridProps<T> {
   /** Array of items to render */
@@ -124,7 +126,7 @@ function VirtualGridInternal<T>({
           style={{ height: containerHeight }}
         >
           <div className="text-center text-slate-500 dark:text-slate-400">
-            <span className="material-symbols-outlined text-4xl mb-2">category</span>
+            <Tags size={36} className="mb-2 mx-auto" />
             <p>{emptyMessage}</p>
           </div>
         </div>

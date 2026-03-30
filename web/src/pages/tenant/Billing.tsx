@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, memo, type FC } from 'react'
 
 import { useTranslation } from 'react-i18next';
 
+import { Check, CreditCard, Download, Loader2, Receipt } from 'lucide-react';
+
 import { billingService } from '../../services/billingService';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -10,9 +12,7 @@ import type { BillingInfo } from '../../services/billingService';
 // Loading state component
 const LoadingState = memo<{ message: string }>(({ message }) => (
   <div className="p-8 text-center text-slate-500">
-    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none mr-2">
-      progress_activity
-    </span>
+    <Loader2 size={16} className="animate-spin motion-reduce:animate-none mr-2" />
     {message}
   </div>
 ));
@@ -126,7 +126,7 @@ export const Billing: FC = memo(() => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">credit_card</span>
+            <CreditCard size={16} className="text-primary" />
             {t('tenant.billing.current_plan')}
           </h2>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
@@ -219,15 +219,15 @@ export const Billing: FC = memo(() => {
             </p>
             <ul className="space-y-3 mb-8">
               <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <span className="material-symbols-outlined text-[18px]">check</span> Unlimited
+                <Check size={16} /> Unlimited
                 Projects
               </li>
               <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <span className="material-symbols-outlined text-[18px]">check</span> SSO & Audit
+                <Check size={16} /> SSO & Audit
                 Logs
               </li>
               <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <span className="material-symbols-outlined text-[18px]">check</span> Priority
+                <Check size={16} /> Priority
                 Support
               </li>
             </ul>
@@ -242,7 +242,7 @@ export const Billing: FC = memo(() => {
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
         <div className="p-6 border-b border-slate-200 dark:border-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">receipt_long</span>
+            <Receipt size={16} className="text-primary" />
             {t('tenant.billing.history.title')}
           </h2>
         </div>
@@ -298,7 +298,7 @@ export const Billing: FC = memo(() => {
                           rel="noopener noreferrer"
                           className="text-primary hover:text-primary-dark hover:underline flex items-center justify-end gap-1"
                         >
-                          <span className="material-symbols-outlined text-[16px]">download</span>
+                          <Download size={16} />
                           {t('tenant.billing.history.download')}
                         </a>
                       ) : (

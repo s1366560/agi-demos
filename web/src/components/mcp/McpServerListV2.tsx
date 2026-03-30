@@ -6,6 +6,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { message } from 'antd';
+import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  Ban,
+  Brain,
+  CheckCircle,
+  Cloud,
+  FlaskConical,
+  Globe,
+  Grid3x3,
+  Info,
+  Loader2,
+  MessageCircle,
+  RefreshCcw,
+  Search,
+  Server,
+  Settings,
+  Sparkles,
+  Square,
+  StopCircle,
+  Terminal,
+  User,
+  Wrench,
+  Zap,
+} from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useMCPStore } from '@/stores/mcp';
@@ -13,7 +39,6 @@ import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { mcpAPI } from '@/services/mcpService';
 
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { McpAppsTabV2 } from './McpAppsTabV2';
 import { McpLogsTabV2 } from './McpLogsTabV2';
@@ -23,6 +48,34 @@ import { McpToolsTabV2 } from './McpToolsTabV2';
 import { getRuntimeStatus } from './types';
 
 import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 // ============================================================================
 // Stats Card Component
@@ -156,11 +209,7 @@ export const McpServerListV2: React.FC = () => {
           disabled={isReconciling}
           className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
         >
-          <MaterialIcon
-            name={isReconciling ? 'progress_activity' : 'sync'}
-            size={20}
-            className={isReconciling ? 'animate-spin motion-reduce:animate-none' : ''}
-          />
+          {renderDynamicIcon(isReconciling ? 'progress_activity' : 'sync', 20, isReconciling ? 'animate-spin motion-reduce:animate-none' : '')}
           Reconcile
         </button>
       </div>
@@ -170,7 +219,7 @@ export const McpServerListV2: React.FC = () => {
         <StatsCard
           title="Total Servers"
           value={stats.serverStats.total}
-          icon={<MaterialIcon name="dns" size={24} className="text-blue-600 dark:text-blue-400" />}
+          icon={<Server size={24} className="text-blue-600 dark:text-blue-400" />}
           bgColor="bg-blue-500"
           textColor="text-slate-900 dark:text-white"
           iconBg="bg-blue-100 dark:bg-blue-900/30"
@@ -180,7 +229,7 @@ export const McpServerListV2: React.FC = () => {
           title="Tools"
           value={stats.toolStats.total}
           icon={
-            <MaterialIcon name="build" size={24} className="text-purple-600 dark:text-purple-400" />
+            <Wrench size={24} className="text-purple-600 dark:text-purple-400" />
           }
           bgColor="bg-purple-500"
           textColor="text-slate-900 dark:text-white"
@@ -191,11 +240,7 @@ export const McpServerListV2: React.FC = () => {
           title="Applications"
           value={stats.appStats.total}
           icon={
-            <MaterialIcon
-              name="apps"
-              size={24}
-              className="text-emerald-600 dark:text-emerald-400"
-            />
+            <Grid3x3 size={24} className="text-emerald-600 dark:text-emerald-400" />
           }
           bgColor="bg-emerald-500"
           textColor="text-slate-900 dark:text-white"
@@ -207,17 +252,9 @@ export const McpServerListV2: React.FC = () => {
           value={stats.serverStats.error > 0 ? stats.serverStats.error : stats.serverStats.running}
           icon={
             stats.serverStats.error > 0 ? (
-              <MaterialIcon
-                name="warning"
-                size={24}
-                className="text-amber-600 dark:text-amber-400"
-              />
+              <AlertTriangle size={24} className="text-amber-600 dark:text-amber-400" />
             ) : (
-              <MaterialIcon
-                name="check_circle"
-                size={24}
-                className="text-emerald-600 dark:text-emerald-400"
-              />
+              <CheckCircle size={24} className="text-emerald-600 dark:text-emerald-400" />
             )
           }
           bgColor="bg-emerald-500"
@@ -254,7 +291,7 @@ export const McpServerListV2: React.FC = () => {
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <MaterialIcon name="dns" size={18} />
+              <Server size={18} />
               Servers
             </button>
             <button
@@ -271,7 +308,7 @@ export const McpServerListV2: React.FC = () => {
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <MaterialIcon name="build" size={18} />
+              <Wrench size={18} />
               Tools
             </button>
             <button
@@ -288,7 +325,7 @@ export const McpServerListV2: React.FC = () => {
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <MaterialIcon name="apps" size={18} />
+              <Grid3x3 size={18} />
               Applications
             </button>
             <button
@@ -305,7 +342,7 @@ export const McpServerListV2: React.FC = () => {
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <MaterialIcon name="chat" size={18} />
+              <MessageCircle size={18} />
               Prompts
             </button>
             <button
@@ -322,7 +359,7 @@ export const McpServerListV2: React.FC = () => {
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <MaterialIcon name="terminal" size={18} />
+              <Terminal size={18} />
               Logs
             </button>
           </div>

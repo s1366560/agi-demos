@@ -9,9 +9,9 @@
 
 import React, { memo, useMemo } from 'react';
 
+import { Collapse } from 'antd';
 import { Lightbulb, Wrench } from 'lucide-react';
 
-import { Collapse } from 'antd';
 
 import { formatTimeOnly } from '@/utils/date';
 
@@ -99,7 +99,7 @@ const TimelineNode: React.FC<TimelineNodeProps> = memo(
     return (
       <div className="relative pl-8 pb-4">
         {/* Connecting line */}
-        {!isLast && <div className="absolute left-[7px] top-5 bottom-0 w-0.5 bg-slate-200" />}
+        {!isLast && <div className="absolute left-2 top-5 bottom-0 w-0.5 bg-slate-200" />}
 
         {/* Status dot */}
         <div

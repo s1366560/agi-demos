@@ -13,5 +13,6 @@ class User(Entity):
     name: str
     password_hash: str
     is_active: bool = True
+    must_change_password: bool = False
     profile: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

@@ -3,14 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom';
 
 import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  ReloadOutlined,
-  ExclamationCircleOutlined,
-  MessageOutlined,
-} from '@ant-design/icons';
-import {
   Card,
   Button,
   Table,
@@ -29,6 +21,7 @@ import {
   InputNumber,
   Divider,
 } from 'antd';
+import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, MessageSquare } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useChannelStore } from '@/stores/channel';
@@ -438,7 +431,7 @@ const ChannelConfigPage: React.FC = () => {
       render: (error: string | null) =>
         error ? (
           <Tooltip title={error}>
-            <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
+            <AlertCircle size={16} style={{ color: '#ff4d4f' }} />
             <Text type="danger" style={{ marginLeft: 8 }}>
               {error.slice(0, 30)}...
             </Text>
@@ -458,7 +451,7 @@ const ChannelConfigPage: React.FC = () => {
         <Space>
           <Tooltip title="Test Connection">
             <Button
-              icon={<ReloadOutlined />}
+              icon={<RefreshCw size={16} />}
               size="small"
               loading={testingConfig === record.id}
               onClick={() => handleTest(record.id)}
@@ -466,7 +459,7 @@ const ChannelConfigPage: React.FC = () => {
           </Tooltip>
           <Tooltip title="Edit">
             <Button
-              icon={<EditOutlined />}
+              icon={<Pencil size={16} />}
               size="small"
               onClick={() => {
                 handleEdit(record);
@@ -480,7 +473,7 @@ const ChannelConfigPage: React.FC = () => {
             okText="Delete"
             okButtonProps={{ danger: true }}
           >
-            <Button icon={<DeleteOutlined />} size="small" danger />
+            <Button icon={<Trash2 size={16} />} size="small" danger />
           </Popconfirm>
         </Space>
       ),
@@ -644,7 +637,7 @@ const ChannelConfigPage: React.FC = () => {
         style={{ marginBottom: 16 }}
         title={
           <Space>
-            <MessageOutlined />
+            <MessageSquare size={20} />
             <Title level={4} style={{ margin: 0 }}>
               Plugin Hub
             </Title>
@@ -668,7 +661,7 @@ const ChannelConfigPage: React.FC = () => {
               Install
             </Button>
             <Button
-              icon={<ReloadOutlined />}
+              icon={<RefreshCw size={16} />}
               loading={pluginActionKey === 'reload'}
               onClick={handleReloadPlugins}
             >
@@ -738,14 +731,14 @@ const ChannelConfigPage: React.FC = () => {
       <Card
         title={
           <Space>
-            <MessageOutlined />
+            <MessageSquare size={20} />
             <Title level={4} style={{ margin: 0 }}>
               Channel Configurations
             </Title>
           </Space>
         }
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          <Button type="primary" icon={<Plus size={16} />} onClick={handleAdd}>
             Add Channel
           </Button>
         }

@@ -15,6 +15,8 @@ from sqlalchemy.orm import selectinload
 from src.application.schemas.auth import (
     APIKeyCreate,
     APIKeyResponse,
+    ForceChangePasswordRequest,
+    ForceChangePasswordResponse,
     Token,
     User as UserSchema,
     UserUpdate,
@@ -64,11 +66,11 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
         return
 
     # Get tenant details
-    tenant_result = await db.execute(select(Tenant).where(Tenant.id == user_tenant.tenant_id))  # type: ignore[attr-defined]
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == user_tenant.tenant_id))
     tenant = tenant_result.scalar_one_or_none()
 
     if not tenant:
-        logger.warning(f"Tenant {user_tenant.tenant_id} not found for user {user.id}")  # type: ignore[attr-defined]
+        logger.warning(f"Tenant {user_tenant.tenant_id} not found for user {user.id}")
         return
 
     # Create default project
@@ -159,7 +161,36 @@ async def login_for_access_token(
     # Commit the transaction to persist the API key and default project (if created)
     await db.commit()
 
-    return {"access_token": plain_key, "token_type": "bearer"}
+    return {
+        "access_token": plain_key,
+        "token_type": "bearer",
+        "must_change_password": bool(user.must_change_password),
+    }
+
+
+@router.post("/auth/force-change-password", response_model=ForceChangePasswordResponse)
+async def force_change_password(
+    request: ForceChangePasswordRequest,
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ForceChangePasswordResponse:
+    if not verify_password(request.old_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    from src.application.services.auth_service_v2 import AuthService
+
+    current_user.hashed_password = AuthService.get_password_hash(request.new_password)
+    current_user.must_change_password = False
+    db.add(current_user)
+    await db.commit()
+
+    return ForceChangePasswordResponse(
+        success=True,
+        message="Password changed successfully",
+    )
 
 
 @router.post("/auth/keys", response_model=APIKeyResponse)

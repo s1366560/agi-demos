@@ -70,6 +70,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Enrich project options with tenant context for duplicate name handling
   const projectOptions: ProjectOption[] = useMemo(() => {
@@ -107,6 +108,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
   // Execute the project switch after confirmation
   const executeProjectSwitch = async (projectId: string) => {
+    setIsSubmitting(true);
     try {
       // Clear current conversation state
       setActiveConversation(null);
@@ -121,6 +123,8 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       setPendingProjectId(null);
     } catch (error) {
       console.error('Failed to switch projects:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -204,6 +208,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         onCancel={handleCancelSwitch}
         okText="Switch Project"
         cancelText="Cancel"
+        confirmLoading={isSubmitting}
         okButtonProps={{ danger: true }}
       >
         <p>

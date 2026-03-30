@@ -14,7 +14,7 @@ export const EditIndicator = memo<EditIndicatorProps>(({ version, editedAt: _edi
   if (version <= 1) return null;
 
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 ml-2">
+    <span className="inline-flex items-center gap-1 text-2xs text-slate-400 ml-2">
       <Pencil size={10} />
       {t('agent.version.edited', 'edited')}
       {version > 2 && <span className="text-slate-300">v{version}</span>}

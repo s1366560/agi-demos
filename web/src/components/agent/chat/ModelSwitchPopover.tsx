@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Popover, Select } from 'antd';
+import { message, Popover, Select } from 'antd';
 import { Bot } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -141,7 +141,12 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
             .updateConversationConfig(conversationId, projectId, {
               llm_model_override: override,
             })
-            .catch(console.error);
+            .catch((err: unknown) => {
+              void message.error(
+                err instanceof Error ? err.message : 'Failed to update model override'
+              );
+              console.error('ModelSwitchPopover: update config failed', err);
+            });
         }
       },
       [conversationId, projectId]
@@ -155,21 +160,26 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
           .updateConversationConfig(conversationId, projectId, {
             llm_model_override: null,
           })
-          .catch(console.error);
+          .catch((err: unknown) => {
+            void message.error(
+              err instanceof Error ? err.message : 'Failed to reset model override'
+            );
+            console.error('ModelSwitchPopover: reset config failed', err);
+          });
       }
     }, [conversationId, projectId]);
 
     const isOverrideActive = Boolean(activeModelOverride);
 
     const content = (
-      <div className="w-[320px] flex flex-col gap-3">
+      <div className="w-80 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
             <span className="font-bold text-slate-800 dark:text-slate-100">Model</span>
             {effectiveModel && (
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
-                {effectiveModel}
-              </span>
+             <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
+                 {effectiveModel}
+               </span>
             )}
           </div>
           {isOverrideActive && (

@@ -5,6 +5,8 @@
  * success/failure rates, tool usage, and performance metrics.
  */
 
+import { BarChart3, PlayCircle, CheckCircle, AlertCircle, Timer, Wrench } from 'lucide-react';
+
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import {
@@ -17,7 +19,6 @@ import {
   Tag,
 } from '@/components/ui/lazyAntd';
 
-import { MaterialIcon } from './shared';
 
 import type { ExecutionStatsResponse } from '../../types/agent';
 
@@ -77,7 +78,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
     <LazyCard className="mb-6">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <MaterialIcon name="analytics" size={20} className="text-blue-600" />
+          <BarChart3 size={20} className="text-blue-600" />
           Execution Statistics
         </h3>
       </div>
@@ -89,7 +90,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
             <LazyStatistic
               title="Total Executions"
               value={stats.total_executions}
-              prefix={<MaterialIcon name="play_circle" size={20} className="text-slate-600" />}
+              prefix={<PlayCircle size={20} className="text-slate-600" />}
             />
           </LazyCard>
         </LazyCol>
@@ -99,7 +100,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
             <LazyStatistic
               title="Completed"
               value={stats.completed_count}
-              prefix={<MaterialIcon name="check_circle" size={20} className="text-green-600" />}
+              prefix={<CheckCircle size={20} className="text-green-600" />}
               suffix={<span className="text-sm text-slate-500">({successRate.toFixed(1)}%)</span>}
             />
           </LazyCard>
@@ -110,7 +111,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
             <LazyStatistic
               title="Failed"
               value={stats.failed_count}
-              prefix={<MaterialIcon name="error" size={20} className="text-red-600" />}
+              prefix={<AlertCircle size={20} className="text-red-600" />}
               suffix={<span className="text-sm text-slate-500">({failureRate.toFixed(1)}%)</span>}
             />
           </LazyCard>
@@ -122,7 +123,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
               title="Avg Duration"
               value={stats.average_duration_ms.toFixed(0)}
               suffix="ms"
-              prefix={<MaterialIcon name="timer" size={20} className="text-amber-600" />}
+              prefix={<Timer size={20} className="text-amber-600" />}
             />
           </LazyCard>
         </LazyCol>
@@ -150,7 +151,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
       {toolUsageData.length > 0 && (
         <div>
           <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-            <MaterialIcon name="build" size={16} />
+            <Wrench size={16} />
             Tool Usage Distribution
           </h4>
           <LazyTable

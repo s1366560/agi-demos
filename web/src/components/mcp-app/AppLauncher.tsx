@@ -136,7 +136,7 @@ export const AppLauncher: FC = () => {
         <button
           type="button"
           onClick={handleRefresh}
-          className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title="Refresh apps"
         >
           <RefreshCw
@@ -183,7 +183,7 @@ export const AppLauncher: FC = () => {
             {pinnedApps.length > 0 && (
               <>
                 <div className="px-2 py-1">
-                  <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  <span className="text-2xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     Pinned
                   </span>
                 </div>
@@ -230,7 +230,7 @@ export const AppLauncher: FC = () => {
       <LazyTooltip title="Open MCP Apps">
         <button
           type="button"
-          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400 relative"
+          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-600 dark:text-slate-400 relative"
         >
           <AppWindow className="w-5 h-5" />
           {totalReady > 0 && (
@@ -269,12 +269,12 @@ const AppLauncherItem: FC<{
         onClick={() => {
           onOpen(app);
         }}
-        className="flex-1 min-w-0 text-left"
+        className="flex-1 min-w-0 text-left rounded-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
       >
         <div className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
           {title}
         </div>
-        <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+        <div className="text-2xs text-slate-400 dark:text-slate-500 truncate">
           {app.server_name}
         </div>
       </button>
@@ -287,7 +287,7 @@ const AppLauncherItem: FC<{
             e.stopPropagation();
             onTogglePin(app);
           }}
-          className={`p-1 rounded transition-colors ${
+          className={`p-1 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
             pinned
               ? 'text-primary bg-primary/10'
               : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -302,7 +302,7 @@ const AppLauncherItem: FC<{
             e.stopPropagation();
             onOpen(app);
           }}
-          className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title="Open in canvas"
         >
           <ExternalLink size={12} />

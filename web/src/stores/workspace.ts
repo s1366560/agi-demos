@@ -52,7 +52,12 @@ interface WorkspaceState {
   chatMessages: WorkspaceMessage[];
   chatLoading: boolean;
   loadChatMessages: (tenantId: string, projectId: string, workspaceId: string) => Promise<void>;
-  sendChatMessage: (tenantId: string, projectId: string, workspaceId: string, content: string) => Promise<void>;
+  sendChatMessage: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    content: string
+  ) => Promise<void>;
   handleChatEvent: (event: { type: string; data: Record<string, unknown> }) => void;
 
   loadObjectives: (tenantId: string, projectId: string, workspaceId: string) => Promise<void>;
@@ -592,7 +597,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       loadChatMessages: async (tenantId, projectId, workspaceId) => {
         set({ chatLoading: true });
         try {
-          const messages = await workspaceChatService.listMessages(tenantId, projectId, workspaceId);
+          const messages = await workspaceChatService.listMessages(
+            tenantId,
+            projectId,
+            workspaceId
+          );
           set({ chatMessages: messages, chatLoading: false });
         } catch (error) {
           set({ error: getErrorMessage(error), chatLoading: false });
@@ -601,7 +610,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       sendChatMessage: async (tenantId, projectId, workspaceId, content) => {
-        const message = await workspaceChatService.sendMessage(tenantId, projectId, workspaceId, { content });
+        const message = await workspaceChatService.sendMessage(tenantId, projectId, workspaceId, {
+          content,
+        });
         set({ chatMessages: [...get().chatMessages, message] });
       },
 

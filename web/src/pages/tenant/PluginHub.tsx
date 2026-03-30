@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
   Badge,
   Button,
@@ -20,7 +19,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { Package } from 'lucide-react';
+import { Package, Trash2, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useProjectStore } from '@/stores/project';
@@ -808,13 +807,13 @@ export const PluginHub: React.FC = () => {
         <Space>
           <Button
             size="small"
-            icon={<ReloadOutlined />}
+            icon={<RefreshCw size={16} />}
             loading={configActionKey === `test:${record.id}`}
             onClick={() => handleTestConfig(record.id)}
           />
           <Button
             size="small"
-            icon={<EditOutlined />}
+            icon={<Pencil size={16} />}
             onClick={() => {
               handleEditConfig(record);
             }}
@@ -828,7 +827,7 @@ export const PluginHub: React.FC = () => {
             <Button
               size="small"
               danger
-              icon={<DeleteOutlined />}
+              icon={<Trash2 size={16} />}
               loading={configActionKey === `delete:${record.id}`}
             />
           </Popconfirm>
@@ -890,7 +889,7 @@ export const PluginHub: React.FC = () => {
               Install
             </Button>
             <Button
-              icon={<ReloadOutlined />}
+              icon={<RefreshCw size={16} />}
               loading={pluginActionKey === 'reload'}
               onClick={handleReloadPlugins}
             >
@@ -977,7 +976,7 @@ export const PluginHub: React.FC = () => {
           </Title>
           <Button
             type="primary"
-            icon={<PlusOutlined />}
+            icon={<Plus size={16} />}
             onClick={handleAddConfig}
             disabled={!selectedProjectId}
           >

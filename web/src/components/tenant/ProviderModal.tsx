@@ -1,9 +1,59 @@
 import React, { useEffect, useState } from 'react';
 
+import { AlertCircle, Bot, Loader2, Save, X ,
+  CheckCircle,
+  Square,
+  StopCircle,
+  Terminal,
+  Cloud,
+  Zap,
+  Ban,
+  Search,
+  Sparkles,
+  AlertTriangle,
+  Activity,
+  FlaskConical,
+  RefreshCcw,
+  Settings,
+  Brain,
+  Info,
+  Globe,
+  User
+} from 'lucide-react';
+
 import { formatDateTime } from '@/utils/date';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../../types/memory';
+
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 interface ProviderModalProps {
   isOpen: boolean;
@@ -322,7 +372,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg text-primary">
-              <span className="material-symbols-outlined">smart_toy</span>
+              <Bot size={16} />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -335,9 +385,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
-            <span className="material-symbols-outlined">close</span>
+            <X size={16} />
           </button>
         </div>
 
@@ -354,13 +404,13 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                 onClick={() => {
                   setActiveTab(tab.id as typeof activeTab);
                 }}
-                className={`flex items-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                   activeTab === tab.id
                     ? 'border-primary text-primary'
                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
-                <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
+                {renderDynamicIcon(tab.icon, 18, "")}
                 {tab.label}
               </button>
             ))}
@@ -372,7 +422,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
           <div className="p-6 space-y-6">
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
-                <span className="material-symbols-outlined text-red-600">error</span>
+                <AlertCircle size={16} className="text-red-600" />
                 <span className="text-red-800 dark:text-red-200 text-sm">{error}</span>
               </div>
             )}
@@ -636,25 +686,23 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
-                  <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[18px]">
-                    progress_activity
-                  </span>
+                  <Loader2 size={16} className="animate-spin motion-reduce:animate-none ]" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <span className="material-symbols-outlined text-[18px]">save</span>
+                  <Save size={16} className="]" />
                   {isEditing ? 'Update Provider' : 'Create Provider'}
                 </>
               )}

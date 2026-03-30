@@ -167,7 +167,7 @@ const StatusPill = memo<{ status: string }>(({ status }) => {
 
   return (
     <span
-      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full animate-status-pill-in ${colorClasses}`}
+      className={`text-2xs font-medium px-1.5 py-0.5 rounded-full animate-status-pill-in ${colorClasses}`}
     >
       {key ? t(key, fallback) : fallback}
     </span>
@@ -250,7 +250,7 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
                     {task.subagent_name}
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-400 pl-2 shrink-0">{statusText}</span>
+                <span className="text-2xs text-slate-400 pl-2 shrink-0">{statusText}</span>
               </div>
               <div
                 className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 break-words [overflow-wrap:anywhere]"
@@ -269,7 +269,7 @@ const ParallelDetail = memo<{ info: SubAgentGroup['parallelInfo'] }>(({ info }) 
         </div>
       )}
       {info.results && (
-        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
+        <div className="flex items-center gap-3 text-2xs text-slate-400 mt-1">
           <span className="flex items-center gap-0.5">
             <CheckCircle2 size={9} />
             {info.results.filter((r) => r.success).length}/{info.results.length}
@@ -318,7 +318,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
             title: (
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300 break-words [overflow-wrap:anywhere]">
                 {step.name || step.subagentName}{' '}
-                <span className="text-[10px] text-slate-400 font-normal">
+                <span className="text-2xs text-slate-400 font-normal">
                   ({step.subagentName})
                 </span>
               </span>
@@ -341,7 +341,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
         </div>
       )}
       {info.totalTimeMs != null && info.steps.length > 0 && (
-        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
+        <div className="flex items-center gap-3 text-2xs text-slate-400 mt-1">
           <span className="flex items-center gap-0.5">
             <CheckCircle2 size={9} />
             {info.steps.filter((s) => s.status === 'success').length}/{info.steps.length}
@@ -400,7 +400,7 @@ const ProgressPhaseBar = memo<{ group: SubAgentGroup }>(({ group }) => {
 
   return (
     <div className="w-full px-4 pt-2 pb-1">
-      <div className="flex justify-between items-center mb-1.5 text-[10px] text-slate-500 font-medium">
+      <div className="flex justify-between items-center mb-1.5 text-2xs text-slate-500 font-medium">
         <span className="animate-pulse motion-reduce:animate-none">{phaseLabel}</span>
         {parallelText && <span>{parallelText}</span>}
       </div>
@@ -482,7 +482,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         bg = 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700';
     }
 
-    return `rounded-lg border border-l-[3px] ${border} ${bg} ${pulse} shadow-sm transition-colors duration-300`;
+    return `rounded-lg border border-l-3 ${border} ${bg} ${pulse} shadow-sm transition-colors duration-300`;
   }, [group.status]);
 
   // Header label with name fallback applied
@@ -589,7 +589,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block truncate">
             {headerLabel}
           </span>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-2xs text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800/70">
               <Bot size={9} />
               <span className="truncate max-w-[160px]">{displayName}</span>
@@ -604,7 +604,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         <div className="flex items-center gap-2 shrink-0 max-w-[48%]">
           {group.confidence != null && (
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded-full
+              className="text-2xs px-1.5 py-0.5 rounded-full
               bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"
             >
               {Math.round(group.confidence * 100)}%
@@ -612,7 +612,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           )}
           {group.tokensUsed != null && group.tokensUsed > 0 && (
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded-full
+              className="text-2xs px-1.5 py-0.5 rounded-full
               bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center gap-0.5"
             >
               <Zap size={8} />
@@ -620,7 +620,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             </span>
           )}
           {group.executionTimeMs != null && group.executionTimeMs > 0 && (
-            <span className="text-[10px] text-slate-400 flex items-center gap-0.5 shrink-0">
+            <span className="text-2xs text-slate-400 flex items-center gap-0.5 shrink-0">
               <Clock size={9} />
               {formatDuration(group.executionTimeMs)}
             </span>
@@ -638,7 +638,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         <div className="mx-4 mt-2 rounded-md bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 font-mono leading-relaxed animate-fade-in border border-slate-200/60 dark:border-slate-700/60">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-            <span className="text-gray-500 dark:text-gray-500 text-[10px] uppercase tracking-wider font-sans">
+            <span className="text-gray-500 dark:text-gray-500 text-2xs uppercase tracking-wider font-sans">
               {t('agent.subagent.live_preview')}
             </span>
           </div>
@@ -655,7 +655,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
             {lifecycleSteps.map((step) => (
               <span
                 key={step.id}
-                className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                className={`text-2xs px-1.5 py-0.5 rounded-full border ${
                   step.active
                     ? 'border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20'
                     : 'border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 text-slate-400'
@@ -675,7 +675,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* Routing reason */}
           {group.reason && (
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 italic break-words [overflow-wrap:anywhere]">
+            <p className="text-xs-plus text-slate-400 dark:text-slate-500 italic break-words [overflow-wrap:anywhere]">
               {group.reason}
             </p>
           )}
@@ -722,10 +722,10 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* 2.2 - Inline Detail Panel refinement (moved to bottom of body) */}
           <div className="pt-1 flex justify-end">
-            <button
+             <button
               type="button"
               onClick={toggleDetail}
-              className="text-[10px] text-slate-400 hover:text-blue-500 transition-colors flex items-center gap-1 min-h-[28px] min-w-[28px] px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="text-2xs text-slate-400 hover:text-blue-500 transition-colors flex items-center gap-1 min-h-7 min-w-7 px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
               title={
                 showDetail
                   ? t('agent.subagent.hideDetails', 'Hide details')

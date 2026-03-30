@@ -74,8 +74,7 @@ describe('AgentLayout', () => {
         </Routes>
       );
 
-      // Check for brand indicator
-      const brandIcon = document.querySelector('.material-symbols-outlined');
+      const brandIcon = document.querySelector('svg');
       expect(brandIcon).toBeTruthy();
     });
 

@@ -8,22 +8,22 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  AudioMutedOutlined,
-  AudioOutlined,
-  DesktopOutlined,
-  DisconnectOutlined,
-  ExpandOutlined,
-  FullscreenExitOutlined,
-  FullscreenOutlined,
-  LoadingOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
 import { Button, Select, Space, Spin, Tooltip } from 'antd';
+import {
+  VolumeX,
+  Volume2,
+  Monitor,
+  Unplug,
+  Maximize2,
+  Minimize,
+  Maximize,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 
-// @ts-expect-error -- vendored KasmVNC noVNC fork
+// vendored KasmVNC noVNC fork
 import MouseButtonMapper, { XVNC_BUTTONS } from '@/vendor/kasmvnc/core/mousebuttonmapper.js';
-// @ts-expect-error -- vendored KasmVNC noVNC fork (ES modules, no TS declarations)
+// vendored KasmVNC noVNC fork (ES modules, no TS declarations)
 import RFB from '@/vendor/kasmvnc/core/rfb.js';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -309,7 +309,7 @@ export function KasmVNCViewer({
       {showToolbar && (
         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800 border-b border-gray-700 shrink-0">
           <div className="flex items-center gap-2">
-            <DesktopOutlined className="text-gray-400" />
+            <Monitor size={16} className="text-gray-400" />
             <span
               className="inline-block w-2 h-2 rounded-full"
               style={{ backgroundColor: status.color }}
@@ -327,7 +327,7 @@ export function KasmVNCViewer({
                 options={RESOLUTION_PRESETS}
                 className="w-36"
                 popupMatchSelectWidth={false}
-                suffixIcon={<ExpandOutlined className="text-gray-400" />}
+                suffixIcon={<Maximize2 size={16} className="text-gray-400" />}
               />
             )}
 
@@ -336,7 +336,7 @@ export function KasmVNCViewer({
               <Button
                 type="text"
                 size="small"
-                icon={isMuted ? <AudioMutedOutlined /> : <AudioOutlined />}
+                icon={isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
                 onClick={() => {
                   setIsMuted((prev) => !prev);
                 }}
@@ -350,7 +350,7 @@ export function KasmVNCViewer({
               <Button
                 type="text"
                 size="small"
-                icon={<ReloadOutlined />}
+                icon={<RefreshCw size={16} />}
                 onClick={handleReconnect}
                 disabled={connectionState === 'connecting'}
                 className="text-gray-400 hover:text-white"
@@ -363,7 +363,7 @@ export function KasmVNCViewer({
               <Button
                 type="text"
                 size="small"
-                icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                icon={isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
                 onClick={toggleFullscreen}
                 className="text-gray-400 hover:text-white"
                 aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
@@ -377,14 +377,14 @@ export function KasmVNCViewer({
       <div className="flex-1 relative bg-black overflow-hidden">
         {connectionState === 'connecting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10 pointer-events-none">
-            <Spin indicator={<LoadingOutlined style={{ fontSize: 32 }} spin />} />
+            <Spin indicator={<Loader2 className="animate-spin" size={32} />} />
             <span className="text-white text-sm">Connecting to desktop...</span>
           </div>
         )}
 
         {(connectionState === 'error' || connectionState === 'disconnected') && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
-            <DisconnectOutlined className="text-4xl text-gray-500" />
+            <Unplug size={36} className="text-gray-500" />
             <span className="text-gray-400">
               {connectionState === 'error' ? 'Failed to connect to desktop' : 'Disconnected'}
             </span>

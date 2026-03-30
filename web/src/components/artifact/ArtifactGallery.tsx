@@ -6,16 +6,16 @@
 
 import React, { useState } from 'react';
 
-import {
-  AppstoreOutlined,
-  BarsOutlined,
-  FileImageOutlined,
-  VideoCameraOutlined,
-  SoundOutlined,
-  FileTextOutlined,
-  FileOutlined,
-} from '@ant-design/icons';
 import { Modal, Empty, Typography, Space, Tag, Segmented } from 'antd';
+import {
+  LayoutGrid,
+  List,
+  Image as ImageIcon,
+  Video,
+  Volume2,
+  FileText,
+  File,
+} from 'lucide-react';
 
 import { ArtifactRenderer } from './ArtifactRenderer';
 
@@ -42,14 +42,14 @@ export interface ArtifactGalleryProps {
 
 // Category icons
 const CATEGORY_ICONS: Record<ArtifactCategory, React.ReactNode> = {
-  image: <FileImageOutlined />,
-  video: <VideoCameraOutlined />,
-  audio: <SoundOutlined />,
-  document: <FileTextOutlined />,
-  code: <FileTextOutlined />,
-  data: <FileTextOutlined />,
-  archive: <FileOutlined />,
-  other: <FileOutlined />,
+  image: <ImageIcon size={14} />,
+  video: <Video size={14} />,
+  audio: <Volume2 size={14} />,
+  document: <FileText size={14} />,
+  code: <FileText size={14} />,
+  data: <FileText size={14} />,
+  archive: <File size={14} />,
+  other: <File size={14} />,
 };
 
 export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
@@ -114,8 +114,8 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
         <Segmented
           size="small"
           options={[
-            { value: 'grid', icon: <AppstoreOutlined /> },
-            { value: 'list', icon: <BarsOutlined /> },
+            { value: 'grid', icon: <LayoutGrid size={14} /> },
+            { value: 'list', icon: <List size={14} /> },
           ]}
           value={viewMode}
           onChange={(value) => {

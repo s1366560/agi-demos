@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { message } from 'antd';
+
 import type { GroupedItem } from './groupTimelineEvents';
 
 export interface UseMessageAreaKeyboardParams {
@@ -72,7 +74,9 @@ export function useMessageAreaKeyboard(
         if (item?.kind === 'event') {
           const ev = item.event;
           if (ev.type === 'user_message' || ev.type === 'assistant_message') {
-            navigator.clipboard.writeText(ev.content).catch(() => {});
+            navigator.clipboard.writeText(ev.content).catch(() => {
+              void message.warning('Failed to copy to clipboard');
+            });
           }
         }
       }

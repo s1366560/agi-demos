@@ -6,6 +6,20 @@
  */
 
 import type { Message, TimelineEvent } from '../../types/agent';
+import type {
+  ClarificationAnsweredTimelineEvent,
+  DecisionAnsweredTimelineEvent,
+  EnvVarProvidedTimelineEvent,
+  PermissionRepliedTimelineEvent,
+  PermissionGrantedTimelineEvent,
+} from '../../types/agent/timeline';
+
+/**
+ * Type guard to check if event has requestId property
+ */
+function hasRequestId(event: TimelineEvent): event is TimelineEvent & { requestId: string } {
+  return 'requestId' in event && typeof (event as { requestId?: unknown }).requestId === 'string';
+}
 
 /**
  * Update HITL event in timeline when user responds
@@ -30,7 +44,7 @@ export function updateHITLEventInTimeline(
   }
 ): TimelineEvent[] {
   return timeline.map((event) => {
-    if (event.type === eventType && (event as any).requestId === requestId) {
+    if (event.type === eventType && hasRequestId(event) && event.requestId === requestId) {
       return { ...event, ...updates };
     }
     return event;
@@ -50,35 +64,49 @@ export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEven
     string,
     {
       requestType: string;
-      mapFn: (resp: any) => Record<string, unknown>;
+      mapFn: (resp: TimelineEvent) => Record<string, unknown>;
     }
   > = {
     clarification_answered: {
       requestType: 'clarification_asked',
-      mapFn: (r) => ({ answered: true, answer: r.answer }),
+      mapFn: (r) => {
+        const event = r as ClarificationAnsweredTimelineEvent;
+        return { answered: true, answer: event.answer };
+      },
     },
     decision_answered: {
       requestType: 'decision_asked',
-      mapFn: (r) => ({ answered: true, decision: r.decision }),
+      mapFn: (r) => {
+        const event = r as DecisionAnsweredTimelineEvent;
+        return { answered: true, decision: event.decision };
+      },
     },
     env_var_provided: {
       requestType: 'env_var_requested',
-      mapFn: (r) => ({
-        answered: true,
-        providedVariables: r.variableNames,
-        values: r.values,
-      }),
+      mapFn: (r) => {
+        const event = r as EnvVarProvidedTimelineEvent;
+        return {
+          answered: true,
+          providedVariables: event.variableNames,
+        };
+      },
     },
     permission_replied: {
       requestType: 'permission_asked',
-      mapFn: (r) => ({ answered: true, granted: r.granted }),
+      mapFn: (r) => {
+        const event = r as PermissionRepliedTimelineEvent;
+        return { answered: true, granted: event.granted };
+      },
     },
     permission_granted: {
       requestType: 'permission_asked',
-      mapFn: (r) => ({
-        answered: true,
-        granted: r.granted !== undefined ? r.granted : true,
-      }),
+      mapFn: (r) => {
+        const event = r as PermissionGrantedTimelineEvent;
+        return {
+          answered: true,
+          granted: event.granted,
+        };
+      },
     },
   };
 
@@ -88,12 +116,10 @@ export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEven
 
   for (const event of timeline) {
     const mapping = responseTypeMap[event.type];
-    if (mapping) {
-      const requestId = (event as any).requestId;
-      if (requestId) {
-        responsesByRequestId.set(requestId, mapping.mapFn(event));
-        responseEventIds.add(event.id);
-      }
+    if (mapping && hasRequestId(event)) {
+      const requestId = event.requestId;
+      responsesByRequestId.set(requestId, mapping.mapFn(event));
+      responseEventIds.add(event.id);
     }
   }
 
@@ -102,19 +128,21 @@ export function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEven
   // Merge into request events and filter out response events
   return timeline
     .map((event) => {
-      const requestId = (event as any).requestId;
-      if (requestId && responsesByRequestId.has(requestId)) {
-        const requestTypes = [
-          'clarification_asked',
-          'decision_asked',
-          'env_var_requested',
-          'permission_asked',
-        ];
-        if (requestTypes.includes(event.type)) {
-          return {
-            ...event,
-            ...responsesByRequestId.get(requestId),
-          };
+      if (hasRequestId(event)) {
+        const requestId = event.requestId;
+        if (responsesByRequestId.has(requestId)) {
+          const requestTypes = [
+            'clarification_asked',
+            'decision_asked',
+            'env_var_requested',
+            'permission_asked',
+          ];
+          if (requestTypes.includes(event.type)) {
+            return {
+              ...event,
+              ...responsesByRequestId.get(requestId),
+            };
+          }
         }
       }
       return event;
@@ -131,38 +159,44 @@ export function timelineToMessages(timeline: TimelineEvent[]): Message[] {
 
   for (const event of timeline) {
     switch (event.type) {
-      case 'user_message':
+      case 'user_message': {
+        const userEvent = event;
         messages.push({
           id: event.id,
           conversation_id: '',
           role: 'user',
-          content: (event as any).content || '',
+          content: userEvent.content || '',
           message_type: 'text' as const,
           created_at: new Date(event.timestamp).toISOString(),
         });
         break;
+      }
 
-      case 'assistant_message':
+      case 'assistant_message': {
+        const assistantEvent = event;
         messages.push({
           id: event.id,
           conversation_id: '',
           role: 'assistant',
-          content: (event as any).content || '',
+          content: assistantEvent.content || '',
           message_type: 'text' as const,
           created_at: new Date(event.timestamp).toISOString(),
         });
         break;
+      }
 
-      case 'text_end':
+      case 'text_end': {
+        const textEndEvent = event;
         messages.push({
           id: event.id,
           conversation_id: '',
           role: 'assistant',
-          content: (event as any).fullText || '',
+          content: textEndEvent.fullText || '',
           message_type: 'text' as const,
           created_at: new Date(event.timestamp).toISOString(),
         });
         break;
+      }
 
       // Other event types are rendered directly from timeline, not as messages
       default:

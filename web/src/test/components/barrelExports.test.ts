@@ -69,18 +69,6 @@ describe('Barrel Exports', () => {
   });
 
   describe('Agent Layout Barrel', () => {
-    it('exports WorkspaceSidebar component', () => {
-      expect(WorkspaceSidebar).toBeDefined();
-    });
-
-    it('exports TopNavigation component', () => {
-      expect(TopNavigation).toBeDefined();
-    });
-
-    it('exports ChatHistorySidebar component', () => {
-      expect(ChatHistorySidebar).toBeDefined();
-    });
-
     it('exports layout types', () => {
       // Type-only exports are validated at compile time
       expect(true).toBe(true);

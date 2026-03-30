@@ -2,7 +2,7 @@ import { memo, useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Loader2, PanelRight } from 'lucide-react';
+import { Loader2, PanelRight, Image as ImageIcon, Film, AudioLines, FileText, Code as CodeIcon, Table as TableIcon, FileArchive, Paperclip, AlertCircle, File as FileIcon, Download, LoaderCircle } from 'lucide-react';
 
 import { type CanvasContentType, useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
@@ -17,24 +17,25 @@ interface ArtifactCreatedItemProps {
   event: ArtifactCreatedEvent & { error?: string | undefined };
 }
 
+
 function getCategoryIcon(category: string) {
   switch (category) {
     case 'image':
-      return 'image';
+      return ImageIcon;
     case 'video':
-      return 'movie';
+      return Film;
     case 'audio':
-      return 'audio_file';
+      return AudioLines;
     case 'document':
-      return 'description';
+      return FileText;
     case 'code':
-      return 'code';
+      return CodeIcon;
     case 'data':
-      return 'table_chart';
+      return TableIcon;
     case 'archive':
-      return 'folder_zip';
+      return FileArchive;
     default:
-      return 'attach_file';
+      return Paperclip;
   }
 }
 
@@ -226,16 +227,12 @@ export const ArtifactCreatedItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-4">
           <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-            <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
-              {getCategoryIcon(event.category)}
-            </span>
+            {(() => { const Icon = getCategoryIcon(event.category); return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />; })()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-700/50">
               <div className="flex items-center gap-2 mb-3">
-                <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
-                  {getCategoryIcon(event.category)}
-                </span>
+                {(() => { const Icon = getCategoryIcon(event.category); return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />; })()}
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                   {t('agent.artifact.fileGenerated', 'File generated')}
                 </span>
@@ -250,9 +247,7 @@ export const ArtifactCreatedItem = memo(
                 <div className="mb-3 relative">
                   {!imageLoaded && (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg min-h-[100px]">
-                      <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-slate-400">
-                        progress_activity
-                      </span>
+                      <LoaderCircle size={24} className="animate-spin motion-reduce:animate-none text-slate-400" />
                     </div>
                   )}
                   <img
@@ -273,18 +268,14 @@ export const ArtifactCreatedItem = memo(
 
               {hasError && (
                 <div className="mb-3 flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200/50 dark:border-red-700/50">
-                  <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-base">
-                    error
-                  </span>
+                  <AlertCircle size={16} className="text-red-500 dark:text-red-400" />
                   <span className="text-xs text-red-600 dark:text-red-400">{artifactError}</span>
                 </div>
               )}
 
               <div className="flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-base">
-                    insert_drive_file
-                  </span>
+                  <FileIcon size={16} className="text-slate-500 dark:text-slate-400" />
                   <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
                     {event.filename}
                   </span>
@@ -300,7 +291,7 @@ export const ArtifactCreatedItem = memo(
                     className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                     download={event.filename}
                   >
-                    <span className="material-symbols-outlined text-base">download</span>
+                    <Download size={16} />
                     {t('agent.artifact.download', 'Download')}
                   </a>
                 )}

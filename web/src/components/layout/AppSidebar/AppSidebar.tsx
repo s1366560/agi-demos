@@ -8,6 +8,8 @@
 import * as React from 'react';
 import { useState, useCallback } from 'react';
 
+import { Brain } from 'lucide-react';
+
 import { SidebarBrand } from './SidebarBrand';
 import { SidebarProvider, useSidebarContext } from './SidebarContext';
 import { SidebarNavigation } from './SidebarNavigation';
@@ -24,6 +26,7 @@ function CollapseToggleButton() {
 
   return (
     <button
+      type="button"
       onClick={onCollapseToggle}
       data-testid="collapse-toggle"
       className="absolute top-20 -right-3 w-6 h-6 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors z-30"
@@ -73,7 +76,7 @@ function SidebarContent({
         {isCollapsed ? (
           <div className="w-full flex justify-center">
             <div className="bg-primary/10 p-2 rounded-lg border border-primary/20">
-              <span className="material-symbols-outlined text-primary">memory</span>
+              <Brain size={24} className="text-primary" />
             </div>
           </div>
         ) : (

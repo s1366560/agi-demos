@@ -345,7 +345,7 @@ const ClarificationContent: React.FC<{
                 <button
                   type="button"
                   key={optionKey}
-                  className={`p-3 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left w-full ${
+                  className={`p-3 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left w-full ${
                     isSelected
                       ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                       : isAnswered
@@ -410,7 +410,7 @@ const ClarificationContent: React.FC<{
             {data.allow_custom && !isAnswered && (
               <button
                 type="button"
-                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left w-full ${
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left w-full ${
                   selected === '__custom__'
                     ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
@@ -561,7 +561,7 @@ const DecisionContent: React.FC<{
                   type="button"
                   key={optionKey}
                   className={`
-                    rounded-xl p-4 transition-[color,background-color,border-color,box-shadow,opacity,transform] border-2 text-left w-full
+                    rounded-xl p-4 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 border-2 text-left w-full
                     ${
                       isOptionSelected
                         ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
@@ -666,7 +666,7 @@ const DecisionContent: React.FC<{
                       {hasDetails && (
                         <button
                           type="button"
-                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors"
+                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           onClick={(e) => {
                             e.stopPropagation();
                             setExpanded(isExpanded ? null : option.id);
@@ -704,7 +704,7 @@ const DecisionContent: React.FC<{
             {data.allow_custom && !isAnswered && !isMultiSelect && (
               <button
                 type="button"
-                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left w-full ${
+                className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left w-full ${
                   selected === '__custom__'
                     ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'

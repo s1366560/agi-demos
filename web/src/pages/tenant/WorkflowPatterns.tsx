@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { Modal } from 'antd';
+import { AlertCircle, Plus, RefreshCw, Search } from 'lucide-react';
 
 import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
 
@@ -23,7 +24,6 @@ import {
   type WorkflowPattern as UIWorkflowPattern,
   type PatternStatus,
 } from '../../components/agent';
-import { MaterialIcon } from '../../components/agent/shared';
 import { patternService, PatternServiceError } from '../../services/patternService';
 
 import type { WorkflowPattern as APIWorkflowPattern } from '../../types/agent';
@@ -193,7 +193,7 @@ export function WorkflowPatterns() {
       <div className="max-w-full mx-auto">
         <div className="flex flex-col items-center justify-center py-16">
           <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-            <MaterialIcon name="error" size={32} className="text-red-500" />
+            <AlertCircle size={32} className="text-red-500" />
           </div>
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
             Failed to Load Patterns
@@ -228,14 +228,14 @@ export function WorkflowPatterns() {
             disabled={loading}
             className="px-4 py-2.5 rounded-lg text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
-            <span className="material-symbols-outlined text-[18px] align-middle mr-1">refresh</span>
+            <RefreshCw size={16} className="align-middle mr-1" />
             Refresh
           </button>
           <button
             onClick={handleNewPattern}
             className="bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
           >
-            <span className="material-symbols-outlined text-[20px]">add</span>
+            <Plus size={20} />
             Define New Pattern
           </button>
         </div>
@@ -263,9 +263,7 @@ export function WorkflowPatterns() {
       <div className="flex items-center gap-3 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg px-4 py-2 my-6">
         {/* Search */}
         <div className="relative flex-1">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
-            search
-          </span>
+          <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
@@ -311,7 +309,7 @@ export function WorkflowPatterns() {
         </div>
 
         {/* Pattern Inspector */}
-        <div className="w-[480px] shrink-0">
+        <div className="w-120 shrink-0">
           <PatternInspector
             pattern={selectedPattern}
             onClose={() => {

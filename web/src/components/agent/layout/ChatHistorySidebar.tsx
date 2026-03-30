@@ -132,7 +132,7 @@ export function ChatHistorySidebar({
           {/* Recent Sessions */}
           {recentConversations.length > 0 && (
             <>
-              <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 mb-2 mt-4">
+              <h3 className="text-2xs font-bold text-text-muted uppercase tracking-wider px-2 mb-2 mt-4">
                 Recent Sessions
               </h3>
               {recentConversations.map((conversation) => (
@@ -159,7 +159,7 @@ export function ChatHistorySidebar({
                       {conversation.title}
                     </h4>
                     <span
-                      className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold uppercase ${getStatusColor(
+                      className={`flex-shrink-0 flex items-center gap-1 text-2xs font-bold uppercase ${getStatusColor(
                         conversation.status
                       )}`}
                     >
@@ -172,7 +172,7 @@ export function ChatHistorySidebar({
                     </span>
                   </div>
                   {conversation.timestamp && (
-                    <p className="text-[11px] text-text-muted">{conversation.timestamp}</p>
+                    <p className="text-xs-plus text-text-muted">{conversation.timestamp}</p>
                   )}
                 </button>
               ))}
@@ -182,7 +182,7 @@ export function ChatHistorySidebar({
           {/* Older Sessions */}
           {olderConversations.length > 0 && (
             <>
-              <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 mb-2 mt-6">
+              <h3 className="text-2xs font-bold text-text-muted uppercase tracking-wider px-2 mb-2 mt-6">
                 Older
               </h3>
               {olderConversations.map((conversation) => (
@@ -198,7 +198,7 @@ export function ChatHistorySidebar({
                       {conversation.title}
                     </h4>
                     <span
-                      className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-bold uppercase ${getStatusColor(
+                      className={`flex-shrink-0 flex items-center gap-1 text-2xs font-bold uppercase ${getStatusColor(
                         conversation.status
                       )}`}
                     >
@@ -211,7 +211,7 @@ export function ChatHistorySidebar({
                     </span>
                   </div>
                   {conversation.timestamp && (
-                    <p className="text-[11px] text-text-muted">{conversation.timestamp}</p>
+                    <p className="text-xs-plus text-text-muted">{conversation.timestamp}</p>
                   )}
                 </button>
               ))}

@@ -9,9 +9,9 @@
 
 import React, { memo, useMemo } from 'react';
 
+import { Card, Tag, Collapse, Typography } from 'antd';
 import { CheckCircle2, Clock, RefreshCw, XCircle } from 'lucide-react';
 
-import { Card, Tag, Collapse, Typography } from 'antd';
 
 import { formatTimeOnly } from '@/utils/date';
 

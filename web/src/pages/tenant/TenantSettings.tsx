@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { AlertTriangle, ArrowRight, CreditCard, Loader2, Settings, CheckCircle, AlertCircle } from 'lucide-react';
+
 import { formatDateOnly } from '@/utils/date';
 
 import { useTenantStore } from '../../stores/tenant';
@@ -41,7 +43,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
       {/* General Settings */}
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary">settings</span>
+          <Settings size={16} className="text-primary" />
           {t('tenant.settings.general.title')}
         </h2>
 
@@ -77,9 +79,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
             <div
               className={`p-4 rounded-lg flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}
             >
-              <span className="material-symbols-outlined text-[20px]">
-                {message.type === 'success' ? 'check_circle' : 'error'}
-              </span>
+              {message.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
               {message.text}
             </div>
           )}
@@ -91,9 +91,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isLoading && (
-                <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[20px]">
-                  progress_activity
-                </span>
+                <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
               )}
               {t('tenant.settings.save')}
             </button>
@@ -104,7 +102,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
       {/* Plan & Usage */}
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary">credit_card</span>
+          <CreditCard size={16} className="text-primary" />
           {t('tenant.settings.plan.title')}
         </h2>
 
@@ -130,7 +128,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
             </p>
             <button className="text-primary hover:text-primary-dark font-medium text-sm flex items-center gap-1">
               {t('tenant.settings.plan.change')}{' '}
-              <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+              <ArrowRight size={16} />
             </button>
           </div>
 
@@ -169,7 +167,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
       {/* Danger Zone */}
       <div className="bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-200 dark:border-red-900/30 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">
-          <span className="material-symbols-outlined">warning</span>
+          <AlertTriangle size={16} />
           {t('tenant.settings.danger.title')}
         </h2>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

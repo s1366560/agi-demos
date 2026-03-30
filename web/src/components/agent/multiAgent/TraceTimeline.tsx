@@ -121,7 +121,7 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
           {run.subagent_name}
         </span>
         <span
-          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${style.color} ${style.bg}`}
+          className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium ${style.color} ${style.bg}`}
         >
           {style.label}
         </span>
@@ -129,7 +129,7 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
 
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{run.task}</p>
 
-      <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500">
+      <div className="mt-2 flex items-center gap-3 text-2xs text-slate-400 dark:text-slate-500">
         <span className="flex items-center gap-1">
           <Clock size={10} />
           {formatTimestamp(run.created_at)}
@@ -147,11 +147,11 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
       </div>
 
       {run.error && (
-        <p className="mt-1 text-[10px] text-red-500 dark:text-red-400 line-clamp-1">{run.error}</p>
+        <p className="mt-1 text-2xs text-red-500 dark:text-red-400 line-clamp-1">{run.error}</p>
       )}
 
       {run.summary && run.status === 'completed' && (
-        <p className="mt-1 text-[10px] text-green-600 dark:text-green-400 line-clamp-1">
+        <p className="mt-1 text-2xs text-green-600 dark:text-green-400 line-clamp-1">
           {run.summary}
         </p>
       )}
@@ -195,7 +195,7 @@ const TraceGroup: FC<TraceGroupProps> = memo(({ traceId, runs, selectedRunId, on
         <span className="text-xs font-mono text-slate-600 dark:text-slate-300 truncate flex-1 text-left">
           {traceId === 'no-trace' ? 'Untraced Runs' : traceId.slice(0, 12)}
         </span>
-        <div className="flex items-center gap-2 text-[10px] flex-shrink-0">
+        <div className="flex items-center gap-2 text-2xs flex-shrink-0">
           <span className="text-slate-400">{runs.length} runs</span>
           {runningCount > 0 && (
             <span className="text-blue-500 font-medium">{runningCount} active</span>

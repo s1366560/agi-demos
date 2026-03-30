@@ -120,7 +120,7 @@ describe('Timeline Styles', () => {
   });
 
   describe('Event Type Indicators', () => {
-    it('should render thought event with psychology icon', () => {
+    it('should render thought event with icon', () => {
       const event: TimelineEvent = {
         id: 'test-icon-thought',
         type: 'thought',
@@ -131,11 +131,11 @@ describe('Timeline Styles', () => {
 
       const { container } = render(<TimelineEventItem event={event} />);
 
-      const icon = container.querySelector('.material-symbols-outlined');
+      const icon = container.querySelector('svg');
       expect(icon).toBeInTheDocument();
     });
 
-    it('should render act event with construction icon', () => {
+    it('should render act event with icon', () => {
       const event: TimelineEvent = {
         id: 'test-icon-act',
         type: 'act',
@@ -147,7 +147,7 @@ describe('Timeline Styles', () => {
 
       const { container } = render(<TimelineEventItem event={event} />);
 
-      const icon = container.querySelector('.material-symbols-outlined');
+      const icon = container.querySelector('svg');
       expect(icon).toBeInTheDocument();
     });
   });

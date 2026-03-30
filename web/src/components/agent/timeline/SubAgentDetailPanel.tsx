@@ -98,11 +98,11 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
               {displayName}
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 font-mono">
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 font-mono">
                 {group.subagentId.slice(0, 8)}...
               </span>
               {'modelName' in group && Boolean((group as Record<string, unknown>).modelName) ? (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 break-all">
+                <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 break-all">
                   {String((group as Record<string, unknown>).modelName)}
                 </span>
               ) : null}
@@ -198,12 +198,12 @@ export const SubAgentDetailPanel = memo<SubAgentDetailPanelProps>(({ group, onCl
                         <div className="text-xs font-medium text-slate-700 dark:text-slate-300 break-words [overflow-wrap:anywhere] pr-2">
                           {formatEventType(event.type)}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
+                        <div className="text-2xs text-slate-400 font-mono shrink-0 ml-2">
                           {relTime}
                         </div>
                       </div>
                       {eventDetail && (
-                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed break-words [overflow-wrap:anywhere]">
+                        <p className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400 leading-relaxed break-words [overflow-wrap:anywhere]">
                           {eventDetail}
                         </p>
                       )}

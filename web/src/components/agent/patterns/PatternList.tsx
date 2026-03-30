@@ -11,7 +11,7 @@
 
 import React, { memo, useMemo } from 'react';
 
-import { MaterialIcon } from '../shared';
+import { Trash2, Network } from 'lucide-react';
 
 export type PatternStatus = 'preferred' | 'active' | 'deprecated';
 
@@ -207,12 +207,13 @@ export function PatternList({
       {/* Table Body */}
       <div className="divide-y divide-slate-100 dark:divide-slate-800">
         {computedPatterns.map((pattern) => (
-          <div
+          <button
             key={pattern.id}
+            type="button"
             onClick={() => {
               handleRowClick(pattern);
             }}
-            className={`grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer transition-colors ${pattern.rowClassName}`}
+            className={`w-full text-left grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer transition-colors ${pattern.rowClassName}`}
           >
             {/* Status */}
             <div className="col-span-1">
@@ -252,23 +253,23 @@ export function PatternList({
             {/* Actions */}
             <div className="col-span-1 flex justify-end">
               <button
+                type="button"
                 onClick={(e) => {
                   handleDeprecateClick(e, pattern.id);
                 }}
                 className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-red-500 transition-colors"
                 title="Deprecate pattern"
               >
-                <MaterialIcon name="delete" size={18} />
+                <Trash2 size={18} />
               </button>
             </div>
-          </div>
+          </button>
         ))}
 
         {/* Empty State */}
         {patterns.length === 0 && (
           <div className="px-4 py-12 text-center">
-            <MaterialIcon
-              name="account_tree"
+            <Network
               size={48}
               className="text-slate-300 dark:text-slate-700 mx-auto mb-3"
             />

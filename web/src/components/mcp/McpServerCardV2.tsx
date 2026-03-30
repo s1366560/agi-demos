@@ -6,13 +6,60 @@
 import React from 'react';
 
 import { Popconfirm, Switch, Tooltip } from 'antd';
-
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
+import { Clock, Info, Pencil, Trash2, Wrench ,
+  CheckCircle,
+  Square,
+  StopCircle,
+  Terminal,
+  Cloud,
+  Zap,
+  Ban,
+  Search,
+  Sparkles,
+  AlertTriangle,
+  Activity,
+  FlaskConical,
+  RefreshCcw,
+  Settings,
+  Brain,
+  Loader2,
+  AlertCircle,
+  Globe,
+  User} from 'lucide-react';
 
 import { RUNTIME_STATUS_STYLES, SERVER_TYPE_STYLES, CARD_STYLES } from './styles';
 import { getRuntimeStatus } from './types';
 
 import type { MCPServerResponse } from '@/types/agent';
+
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 export interface McpServerCardV2Props {
   server: MCPServerResponse;
@@ -94,7 +141,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
               <div
                 className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeStyle.bgColor}`}
               >
-                <MaterialIcon name={typeStyle.icon} size={20} className={typeStyle.textColor} />
+                {renderDynamicIcon(typeStyle.icon, 20, typeStyle.textColor)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -102,7 +149,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                     {server.name}
                   </h3>
                   {!server.enabled && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
                       Disabled
                     </span>
                   )}
@@ -132,17 +179,13 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           <div
             className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border mb-3 ${runtimeStyle.bgColor} ${runtimeStyle.borderColor}`}
           >
-            <MaterialIcon
-              name={runtimeStyle.icon}
-              size={16}
-              className={`${runtimeStyle.color} ${status === 'starting' ? 'animate-spin motion-reduce:animate-none' : ''}`}
-            />
+            {renderDynamicIcon(runtimeStyle.icon, 16, `${runtimeStyle.color} ${status === 'starting' ? 'animate-spin motion-reduce:animate-none' : ''}`)}
             <span className={`text-xs font-medium ${runtimeStyle.color}`}>
               {runtimeStyle.label}
             </span>
             {status === 'error' && runtimeError && (
               <Tooltip title={runtimeError}>
-                <MaterialIcon name="info" size={14} className="text-red-500" />
+                <Info size={14} className="text-red-500" />
               </Tooltip>
             )}
           </div>
@@ -151,23 +194,23 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           <div className="grid grid-cols-3 gap-2 mb-3">
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <p className="text-lg font-bold text-slate-900 dark:text-white">{toolCount}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">Tools</p>
+              <p className="text-2xs text-slate-500 dark:text-slate-400">Tools</p>
             </div>
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <p className="text-lg font-bold text-slate-900 dark:text-white">{appCount || 0}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">Apps</p>
+              <p className="text-2xs text-slate-500 dark:text-slate-400">Apps</p>
             </div>
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <p className="text-lg font-bold text-slate-900 dark:text-white">
                 {readyAppCount || 0}
               </p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">Ready</p>
+              <p className="text-2xs text-slate-500 dark:text-slate-400">Ready</p>
             </div>
           </div>
 
           {/* Last Sync */}
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3">
-            <MaterialIcon name="schedule" size={14} />
+            <Clock size={14} />
             <span>Synced {formatLastSync(server.last_sync_at)}</span>
           </div>
 
@@ -181,11 +224,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 disabled={isSyncing}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
-                <MaterialIcon
-                  name={isSyncing ? 'progress_activity' : 'sync'}
-                  size={16}
-                  className={isSyncing ? 'animate-spin motion-reduce:animate-none' : ''}
-                />
+                {renderDynamicIcon(isSyncing ? 'progress_activity' : 'sync', 16, isSyncing ? 'animate-spin motion-reduce:animate-none' : '')}
                 Sync
               </button>
             </Tooltip>
@@ -198,11 +237,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 disabled={isTesting}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
-                <MaterialIcon
-                  name={isTesting ? 'progress_activity' : 'science'}
-                  size={16}
-                  className={isTesting ? 'animate-spin motion-reduce:animate-none' : ''}
-                />
+                {renderDynamicIcon(isTesting ? 'progress_activity' : 'science', 16, isTesting ? 'animate-spin motion-reduce:animate-none' : '')}
                 Test
               </button>
             </Tooltip>
@@ -214,7 +249,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 }}
                 className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
               >
-                <MaterialIcon name="build" size={18} />
+                <Wrench size={18} />
               </button>
             </Tooltip>
 
@@ -224,7 +259,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
               }}
               className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
-              <MaterialIcon name="edit" size={18} />
+              <Pencil size={18} />
             </button>
 
             <Popconfirm
@@ -238,7 +273,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
               okButtonProps={{ danger: true }}
             >
               <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors">
-                <MaterialIcon name="delete" size={18} />
+                <Trash2 size={18} />
               </button>
             </Popconfirm>
           </div>

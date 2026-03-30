@@ -10,11 +10,13 @@
 
 import { useState } from 'react';
 
-import { MaterialIcon } from '../shared';
+import { Check, Hourglass, X, Circle, ChevronDown, ChevronUp, Brain, ChevronRight, Wrench } from 'lucide-react';
+
 
 import { ToolExecutionDetail } from './ToolExecutionDetail';
 
 import type { TimelineStep } from '../../../types/agent';
+import type { LucideIcon } from 'lucide-react';
 
 export interface TimelineNodeProps {
   /** Step data */
@@ -41,11 +43,11 @@ function formatDuration(ms: number | undefined): string {
 /**
  * Get status icon and styles
  */
-function getStatusConfig(status: TimelineStep['status']) {
+function getStatusConfig(status: TimelineStep['status']): { icon: LucideIcon; bgColor: string; textColor: string; borderColor: string; pulse: boolean } {
   switch (status) {
     case 'completed':
       return {
-        icon: 'check',
+        icon: Check,
         bgColor: 'bg-emerald-500',
         textColor: 'text-white',
         borderColor: 'border-emerald-500',
@@ -53,7 +55,7 @@ function getStatusConfig(status: TimelineStep['status']) {
       };
     case 'running':
       return {
-        icon: 'hourglass_empty',
+        icon: Hourglass,
         bgColor: 'bg-blue-500',
         textColor: 'text-white',
         borderColor: 'border-blue-500',
@@ -61,7 +63,7 @@ function getStatusConfig(status: TimelineStep['status']) {
       };
     case 'failed':
       return {
-        icon: 'close',
+        icon: X,
         bgColor: 'bg-red-500',
         textColor: 'text-white',
         borderColor: 'border-red-500',
@@ -69,7 +71,7 @@ function getStatusConfig(status: TimelineStep['status']) {
       };
     default:
       return {
-        icon: 'circle',
+        icon: Circle,
         bgColor: 'bg-slate-200 dark:bg-slate-700',
         textColor: 'text-slate-400',
         borderColor: 'border-slate-300 dark:border-slate-600',
@@ -90,6 +92,7 @@ export function TimelineNode({
 }: TimelineNodeProps) {
   const [showAllThoughts, setShowAllThoughts] = useState(false);
   const statusConfig = getStatusConfig(step.status);
+  const StatusIcon = statusConfig.icon;
 
   const hasContent = step.thoughts.length > 0 || step.toolExecutions.length > 0;
   const displayThoughts = showAllThoughts ? step.thoughts : step.thoughts.slice(-3);
@@ -106,7 +109,7 @@ export function TimelineNode({
         {step.status === 'pending' ? (
           <span className="text-xs font-medium">{step.stepNumber + 1}</span>
         ) : (
-          <MaterialIcon name={statusConfig.icon as any} size={12} />
+          <StatusIcon size={12} />
         )}
       </div>
 
@@ -118,6 +121,7 @@ export function TimelineNode({
       >
         {/* Header - Clickable to expand/collapse */}
         <button
+          type="button"
           onClick={onToggle}
           className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
         >
@@ -168,11 +172,7 @@ export function TimelineNode({
 
           {/* Expand/Collapse Icon */}
           {hasContent && (
-            <MaterialIcon
-              name={isExpanded ? 'expand_less' : 'expand_more'}
-              size={20}
-              className="text-slate-400"
-            />
+            isExpanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />
           )}
         </button>
 
@@ -184,11 +184,12 @@ export function TimelineNode({
               <div className="pt-4">
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <MaterialIcon name="psychology" size={14} />
+                    <Brain size={14} />
                     Thinking Process
                   </h5>
                   {step.thoughts.length > 3 && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowAllThoughts(!showAllThoughts);
@@ -200,13 +201,12 @@ export function TimelineNode({
                   )}
                 </div>
                 <div className="space-y-2">
-                  {displayThoughts.map((thought, idx) => (
+                  {displayThoughts.map((thought) => (
                     <div
-                      key={idx}
+                      key={thought}
                       className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400"
                     >
-                      <MaterialIcon
-                        name="chevron_right"
+                      <ChevronRight
                         size={16}
                         className="text-slate-400 mt-0.5 flex-shrink-0"
                       />
@@ -221,7 +221,7 @@ export function TimelineNode({
             {step.toolExecutions.length > 0 && (
               <div className="pt-2">
                 <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <MaterialIcon name="build" size={14} />
+                  <Wrench size={14} />
                   Tool Executions
                 </h5>
                 <div className="space-y-3">

@@ -1,5 +1,7 @@
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Space, Typography } from 'antd';
 
 import { useOnlineAgents, useOnlineUsers } from '@/stores/workspace';
@@ -13,6 +15,7 @@ export interface PresenceBarProps {
 }
 
 export const PresenceBar: FC<PresenceBarProps> = () => {
+  const { t } = useTranslation();
   const onlineUsers = useOnlineUsers();
   const onlineAgents = useOnlineAgents();
 
@@ -23,19 +26,9 @@ export const PresenceBar: FC<PresenceBarProps> = () => {
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '8px 16px',
-        borderRadius: 8,
-        backgroundColor: 'rgba(0, 0, 0, 0.02)',
-        border: '1px solid rgba(0, 0, 0, 0.06)',
-      }}
-    >
-      <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-        Online ({totalOnline})
+    <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 transition-colors duration-200">
+      <Text type="secondary" className="text-xs whitespace-nowrap">
+        {t('workspaceDetail.presence.online')} ({totalOnline})
       </Text>
       <Space size={4} wrap>
         {onlineUsers.map((user) => (

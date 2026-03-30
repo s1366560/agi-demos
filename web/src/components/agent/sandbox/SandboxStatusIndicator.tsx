@@ -767,9 +767,9 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
           sandbox={sandbox}
           stats={stats}
           loading={statsLoading}
-          onRefresh={() => { void fetchStats(); }}
-          onRestart={() => { void handleRestart(); }}
-          onStop={() => { void handleStop(); }}
+          onRefresh={() => fetchStats()}
+          onRestart={() => handleRestart()}
+          onStop={() => handleStop()}
         />
       }
       trigger="hover"

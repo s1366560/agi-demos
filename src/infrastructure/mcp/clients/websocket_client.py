@@ -362,7 +362,7 @@ class MCPWebSocketClient:
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
 
-    async def _handle_message(self, data: dict[str, Any]) -> None:
+    async def _handle_message(self, data: dict[str, Any]) -> None:  # noqa: PLR0912
         """Handle incoming JSON-RPC message."""
         request_id = data.get("id")
 

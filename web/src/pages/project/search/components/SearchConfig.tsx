@@ -160,7 +160,7 @@ export const SearchConfig = memo<SearchConfigProps>(
                 {t('project.search.config.title')}
               </h2>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] px-1.5 py-0.5 bg-blue-600/10 text-blue-600 rounded font-medium">
+                <span className="text-2xs px-1.5 py-0.5 bg-blue-600/10 text-blue-600 rounded font-medium">
                   Advanced
                 </span>
                 <button
@@ -489,7 +489,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
               onClick={() => {
                 onToggleRelationshipType(rel);
               }}
-              className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
                 relationshipTypes.includes(rel)
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -636,7 +636,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
               onClick={() => {
                 onToggleEntityType(type);
               }}
-              className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
                 selectedEntityTypes.includes(type)
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -659,7 +659,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
               onClick={() => {
                 onToggleTag(tag);
               }}
-              className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
                 selectedTags.includes(tag)
                   ? 'bg-blue-600/10 text-blue-600 border border-blue-600/10'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent'
@@ -668,7 +668,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
               #{tag}
             </button>
           ))}
-          <button className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-[10px] font-medium transition-colors flex items-center gap-1">
+          <button className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-2xs font-medium transition-colors flex items-center gap-1">
             <Plus className="w-3 h-3" /> Add
           </button>
         </div>

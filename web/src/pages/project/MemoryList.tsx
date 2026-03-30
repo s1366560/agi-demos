@@ -14,9 +14,11 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useContext, useRef, memo } from 'react';
 
+
 import { useParams, Link } from 'react-router-dom';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { AlertCircle, ChevronDown, FileText, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
@@ -359,8 +361,8 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
       </div>
       <Link to={`${projectBasePath}/memories/new`}>
-        <button className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
-          <span className="material-symbols-outlined text-lg">add</span>
+        <button type="button" className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
+          <Plus size={18} />
           <span>{TEXTS.addMemory}</span>
         </button>
       </Link>
@@ -395,7 +397,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
     >
       <div className="relative w-full md:max-w-md">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <span className="material-symbols-outlined text-slate-400">search</span>
+          <Search size={16} className="text-slate-400" />
         </div>
         <input
           type="text"
@@ -409,9 +411,9 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
           {TEXTS.filterLabel}
         </span>
-        <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 text-sm font-medium whitespace-nowrap transition-colors">
+        <button type="button" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 text-sm font-medium whitespace-nowrap transition-colors">
           {TEXTS.allTypes}
-          <span className="material-symbols-outlined text-lg">arrow_drop_down</span>
+          <ChevronDown size={18} />
         </button>
       </div>
     </div>
@@ -577,9 +579,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
         <td className="px-6 py-3">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                description
-              </span>
+              <FileText size={16} style={{ fontSize: '20px' }} />
             </div>
             <div>
               <Link
@@ -621,17 +621,17 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
           <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             {actions && (
               <button
+                type="button"
                 onClick={() => actions.handleReprocess(memory.id)}
                 className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 title={TEXTS.reprocess}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  refresh
-                </span>
+                <RefreshCw size={16} style={{ fontSize: '20px' }} />
               </button>
             )}
             {onDelete && (
               <button
+                type="button"
                 onClick={() => {
                   onDelete(memory);
                 }}
@@ -640,16 +640,9 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
                 title={TEXTS.deleteMemory}
               >
                 {state?.deletingId === memory.id ? (
-                  <span
-                    className="material-symbols-outlined animate-spin motion-reduce:animate-none"
-                    style={{ fontSize: '20px' }}
-                  >
-                    progress_activity
-                  </span>
+                  <Loader2 size={16} className="animate-spin motion-reduce:animate-none" style={{ fontSize: '20px' }} />
                 ) : (
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    delete
-                  </span>
+                  <Trash2 size={16} style={{ fontSize: '20px' }} />
                 )}
               </button>
             )}
@@ -695,10 +688,11 @@ interface ErrorProps {
 const ErrorInternal: React.FC<ErrorProps> = ({ error, onRetry, className = '' }) => (
   <div className={`p-8 text-center ${className}`}>
     <div className="flex flex-col items-center gap-4">
-      <span className="material-symbols-outlined text-red-500 text-4xl">error</span>
+      <AlertCircle size={32} className="text-red-500" />
       <p className="text-red-600 dark:text-red-400">{error}</p>
       {onRetry && (
         <button
+          type="button"
           onClick={onRetry}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
@@ -743,6 +737,7 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
           </p>
           <div className="flex justify-end gap-3">
             <button
+              type="button"
               onClick={onClose}
               disabled={isDeleting}
               className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
@@ -750,6 +745,7 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
               {TEXTS.deleteCancel}
             </button>
             <button
+              type="button"
               onClick={onConfirm}
               disabled={isDeleting}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"

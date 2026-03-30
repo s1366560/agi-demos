@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
 from src.application.services.blackboard_service import BlackboardService
+from src.application.services.cluster_service import ClusterService
 from src.application.services.cron_service import CronJobService
+from src.application.services.deploy_service import DeployService
+from src.application.services.gene_service import GeneService
+from src.application.services.instance_service import InstanceService
+from src.application.services.instance_template_service import InstanceTemplateService
 from src.application.services.memory_service import MemoryService
 from src.application.services.project_service import ProjectService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
@@ -55,6 +60,7 @@ from src.configuration.containers import (
     AuthContainer,
     CronContainer,
     InfraContainer,
+    InstanceContainer,
     MemoryContainer,
     ProjectContainer,
     SandboxContainer,
@@ -62,6 +68,25 @@ from src.configuration.containers import (
 )
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
+from src.domain.ports.repositories.cluster_repository import ClusterRepository
+from src.domain.ports.repositories.deploy_record_repository import DeployRecordRepository
+from src.domain.ports.repositories.evolution_event_repository import (
+    EvolutionEventRepository,
+)
+from src.domain.ports.repositories.gene_rating_repository import GeneRatingRepository
+from src.domain.ports.repositories.gene_repository import GeneRepository
+from src.domain.ports.repositories.gene_review_repository import GeneReviewRepository
+from src.domain.ports.repositories.genome_repository import GenomeRepository
+from src.domain.ports.repositories.instance_gene_repository import (
+    InstanceGeneRepository,
+)
+from src.domain.ports.repositories.instance_member_repository import (
+    InstanceMemberRepository,
+)
+from src.domain.ports.repositories.instance_repository import InstanceRepository
+from src.domain.ports.repositories.instance_template_repository import (
+    InstanceTemplateRepository,
+)
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.task_repository import TaskRepository
@@ -176,6 +201,7 @@ class DIContainer:
             user_repository_factory=self._auth.user_repository,
             tenant_repository_factory=self._auth.tenant_repository,
         )
+        self._instance = InstanceContainer(db=db, redis_client=redis_client)
         # Reuse InfraContainer when provided (e.g. from with_db()) to preserve
         # cached singletons like MCPSandboxAdapter across per-request clones.
         self._infra = _infra or InfraContainer(
@@ -354,6 +380,56 @@ class DIContainer:
         ) = None,
     ) -> WorkspaceMessageService:
         return self._project.workspace_message_service(workspace_event_publisher)
+
+    # === Instance Container delegates ===
+
+    def instance_repository(self) -> InstanceRepository:
+        return self._instance.instance_repository()
+
+    def instance_member_repository(self) -> InstanceMemberRepository:
+        return self._instance.instance_member_repository()
+
+    def deploy_record_repository(self) -> DeployRecordRepository:
+        return self._instance.deploy_record_repository()
+
+    def cluster_repository(self) -> ClusterRepository:
+        return self._instance.cluster_repository()
+
+    def gene_repository(self) -> GeneRepository:
+        return self._instance.gene_repository()
+
+    def genome_repository(self) -> GenomeRepository:
+        return self._instance.genome_repository()
+
+    def instance_gene_repository(self) -> InstanceGeneRepository:
+        return self._instance.instance_gene_repository()
+
+    def gene_rating_repository(self) -> GeneRatingRepository:
+        return self._instance.gene_rating_repository()
+
+    def gene_review_repository(self) -> GeneReviewRepository:
+        return self._instance.gene_review_repository()
+
+    def evolution_event_repository(self) -> EvolutionEventRepository:
+        return self._instance.evolution_event_repository()
+
+    def instance_template_repository(self) -> InstanceTemplateRepository:
+        return self._instance.instance_template_repository()
+
+    def instance_service(self) -> InstanceService:
+        return self._instance.instance_service()
+
+    def deploy_service(self) -> DeployService:
+        return self._instance.deploy_service()
+
+    def cluster_service(self) -> ClusterService:
+        return self._instance.cluster_service()
+
+    def gene_service(self) -> GeneService:
+        return self._instance.gene_service()
+
+    def instance_template_service(self) -> InstanceTemplateService:
+        return self._instance.instance_template_service()
 
     # === Infra Container delegates ===
 
@@ -596,3 +672,31 @@ class DIContainer:
 
     def default_context_engine(self, window_manager: Any | None = None) -> Any:
         return self._agent.default_context_engine(window_manager)
+
+    # === Event Log & Webhooks ===
+
+    def event_log_repository(self) -> Any:
+        from src.infrastructure.adapters.secondary.persistence.sql_event_log_repository import (
+            SqlEventLogRepository,
+        )
+
+        assert self._db is not None, "DB session required for event_log_repository"
+        return SqlEventLogRepository(self._db)
+
+    def event_log_service(self) -> Any:
+        from src.application.services.event_log_service import EventLogService
+
+        return EventLogService(self.event_log_repository())
+
+    def webhook_repository(self) -> Any:
+        from src.infrastructure.adapters.secondary.persistence.sql_webhook_repository import (
+            SqlWebhookRepository,
+        )
+
+        assert self._db is not None, "DB session required for webhook_repository"
+        return SqlWebhookRepository(self._db)
+
+    def webhook_service(self) -> Any:
+        from src.application.services.webhook_service import WebhookService
+
+        return WebhookService(self.webhook_repository())

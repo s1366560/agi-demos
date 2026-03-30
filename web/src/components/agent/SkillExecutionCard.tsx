@@ -9,9 +9,9 @@
 
 import React, { memo } from 'react';
 
+import { Card, Typography, Space, Tag, Progress, Steps, Tooltip } from 'antd';
 import { AlertTriangle, CheckCircle2, Edit, Loader2, Rocket, XCircle, Zap } from 'lucide-react';
 
-import { Card, Typography, Space, Tag, Progress, Steps, Tooltip } from 'antd';
 
 import { formatTimeOnly } from '@/utils/date';
 

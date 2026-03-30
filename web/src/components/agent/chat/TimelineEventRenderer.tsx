@@ -1,3 +1,6 @@
+import React, { memo } from 'react';
+
+import { MessageSquare } from 'lucide-react';
 /**
  * TimelineEventRenderer - Unified TimelineEvent renderer
  *
@@ -7,7 +10,6 @@
  * @module components/agent/chat/TimelineEventRenderer
  */
 
-import React, { memo } from 'react';
 
 import { TimelineEventItem } from '../TimelineEventItem';
 
@@ -59,7 +61,7 @@ export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(
         <MessageStream className={className}>
           <div className="flex items-center justify-center h-96">
             <div className="text-center text-slate-500 dark:text-slate-400">
-              <span className="material-symbols-outlined text-4xl mb-2">chat</span>
+              <MessageSquare size={36} className="mx-auto mb-2" />
               <p>No messages yet. Start a conversation!</p>
             </div>
           </div>

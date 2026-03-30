@@ -13,6 +13,8 @@ import {
   ActEventData,
   ObserveEventData,
   UserMessageEvent,
+  AssistantMessageEvent,
+  TextEndEvent,
   PermissionAskedEventData,
   DoomLoopDetectedEventData,
 } from '../types/agent';
@@ -363,38 +365,44 @@ function timelineToMessages(timeline: TimelineEvent[]): Message[] {
 
   for (const event of timeline) {
     switch (event.type) {
-      case 'user_message':
+      case 'user_message': {
+        const userEvent = event;
         messages.push({
           id: event.id,
           conversation_id: '',
           role: 'user',
-          content: (event as any).content || '',
+          content: userEvent.content || '',
           message_type: 'text' as const,
           created_at: new Date(event.timestamp).toISOString(),
         });
         break;
+      }
 
-      case 'assistant_message':
+      case 'assistant_message': {
+        const assistantEvent = event;
         messages.push({
           id: event.id,
           conversation_id: '',
           role: 'assistant',
-          content: (event as any).content || '',
+          content: assistantEvent.content || '',
           message_type: 'text' as const,
           created_at: new Date(event.timestamp).toISOString(),
         });
         break;
+      }
 
-      case 'text_end':
+      case 'text_end': {
+        const textEndEvent = event;
         messages.push({
           id: event.id,
           conversation_id: '',
           role: 'assistant',
-          content: (event as any).fullText || '',
+          content: textEndEvent.fullText || '',
           message_type: 'text' as const,
           created_at: new Date(event.timestamp).toISOString(),
         });
         break;
+      }
 
       // Other event types are rendered directly from timeline, not as messages
       default:

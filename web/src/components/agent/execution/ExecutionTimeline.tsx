@@ -28,7 +28,7 @@ import {
   useContext,
 } from 'react';
 
-import { MaterialIcon } from '../shared';
+import { Check, ChevronDown, ChevronRight, ListTodo, X } from 'lucide-react';
 
 import { SimpleExecutionView } from './SimpleExecutionView';
 import { TimelineNode } from './TimelineNode';
@@ -187,7 +187,7 @@ const HeaderContent: React.FC = () => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <MaterialIcon name="checklist" size={20} className="text-primary" />
+            <ListTodo size={20} className="text-primary" />
           </div>
           <div>
             <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
@@ -268,10 +268,11 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
             const isCompleted = step.status === 'completed';
             const isActive = step.status === 'running' || currentStepNumber === step.stepNumber;
             const isFailed = step.status === 'failed';
-            return (
-              <div
+              return (
+              <button
                 key={step.stepNumber}
-                className={`flex items-center gap-3 py-2 px-3 rounded-lg transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70 ${
+                type="button"
+                className={`w-full text-left flex items-center gap-3 py-2 px-3 rounded-lg transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70 ${
                   isActive
                     ? 'bg-primary/5 border border-primary/20'
                     : isCompleted
@@ -297,9 +298,9 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                   }`}
                 >
                   {isCompleted ? (
-                    <MaterialIcon name="check" size={14} />
+                    <Check size={14} />
                   ) : isFailed ? (
-                    <MaterialIcon name="close" size={14} />
+                    <X size={14} />
                   ) : isActive ? (
                     <span className="w-2 h-2 bg-white rounded-full animate-pulse motion-reduce:animate-none" />
                   ) : (
@@ -323,12 +324,12 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                   <span className="text-xs text-slate-400">{step.toolExecutions.length} 工具</span>
                 )}
                 {isActive && isStreaming && <span className="text-xs text-primary">执行中...</span>}
-                <MaterialIcon
-                  name={isStepExpanded(step.stepNumber) ? 'expand_less' : 'expand_more'}
-                  size={18}
-                  className="text-slate-400"
-                />
-              </div>
+                {isStepExpanded(step.stepNumber) ? (
+                  <ChevronDown size={18} className="text-slate-400" />
+                ) : (
+                  <ChevronRight size={18} className="text-slate-400" />
+                )}
+              </button>
             );
           })}
         </div>
@@ -350,11 +351,11 @@ export const Controls: React.FC<ControlsProps> = ({ children }) => {
     <>
       {children || (
         <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-          <button onClick={expandAll} className="text-xs text-primary hover:underline">
+          <button type="button" onClick={expandAll} className="text-xs text-primary hover:underline">
             展开全部
           </button>
           <span className="text-slate-300">|</span>
-          <button onClick={collapseAll} className="text-xs text-primary hover:underline">
+          <button type="button" onClick={collapseAll} className="text-xs text-primary hover:underline">
             收起全部
           </button>
         </div>
@@ -448,7 +449,7 @@ function SimpleTimelineMode({
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 mb-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <MaterialIcon name="checklist" size={18} className="text-primary" />
+              <ListTodo size={18} className="text-primary" />
             </div>
             <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
           </div>
@@ -458,7 +459,7 @@ function SimpleTimelineMode({
               const isActive = idx === currentStepNumber;
               return (
                 <div
-                  key={idx}
+                  key={step.description}
                   className={`flex items-center gap-3 py-2 px-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-primary/5 border border-primary/20'
@@ -477,7 +478,7 @@ function SimpleTimelineMode({
                     }`}
                   >
                     {isCompleted ? (
-                      <MaterialIcon name="check" size={14} />
+                      <Check size={14} />
                     ) : isActive ? (
                       <span className="w-2 h-2 bg-white rounded-full animate-pulse motion-reduce:animate-none" />
                     ) : (

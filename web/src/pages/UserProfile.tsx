@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { Building2, Calendar, Camera, CheckCircle, MapPin, X } from 'lucide-react';
+
+
 import { formatDateOnly } from '@/utils/date';
 
 import { authAPI } from '../services/api';
@@ -125,8 +128,8 @@ export const UserProfile: React.FC = () => {
                     }
                   />
                 </div>
-                <button className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark">
-                  <span className="material-symbols-outlined text-sm">photo_camera</span>
+                <button type="button" className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark">
+                  <Camera size={14} />
                 </button>
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">{user.name}</h2>
@@ -135,15 +138,15 @@ export const UserProfile: React.FC = () => {
               </p>
               <div className="mt-4 flex w-full flex-col gap-2 border-t border-slate-200 py-4 dark:border-slate-700">
                 <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                  <span className="material-symbols-outlined text-lg">business</span>
+                  <Building2 size={18} />
                   <span>{formData.profile?.department || t('user_profile.no_department')}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                  <span className="material-symbols-outlined text-lg">location_on</span>
+                  <MapPin size={18} />
                   <span>{formData.profile?.location || t('user_profile.no_location')}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                  <span className="material-symbols-outlined text-lg">calendar_month</span>
+                  <Calendar size={18} />
                   <span>
                     {t('user_profile.member_since', {
                       date: formatDateOnly(user.created_at),
@@ -173,18 +176,19 @@ export const UserProfile: React.FC = () => {
             <div className="border-b border-slate-200 px-6 dark:border-slate-700">
               <nav aria-label="Tabs" className="-mb-px flex space-x-8">
                 <button
+                  type="button"
                   aria-current="page"
                   className="border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white"
                 >
                   {t('user_profile.tabs.basic')}
                 </button>
-                <button className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
+                <button type="button" className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
                   {t('user_profile.tabs.contact')}
                 </button>
-                <button className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
+                <button type="button" className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
                   {t('user_profile.tabs.preferences')}
                 </button>
-                <button className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
+                <button type="button" className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
                   {t('user_profile.tabs.security')}
                 </button>
               </nav>
@@ -331,9 +335,7 @@ export const UserProfile: React.FC = () => {
                       <div className="mt-2">
                         <div className="relative rounded-md shadow-sm">
                           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                            <span className="material-symbols-outlined text-gray-400 text-lg">
-                              location_on
-                            </span>
+                            <MapPin size={18} className="text-gray-400" />
                           </div>
                           <input
                             className="block w-full rounded-md border-0 py-1.5 pl-10 text-slate-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6"
@@ -431,7 +433,7 @@ export const UserProfile: React.FC = () => {
               <div className="p-4">
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
-                    <span className="material-symbols-outlined text-green-400">check_circle</span>
+                    <CheckCircle size={16} className="text-green-400" />
                   </div>
                   <div className="ml-3 w-0 flex-1 pt-0.5">
                     <p className="text-sm font-medium text-slate-900 dark:text-white">
@@ -443,13 +445,14 @@ export const UserProfile: React.FC = () => {
                   </div>
                   <div className="ml-4 flex flex-shrink-0">
                     <button
+                      type="button"
                       className="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:bg-surface-dark dark:hover:text-gray-300"
                       onClick={() => {
                         setShowSuccess(false);
                       }}
                     >
                       <span className="sr-only">Close</span>
-                      <span className="material-symbols-outlined text-sm">close</span>
+                      <X size={14} />
                     </button>
                   </div>
                 </div>

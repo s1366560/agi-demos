@@ -31,37 +31,54 @@ from src.infrastructure.adapters.primary.web.routers import (
     ai_tools,
     artifacts,
     attachments_upload,
+    audit,
     auth,
     background_tasks,
     billing,
     blackboard,
     channels,
+    clusters,
     cron,
     cyber_genes,
     cyber_objectives,
     data_export,
+    deploy,
+    engines,
     enhanced_search,
     episodes,
+    events,
+    genes,
     graph,
+    instance_templates,
+    instances,
+    invitations,
     llm_providers,
     maintenance,
     mcp,
     memories,
     notifications,
+    observability,
     project_sandbox,
     projects,
     recall,
     sandbox,
     schema,
+    security_ws,
     shares,
     skills,
+    smtp_config,
     subagents,
     support,
+    system,
     tasks,
     tenant_skill_configs,
+    tenant_webhooks,
     tenants,
     terminal,
     topology,
+    trust,
+    tunnel,
+    webhooks,
     workspace_chat,
     workspace_tasks,
     workspaces,
@@ -423,6 +440,43 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # CyberOffice genes (skill packages per workspace)
     app.include_router(cyber_genes.router)
+
+    # Instance / Deploy / Cluster / Gene Marketplace / Template Marketplace
+    app.include_router(instances.router)
+    app.include_router(deploy.router)
+    app.include_router(clusters.router)
+    app.include_router(genes.router)
+    app.include_router(instance_templates.router)
+
+    # Audit Logs (tenant-scoped read-only audit trail)
+    app.include_router(audit.router)
+
+    # Trust System (graduated autonomy policies and approval decisions)
+    app.include_router(trust.router)
+
+    # SMTP Configuration (tenant-scoped mail server settings)
+    app.include_router(smtp_config.router)
+
+    # Webhooks (Feishu challenge verification + message ingestion)
+    app.include_router(webhooks.router)
+    app.include_router(tenant_webhooks.router, prefix="/api/v1")
+    app.include_router(system.router, prefix="/api/v1")
+    app.include_router(events.router)
+
+    # Tunnel (WebSocket reverse tunnel for local sandbox connectivity)
+    app.include_router(tunnel.router)
+
+    # Engines (runtime engine catalog)
+    app.include_router(engines.router)
+
+    # Security WebSocket (pre/post execution security evaluation)
+    app.include_router(security_ws.router)
+
+    # Observability (workspace-scoped event logs, DLQ, circuit state, queues)
+    app.include_router(observability.router)
+
+    app.include_router(invitations.router)
+    app.include_router(invitations.public_router)
 
     # Agent Pool Admin API (always registered, returns disabled status when pool not enabled)
     from src.infrastructure.agent.pool import create_pool_router

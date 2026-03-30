@@ -118,19 +118,19 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                     @{subagent.name}
                   </span>
                   <span
-                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getModelBadgeStyle(subagent.model)}`}
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium ${getModelBadgeStyle(subagent.model)}`}
                   >
                     {subagent.model === 'inherit'
                       ? t('tenant.subagents.card.inherit', 'Inherit')
                       : subagent.model}
                   </span>
                   {isFilesystem ? (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-2xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
                       <HardDrive size={9} />
                       {t('tenant.subagents.card.filesystem', 'File')}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-2xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
                       <Database size={9} />
                       {t('tenant.subagents.card.database', 'DB')}
                     </span>
@@ -180,7 +180,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                           )}
                           {subagent.file_path && (
                             <Tooltip title={subagent.file_path}>
-                              <div className="px-3 py-2 text-[11px] text-slate-400 dark:text-slate-500 truncate">
+                              <div className="px-3 py-2 text-xs-plus text-slate-400 dark:text-slate-500 truncate">
                                 {subagent.file_path}
                               </div>
                             </Tooltip>
@@ -253,14 +253,14 @@ export const SubAgentCard = memo<SubAgentCardProps>(
               {subagent.trigger.keywords.slice(0, 4).map((kw) => (
                 <span
                   key={kw}
-                  className="px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 rounded"
+                  className="px-1.5 py-0.5 text-2xs bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 rounded"
                 >
                   {kw}
                 </span>
               ))}
               {subagent.trigger.keywords.length > 4 && (
                 <Tooltip title={subagent.trigger.keywords.slice(4).join(', ')}>
-                  <span className="px-1.5 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-700/60 text-slate-400 rounded cursor-help">
+                  <span className="px-1.5 py-0.5 text-2xs bg-slate-100 dark:bg-slate-700/60 text-slate-400 rounded cursor-help">
                     +{subagent.trigger.keywords.length - 4}
                   </span>
                 </Tooltip>
@@ -270,7 +270,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
         )}
 
         {/* Capabilities */}
-        <div className="px-4 pb-3 flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500">
+        <div className="px-4 pb-3 flex items-center gap-3 text-xs-plus text-slate-400 dark:text-slate-500">
           <span className="flex items-center gap-1">
             <Wrench size={11} /> {toolCount}
           </span>
@@ -290,7 +290,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
         </div>
 
         {/* Performance footer */}
-        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
+        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs-plus">
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
             <span className="flex items-center gap-1">
               <Zap size={11} />

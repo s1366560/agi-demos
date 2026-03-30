@@ -8,8 +8,11 @@ import type { FileMetadata } from '../../services/sandboxUploadService';
 import type {
   ActEventData,
   AgentEvent,
+  ClarificationAskedEventData,
   Conversation,
+  DecisionAskedEventData,
   DoomLoopDetectedEventData,
+  EnvVarRequestedEventData,
   Message,
   ObserveEventData,
   PermissionAskedEventData,
@@ -99,9 +102,9 @@ export interface AgentV3State {
   rightPanelWidth: number;
 
   // Interactivity (for active conversation - backward compatibility)
-  pendingClarification: any; // Pending clarification request from agent
-  pendingDecision: any; // Using any for brevity in this update
-  pendingEnvVarRequest: any; // Pending environment variable request from agent
+  pendingClarification: ClarificationAskedEventData | null; // Pending clarification request from agent
+  pendingDecision: DecisionAskedEventData | null; // Pending decision request from agent
+  pendingEnvVarRequest: EnvVarRequestedEventData | null; // Pending environment variable request from agent
   pendingPermission: PermissionAskedEventData | null; // Pending permission request
   doomLoopDetected: DoomLoopDetectedEventData | null;
   costTracking: CostTrackingState | null; // Cost tracking state

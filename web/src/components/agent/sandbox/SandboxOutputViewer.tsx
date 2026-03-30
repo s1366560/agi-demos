@@ -8,18 +8,18 @@
 
 import { useState, useMemo } from 'react';
 
-import {
-  CopyOutlined,
-  CheckOutlined,
-  FileTextOutlined,
-  CodeOutlined,
-  DesktopOutlined,
-  SearchOutlined,
-  EditOutlined,
-  FolderOutlined,
-  PictureOutlined,
-} from '@ant-design/icons';
 import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from 'antd';
+import {
+  Copy,
+  Check,
+  FileText,
+  Code,
+  Monitor,
+  Search,
+  Pencil,
+  Folder,
+  Image as PictureIcon,
+} from 'lucide-react';
 
 import { formatTimeOnly } from '@/utils/date';
 
@@ -55,12 +55,12 @@ export interface SandboxOutputViewerProps {
 
 // Tool icons mapping
 const TOOL_ICONS: Record<string, React.ReactNode> = {
-  read: <FileTextOutlined />,
-  write: <EditOutlined />,
-  edit: <CodeOutlined />,
-  glob: <FolderOutlined />,
-  grep: <SearchOutlined />,
-  bash: <DesktopOutlined />,
+  read: <FileText size={14} />,
+  write: <Pencil size={14} />,
+  edit: <Code size={14} />,
+  glob: <Folder size={14} />,
+  grep: <Search size={14} />,
+  bash: <Monitor size={14} />,
 };
 
 // Tool colors mapping
@@ -162,7 +162,7 @@ function ToolExecutionCard({
             <Button
               type="text"
               size="small"
-              icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+              icon={copied ? <Check size={16} /> : <Copy size={16} />}
               onClick={handleCopy}
               className="text-slate-400 hover:text-slate-600"
             />
@@ -201,7 +201,7 @@ function ToolExecutionCard({
       {execution.artifacts && execution.artifacts.length > 0 && (
         <div className="border-t border-slate-200">
           <div className="px-3 py-2 bg-slate-50 flex items-center gap-2">
-            <PictureOutlined className="text-blue-500" />
+            <PictureIcon size={16} className="text-blue-500" />
             <Text className="text-xs text-slate-600">
               {execution.artifacts.length} artifact{execution.artifacts.length > 1 ? 's' : ''}
             </Text>
@@ -258,7 +258,7 @@ export function SandboxOutputViewer({
           <Text className="text-sm text-slate-600">{formatTimeOnly(exec.timestamp)}</Text>
           {exec.error && <Tag color="error">Error</Tag>}
           {exec.artifacts && exec.artifacts.length > 0 && (
-            <Tag icon={<PictureOutlined />} color="blue">
+            <Tag icon={<PictureIcon size={14} />} color="blue">
               {exec.artifacts.length}
             </Tag>
           )}

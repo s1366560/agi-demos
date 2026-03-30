@@ -27,13 +27,46 @@ export const HexContextMenu: FC<HexContextMenuProps> = ({ q, r, x, y, onClose, o
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
+    
+    const firstMenuItem = ref.current?.querySelector('[role="menuitem"]') as HTMLElement;
+    if (firstMenuItem) {
+      firstMenuItem.focus();
+    }
+    
     return () => { document.removeEventListener('mousedown', handleClickOutside); };
   }, [onClose]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    
+    if (e.key === 'Escape') {
+      onClose();
+      return;
+    }
+
+    const menuItems = Array.from(ref.current.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    if (!menuItems.length) return;
+
+    const currentIndex = menuItems.indexOf(document.activeElement as HTMLElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % menuItems.length;
+      menuItems[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const nextIndex = (currentIndex - 1 + menuItems.length) % menuItems.length;
+      menuItems[nextIndex]?.focus();
+    }
+  };
 
   return (
     <div
       ref={ref}
-      className="fixed z-50 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[160px]"
+      role="menu"
+      aria-label="Hex cell actions"
+      onKeyDown={handleKeyDown}
+      className="fixed z-50 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-40"
       style={{ left: x, top: y }}
     >
       <div className="px-3 py-1.5 text-xs text-slate-400 font-medium">
@@ -43,6 +76,7 @@ export const HexContextMenu: FC<HexContextMenuProps> = ({ q, r, x, y, onClose, o
         <button
           key={action.key}
           type="button"
+          role="menuitem"
           className={`w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 ${action.danger ? 'text-red-500 hover:bg-red-50' : 'text-slate-700'}`}
           onClick={() => {
             if (onAction) {

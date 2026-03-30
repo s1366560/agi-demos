@@ -21,7 +21,7 @@ import React, { useState, useEffect } from 'react';
 
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 
-import { Search, History, GitBranch } from 'lucide-react';
+import { Search, History, GitBranch, Home, ChevronRight } from 'lucide-react';
 
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
@@ -112,27 +112,23 @@ export const AgentLayout: React.FC = () => {
                 to={projectBasePath}
                 className="text-slate-400 hover:text-primary transition-colors"
               >
-                <span className="material-symbols-outlined text-[18px]">home</span>
+                <Home size={18} />
               </Link>
-              <span className="material-symbols-outlined text-slate-300 dark:text-slate-600 text-[16px]">
-                chevron_right
-              </span>
+              <ChevronRight size={16} className="text-slate-300 dark:text-slate-600" />
               <Link
                 to={projectBasePath}
                 className="text-slate-500 hover:text-primary transition-colors font-medium"
               >
                 {currentProject?.name || 'Project'}
               </Link>
-              <span className="material-symbols-outlined text-slate-300 dark:text-slate-600 text-[16px]">
-                chevron_right
-              </span>
+              <ChevronRight size={16} className="text-slate-300 dark:text-slate-600" />
               <span className="text-slate-900 dark:text-white font-bold">Agent</span>
             </nav>
 
             {/* Agent Status Badge */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-full">
               <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse motion-reduce:animate-none"></div>
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
+              <span className="text-2xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
                 Agent Online
               </span>
             </div>
@@ -141,6 +137,7 @@ export const AgentLayout: React.FC = () => {
             <nav className="flex items-center gap-1 ml-4 bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1">
               {TOP_TABS.map((tab) => (
                 <button
+                  type="button"
                   key={tab.id}
                   onClick={() => {
                     handleTabClick(tab);
@@ -175,6 +172,7 @@ export const AgentLayout: React.FC = () => {
               <AppLauncher />
               <LazyTooltip title="View execution history">
                 <button
+                  type="button"
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
                   onClick={() => {
                     const tab = TOP_TABS[1];
@@ -186,6 +184,7 @@ export const AgentLayout: React.FC = () => {
               </LazyTooltip>
               <LazyTooltip title="View workflow patterns">
                 <button
+                  type="button"
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
                   onClick={() => {
                     const tab = TOP_TABS[2];

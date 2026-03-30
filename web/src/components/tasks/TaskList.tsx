@@ -126,7 +126,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+              className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
             >
               <RefreshCw
                 className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
@@ -185,7 +185,7 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
               {task.canRetry && (
                 <button
                   onClick={() => handleRetry(task.id)}
-                  className="text-primary hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-xs mr-2"
+                  className="text-primary hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-xs mr-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
                 >
                   Retry
                 </button>
@@ -193,12 +193,12 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
               {task.canStop && (
                 <button
                   onClick={() => handleStop(task.id)}
-                  className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium text-xs mr-2 flex items-center gap-1"
+                  className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium text-xs mr-2 flex items-center gap-1 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
                 >
                   <Ban className="size-3" /> Stop
                 </button>
               )}
-              <button className="text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-white">
+              <button className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-white">
                 <MoreVertical className="size-5" />
               </button>
             </div>
@@ -234,7 +234,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
                 setOffset(Math.max(0, offset - limit));
               }}
               disabled={offset === 0}
-              className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-1"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
             >
               <ChevronLeft className="size-4" /> Previous
             </button>
@@ -243,7 +243,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
                 setOffset(offset + limit);
               }}
               disabled={tasks.length < limit}
-              className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-1"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
             >
               Next <ChevronRight className="size-4" />
             </button>

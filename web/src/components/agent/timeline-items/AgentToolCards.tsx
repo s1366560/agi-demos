@@ -1,5 +1,7 @@
 import { memo, useState } from 'react';
 
+import { Rocket, CircleStop, Send, Users, Bot, Network, Terminal, History, AlertCircle, Check } from 'lucide-react';
+
 import { AgentSection } from '../chat/MessageStream';
 
 import { TimeBadge } from './shared';
@@ -35,7 +37,7 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
 
   if (status === 'running') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider">
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-2xs font-bold uppercase tracking-wider">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
         {label ?? 'Running'}
       </span>
@@ -43,15 +45,15 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
   }
   if (status === 'error') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[10px] font-bold uppercase tracking-wider">
-        <span className="material-symbols-outlined text-[11px]">error</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-2xs font-bold uppercase tracking-wider">
+        <AlertCircle size={12} />
         {label ?? 'Error'}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-      <span className="material-symbols-outlined text-[11px]">check</span>
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-2xs font-bold uppercase tracking-wider">
+      <Check size={12} />
       {label ?? 'Done'}
       {duration !== undefined && (
         <span className="ml-0.5 opacity-70">({formatDuration(duration)})</span>
@@ -99,13 +101,11 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
   return (
     <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-emerald-100/60 dark:bg-emerald-900/30">
-        <span className="material-symbols-outlined text-[16px] text-emerald-600 dark:text-emerald-400">
-          rocket_launch
-        </span>
+        <Rocket size={16} className="text-emerald-600 dark:text-emerald-400" />
         <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">
           Spawn Agent
         </span>
-        <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 bg-emerald-200/60 dark:bg-emerald-800/40 px-1.5 py-0.5 rounded">
+        <span className="text-2xs text-emerald-600/70 dark:text-emerald-400/60 bg-emerald-200/60 dark:bg-emerald-800/40 px-1.5 py-0.5 rounded">
           {mode}
         </span>
         <div className="ml-auto">
@@ -114,7 +114,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
       </div>
       <div className="px-3 py-2 space-y-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
+          <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
             Agent
           </span>
           <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
@@ -123,26 +123,26 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
         </div>
         {sessionId && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
               Session
             </span>
-            <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+            <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
               {sessionId.slice(0, 12)}...
             </code>
           </div>
         )}
         {message && (
           <div className="flex items-start gap-2 mt-1">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0 pt-0.5">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0 pt-0.5">
               Task
             </span>
-            <span className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+            <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed">
               {truncate(message, 200)}
             </span>
           </div>
         )}
         {error && (
-          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 mt-1">
+          <div className="text-xs-plus text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 mt-1">
             {error}
           </div>
         )}
@@ -168,12 +168,10 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
   return (
     <div className="rounded-lg border border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-red-100/60 dark:bg-red-900/30">
-        <span className="material-symbols-outlined text-[16px] text-red-600 dark:text-red-400">
-          stop_circle
-        </span>
+        <CircleStop size={16} className="text-red-600 dark:text-red-400" />
         <span className="text-xs font-semibold text-red-800 dark:text-red-200">Stop Agent</span>
         {cascade && (
-          <span className="text-[10px] text-red-600/70 dark:text-red-400/60 bg-red-200/60 dark:bg-red-800/40 px-1.5 py-0.5 rounded">
+          <span className="text-2xs text-red-600/70 dark:text-red-400/60 bg-red-200/60 dark:bg-red-800/40 px-1.5 py-0.5 rounded">
             cascade
           </span>
         )}
@@ -184,17 +182,17 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
       <div className="px-3 py-2 space-y-1.5">
         {sessionId && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-14 shrink-0">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-14 shrink-0">
               Session
             </span>
-            <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+            <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
               {sessionId.slice(0, 12)}...
             </code>
           </div>
         )}
         {status === 'success' && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-14 shrink-0">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-14 shrink-0">
               Stopped
             </span>
             <span className="text-xs text-slate-600 dark:text-slate-300">
@@ -203,7 +201,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
           </div>
         )}
         {error && (
-          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 mt-1">
+          <div className="text-xs-plus text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 mt-1">
             {error}
           </div>
         )}
@@ -229,9 +227,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
   return (
     <div className="rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-100/60 dark:bg-blue-900/30">
-        <span className="material-symbols-outlined text-[16px] text-blue-600 dark:text-blue-400">
-          send
-        </span>
+        <Send size={16} className="text-blue-600 dark:text-blue-400" />
         <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Send Message</span>
         <div className="ml-auto">
           <StatusBadge status={status} duration={duration} />
@@ -240,7 +236,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
       <div className="px-3 py-2 space-y-1.5">
         {agentId && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0">
               To
             </span>
             <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
@@ -250,26 +246,26 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         )}
         {targetSession && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0">
               Sess
             </span>
-            <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+            <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
               {targetSession.slice(0, 12)}...
             </code>
           </div>
         )}
         {message && (
           <div className="flex items-start gap-2 mt-1">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0 pt-0.5">
+            <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0 pt-0.5">
               Msg
             </span>
-            <span className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+            <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed">
               {truncate(message, 200)}
             </span>
           </div>
         )}
         {error && (
-          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 mt-1">
+          <div className="text-xs-plus text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1 mt-1">
             {error}
           </div>
         )}
@@ -291,14 +287,12 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
   return (
     <div className="rounded-lg border border-violet-200 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-violet-100/60 dark:bg-violet-900/30">
-        <span className="material-symbols-outlined text-[16px] text-violet-600 dark:text-violet-400">
-          groups
-        </span>
+        <Users size={16} className="text-violet-600 dark:text-violet-400" />
         <span className="text-xs font-semibold text-violet-800 dark:text-violet-200">
           Available Agents
         </span>
         {agents.length > 0 && (
-          <span className="text-[10px] text-violet-600/70 dark:text-violet-400/60 bg-violet-200/60 dark:bg-violet-800/40 px-1.5 py-0.5 rounded">
+          <span className="text-2xs text-violet-600/70 dark:text-violet-400/60 bg-violet-200/60 dark:bg-violet-800/40 px-1.5 py-0.5 rounded">
             {agents.length}
           </span>
         )}
@@ -321,9 +315,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
                 key={id}
                 className="flex items-center gap-2 py-1 px-2 rounded bg-white/60 dark:bg-slate-800/40"
               >
-                <span className="material-symbols-outlined text-[14px] text-violet-500 dark:text-violet-400">
-                  smart_toy
-                </span>
+                <Bot size={14} className="text-violet-500 dark:text-violet-400" />
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-200 flex-1">
                   {name}
                 </span>
@@ -339,7 +331,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
       )}
       {error && (
         <div className="px-3 pb-2">
-          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
+          <div className="text-xs-plus text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
             {error}
           </div>
         </div>
@@ -361,14 +353,12 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
   return (
     <div className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-amber-100/60 dark:bg-amber-900/30">
-        <span className="material-symbols-outlined text-[16px] text-amber-600 dark:text-amber-400">
-          device_hub
-        </span>
+        <Network size={16} className="text-amber-600 dark:text-amber-400" />
         <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
           Active Sessions
         </span>
         {sessions.length > 0 && (
-          <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60 bg-amber-200/60 dark:bg-amber-800/40 px-1.5 py-0.5 rounded">
+          <span className="text-2xs text-amber-600/70 dark:text-amber-400/60 bg-amber-200/60 dark:bg-amber-800/40 px-1.5 py-0.5 rounded">
             {sessions.length}
           </span>
         )}
@@ -390,16 +380,14 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
                 key={childId}
                 className="flex items-start gap-2 py-1.5 px-2 rounded bg-white/60 dark:bg-slate-800/40"
               >
-                <span className="material-symbols-outlined text-[14px] text-amber-500 dark:text-amber-400 mt-0.5">
-                  terminal
-                </span>
+                <Terminal size={14} className="text-amber-500 dark:text-amber-400 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                    <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono">
                       {childId.slice(0, 12)}...
                     </code>
                     {agentId && (
-                      <span className="text-[10px] text-slate-600 dark:text-slate-300">
+                      <span className="text-2xs text-slate-600 dark:text-slate-300">
                         {truncate(agentId, 16)}
                       </span>
                     )}
@@ -421,7 +409,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
                     )}
                   </div>
                   {taskSummary && (
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    <div className="text-2xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {truncate(taskSummary, 100)}
                     </div>
                   )}
@@ -433,7 +421,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
       )}
       {error && (
         <div className="px-3 pb-2">
-          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
+          <div className="text-xs-plus text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
             {error}
           </div>
         </div>
@@ -459,19 +447,17 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-100/60 dark:bg-slate-800/30">
-        <span className="material-symbols-outlined text-[16px] text-slate-600 dark:text-slate-400">
-          history
-        </span>
+        <History size={16} className="text-slate-600 dark:text-slate-400" />
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
           Session History
         </span>
         {sessionId && (
-          <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-200/60 dark:bg-slate-700/40 px-1.5 py-0.5 rounded">
+          <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-200/60 dark:bg-slate-700/40 px-1.5 py-0.5 rounded">
             {sessionId.slice(0, 12)}...
           </code>
         )}
         {messages.length > 0 && (
-          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+          <span className="text-2xs text-slate-500 dark:text-slate-400">
             {messages.length} msg{messages.length !== 1 ? 's' : ''}
           </span>
         )}
@@ -503,11 +489,11 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
                   {role}
                 </span>
                 {from && (
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
+                  <span className="text-2xs text-slate-400 dark:text-slate-500 shrink-0">
                     {truncate(from, 12)}
                   </span>
                 )}
-                <span className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed min-w-0 break-words">
+                <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed min-w-0 break-words">
                   {truncate(content, 300)}
                 </span>
               </div>
@@ -519,7 +505,7 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
               onClick={() => {
                 setExpanded((v) => !v);
               }}
-              className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer px-2 py-0.5"
+              className="text-2xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer px-2 py-0.5"
             >
               {expanded ? 'Show less' : `Show ${String(messages.length - 3)} more...`}
             </button>
@@ -528,7 +514,7 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
       )}
       {error && (
         <div className="px-3 pb-2">
-          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
+          <div className="text-xs-plus text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
             {error}
           </div>
         </div>

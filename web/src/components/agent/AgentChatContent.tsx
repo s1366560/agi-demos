@@ -19,6 +19,7 @@ import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { message } from 'antd';
 import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -326,7 +327,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
                 });
                 useAgentV3Store.setState({ isPlanMode: newMode === 'plan' });
               })
-              .catch(console.error);
+              .catch((err: unknown) => {
+                void message.error(
+                  err instanceof Error ? err.message : 'Failed to switch plan mode'
+                );
+                console.error('AgentChatContent: switchMode failed', err);
+              });
           });
           return;
         }
@@ -629,6 +635,9 @@ ${content}`;
         });
         useAgentV3Store.setState({ isPlanMode: newMode === 'plan' });
       } catch (err) {
+        void message.error(
+          err instanceof Error ? err.message : 'Failed to switch plan mode'
+        );
         console.error('Failed to switch plan mode:', err);
       }
     }, [activeConversationId, isPlanMode]);

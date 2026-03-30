@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input } from 'antd';
+import { BarChart, CheckCircle, GraduationCap, Pencil, Plus, RefreshCw, Trash2, TrendingUp } from 'lucide-react';
 
 import {
   useLazyMessage,
@@ -197,7 +198,7 @@ export const SkillList: React.FC = () => {
           onClick={handleCreate}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
         >
-          <span className="material-symbols-outlined text-lg">add</span>
+          <Plus size={16} />
           {t('tenant.skills.createNew')}
         </button>
       </div>
@@ -212,7 +213,7 @@ export const SkillList: React.FC = () => {
               </p>
               <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{total}</p>
             </div>
-            <span className="material-symbols-outlined text-4xl text-primary-500">school</span>
+            <GraduationCap size={16} className="text-4xl text-primary-500" />
           </div>
         </div>
 
@@ -226,7 +227,7 @@ export const SkillList: React.FC = () => {
                 {activeCount}
               </p>
             </div>
-            <span className="material-symbols-outlined text-4xl text-green-500">check_circle</span>
+            <CheckCircle size={16} className="text-4xl text-green-500" />
           </div>
         </div>
 
@@ -240,7 +241,7 @@ export const SkillList: React.FC = () => {
                 {(avgSuccessRate * 100).toFixed(1)}%
               </p>
             </div>
-            <span className="material-symbols-outlined text-4xl text-blue-500">trending_up</span>
+            <TrendingUp size={16} className="text-4xl text-blue-500" />
           </div>
         </div>
 
@@ -254,7 +255,7 @@ export const SkillList: React.FC = () => {
                 {totalUsageCount}
               </p>
             </div>
-            <span className="material-symbols-outlined text-4xl text-purple-500">bar_chart</span>
+            <BarChart size={16} className="text-4xl text-purple-500" />
           </div>
         </div>
       </div>
@@ -298,7 +299,7 @@ export const SkillList: React.FC = () => {
             onClick={handleRefresh}
             className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
           >
-            <span className="material-symbols-outlined">refresh</span>
+            <RefreshCw size={16} />
           </button>
         </div>
       </div>
@@ -419,7 +420,7 @@ export const SkillList: React.FC = () => {
                     }}
                     className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
                   >
-                    <span className="material-symbols-outlined text-lg">edit</span>
+                    <Pencil size={16} />
                   </button>
                   <LazyPopconfirm
                     title={t('tenant.skills.deleteConfirm')}
@@ -428,7 +429,7 @@ export const SkillList: React.FC = () => {
                     cancelText={t('common.cancel')}
                   >
                     <button className="p-2 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
-                      <span className="material-symbols-outlined text-lg">delete</span>
+                      <Trash2 size={16} />
                     </button>
                   </LazyPopconfirm>
                 </div>

@@ -8,6 +8,14 @@
 
 import { Link } from 'react-router-dom';
 
+import {
+  MessageSquare, LayoutDashboard, Folder, Users, Activity, CheckSquare, Headset, Bot, Brain,
+  Puzzle, LayoutGrid, Cable, Network, Cpu, Link as LinkIcon, Server, Cloud, Rocket, Dna,
+  History, Shield, Gavel, Calendar, Webhook, CreditCard, Building2, Settings, Database,
+  Tags, Compass, Code, Wrench, Clock, UserCog, HelpCircle, ArrowLeft, Search,
+  type LucideIcon
+} from 'lucide-react';
+
 import { useNavigation } from '@/hooks/useNavigation';
 
 import { LazyTooltip } from '@/components/ui/lazyAntd';
@@ -37,6 +45,51 @@ function normalizePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
+const iconMap: Record<string, LucideIcon> = {
+  chat: MessageSquare,
+  dashboard: LayoutDashboard,
+  folder: Folder,
+  group: Users,
+  monitoring: Activity,
+  task: CheckSquare,
+  group_work: Users,
+  support_agent: Headset,
+  smart_toy: Bot,
+  psychology: Brain,
+  extension: Puzzle,
+  widgets: LayoutGrid,
+  cable: Cable,
+  account_tree: Network,
+  model_training: Cpu,
+  hub: Network,
+  link: LinkIcon,
+  dns: Server,
+  cloud: Cloud,
+  rocket_launch: Rocket,
+  genetics: Dna,
+  dashboard_customize: LayoutDashboard,
+  memory: Brain,
+  history: History,
+  policy: Shield,
+  gavel: Gavel,
+  event: Calendar,
+  webhook: Webhook,
+  credit_card: CreditCard,
+  business: Building2,
+  settings: Settings,
+  database: Database,
+  category: Tags,
+  groups: Users,
+  travel_explore: Compass,
+  code: Code,
+  build: Wrench,
+  schedule: Clock,
+  manage_accounts: UserCog,
+  help: HelpCircle,
+  arrow_back: ArrowLeft,
+  search: Search,
+};
+
 /**
  * Render a single navigation item in the sidebar
  */
@@ -54,6 +107,8 @@ export function SidebarNavItem({
   // Translate label if it looks like an i18n key (contains dot or starts with nav.)
   const label = item.label.includes('.') ? t(item.label) : item.label;
 
+  const IconComponent = iconMap[item.icon] || LayoutGrid;
+
   const linkContent = (
     <Link
       to={basePath + normalizePath(item.path)}
@@ -66,16 +121,14 @@ export function SidebarNavItem({
       data-testid={`nav-${item.id}`}
     >
       {/* Icon */}
-      <span className={`material-symbols-outlined text-[20px] ${isActive ? 'icon-filled' : ''}`}>
-        {item.icon}
-      </span>
+      <IconComponent size={20} className={isActive ? 'icon-filled' : ''} />
 
       {/* Label */}
-      {!collapsed && <span className="text-sm whitespace-nowrap">{label}</span>}
+      {!collapsed && <span className="text-sm truncate">{label}</span>}
 
       {/* Badge */}
       {!collapsed && item.badge !== undefined && item.badge > 0 && (
-        <span className="ml-auto bg-slate-500 dark:bg-slate-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+        <span className="ml-auto flex-shrink-0 bg-slate-500 dark:bg-slate-600 text-white text-xs px-1.5 py-0.5 rounded-full">
           {item.badge > 99 ? '99+' : item.badge}
         </span>
       )}

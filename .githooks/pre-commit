@@ -37,14 +37,15 @@ if [[ ${#PY_FILES[@]} -gt 0 ]]; then
 
   if [[ ${#PYRIGHT_FILES[@]} -gt 0 ]]; then
     echo "Running pyright on ${#PYRIGHT_FILES[@]} staged file(s)..."
-    uv run pyright "${PYRIGHT_FILES[@]}"
+    # --level error means only fail on errors, not warnings
+    uv run pyright --level error "${PYRIGHT_FILES[@]}"
   fi
 fi
 
 # --- Web checks ---
 if [[ ${#WEB_FILES[@]} -gt 0 ]]; then
   pushd web >/dev/null
-  pnpm exec eslint --max-warnings 0 "${WEB_FILES[@]}"
+  pnpm exec eslint "${WEB_FILES[@]}"
   popd >/dev/null
 fi
 

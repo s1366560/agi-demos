@@ -176,7 +176,7 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
                 onClick={() => {
                   setSelectedColor(c.name);
                 }}
-                className={`w-5 h-5 rounded-full ${c.dot} transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                className={`w-5 h-5 rounded-full ${c.dot} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                   selectedColor === c.name
                     ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800'
                     : 'opacity-60 hover:opacity-100'
@@ -305,7 +305,7 @@ const ConversationItem = memo<ConversationItemProps>(
             type="button"
             onClick={onSelect}
             className={`
-            w-full p-3 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
+            w-full p-3 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
             flex items-center justify-center relative
             ${
               isActive
@@ -341,7 +341,7 @@ const ConversationItem = memo<ConversationItemProps>(
         }}
         className={`
         w-full text-left group relative p-3 rounded-lg mb-1 cursor-pointer
-        transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
+        transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
         ${
           isActive
             ? 'bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700'
@@ -404,10 +404,10 @@ const ConversationItem = memo<ConversationItemProps>(
                   const colorDef =
                     LABEL_COLORS.find((c) => c.name === label.color) ?? LABEL_COLORS[1];
                   return (
-                    <span
-                      key={label.id}
-                      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0 rounded-full ${colorDef.bg} ${colorDef.text} font-medium leading-4`}
-                    >
+                     <span
+                       key={label.id}
+                       className={`inline-flex items-center gap-1 text-2xs px-1.5 py-0 rounded-full ${colorDef.bg} ${colorDef.text} font-medium leading-4`}
+                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${colorDef.dot} shrink-0`} />
                       {label.name}
                     </span>
@@ -418,22 +418,22 @@ const ConversationItem = memo<ConversationItemProps>(
             <div className="flex items-center gap-2 mt-1">
               <p className="text-xs text-slate-400">{timeAgo}</p>
               {/* Status badges */}
-              {hasHITL ? (
-                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
-                  {t('agent.sidebar.needsInput', 'Input needed')}
-                </span>
-              ) : isStreaming ? (
-                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-                  {t('agent.sidebar.processing', 'Processing')}
-                </span>
-              ) : conversation.status === 'active' ? (
-                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  {t('agent.sidebar.active', 'Active')}
-                </span>
-              ) : null}
+               {hasHITL ? (
+                 <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-medium">
+                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
+                   {t('agent.sidebar.needsInput', 'Input needed')}
+                 </span>
+               ) : isStreaming ? (
+                 <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium">
+                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
+                   {t('agent.sidebar.processing', 'Processing')}
+                 </span>
+               ) : conversation.status === 'active' ? (
+                 <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium">
+                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                   {t('agent.sidebar.active', 'Active')}
+                 </span>
+               ) : null}
             </div>
           </div>
 
@@ -553,7 +553,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
               <button
                 type="button"
                 onClick={onToggleCollapse}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 aria-label={t('agent.sidebar.expandSidebar', 'Expand sidebar')}
                 title={t('agent.sidebar.expandSidebar', 'Expand sidebar')}
               >
@@ -581,7 +581,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
                 <button
                   type="button"
                   onClick={onToggleCollapse}
-                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   aria-label={t('agent.sidebar.collapseSidebar', 'Collapse sidebar')}
                   title={t('agent.sidebar.collapseSidebar', 'Collapse sidebar')}
                 >
@@ -670,7 +670,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
           <button
             type="button"
             onClick={onNew}
-            className="text-center py-12 px-4 w-full hover:bg-slate-50 dark:hover:bg-slate-800/30 rounded-xl transition-colors"
+            className="text-center py-12 px-4 w-full hover:bg-slate-50 dark:hover:bg-slate-800/30 rounded-xl transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
           >
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
               <MessageSquare size={24} className="text-slate-400" />

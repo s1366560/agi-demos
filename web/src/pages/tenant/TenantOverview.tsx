@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
+import { BadgeCheck, Database, Diamond, FolderOpen, Globe, MoreVertical, Plug, Users } from 'lucide-react';
+
 import { tenantAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -77,7 +79,7 @@ export const TenantOverview: React.FC = () => {
           <div className="relative z-10 flex flex-col justify-between h-full gap-4">
             <div className="flex items-start justify-between">
               <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <span className="material-symbols-outlined text-white">database</span>
+                <Database size={16} className="text-white" />
               </div>
               <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
                 +12%
@@ -111,7 +113,7 @@ export const TenantOverview: React.FC = () => {
           <div className="relative z-10 flex flex-col justify-between h-full gap-4">
             <div className="flex items-start justify-between">
               <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <span className="material-symbols-outlined text-white">folder_open</span>
+                <FolderOpen size={16} className="text-white" />
               </div>
               <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
                 {stats.projects.active} {t('common.status.active')}
@@ -135,7 +137,7 @@ export const TenantOverview: React.FC = () => {
           <div className="relative z-10 flex flex-col justify-between h-full gap-4">
             <div className="flex items-start justify-between">
               <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <span className="material-symbols-outlined text-white">group</span>
+                <Users size={16} className="text-white" />
               </div>
               <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
                 {t('common.stats.total')} {stats.members.total}
@@ -148,7 +150,7 @@ export const TenantOverview: React.FC = () => {
               <h3 className="text-3xl font-bold tracking-tight">{stats.members.total}</h3>
             </div>
             <div className="flex -space-x-2 overflow-hidden mt-1">
-              <div className="h-6 w-6 rounded-full bg-slate-500 ring-2 ring-slate-600 flex items-center justify-center text-[10px] font-medium">
+              <div className="h-6 w-6 rounded-full bg-slate-500 ring-2 ring-slate-600 flex items-center justify-center text-2xs font-medium">
                 +{stats.members.new_added}
               </div>
             </div>
@@ -174,7 +176,7 @@ export const TenantOverview: React.FC = () => {
             </select>
           </div>
           {/* Simulated Chart using SVG */}
-          <div className="flex-1 w-full min-h-[240px] relative">
+          <div className="flex-1 w-full min-h-60 relative">
             <div className="absolute inset-0 flex flex-col justify-between text-xs text-slate-400">
               <div className="flex w-full items-center">
                 <span className="w-8 text-right pr-2">100%</span>
@@ -231,7 +233,7 @@ export const TenantOverview: React.FC = () => {
           <div className="flex flex-col gap-6">
             <div className="flex items-center gap-4">
               <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-primary">
-                <span className="material-symbols-outlined">badge</span>
+                <BadgeCheck size={16} />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -244,7 +246,7 @@ export const TenantOverview: React.FC = () => {
             </div>
             <div className="flex items-center gap-4">
               <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-lg text-purple-600">
-                <span className="material-symbols-outlined">diamond</span>
+                <Diamond size={16} />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -257,7 +259,7 @@ export const TenantOverview: React.FC = () => {
             </div>
             <div className="flex items-center gap-4">
               <div className="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg text-emerald-600">
-                <span className="material-symbols-outlined">public</span>
+                <Globe size={16} />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -326,7 +328,7 @@ export const TenantOverview: React.FC = () => {
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-3">
                       <div className="bg-primary/10 text-primary p-2 rounded-lg">
-                        <span className="material-symbols-outlined text-[20px]">api</span>
+                        <Plug size={20} />
                       </div>
                       <div>
                         <p className="font-medium text-slate-900 dark:text-white">{project.name}</p>
@@ -373,7 +375,7 @@ export const TenantOverview: React.FC = () => {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <button className="text-slate-400 hover:text-primary transition-colors">
-                      <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                      <MoreVertical size={20} />
                     </button>
                   </td>
                 </tr>

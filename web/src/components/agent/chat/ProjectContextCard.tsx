@@ -65,7 +65,7 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
             <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
               {item.value.toLocaleString()}
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">{item.label}</div>
+            <div className="text-2xs text-slate-500 dark:text-slate-400">{item.label}</div>
           </div>
         </div>
       ))}

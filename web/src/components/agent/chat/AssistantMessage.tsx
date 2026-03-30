@@ -13,6 +13,8 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 
+import { Bot } from 'lucide-react';
+
 import {
   MARKDOWN_PROSE_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
@@ -74,7 +76,7 @@ export function AssistantMessage({
     <div className="flex items-start gap-3">
       {/* Robot avatar */}
       <div className={ASSISTANT_AVATAR_CLASSES}>
-        <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
+        <Bot size={18} className="text-primary" />
       </div>
 
       {/* Message content bubble */}

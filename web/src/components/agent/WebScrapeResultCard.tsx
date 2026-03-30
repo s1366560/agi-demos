@@ -4,7 +4,7 @@
  * Displays scraped web page content.
  */
 
-import { MaterialIcon } from './shared';
+import { FileText, Copy, Link, Info } from 'lucide-react';
 
 export interface WebScrapeResultCardProps {
   title: string;
@@ -30,14 +30,15 @@ export function WebScrapeResultCard({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
-          <MaterialIcon name="description" size={18} className="text-purple-500" />
+          <FileText size={18} className="text-purple-500" />
           <span className="font-semibold text-slate-900 dark:text-white">Scraped Content</span>
         </div>
         <button
+          type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
         >
-          <MaterialIcon name="content_copy" size={14} />
+          <Copy size={14} />
           Copy
         </button>
       </div>
@@ -49,12 +50,12 @@ export function WebScrapeResultCard({
 
         {/* URL */}
         <div className="flex items-center gap-1 text-sm">
-          <MaterialIcon name="link" size={14} className="text-slate-400" />
+          <Link size={14} className="text-slate-400" />
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-500 hover:underline truncate"
+            className="text-blue-500 hover:underline truncate transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
           >
             {url}
           </a>
@@ -73,7 +74,7 @@ export function WebScrapeResultCard({
         {/* Truncated Notice */}
         {isTruncated && (
           <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-            <MaterialIcon name="info" size={12} />
+            <Info size={12} />
             <span>Content was truncated due to length limits</span>
           </div>
         )}

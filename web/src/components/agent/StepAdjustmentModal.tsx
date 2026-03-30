@@ -12,9 +12,9 @@
 
 import React, { useMemo } from 'react';
 
+import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from 'antd';
 import { Check, CheckCircle2, X, XCircle } from 'lucide-react';
 
-import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from 'antd';
 
 import type { StepAdjustment, AdjustmentType } from '../../types/agent';
 

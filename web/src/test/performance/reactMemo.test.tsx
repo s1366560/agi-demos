@@ -5,7 +5,6 @@
  * These components should only re-render when their props change.
  *
  * Target components:
- * - TopNavigation
  * - ExecutionStatsCard
  * - Other pure components
  */
@@ -19,26 +18,25 @@ import '@testing-library/jest-dom/vitest';
 
 // Import components to test
 import { ExecutionStatsCard } from '../../components/agent/ExecutionStatsCard';
-import { TopNavigation } from '../../components/agent/layout/TopNavigation';
 import * as containment from '../../styles/containment';
 // Render count tracking utility
 let renderCounts = new Map<string, number>();
 
-export function trackRenderCount(componentName: string) {
+function trackRenderCount(componentName: string) {
   const current = renderCounts.get(componentName) ?? 0;
   renderCounts.set(componentName, current + 1);
 }
 
-export function getRenderCount(componentName: string): number {
+function getRenderCount(componentName: string): number {
   return renderCounts.get(componentName) ?? 0;
 }
 
-export function resetRenderCounts() {
+function resetRenderCounts() {
   renderCounts = new Map();
 }
 
 // Higher-order component that tracks renders
-export function withRenderTracking<P extends object>(
+function withRenderTracking<P extends object>(
   Component: React.ComponentType<P>,
   name: string
 ): React.ComponentType<P> {
@@ -47,91 +45,6 @@ export function withRenderTracking<P extends object>(
     return createElement(Component, props);
   };
 }
-
-describe('React.memo - TopNavigation', () => {
-  beforeEach(() => {
-    resetRenderCounts();
-  });
-
-  it('should be wrapped with React.memo', () => {
-    expect(TopNavigation.displayName).toBe('TopNavigation');
-  });
-
-  it('should re-render when workspaceName changes', () => {
-    const TrackedTopNavigation = withRenderTracking(TopNavigation, 'TopNavigation');
-
-    const onTabChange = vi.fn();
-
-    const { rerender } = render(
-      <TrackedTopNavigation
-        workspaceName="Original Workspace"
-        activeTab="dashboard"
-        onTabChange={onTabChange}
-      />
-    );
-
-    const initialRenderCount = getRenderCount('TopNavigation');
-    expect(initialRenderCount).toBe(1);
-
-    // Re-render with different workspaceName
-    rerender(
-      <TrackedTopNavigation
-        workspaceName="New Workspace"
-        activeTab="dashboard"
-        onTabChange={onTabChange}
-      />
-    );
-
-    const secondRenderCount = getRenderCount('TopNavigation');
-    expect(secondRenderCount).toBeGreaterThan(initialRenderCount);
-  });
-
-  it('should re-render when activeTab changes', () => {
-    const TrackedTopNavigation = withRenderTracking(TopNavigation, 'TopNavigation');
-
-    const onTabChange = vi.fn();
-
-    const { rerender } = render(
-      <TrackedTopNavigation
-        workspaceName="Test Workspace"
-        activeTab="dashboard"
-        onTabChange={onTabChange}
-      />
-    );
-
-    const initialRenderCount = getRenderCount('TopNavigation');
-    expect(initialRenderCount).toBe(1);
-
-    rerender(
-      <TrackedTopNavigation
-        workspaceName="Test Workspace"
-        activeTab="logs"
-        onTabChange={onTabChange}
-      />
-    );
-
-    const secondRenderCount = getRenderCount('TopNavigation');
-    expect(secondRenderCount).toBeGreaterThan(initialRenderCount);
-  });
-
-  it('should render correctly with all props', () => {
-    render(
-      <TopNavigation
-        workspaceName="My Workspace"
-        activeTab="dashboard"
-        onTabChange={vi.fn()}
-        searchQuery="test"
-        onSearchChange={vi.fn()}
-        notificationCount={5}
-        onSettingsClick={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText('My Workspace')).toBeInTheDocument();
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('Logs')).toBeInTheDocument();
-  });
-});
 
 describe('React.memo - ExecutionStatsCard', () => {
   beforeEach(() => {

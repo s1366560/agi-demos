@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 
-import { PlusOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+
 import { Button, Empty, Skeleton, Typography, Segmented } from 'antd';
+import { Plus } from 'lucide-react';
 
 import { GeneCard } from './GeneCard';
 
@@ -24,6 +26,7 @@ export const GeneList: React.FC<GeneListProps> = ({
   onToggleActive,
   onCreate,
 }) => {
+  const { t } = useTranslation();
   const [filterCategory, setFilterCategory] = useState<string>('All');
 
   const filteredGenes = useMemo(() => {
@@ -49,16 +52,22 @@ export const GeneList: React.FC<GeneListProps> = ({
     <div className="flex flex-col h-full w-full">
       <div className="flex items-center justify-between mb-4">
         <Typography.Title level={4} className="m-0">
-          Cyber Genes
+          {t('workspaceDetail.genes.title')}
         </Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-          Create Gene
+        <Button type="primary" icon={<Plus size={16} />} onClick={onCreate}>
+          {t('workspaceDetail.genes.createGene')}
         </Button>
       </div>
 
       <div className="mb-4">
         <Segmented
-          options={['All', 'Skill', 'Knowledge', 'Tool', 'Workflow']}
+          options={[
+            { label: t('workspaceDetail.genes.all'), value: 'All' },
+            { label: t('workspaceDetail.genes.skill'), value: 'Skill' },
+            { label: t('workspaceDetail.genes.knowledge'), value: 'Knowledge' },
+            { label: t('workspaceDetail.genes.tool'), value: 'Tool' },
+            { label: t('workspaceDetail.genes.workflow'), value: 'Workflow' }
+          ]}
           value={filterCategory}
           onChange={(value) => { setFilterCategory(value); }}
         />
@@ -67,10 +76,10 @@ export const GeneList: React.FC<GeneListProps> = ({
       <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-3">
         {filteredGenes.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <Empty description="No genes found" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+            <Empty description={t('workspaceDetail.genes.noGenes')} image={Empty.PRESENTED_IMAGE_SIMPLE}>
               {filterCategory === 'All' && (
                 <Button type="primary" onClick={onCreate}>
-                  Create Your First Gene
+                  {t('workspaceDetail.genes.createFirst')}
                 </Button>
               )}
             </Empty>

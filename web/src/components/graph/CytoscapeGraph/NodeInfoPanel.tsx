@@ -6,6 +6,8 @@
 
 import { useTranslation } from 'react-i18next';
 
+import { X, Fingerprint, Building2 } from 'lucide-react';
+
 import { useGraphContext } from './CytoscapeGraph';
 
 import type { NodeData } from './types';
@@ -45,7 +47,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
           <div className="p-5 border-b border-slate-200 dark:border-border-dark bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/10 dark:to-transparent">
             <div className="flex justify-between items-start mb-2">
               <div
-                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
+                className={`px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border ${
                   node.type === 'Entity'
                     ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30'
                     : node.type === 'Episodic'
@@ -58,10 +60,11 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
                 {node.type}
               </div>
               <button
+                type="button"
                 onClick={handleClose}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
               >
-                <span className="material-symbols-outlined text-[20px]">close</span>
+                <X size={20} />
               </button>
             </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
@@ -69,7 +72,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
             </h2>
             {node.uuid && (
               <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
-                <span className="material-symbols-outlined text-[14px]">fingerprint</span>
+                <Fingerprint size={14} />
                 <span className="font-mono text-slate-500">{node.uuid.slice(0, 8)}...</span>
               </div>
             )}
@@ -133,7 +136,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
               <div className="pt-4 border-t border-slate-200 dark:border-border-dark">
                 <div className="space-y-2 text-xs text-slate-500">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[16px]">domain</span>
+                    <Building2 size={16} />
                     <span>
                       {t('project.graph.node_detail.tenant', 'Tenant')}: {node.tenant_id}
                     </span>
@@ -144,10 +147,10 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
           </div>
 
           <div className="p-4 border-t border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-background-dark flex gap-2">
-            <button className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-surface-elevated hover:text-slate-900 dark:hover:text-white transition-colors">
+            <button type="button" className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-surface-elevated hover:text-slate-900 dark:hover:text-white transition-colors">
               {t('project.graph.node_detail.expand', 'Expand')}
             </button>
-            <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-colors">
+            <button type="button" className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-colors">
               {t('project.graph.node_detail.edit', 'Edit')}
             </button>
           </div>

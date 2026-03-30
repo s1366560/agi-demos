@@ -76,7 +76,7 @@ export const SubAgentCostSummary = memo<SubAgentCostSummaryProps>(({ groups }) =
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-500">
+          <span className="text-2xs text-slate-500">
             {stats.totalAgents} {t('agent.subagent.cost_totalAgents', 'Total SubAgents')}
           </span>
           {expanded ? (
@@ -93,7 +93,7 @@ export const SubAgentCostSummary = memo<SubAgentCostSummaryProps>(({ groups }) =
             <div className="flex flex-col p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
               <div className="flex items-center gap-1.5 mb-1 text-amber-500">
                 <Zap size={12} />
-                <span className="text-[10px] font-medium text-slate-500">
+                <span className="text-2xs font-medium text-slate-500">
                   {t('agent.subagent.cost_totalTokens', 'Total Tokens')}
                 </span>
               </div>
@@ -103,7 +103,7 @@ export const SubAgentCostSummary = memo<SubAgentCostSummaryProps>(({ groups }) =
             <div className="flex flex-col p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
               <div className="flex items-center gap-1.5 mb-1 text-blue-500">
                 <Clock size={12} />
-                <span className="text-[10px] font-medium text-slate-500">
+                <span className="text-2xs font-medium text-slate-500">
                   {t('agent.subagent.cost_totalTime', 'Total Time')}
                 </span>
               </div>
@@ -113,7 +113,7 @@ export const SubAgentCostSummary = memo<SubAgentCostSummaryProps>(({ groups }) =
             <div className="flex flex-col p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
               <div className="flex items-center gap-1.5 mb-1 text-emerald-500">
                 <CheckCircle2 size={12} />
-                <span className="text-[10px] font-medium text-slate-500">
+                <span className="text-2xs font-medium text-slate-500">
                   {t('agent.subagent.cost_completed', 'Completed')}
                 </span>
               </div>
@@ -130,7 +130,7 @@ export const SubAgentCostSummary = memo<SubAgentCostSummaryProps>(({ groups }) =
                     className="text-blue-500 animate-spin motion-reduce:animate-none"
                   />
                 )}
-                <span className="text-[10px] font-medium text-slate-500">
+                <span className="text-2xs font-medium text-slate-500">
                   {stats.failed > 0
                     ? t('agent.subagent.cost_failed', 'Failed')
                     : t('agent.subagent.cost_running', 'Running')}

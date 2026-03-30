@@ -2,7 +2,7 @@ import React from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { GlobalOutlined } from '@ant-design/icons';
+import { Globe } from 'lucide-react';
 
 import { LazySelect } from '@/components/ui/lazyAntd';
 
@@ -19,7 +19,7 @@ export const LanguageSwitcher: React.FC = () => {
       value={i18n.language}
       onChange={handleChange}
       style={{ width: 120 }}
-      suffixIcon={<GlobalOutlined />}
+      suffixIcon={<Globe size={16} />}
       options={[
         { value: 'en-US', label: 'English' },
         { value: 'zh-CN', label: '简体中文' },

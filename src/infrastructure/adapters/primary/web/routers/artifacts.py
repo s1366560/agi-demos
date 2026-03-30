@@ -37,7 +37,7 @@ def get_artifact_service() -> ArtifactService:
         container = DIContainer()
         _artifact_service = container.artifact_service()
 
-    return _artifact_service
+    return _artifact_service  # type: ignore[unreachable]
 
 
 # === Request/Response Models ===

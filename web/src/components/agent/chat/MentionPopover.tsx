@@ -10,6 +10,7 @@ import { memo, useState, useEffect, useRef, forwardRef, useImperativeHandle } fr
 
 import { useTranslation } from 'react-i18next';
 
+import { message } from 'antd';
 import { Hash, FileText, Loader2, Workflow } from 'lucide-react';
 
 import { useSubAgentStore } from '@/stores/subagent';
@@ -42,7 +43,12 @@ export const MentionPopover = memo(
       // Ensure subagents are loaded
       useEffect(() => {
         if (subagents.length === 0) {
-          listSubAgents({ enabled_only: true }).catch(() => {});
+          listSubAgents({ enabled_only: true }).catch((err: unknown) => {
+            void message.error(
+              err instanceof Error ? err.message : 'Failed to load sub-agents'
+            );
+            console.error('MentionPopover: listSubAgents failed', err);
+          });
         }
       }, [subagents.length, listSubAgents]);
 
@@ -63,7 +69,10 @@ export const MentionPopover = memo(
           try {
             // Parallel fetch: mention search + subagent filtering
             const [mentionResults, _] = await Promise.all([
-              mentionService.search(query, projectId).catch(() => []),
+              mentionService.search(query, projectId).catch((err: unknown) => {
+                console.error('MentionPopover: search failed', err);
+                return [];
+              }),
               Promise.resolve(), // Subagents are already in store
             ]);
 
@@ -85,7 +94,11 @@ export const MentionPopover = memo(
             // Combine results: SubAgents first, then others
             setItems([...subagentResults, ...mentionResults]);
             onSelectedIndexChange(0);
-          } catch {
+          } catch (err: unknown) {
+            void message.error(
+              err instanceof Error ? err.message : 'Failed to search mentions'
+            );
+            console.error('MentionPopover: search failed', err);
             setItems([]);
             onSelectedIndexChange(0);
           } finally {
@@ -156,11 +169,11 @@ export const MentionPopover = memo(
                     {item.summary && (
                       <div className="text-xs text-slate-400 truncate mt-0.5">{item.summary}</div>
                     )}
-                    {item.entityType && (
-                      <span className="text-[10px] bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300 px-1.5 rounded-full mt-0.5 inline-block">
-                        {item.entityType}
-                      </span>
-                    )}
+                     {item.entityType && (
+                       <span className="text-2xs bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300 px-1.5 rounded-full mt-0.5 inline-block">
+                         {item.entityType}
+                       </span>
+                     )}
                   </div>
                 </button>
               ))

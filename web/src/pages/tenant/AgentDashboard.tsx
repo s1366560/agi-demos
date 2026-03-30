@@ -127,7 +127,7 @@ const SubAgentCard = memo<{
           <agent.icon className="h-6 w-6" />
         </div>
         {agent.active ? (
-          <div className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+          <div className="bg-blue-600 text-white text-2xs font-bold px-2 py-0.5 rounded-full uppercase">
             Active
           </div>
         ) : (
@@ -136,23 +136,23 @@ const SubAgentCard = memo<{
             onClick={() => {
               onToggle(agent.id);
             }}
-            className="text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-tight hover:underline"
+            className="text-blue-600 dark:text-blue-400 text-2xs font-bold uppercase tracking-tight hover:underline"
           >
             Activate
           </button>
         )}
       </div>
       <h4 className="font-bold text-lg mb-1 text-slate-900 dark:text-white">{agent.title}</h4>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed min-h-[40px]">
-        {agent.description}
-      </p>
+       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed min-h-10">
+         {agent.description}
+       </p>
 
       {agent.active && (
         <div className="flex flex-wrap gap-2">
           {agent.tags.map((tag) => (
             <span
               key={tag}
-              className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] rounded font-medium"
+              className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-2xs rounded font-medium"
             >
               {tag}
             </span>
@@ -172,7 +172,7 @@ const SkillCard = memo<{ skill: Skill }>(({ skill }) => {
       </div>
       <div className="flex-1">
         <p className="text-sm font-semibold text-slate-900 dark:text-white">{skill.name}</p>
-        <p className="text-[10px] text-slate-500">{skill.version}</p>
+        <p className="text-2xs text-slate-500">{skill.version}</p>
       </div>
       <CheckCircle className="text-green-500 h-4 w-4" />
     </div>
@@ -201,7 +201,7 @@ const EngineConfigCard = memo<EngineConfigCardProps>(
               }}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600"></div>
+            <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600"></div>
           </label>
         </div>
         <div>

@@ -214,7 +214,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
               <h1 className="text-slate-900 dark:text-white text-sm font-bold leading-none tracking-tight truncate">
                 {currentTenant?.name || 'Select Tenant'}
               </h1>
-              <p className="text-[10px] text-slate-500 truncate leading-tight opacity-80">
+              <p className="text-2xs text-slate-500 truncate leading-tight opacity-80">
                 Tenant Console
               </p>
             </div>
@@ -228,7 +228,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
               <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none truncate">
                 {displayProject?.name || 'Select Project'}
               </h1>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate leading-tight opacity-80 mt-0.5">
+              <p className="text-2xs text-slate-500 dark:text-slate-400 font-medium truncate leading-tight opacity-80 mt-0.5">
                 {currentTenant?.name}
               </p>
             </div>

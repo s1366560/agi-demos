@@ -9,22 +9,22 @@
 
 import React, { useState, useMemo, memo } from 'react';
 
-import {
-  CheckCircleOutlined,
-  SyncOutlined,
-  CloseCircleOutlined,
-  ClockCircleOutlined,
-  SearchOutlined,
-  ApiOutlined,
-  CloudOutlined,
-  FileSearchOutlined,
-  EditOutlined,
-  GlobalOutlined,
-  AppstoreOutlined,
-  UnorderedListOutlined,
-  NodeIndexOutlined,
-} from '@ant-design/icons';
 import { Tooltip, Drawer, Tag, Empty, Segmented } from 'antd';
+import {
+  CheckCircle,
+  RefreshCcw,
+  XCircle,
+  Clock,
+  Search,
+  Plug,
+  Cloud,
+  FileSearch,
+  Pencil,
+  Globe,
+  LayoutGrid,
+  List,
+  Network,
+} from 'lucide-react';
 
 import { formatTimeWithSeconds } from '@/utils/date';
 
@@ -61,14 +61,14 @@ export interface ToolCallVisualizationProps {
 
 // Tool icon mapping
 const TOOL_ICONS: Record<string, React.ReactNode> = {
-  memory_search: <SearchOutlined />,
-  entity_lookup: <ApiOutlined />,
-  graph_query: <NodeIndexOutlined />,
-  web_search: <GlobalOutlined />,
-  web_scrape: <FileSearchOutlined />,
-  summary: <FileSearchOutlined />,
-  memory_create: <EditOutlined />,
-  default: <CloudOutlined />,
+  memory_search: <Search size={16} />,
+  entity_lookup: <Plug size={16} />,
+  graph_query: <Network size={16} />,
+  web_search: <Globe size={16} />,
+  web_scrape: <FileSearch size={16} />,
+  summary: <FileSearch size={16} />,
+  memory_create: <Pencil size={16} />,
+  default: <Cloud size={16} />,
 };
 
 // Get tool icon
@@ -93,11 +93,11 @@ const formatTime = (timestamp: number): string => {
 const StatusIcon: React.FC<{ status: 'running' | 'success' | 'failed' }> = ({ status }) => {
   switch (status) {
     case 'running':
-      return <SyncOutlined spin className="text-blue-500" />;
+      return <RefreshCcw className="animate-spin text-blue-500" size={16} />;
     case 'success':
-      return <CheckCircleOutlined className="text-emerald-500" />;
+      return <CheckCircle className="text-emerald-500" size={16} />;
     case 'failed':
-      return <CloseCircleOutlined className="text-red-500" />;
+      return <XCircle className="text-red-500" size={16} />;
   }
 };
 
@@ -144,7 +144,7 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             {exec.duration !== undefined && (
               <span className="flex items-center gap-1">
-                <ClockCircleOutlined className="text-[10px]" />
+                <Clock className="text-2xs" size={12} />
                 {formatDuration(exec.duration)}
               </span>
             )}
@@ -156,7 +156,7 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
                     ? 'error'
                     : 'processing'
               }
-              className="mr-0 text-[10px]"
+              className="mr-0 text-2xs"
             >
               {exec.status.toUpperCase()}
             </Tag>
@@ -200,10 +200,10 @@ const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) 
     <div className="space-y-3">
       {/* Time axis */}
       <div className="relative h-6 border-b border-slate-200 dark:border-slate-700">
-        <span className="absolute left-0 bottom-1 text-[10px] text-slate-400">
+        <span className="absolute left-0 bottom-1 text-2xs text-slate-400">
           {formatTime(timeRange.min)}
         </span>
-        <span className="absolute right-0 bottom-1 text-[10px] text-slate-400">
+        <span className="absolute right-0 bottom-1 text-2xs text-slate-400">
           {formatTime(timeRange.max)}
         </span>
       </div>
@@ -297,7 +297,7 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
                   {exec.toolName}
                 </div>
                 {exec.duration !== undefined && (
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                  <div className="text-2xs text-slate-500 dark:text-slate-400">
                     {formatDuration(exec.duration)}
                   </div>
                 )}
@@ -453,9 +453,9 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
   }
 
   const modeOptions = [
-    { value: 'grid', icon: <AppstoreOutlined />, label: 'Grid' },
-    { value: 'timeline', icon: <UnorderedListOutlined />, label: 'Timeline' },
-    { value: 'flow', icon: <NodeIndexOutlined />, label: 'Flow' },
+    { value: 'grid', icon: <LayoutGrid size={16} />, label: 'Grid' },
+    { value: 'timeline', icon: <List size={16} />, label: 'Timeline' },
+    { value: 'flow', icon: <Network size={16} />, label: 'Flow' },
   ];
 
   return (

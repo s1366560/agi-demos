@@ -17,6 +17,8 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
+import { CircleAlert, RefreshCw } from 'lucide-react';
+
 import { Button } from '@/components/ui';
 
 /** Error boundary props */
@@ -56,9 +58,7 @@ const DefaultErrorFallback: React.FC<{
   >
     <div className="flex items-start gap-3">
       {/* Error icon */}
-      <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-xl">
-        error
-      </span>
+      <CircleAlert size={20} className="text-red-500 dark:text-red-400" />
 
       <div className="flex-1 min-w-0">
         <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">
@@ -79,7 +79,7 @@ const DefaultErrorFallback: React.FC<{
 
         {showRetry && (
           <Button onClick={onRetry} size="small" className="mt-2 text-xs">
-            <span className="material-symbols-outlined text-sm mr-1">refresh</span>
+            <RefreshCw size={14} className="mr-1" />
             Try Again
           </Button>
         )}

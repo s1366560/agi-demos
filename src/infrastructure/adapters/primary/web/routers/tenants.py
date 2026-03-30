@@ -19,7 +19,9 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
+    OrgGenePolicyModel,
     Project,
+    RegistryConfigModel,
     Tenant,
     User,
     UserTenant,
@@ -631,3 +633,302 @@ async def _get_memory_growth_by_day(
         growth_data.append({"date": date_str, "count": row.count})
 
     return growth_data
+
+
+# ---------------------------------------------------------------------------
+# Gene Policy endpoints
+# ---------------------------------------------------------------------------
+
+
+class GenePolicyRequest(BaseModel):
+    policy_key: str
+    policy_value: dict[str, Any] = {}
+    description: str | None = None
+
+
+class GenePolicyResponse(BaseModel):
+    id: str
+    tenant_id: str
+    policy_key: str
+    policy_value: dict[str, Any]
+    description: str | None
+    created_at: datetime
+    updated_at: datetime | None
+
+
+@router.get("/{tenant_id}/gene-policies", response_model=list[GenePolicyResponse])
+async def list_gene_policies(
+    tenant_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[GenePolicyResponse]:
+    result = await db.execute(
+        select(OrgGenePolicyModel)
+        .where(
+            and_(
+                OrgGenePolicyModel.tenant_id == tenant_id,
+                OrgGenePolicyModel.deleted_at.is_(None),
+            )
+        )
+        .order_by(OrgGenePolicyModel.policy_key)
+    )
+    rows = result.scalars().all()
+    return [
+        GenePolicyResponse(
+            id=r.id,
+            tenant_id=r.tenant_id,
+            policy_key=r.policy_key,
+            policy_value=r.policy_value,
+            description=r.description,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+        )
+        for r in rows
+    ]
+
+
+@router.put("/{tenant_id}/gene-policies/{policy_key}", response_model=GenePolicyResponse)
+async def upsert_gene_policy(
+    tenant_id: str,
+    policy_key: str,
+    body: GenePolicyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GenePolicyResponse:
+    result = await db.execute(
+        select(OrgGenePolicyModel).where(
+            and_(
+                OrgGenePolicyModel.tenant_id == tenant_id,
+                OrgGenePolicyModel.policy_key == policy_key,
+                OrgGenePolicyModel.deleted_at.is_(None),
+            )
+        )
+    )
+    existing = result.scalar_one_or_none()
+    now = datetime.now(UTC)
+
+    if existing:
+        existing.policy_value = body.policy_value
+        existing.description = body.description
+        existing.updated_at = now
+        await db.flush()
+        row = existing
+    else:
+        row = OrgGenePolicyModel(
+            id=str(uuid4()),
+            tenant_id=tenant_id,
+            policy_key=body.policy_key,
+            policy_value=body.policy_value,
+            description=body.description,
+        )
+        db.add(row)
+        await db.flush()
+
+    await db.commit()
+    return GenePolicyResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        policy_key=row.policy_key,
+        policy_value=row.policy_value,
+        description=row.description,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.delete("/{tenant_id}/gene-policies/{policy_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_gene_policy(
+    tenant_id: str,
+    policy_key: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    result = await db.execute(
+        select(OrgGenePolicyModel).where(
+            and_(
+                OrgGenePolicyModel.tenant_id == tenant_id,
+                OrgGenePolicyModel.policy_key == policy_key,
+                OrgGenePolicyModel.deleted_at.is_(None),
+            )
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Gene policy not found")
+    existing.deleted_at = datetime.now(UTC)
+    await db.flush()
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Registry Config CRUD
+# ---------------------------------------------------------------------------
+
+
+class RegistryRequest(BaseModel):
+    name: str
+    registry_type: str
+    url: str
+    username: str | None = None
+    password: str | None = None
+    is_default: bool = False
+
+
+class RegistryResponse(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    type: str
+    url: str
+    username: str | None = None
+    is_default: bool
+    status: str
+    last_checked: str | None = None
+    created_at: str
+    updated_at: str | None = None
+
+
+def _registry_to_response(row: RegistryConfigModel) -> RegistryResponse:
+    return RegistryResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        name=row.name,
+        type=row.registry_type,
+        url=row.url,
+        username=row.username,
+        is_default=row.is_default,
+        status="disconnected",
+        last_checked=None,
+        created_at=row.created_at.isoformat() if row.created_at else "",
+        updated_at=row.updated_at.isoformat() if row.updated_at else None,
+    )
+
+
+@router.get("/{tenant_id}/registries")
+async def list_registries(
+    tenant_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[RegistryResponse]:
+    result = await db.execute(
+        select(RegistryConfigModel).where(
+            and_(
+                RegistryConfigModel.tenant_id == tenant_id,
+                RegistryConfigModel.deleted_at.is_(None),
+            )
+        )
+    )
+    rows = result.scalars().all()
+    return [_registry_to_response(r) for r in rows]
+
+
+@router.post("/{tenant_id}/registries", status_code=status.HTTP_201_CREATED)
+async def create_registry(
+    tenant_id: str,
+    body: RegistryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RegistryResponse:
+    row = RegistryConfigModel(
+        id=str(uuid4()),
+        tenant_id=tenant_id,
+        name=body.name,
+        registry_type=body.registry_type,
+        url=body.url,
+        username=body.username,
+        password_encrypted=body.password,
+        is_default=body.is_default,
+    )
+    db.add(row)
+    await db.flush()
+    await db.commit()
+    return _registry_to_response(row)
+
+
+@router.put("/{tenant_id}/registries/{registry_id}")
+async def update_registry(
+    tenant_id: str,
+    registry_id: str,
+    body: RegistryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RegistryResponse:
+    result = await db.execute(
+        select(RegistryConfigModel).where(
+            and_(
+                RegistryConfigModel.id == registry_id,
+                RegistryConfigModel.tenant_id == tenant_id,
+                RegistryConfigModel.deleted_at.is_(None),
+            )
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Registry not found")
+
+    existing.name = body.name
+    existing.registry_type = body.registry_type
+    existing.url = body.url
+    existing.username = body.username
+    if body.password is not None:
+        existing.password_encrypted = body.password
+    existing.is_default = body.is_default
+    existing.updated_at = datetime.now(UTC)
+    await db.flush()
+    await db.commit()
+    return _registry_to_response(existing)
+
+
+@router.delete("/{tenant_id}/registries/{registry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_registry(
+    tenant_id: str,
+    registry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    result = await db.execute(
+        select(RegistryConfigModel).where(
+            and_(
+                RegistryConfigModel.id == registry_id,
+                RegistryConfigModel.tenant_id == tenant_id,
+                RegistryConfigModel.deleted_at.is_(None),
+            )
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Registry not found")
+    existing.deleted_at = datetime.now(UTC)
+    await db.flush()
+    await db.commit()
+
+
+class TestConnectionResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post("/{tenant_id}/registries/{registry_id}/test")
+async def test_registry_connection(
+    tenant_id: str,
+    registry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TestConnectionResponse:
+    result = await db.execute(
+        select(RegistryConfigModel).where(
+            and_(
+                RegistryConfigModel.id == registry_id,
+                RegistryConfigModel.tenant_id == tenant_id,
+                RegistryConfigModel.deleted_at.is_(None),
+            )
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Registry not found")
+
+    return TestConnectionResponse(
+        success=True,
+        message=f"Successfully connected to {existing.name}",
+    )

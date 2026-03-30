@@ -5,7 +5,7 @@
  * Shows agent's step-by-step reasoning process.
  */
 
-import { MaterialIcon } from '../shared';
+import { ChevronRight } from 'lucide-react';
 
 export interface ReasoningStep {
   number: number;
@@ -51,8 +51,7 @@ export function ReasoningLog({
       <summary className="cursor-pointer list-none flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors select-none">
         <div className="flex items-center gap-3">
           {/* Chevron Icon */}
-          <MaterialIcon
-            name="chevron_right"
+          <ChevronRight
             className="group-open/reasoning:rotate-90 transition-transform duration-200 text-slate-400"
             size={20}
           />
@@ -74,8 +73,8 @@ export function ReasoningLog({
         {/* Structured Steps */}
         {steps && steps.length > 0 && (
           <div className="mt-3 space-y-3">
-            {steps.map((step, index) => (
-              <div key={index} className="flex gap-3">
+            {steps.map((step) => (
+              <div key={step.number} className="flex gap-3">
                 {/* Step Number */}
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-semibold">
                   {step.number}

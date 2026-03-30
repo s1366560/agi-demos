@@ -125,18 +125,18 @@ const ExecutionItem = memo<{
 
           {/* Metadata row */}
           <div className="flex items-center gap-3 mt-1.5">
-            <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-              <Clock size={9} />
-              {formatElapsed(execution.startedAt, execution.completedAt)}
-            </span>
-            {execution.tokensUsed != null && execution.tokensUsed > 0 && (
-              <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                <Zap size={9} />
-                {execution.tokensUsed < 1000
-                  ? execution.tokensUsed
-                  : `${(execution.tokensUsed / 1000).toFixed(1)}k`}
-              </span>
-            )}
+            <span className="text-2xs text-slate-400 flex items-center gap-0.5">
+               <Clock size={9} />
+               {formatElapsed(execution.startedAt, execution.completedAt)}
+             </span>
+             {execution.tokensUsed != null && execution.tokensUsed > 0 && (
+               <span className="text-2xs text-slate-400 flex items-center gap-0.5">
+                 <Zap size={9} />
+                 {execution.tokensUsed < 1000
+                   ? execution.tokensUsed
+                   : `${(execution.tokensUsed / 1000).toFixed(1)}k`}
+               </span>
+             )}
           </div>
 
           {execution.status === 'running' && execution.progress != null && (
@@ -149,11 +149,11 @@ const ExecutionItem = memo<{
                 showInfo={false}
                 className="!mb-0"
               />
-              {execution.progressMessage && (
-                <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-                  {execution.progressMessage}
-                </p>
-              )}
+               {execution.progressMessage && (
+                 <p className="text-2xs text-slate-400 mt-0.5 truncate">
+                   {execution.progressMessage}
+                 </p>
+               )}
             </div>
           )}
 
@@ -161,13 +161,13 @@ const ExecutionItem = memo<{
           {(execution.summary || execution.error || execution.killReason) && (
             <div className="mt-2">
               {execution.status !== 'running' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onToggleExpand(execution.executionId);
-                  }}
-                  className="text-[10px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors mb-1"
-                >
+                   <button
+                     type="button"
+                     onClick={() => {
+                       onToggleExpand(execution.executionId);
+                     }}
+                     className="text-2xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors mb-1"
+                   >
                   {isExpanded
                     ? t('agent.background.hideDetails', 'Hide details')
                     : t('agent.background.showDetails', 'Show details')}
@@ -191,10 +191,10 @@ const ExecutionItem = memo<{
                     </div>
                   )}
                   {execution.killReason && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[10px] text-red-500">
-                      <AlertTriangle size={10} />
-                      <span>{execution.killReason}</span>
-                    </div>
+                     <div className="mt-1.5 flex items-center gap-1 text-2xs text-red-500">
+                       <AlertTriangle size={10} />
+                       <span>{execution.killReason}</span>
+                     </div>
                   )}
                 </div>
               )}

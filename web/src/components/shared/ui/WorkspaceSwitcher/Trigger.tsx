@@ -63,7 +63,7 @@ export const WorkspaceSwitcherTrigger = forwardRef<HTMLButtonElement, WorkspaceT
     };
 
     const baseClasses =
-      'flex items-center gap-2 w-full p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left focus:outline-none focus:ring-2 focus:ring-primary/50';
+      'flex items-center gap-2 w-full p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1';
 
     return (
       <button

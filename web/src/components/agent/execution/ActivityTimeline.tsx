@@ -10,15 +10,15 @@
 
 import React, { useMemo, useRef, useEffect, memo } from 'react';
 
-import {
-  BulbOutlined,
-  ToolOutlined,
-  CheckCircleOutlined,
-  SyncOutlined,
-  CloseCircleOutlined,
-  ClockCircleOutlined,
-} from '@ant-design/icons';
 import { Collapse, Tooltip } from 'antd';
+import {
+  Lightbulb,
+  Wrench,
+  CheckCircle,
+  RefreshCcw,
+  XCircle,
+  Clock,
+} from 'lucide-react';
 
 import { formatTimeOnly, formatDuration } from '@/utils/date';
 
@@ -103,20 +103,21 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
   const getStatusIcon = () => {
     if (isThought) {
       return (
-        <BulbOutlined
+        <Lightbulb
+          size={16}
           className={`text-amber-500 ${isRunning ? 'animate-pulse motion-reduce:animate-none' : ''}`}
         />
       );
     }
     switch (status) {
       case 'running':
-        return <SyncOutlined spin className="text-blue-500" />;
+        return <RefreshCcw className="animate-spin text-blue-500" size={16} />;
       case 'success':
-        return <CheckCircleOutlined className="text-emerald-500" />;
+        return <CheckCircle className="text-emerald-500" size={16} />;
       case 'failed':
-        return <CloseCircleOutlined className="text-red-500" />;
+        return <XCircle className="text-red-500" size={16} />;
       default:
-        return <ToolOutlined className="text-blue-500" />;
+        return <Wrench className="text-blue-500" size={16} />;
     }
   };
 
@@ -126,7 +127,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
       {!isLast && (
         <div
           className={`absolute ${
-            compact ? 'left-[5px]' : 'left-[7px]'
+            compact ? 'left-1.5' : 'left-2'
           } top-5 bottom-0 w-0.5 border-l-2 border-dashed ${
             isThought
               ? 'border-amber-200 dark:border-amber-800'
@@ -179,7 +180,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
           {getStatusIcon()}
           <span
             className={`${
-              compact ? 'text-[10px]' : 'text-xs'
+              compact ? 'text-2xs' : 'text-xs'
             } font-semibold text-slate-600 dark:text-slate-400`}
           >
             {sequence}. {isThought ? 'Thought' : 'Tool'}
@@ -187,15 +188,15 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
           <div className="ml-auto flex items-center gap-2">
             {duration !== undefined && (
               <Tooltip title="Execution time">
-                <span className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500">
-                  <ClockCircleOutlined className="text-[10px]" />
+                <span className="flex items-center gap-1 text-2xs text-slate-400 dark:text-slate-500">
+                  <Clock size={10} className="text-2xs" />
                   {formatDuration(duration)}
                 </span>
               </Tooltip>
             )}
             <span
               className={`${
-                compact ? 'text-[10px]' : 'text-xs'
+                compact ? 'text-2xs' : 'text-xs'
               } text-slate-400 dark:text-slate-500`}
             >
               {formatRelativeTime(timestamp)}
@@ -249,7 +250,7 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
           {toolName}
         </span>
         <span
-          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+          className={`px-1.5 py-0.5 rounded text-2xs font-semibold ${
             status === 'success'
               ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
               : status === 'failed'
@@ -270,17 +271,17 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
             {
               key: 'details',
               label: (
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">View details</span>
+                <span className="text-2xs text-slate-500 dark:text-slate-400">View details</span>
               ),
               children: (
                 <div className="space-y-2">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                    <span className="text-2xs uppercase font-bold text-slate-400 dark:text-slate-500">
                       Input
                     </span>
                     <pre
                       className={`${
-                        compact ? 'p-1.5 text-[10px]' : 'p-2 text-xs'
+                        compact ? 'p-1.5 text-2xs' : 'p-2 text-xs'
                       } rounded bg-white/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 overflow-x-auto max-w-full whitespace-pre-wrap break-all max-h-32`}
                     >
                       {JSON.stringify(input, null, 2)}
@@ -288,12 +289,12 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
                   </div>
                   {result && (
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                      <span className="text-2xs uppercase font-bold text-slate-400 dark:text-slate-500">
                         Result
                       </span>
                       <pre
                         className={`${
-                          compact ? 'p-1.5 text-[10px]' : 'p-2 text-xs'
+                          compact ? 'p-1.5 text-2xs' : 'p-2 text-xs'
                         } rounded bg-white/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 overflow-x-auto max-w-full whitespace-pre-wrap break-all max-h-32`}
                       >
                         {result}
@@ -302,8 +303,8 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
                   )}
                   {error && (
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-red-400">Error</span>
-                      <pre className="p-1.5 text-[10px] rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 overflow-x-auto max-w-full whitespace-pre-wrap break-all">
+                      <span className="text-2xs uppercase font-bold text-red-400">Error</span>
+                      <pre className="p-1.5 text-2xs rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 overflow-x-auto max-w-full whitespace-pre-wrap break-all">
                         {error}
                       </pre>
                     </div>
@@ -379,14 +380,15 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
 
   const header = (
     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-      <BulbOutlined
+      <Lightbulb
+        size={16}
         className={isActive ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''}
       />
-      <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-medium`}>
+      <span className={`${compact ? 'text-2xs' : 'text-xs'} font-medium`}>
         {isActive ? 'Processing...' : 'Activity Timeline'}
       </span>
       {timeline.length > 0 && (
-        <span className={`ml-auto ${compact ? 'text-[10px]' : 'text-xs'} text-slate-400`}>
+        <span className={`ml-auto ${compact ? 'text-2xs' : 'text-xs'} text-slate-400`}>
           {timeline.length} activities
         </span>
       )}
@@ -483,7 +485,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                   </div>
                   <div
                     className={`${
-                      compact ? 'text-[10px]' : 'text-xs'
+                      compact ? 'text-2xs' : 'text-xs'
                     } text-slate-400 dark:text-slate-500 italic`}
                   >
                     Waiting for next activity...

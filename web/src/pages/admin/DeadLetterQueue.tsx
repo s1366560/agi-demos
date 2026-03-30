@@ -9,18 +9,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 
-import {
-  ReloadOutlined,
-  RetweetOutlined,
-  DeleteOutlined,
-  ExclamationCircleOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  StopOutlined,
-  WarningOutlined,
-  EyeOutlined,
-  ClearOutlined,
-} from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+
 import {
   Card,
   Row,
@@ -42,6 +32,18 @@ import {
   Badge,
   Progress,
 } from 'antd';
+import {
+  RefreshCw,
+  RefreshCcw,
+  Trash2,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Square,
+  AlertTriangle,
+  Eye,
+  Eraser,
+} from 'lucide-react';
 
 import { dlqService } from '@/services/dlqService';
 import type { DLQMessage, DLQMessageStatus, DLQStats } from '@/services/dlqService';
@@ -62,32 +64,32 @@ const StatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
     {
       pending: {
         color: 'warning',
-        icon: <ClockCircleOutlined />,
+        icon: <Clock size={16} />,
         label: 'Pending',
       },
       retrying: {
         color: 'processing',
-        icon: <RetweetOutlined />,
+        icon: <RefreshCcw size={16} />,
         label: 'Retrying',
       },
       discarded: {
         color: 'default',
-        icon: <DeleteOutlined />,
+        icon: <Trash2 size={16} />,
         label: 'Discarded',
       },
       expired: {
         color: 'default',
-        icon: <StopOutlined />,
+        icon: <Square size={16} />,
         label: 'Expired',
       },
       resolved: {
         color: 'success',
-        icon: <CheckCircleOutlined />,
+        icon: <CheckCircle2 size={16} />,
         label: 'Resolved',
       },
     };
 
-  const { color, icon, label } = config[status] || config.pending;
+  const { color, icon, label } = config[status];
 
   return (
     <Tag color={color} icon={icon}>
@@ -97,10 +99,10 @@ const StatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
 };
 
 const formatAge = (seconds: number): string => {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
-  return `${Math.round(seconds / 86400)}d`;
+  if (seconds < 60) return `${String(Math.round(seconds))}s`;
+  if (seconds < 3600) return `${String(Math.round(seconds / 60))}m`;
+  if (seconds < 86400) return `${String(Math.round(seconds / 3600))}h`;
+  return `${String(Math.round(seconds / 86400))}d`;
 };
 
 // ============================================================================
@@ -108,6 +110,8 @@ const formatAge = (seconds: number): string => {
 // ============================================================================
 
 const DeadLetterQueue: React.FC = () => {
+  const { t } = useTranslation();
+
   // State
   const [stats, setStats] = useState<DLQStats | null>(null);
   const [messages, setMessages] = useState<DLQMessage[]>([]);
@@ -131,11 +135,11 @@ const DeadLetterQueue: React.FC = () => {
       const data = await dlqService.getStats();
       setStats(data);
     } catch (_error) {
-      message.error('Failed to load DLQ statistics');
+      message.error(t('admin.deadLetterQueue.errors.failedToLoadStats'));
     } finally {
       setStatsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Fetch messages
   const fetchMessages = useCallback(async () => {
@@ -150,106 +154,120 @@ const DeadLetterQueue: React.FC = () => {
       });
       setMessages(data.messages);
     } catch (_error) {
-      message.error('Failed to load DLQ messages');
+      message.error(t('admin.deadLetterQueue.errors.failedToLoadMessages'));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, eventTypeFilter, errorTypeFilter, pagination]);
+  }, [statusFilter, eventTypeFilter, errorTypeFilter, pagination, t]);
 
   // Initial load
   useEffect(() => {
-    fetchStats();
-    fetchMessages();
+    void fetchStats();
+    void fetchMessages();
   }, [fetchStats, fetchMessages]);
 
   // Refresh all
-  const handleRefresh = () => {
-    fetchStats();
-    fetchMessages();
+  const handleRefresh = (): void => {
+    void fetchStats();
+    void fetchMessages();
     setSelectedRowKeys([]);
   };
 
   // Retry single message
-  const handleRetrySingle = async (messageId: string) => {
+  const handleRetrySingle = async (messageId: string): Promise<void> => {
     try {
       await dlqService.retryMessage(messageId);
-      message.success('Retry initiated');
+      message.success(t('admin.deadLetterQueue.messages.retryInitiated'));
       handleRefresh();
     } catch (_error) {
-      message.error('Failed to retry message');
+      message.error(t('admin.deadLetterQueue.errors.failedToRetryMessage'));
     }
   };
 
   // Retry selected messages
-  const handleRetryBatch = async () => {
+  const handleRetryBatch = async (): Promise<void> => {
     if (selectedRowKeys.length === 0) return;
 
     try {
       const result = await dlqService.retryMessages(selectedRowKeys as string[]);
       message.success(
-        `Retry initiated: ${result.success_count} succeeded, ${result.failure_count} failed`
+        t('admin.deadLetterQueue.messages.retryBatchResult', {
+          success: result.success_count,
+          failure: result.failure_count,
+        })
       );
       handleRefresh();
     } catch (_error) {
-      message.error('Failed to retry messages');
+      message.error(t('admin.deadLetterQueue.errors.failedToRetryMessages'));
     }
   };
 
   // Open discard modal
-  const openDiscardModal = (messageIds: string[]) => {
+  const openDiscardModal = (messageIds: string[]): void => {
     setMessagesForDiscard(messageIds);
     setDiscardReason('');
     setDiscardModalVisible(true);
   };
 
   // Confirm discard
-  const handleDiscardConfirm = async () => {
+  const handleDiscardConfirm = async (): Promise<void> => {
     if (!discardReason.trim()) {
-      message.warning('Please provide a reason');
+      message.warning(t('admin.deadLetterQueue.errors.reasonRequired'));
       return;
     }
 
     try {
       if (messagesForDiscard.length === 1) {
         await dlqService.discardMessage(messagesForDiscard[0] ?? '', discardReason);
-        message.success('Message discarded');
+        message.success(t('admin.deadLetterQueue.messages.messageDiscarded'));
       } else {
         const result = await dlqService.discardMessages(messagesForDiscard, discardReason);
         message.success(
-          `Discarded: ${result.success_count} succeeded, ${result.failure_count} failed`
+          t('admin.deadLetterQueue.messages.discardBatchResult', {
+            success: result.success_count,
+            failure: result.failure_count,
+          })
         );
       }
       setDiscardModalVisible(false);
       handleRefresh();
     } catch (_error) {
-      message.error('Failed to discard message(s)');
+      message.error(t('admin.deadLetterQueue.errors.failedToDiscardMessages'));
     }
   };
 
   // Cleanup expired
-  const handleCleanupExpired = async () => {
+  const handleCleanupExpired = async (): Promise<void> => {
     try {
       const result = await dlqService.cleanupExpired();
-      message.success(`Cleaned up ${result.cleaned_count} expired messages`);
+      message.success(
+        t('admin.deadLetterQueue.messages.cleanupExpiredResult', {
+          count: result.cleaned_count,
+        })
+      );
       handleRefresh();
     } catch (_error) {
-      message.error('Failed to cleanup expired messages');
+      message.error(t('admin.deadLetterQueue.errors.failedToCleanupExpired'));
     }
   };
 
   // Cleanup resolved
-  const handleCleanupResolved = async () => {
+  const handleCleanupResolved = async (): Promise<void> => {
     try {
       const result = await dlqService.cleanupResolved();
-      message.success(`Cleaned up ${result.cleaned_count} resolved messages`);
+      message.success(
+        t('admin.deadLetterQueue.messages.cleanupResolvedResult', {
+          count: result.cleaned_count,
+        })
+      );
       handleRefresh();
     } catch (_error) {
-      message.error('Failed to cleanup resolved messages');
+      message.error(t('admin.deadLetterQueue.errors.failedToCleanupResolved'));
     }
   };
 
   // View message detail
-  const viewMessageDetail = (msg: DLQMessage) => {
+  const viewMessageDetail = (msg: DLQMessage): void => {
     setSelectedMessage(msg);
     setDetailModalVisible(true);
   };
@@ -257,7 +275,7 @@ const DeadLetterQueue: React.FC = () => {
   // Table columns
   const columns: ColumnsType<DLQMessage> = [
     {
-      title: 'ID',
+      title: t('admin.deadLetterQueue.columns.id'),
       dataIndex: 'id',
       key: 'id',
       width: 140,
@@ -271,14 +289,14 @@ const DeadLetterQueue: React.FC = () => {
       ),
     },
     {
-      title: 'Event Type',
+      title: t('admin.deadLetterQueue.columns.eventType'),
       dataIndex: 'event_type',
       key: 'event_type',
       width: 140,
       render: (type: string) => <Tag color="blue">{type}</Tag>,
     },
     {
-      title: 'Error Type',
+      title: t('admin.deadLetterQueue.columns.errorType'),
       dataIndex: 'error_type',
       key: 'error_type',
       width: 140,
@@ -290,7 +308,7 @@ const DeadLetterQueue: React.FC = () => {
       ),
     },
     {
-      title: 'Error',
+      title: t('admin.deadLetterQueue.columns.error'),
       dataIndex: 'error',
       key: 'error',
       ellipsis: true,
@@ -303,14 +321,14 @@ const DeadLetterQueue: React.FC = () => {
       ),
     },
     {
-      title: 'Status',
+      title: t('admin.deadLetterQueue.columns.status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: DLQMessageStatus) => <StatusTag status={status} />,
     },
     {
-      title: 'Retries',
+      title: t('admin.deadLetterQueue.columns.retries'),
       key: 'retries',
       width: 80,
       render: (_, record) => (
@@ -320,45 +338,45 @@ const DeadLetterQueue: React.FC = () => {
       ),
     },
     {
-      title: 'Age',
+      title: t('admin.deadLetterQueue.columns.age'),
       dataIndex: 'age_seconds',
       key: 'age',
       width: 80,
       render: (age: number) => formatAge(age),
     },
     {
-      title: 'Actions',
+      title: t('admin.deadLetterQueue.columns.actions'),
       key: 'actions',
       width: 120,
       render: (_, record) => (
         <Space size="small">
-          <Tooltip title="View Details">
+          <Tooltip title={t('admin.deadLetterQueue.actions.viewDetails')}>
             <Button
               type="text"
               size="small"
-              icon={<EyeOutlined />}
+              icon={<Eye size={16} />}
               onClick={() => {
                 viewMessageDetail(record);
               }}
             />
           </Tooltip>
           {record.can_retry && (
-            <Tooltip title="Retry">
+            <Tooltip title={t('admin.deadLetterQueue.actions.retry')}>
               <Button
                 type="text"
                 size="small"
-                icon={<RetweetOutlined />}
-                onClick={() => handleRetrySingle(record.id)}
+                icon={<RefreshCcw size={16} />}
+                onClick={() => void handleRetrySingle(record.id)}
               />
             </Tooltip>
           )}
           {record.status === 'pending' && (
-            <Tooltip title="Discard">
+            <Tooltip title={t('admin.deadLetterQueue.actions.discard')}>
               <Button
                 type="text"
                 size="small"
                 danger
-                icon={<DeleteOutlined />}
+                icon={<Trash2 size={16} />}
                 onClick={() => {
                   openDiscardModal([record.id]);
                 }}
@@ -391,34 +409,38 @@ const DeadLetterQueue: React.FC = () => {
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
           <Title level={2} style={{ margin: 0 }}>
-            <WarningOutlined style={{ marginRight: 8, color: '#faad14' }} />
-            Dead Letter Queue
+            <AlertTriangle size={24} style={{ marginRight: 8, color: '#faad14' }} />
+            {t('admin.deadLetterQueue.title')}
           </Title>
-          <Text type="secondary">Failed events awaiting manual review or automatic retry</Text>
+          <Text type="secondary">{t('admin.deadLetterQueue.description')}</Text>
         </Col>
         <Col>
           <Space>
             <Popconfirm
-              title="Clean up expired messages?"
-              description="This will remove messages older than 1 week"
-              onConfirm={handleCleanupExpired}
+              title={t('admin.deadLetterQueue.confirm.cleanupExpired')}
+              description={t('admin.deadLetterQueue.confirm.cleanupExpiredDesc')}
+              onConfirm={() => void handleCleanupExpired()}
             >
-              <Button icon={<ClearOutlined />}>Cleanup Expired</Button>
+              <Button icon={<Eraser size={16} />}>
+                {t('admin.deadLetterQueue.actions.cleanupExpired')}
+              </Button>
             </Popconfirm>
             <Popconfirm
-              title="Clean up resolved messages?"
-              description="This will remove successfully retried messages older than 24h"
-              onConfirm={handleCleanupResolved}
+              title={t('admin.deadLetterQueue.confirm.cleanupResolved')}
+              description={t('admin.deadLetterQueue.confirm.cleanupResolvedDesc')}
+              onConfirm={() => void handleCleanupResolved()}
             >
-              <Button icon={<ClearOutlined />}>Cleanup Resolved</Button>
+              <Button icon={<Eraser size={16} />}>
+                {t('admin.deadLetterQueue.actions.cleanupResolved')}
+              </Button>
             </Popconfirm>
             <Button
               type="primary"
-              icon={<ReloadOutlined />}
+              icon={<RefreshCw size={16} />}
               onClick={handleRefresh}
               loading={loading || statsLoading}
             >
-              Refresh
+              {t('common.refresh')}
             </Button>
           </Space>
         </Col>
@@ -429,58 +451,58 @@ const DeadLetterQueue: React.FC = () => {
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
-              title="Total Messages"
+              title={t('admin.deadLetterQueue.stats.totalMessages')}
               value={stats?.total_messages || 0}
-              prefix={<ExclamationCircleOutlined />}
+              prefix={<AlertCircle size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
-              title="Pending"
+              title={t('admin.deadLetterQueue.stats.pending')}
               value={stats?.pending_count || 0}
-              valueStyle={{ color: '#faad14' }}
-              prefix={<ClockCircleOutlined />}
+              styles={{ content: { color: '#faad14' } }}
+              prefix={<Clock size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
-              title="Retrying"
+              title={t('admin.deadLetterQueue.stats.retrying')}
               value={stats?.retrying_count || 0}
-              valueStyle={{ color: '#1890ff' }}
-              prefix={<RetweetOutlined />}
+              styles={{ content: { color: '#1890ff' } }}
+              prefix={<RefreshCcw size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
-              title="Resolved"
+              title={t('admin.deadLetterQueue.stats.resolved')}
               value={stats?.resolved_count || 0}
-              valueStyle={{ color: '#52c41a' }}
-              prefix={<CheckCircleOutlined />}
+              styles={{ content: { color: '#52c41a' } }}
+              prefix={<CheckCircle2 size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
-              title="Discarded"
+              title={t('admin.deadLetterQueue.stats.discarded')}
               value={stats?.discarded_count || 0}
-              valueStyle={{ color: '#8c8c8c' }}
-              prefix={<DeleteOutlined />}
+              styles={{ content: { color: '#8c8c8c' } }}
+              prefix={<Trash2 size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
           <Card loading={statsLoading}>
             <Statistic
-              title="Oldest Age"
+              title={t('admin.deadLetterQueue.stats.oldestAge')}
               value={stats ? formatAge(stats.oldest_message_age_seconds) : '-'}
-              prefix={<ClockCircleOutlined />}
+              prefix={<Clock size={20} />}
             />
           </Card>
         </Col>
@@ -488,7 +510,11 @@ const DeadLetterQueue: React.FC = () => {
 
       {/* Error Type Distribution */}
       {stats && Object.keys(stats.error_type_counts).length > 0 && (
-        <Card title="Error Type Distribution" style={{ marginBottom: 24 }} loading={statsLoading}>
+        <Card
+          title={t('admin.deadLetterQueue.errorTypeDistribution')}
+          style={{ marginBottom: 24 }}
+          loading={statsLoading}
+        >
           <Row gutter={[16, 8]}>
             {Object.entries(stats.error_type_counts)
               .sort(([, a], [, b]) => b - a)
@@ -514,27 +540,27 @@ const DeadLetterQueue: React.FC = () => {
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]} align="middle">
           <Col>
-            <Text strong>Filters:</Text>
+            <Text strong>{t('admin.deadLetterQueue.filters.label')}:</Text>
           </Col>
           <Col>
             <Select
-              placeholder="Status"
+              placeholder={t('admin.deadLetterQueue.filters.status')}
               allowClear
               style={{ width: 120 }}
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
-                { value: 'pending', label: 'Pending' },
-                { value: 'retrying', label: 'Retrying' },
-                { value: 'discarded', label: 'Discarded' },
-                { value: 'expired', label: 'Expired' },
-                { value: 'resolved', label: 'Resolved' },
+                { value: 'pending', label: t('admin.deadLetterQueue.statuses.pending') },
+                { value: 'retrying', label: t('admin.deadLetterQueue.statuses.retrying') },
+                { value: 'discarded', label: t('admin.deadLetterQueue.statuses.discarded') },
+                { value: 'expired', label: t('admin.deadLetterQueue.statuses.expired') },
+                { value: 'resolved', label: t('admin.deadLetterQueue.statuses.resolved') },
               ]}
             />
           </Col>
           <Col>
             <Select
-              placeholder="Event Type"
+              placeholder={t('admin.deadLetterQueue.filters.eventType')}
               allowClear
               style={{ width: 160 }}
               value={eventTypeFilter}
@@ -545,7 +571,7 @@ const DeadLetterQueue: React.FC = () => {
           </Col>
           <Col>
             <Select
-              placeholder="Error Type"
+              placeholder={t('admin.deadLetterQueue.filters.errorType')}
               allowClear
               style={{ width: 200 }}
               value={errorTypeFilter}
@@ -562,22 +588,26 @@ const DeadLetterQueue: React.FC = () => {
             <>
               <Col>
                 <Badge count={selectedRowKeys.length}>
-                  <Text type="secondary">Selected</Text>
+                  <Text type="secondary">{t('admin.deadLetterQueue.filters.selected')}</Text>
                 </Badge>
               </Col>
               <Col>
                 <Space>
-                  <Button type="primary" icon={<RetweetOutlined />} onClick={handleRetryBatch}>
-                    Retry Selected
+                  <Button
+                    type="primary"
+                    icon={<RefreshCcw size={16} />}
+                    onClick={() => void handleRetryBatch()}
+                  >
+                    {t('admin.deadLetterQueue.actions.retrySelected')}
                   </Button>
                   <Button
                     danger
-                    icon={<DeleteOutlined />}
+                    icon={<Trash2 size={16} />}
                     onClick={() => {
                       openDiscardModal(selectedRowKeys as string[]);
                     }}
                   >
-                    Discard Selected
+                    {t('admin.deadLetterQueue.actions.discardSelected')}
                   </Button>
                 </Space>
               </Col>
@@ -598,7 +628,7 @@ const DeadLetterQueue: React.FC = () => {
             current: pagination.current,
             pageSize: pagination.pageSize,
             showSizeChanger: true,
-            showTotal: (total) => `Total ${total} messages`,
+            showTotal: (total) => `Total ${String(total)} messages`,
             onChange: (page, pageSize) => {
               setPagination({ current: page, pageSize });
             },
@@ -609,7 +639,7 @@ const DeadLetterQueue: React.FC = () => {
 
       {/* Message Detail Modal */}
       <Modal
-        title="Message Details"
+        title={t('admin.deadLetterQueue.detail.title')}
         open={detailModalVisible}
         onCancel={() => {
           setDetailModalVisible(false);
@@ -621,21 +651,19 @@ const DeadLetterQueue: React.FC = () => {
               setDetailModalVisible(false);
             }}
           >
-            Close
+            {t('common.close')}
           </Button>,
           selectedMessage?.can_retry && (
             <Button
               key="retry"
               type="primary"
-              icon={<RetweetOutlined />}
+              icon={<RefreshCcw size={16} />}
               onClick={() => {
-                if (selectedMessage) {
-                  handleRetrySingle(selectedMessage.id);
-                  setDetailModalVisible(false);
-                }
+                void handleRetrySingle(selectedMessage.id);
+                setDetailModalVisible(false);
               }}
             >
-              Retry
+              {t('admin.deadLetterQueue.actions.retry')}
             </Button>
           ),
         ].filter(Boolean)}
@@ -643,45 +671,45 @@ const DeadLetterQueue: React.FC = () => {
       >
         {selectedMessage && (
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Message ID" span={2}>
+            <Descriptions.Item label={t('admin.deadLetterQueue.columns.id')} span={2}>
               <Text copyable>{selectedMessage.id}</Text>
             </Descriptions.Item>
-            <Descriptions.Item label="Event ID" span={2}>
+            <Descriptions.Item label={t('admin.deadLetterQueue.detail.eventId')} span={2}>
               <Text copyable>{selectedMessage.event_id}</Text>
             </Descriptions.Item>
-            <Descriptions.Item label="Event Type">
+            <Descriptions.Item label={t('admin.deadLetterQueue.columns.eventType')}>
               <Tag color="blue">{selectedMessage.event_type}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Status">
+            <Descriptions.Item label={t('admin.deadLetterQueue.columns.status')}>
               <StatusTag status={selectedMessage.status} />
             </Descriptions.Item>
-            <Descriptions.Item label="Routing Key" span={2}>
+            <Descriptions.Item label={t('admin.deadLetterQueue.detail.routingKey')} span={2}>
               <Text code>{selectedMessage.routing_key}</Text>
             </Descriptions.Item>
-            <Descriptions.Item label="Error Type" span={2}>
+            <Descriptions.Item label={t('admin.deadLetterQueue.columns.errorType')} span={2}>
               <Tag color="red">{selectedMessage.error_type}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Error Message" span={2}>
+            <Descriptions.Item label={t('admin.deadLetterQueue.columns.error')} span={2}>
               <Text type="danger">{selectedMessage.error}</Text>
             </Descriptions.Item>
-            <Descriptions.Item label="Retry Count">
+            <Descriptions.Item label={t('admin.deadLetterQueue.detail.retryCount')}>
               {selectedMessage.retry_count}/{selectedMessage.max_retries}
             </Descriptions.Item>
-            <Descriptions.Item label="Age">
+            <Descriptions.Item label={t('admin.deadLetterQueue.columns.age')}>
               {formatAge(selectedMessage.age_seconds)}
             </Descriptions.Item>
-            <Descriptions.Item label="First Failed">
+            <Descriptions.Item label={t('admin.deadLetterQueue.detail.firstFailed')}>
               {formatDateTime(selectedMessage.first_failed_at)}
             </Descriptions.Item>
-            <Descriptions.Item label="Last Failed">
+            <Descriptions.Item label={t('admin.deadLetterQueue.detail.lastFailed')}>
               {formatDateTime(selectedMessage.last_failed_at)}
             </Descriptions.Item>
             {selectedMessage.next_retry_at && (
-              <Descriptions.Item label="Next Retry" span={2}>
+              <Descriptions.Item label={t('admin.deadLetterQueue.detail.nextRetry')} span={2}>
                 {formatDateTime(selectedMessage.next_retry_at)}
               </Descriptions.Item>
             )}
-            <Descriptions.Item label="Event Data" span={2}>
+            <Descriptions.Item label={t('admin.deadLetterQueue.detail.eventData')} span={2}>
               <pre
                 style={{
                   maxHeight: 200,
@@ -696,7 +724,7 @@ const DeadLetterQueue: React.FC = () => {
               </pre>
             </Descriptions.Item>
             {selectedMessage.error_traceback && (
-              <Descriptions.Item label="Stack Trace" span={2}>
+              <Descriptions.Item label={t('admin.deadLetterQueue.detail.stackTrace')} span={2}>
                 <pre
                   style={{
                     maxHeight: 200,
@@ -718,28 +746,31 @@ const DeadLetterQueue: React.FC = () => {
 
       {/* Discard Confirmation Modal */}
       <Modal
-        title="Discard Message(s)"
+        title={t('admin.deadLetterQueue.discard.title')}
         open={discardModalVisible}
         onCancel={() => {
           setDiscardModalVisible(false);
         }}
-        onOk={handleDiscardConfirm}
-        okText="Discard"
+        onOk={() => void handleDiscardConfirm()}
+        okText={t('admin.deadLetterQueue.actions.discard')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ danger: true }}
       >
         <Alert
           type="warning"
           showIcon
-          message={`You are about to discard ${messagesForDiscard.length} message(s). This action cannot be undone.`}
+          title={t('admin.deadLetterQueue.discard.confirmMessage', {
+            count: messagesForDiscard.length,
+          })}
           style={{ marginBottom: 16 }}
         />
-        <Text>Please provide a reason for discarding:</Text>
+        <Text>{t('admin.deadLetterQueue.discard.reasonLabel')}</Text>
         <TextArea
           value={discardReason}
           onChange={(e) => {
             setDiscardReason(e.target.value);
           }}
-          placeholder="e.g., Duplicate event, Stale data, Manual fix applied..."
+          placeholder={t('admin.deadLetterQueue.discard.reasonPlaceholder')}
           rows={3}
           style={{ marginTop: 8 }}
         />

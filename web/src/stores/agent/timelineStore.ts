@@ -26,7 +26,7 @@ import { devtools } from 'zustand/middleware';
 
 import { agentService } from '../../services/agentService';
 
-import type { TimelineEvent } from '../../types/agent';
+import type { TimelineEvent, ConversationMessagesResponse } from '../../types/agent';
 
 /**
  * Timeline Store State
@@ -97,35 +97,29 @@ export const useTimelineStore = create<TimelineState>()(
         set({ timelineLoading: true, timelineError: null });
 
         try {
-          const response = (await agentService.getConversationMessages(
+          const response: ConversationMessagesResponse = await agentService.getConversationMessages(
             conversationId,
             projectId,
             50 // Changed from 100 to 50
-          )) as any; // Type cast to access pagination metadata
-
-          // Extract pagination metadata from response
-          const firstTimeUs = response.first_time_us ?? null;
-          const firstCounter = response.first_counter ?? null;
-          const lastTimeUs = response.last_time_us ?? null;
-          const lastCounter = response.last_counter ?? null;
+          );
 
           set({
             timeline: response.timeline,
             timelineLoading: false,
-            earliestTimeUs: firstTimeUs,
-            earliestCounter: firstCounter,
-            latestTimeUs: lastTimeUs,
-            latestCounter: lastCounter,
-            hasEarlier: response.has_more ?? false,
+            earliestTimeUs: response.first_time_us,
+            earliestCounter: response.first_counter,
+            latestTimeUs: response.last_time_us,
+            latestCounter: response.last_counter,
+            hasEarlier: response.has_more,
           });
         } catch (error: unknown) {
           const err = error as {
-            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
-            message?: string | undefined;
+            response?: { data?: { detail?: string } };
+            message?: string;
           };
           console.error('[TimelineStore] getTimeline error:', error);
           set({
-            timelineError: err?.response?.data?.detail || 'Failed to get timeline',
+            timelineError: err.response?.data?.detail || 'Failed to get timeline',
             timelineLoading: false,
           });
           throw error;
@@ -198,7 +192,7 @@ export const useTimelineStore = create<TimelineState>()(
         set({ isLoadingEarlier: true, timelineError: null });
 
         try {
-          const response = (await agentService.getConversationMessages(
+          const response: ConversationMessagesResponse = await agentService.getConversationMessages(
             conversationId,
             projectId,
             50,
@@ -206,7 +200,7 @@ export const useTimelineStore = create<TimelineState>()(
             undefined, // fromCounter
             earliestTimeUs, // beforeTimeUs
             earliestCounter ?? undefined // beforeCounter
-          )) as any;
+          );
 
           // Prepend new events to existing timeline
           const { timeline } = get();
@@ -218,20 +212,20 @@ export const useTimelineStore = create<TimelineState>()(
           set({
             timeline: newTimeline,
             isLoadingEarlier: false,
-            earliestTimeUs: response.first_time_us ?? null,
-            earliestCounter: response.first_counter ?? null,
-            hasEarlier: response.has_more ?? false,
+            earliestTimeUs: response.first_time_us,
+            earliestCounter: response.first_counter,
+            hasEarlier: response.has_more,
           });
 
           return true;
         } catch (error: unknown) {
           const err = error as {
-            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
-            message?: string | undefined;
+            response?: { data?: { detail?: string } };
+            message?: string;
           };
           console.error('[TimelineStore] loadEarlierMessages error:', error);
           set({
-            timelineError: err?.response?.data?.detail || 'Failed to load earlier messages',
+            timelineError: err.response?.data?.detail || 'Failed to load earlier messages',
             isLoadingEarlier: false,
           });
           throw error;

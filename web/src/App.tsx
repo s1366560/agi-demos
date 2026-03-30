@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LazySpin } from './components/ui/lazyAntd';
 import './i18n/config';
 import { SchemaLayout } from './layouts/SchemaLayout';
+import { OrgSetupGuard } from './components/common/OrgSetupGuard';
 import { TenantLayout } from './layouts/TenantLayout';
 import { Login } from './pages/Login';
 import { useAuthStore } from './stores/auth';
@@ -20,8 +21,17 @@ import './App.css';
 // ============================================================================
 
 // Auth pages
+const ForceChangePassword = lazy(() =>
+  import('./pages/ForceChangePassword').then((m) => ({ default: m.ForceChangePassword }))
+);
 const UserProfile = lazy(() =>
   import('./pages/UserProfile').then((m) => ({ default: m.UserProfile }))
+);
+const OAuthCallback = lazy(() =>
+  import('./pages/OAuthCallback').then((m) => ({ default: m.OAuthCallback }))
+);
+const InviteAccept = lazy(() =>
+  import('./pages/InviteAccept').then((m) => ({ default: m.InviteAccept }))
 );
 
 // Tenant pages
@@ -55,6 +65,33 @@ const TenantSettings = lazy(() =>
     default: m.TenantSettings,
   }))
 );
+// Organization Settings
+const OrgSettingsLayout = lazy(() =>
+  import('./pages/tenant/org-settings/OrgSettingsLayout').then((m) => ({
+    default: m.OrgSettingsLayout,
+  }))
+);
+const OrgInfo = lazy(() =>
+  import('./pages/tenant/org-settings/OrgInfo').then((m) => ({ default: m.OrgInfo }))
+);
+const OrgMembers = lazy(() =>
+  import('./pages/tenant/org-settings/OrgMembers').then((m) => ({ default: m.OrgMembers }))
+);
+const OrgClusters = lazy(() =>
+  import('./pages/tenant/org-settings/OrgClusters').then((m) => ({ default: m.OrgClusters }))
+);
+const OrgAudit = lazy(() =>
+  import('./pages/tenant/org-settings/OrgAudit').then((m) => ({ default: m.OrgAudit }))
+);
+const OrgRegistry = lazy(() =>
+  import('./pages/tenant/org-settings/OrgRegistry').then((m) => ({ default: m.OrgRegistry }))
+);
+const OrgSmtp = lazy(() =>
+  import('./pages/tenant/org-settings/OrgSmtp').then((m) => ({ default: m.OrgSmtp }))
+);
+const OrgGenes = lazy(() =>
+  import('./pages/tenant/org-settings/OrgGenes').then((m) => ({ default: m.OrgGenes }))
+);
 const TaskDashboard = lazy(() =>
   import('./pages/tenant/TaskDashboard').then((m) => ({
     default: m.TaskDashboard,
@@ -70,6 +107,10 @@ const Analytics = lazy(() =>
   import('./pages/tenant/Analytics').then((m) => ({ default: m.Analytics }))
 );
 const Billing = lazy(() => import('./pages/tenant/Billing').then((m) => ({ default: m.Billing })));
+const Events = lazy(() => import('./pages/tenant/Events').then((m) => ({ default: m.Events })));
+const Webhooks = lazy(() =>
+  import('./pages/tenant/Webhooks').then((m) => ({ default: m.Webhooks }))
+);
 const SubAgentList = lazy(() =>
   import('./pages/tenant/SubAgentList').then((m) => ({
     default: m.SubAgentList,
@@ -110,6 +151,68 @@ const WorkspaceList = lazy(() =>
 const WorkspaceDetail = lazy(() =>
   import('./pages/tenant/WorkspaceDetail').then((m) => ({ default: m.WorkspaceDetail }))
 );
+const InstanceList = lazy(() =>
+  import('./pages/tenant/InstanceList').then((m) => ({ default: m.InstanceList }))
+);
+const InstanceDetail = lazy(() =>
+  import('./pages/tenant/InstanceDetail').then((m) => ({ default: m.InstanceDetail }))
+);
+const CreateInstance = lazy(() =>
+  import('./pages/tenant/CreateInstance').then((m) => ({ default: m.CreateInstance }))
+);
+const DeployProgress = lazy(() =>
+  import('./pages/tenant/DeployProgress').then((m) => ({ default: m.DeployProgress }))
+);
+const ClusterList = lazy(() =>
+  import('./pages/tenant/ClusterList').then((m) => ({ default: m.ClusterList }))
+);
+const ClusterDetail = lazy(() =>
+  import('./pages/tenant/ClusterDetail').then((m) => ({ default: m.ClusterDetail }))
+);
+const GeneMarket = lazy(() =>
+  import('./pages/tenant/GeneMarket').then((m) => ({ default: m.GeneMarket }))
+);
+const GeneDetail = lazy(() =>
+  import('./pages/tenant/GeneDetail').then((m) => ({ default: m.GeneDetail }))
+);
+const InstanceTemplateList = lazy(() =>
+  import('./pages/tenant/InstanceTemplateList').then((m) => ({
+    default: m.InstanceTemplateList,
+  }))
+);
+const InstanceMembers = lazy(() =>
+  import('./pages/tenant/InstanceMembers').then((m) => ({ default: m.InstanceMembers }))
+);
+const InstanceSettings = lazy(() =>
+  import('./pages/tenant/InstanceSettings').then((m) => ({ default: m.InstanceSettings }))
+);
+const InstanceGenes = lazy(() =>
+  import('./pages/tenant/InstanceGenes').then((m) => ({ default: m.InstanceGenes }))
+);
+const InstanceChannels = lazy(() =>
+  import('./pages/tenant/InstanceChannels').then((m) => ({ default: m.InstanceChannels }))
+);
+const InstanceFiles = lazy(() =>
+  import('./pages/tenant/InstanceFiles').then((m) => ({ default: m.InstanceFiles }))
+);
+const AuditLogs = lazy(() =>
+  import('./pages/tenant/AuditLogs').then((m) => ({ default: m.AuditLogs }))
+);
+const TrustPolicies = lazy(() =>
+  import('./pages/tenant/TrustPolicies').then((m) => ({ default: m.TrustPolicies }))
+);
+const DecisionRecords = lazy(() =>
+  import('./pages/tenant/DecisionRecords').then((m) => ({ default: m.DecisionRecords }))
+);
+const EvolutionLog = lazy(() =>
+  import('./pages/tenant/EvolutionLog').then((m) => ({ default: m.EvolutionLog }))
+);
+const GenomeDetail = lazy(() =>
+  import('./pages/tenant/GenomeDetail').then((m) => ({ default: m.GenomeDetail }))
+);
+const TemplateDetail = lazy(() =>
+  import('./pages/tenant/TemplateDetail').then((m) => ({ default: m.TemplateDetail }))
+);
 
 // Admin pages
 const PoolDashboard = lazy(() => import('./pages/admin/PoolDashboard'));
@@ -142,10 +245,7 @@ const EntitiesList = lazy(() =>
   }))
 );
 const CommunitiesList = lazy(() =>
-  import('./pages/project/CommunitiesList').then(
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    (m) => ({ default: m.CommunitiesList })
-  )
+  import('./pages/project/CommunitiesList').then((m) => ({ default: m.CommunitiesList }))
 );
 const EnhancedSearch = lazy(() =>
   import('./pages/project/EnhancedSearch').then((m) => ({
@@ -180,7 +280,7 @@ const EdgeMapList = lazy(() => import('./pages/project/schema/EdgeMapList'));
 // Loading fallback for lazy-loaded components
 // Hoisted outside component to avoid recreation on each render
 const PageLoader: React.FC = () => (
-  <div className="flex items-center justify-center h-[200px]">
+  <div className="flex items-center justify-center h-50">
     <LazySpin size="large" />
   </div>
 );
@@ -209,6 +309,8 @@ const LegacyProjectRedirect: React.FC = () => {
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const mustChangePassword = isAuthenticated && user?.must_change_password === true;
 
   return (
     <ErrorBoundary>
@@ -219,13 +321,45 @@ function App() {
               path="/login"
               element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />}
             />
+            <Route
+              path="/login/callback/:provider"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <OAuthCallback />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/invite/:token"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <InviteAccept />
+                </Suspense>
+              }
+            />
+
+            {/* Force Change Password */}
+            <Route
+              path="/force-change-password"
+              element={
+                isAuthenticated ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <ForceChangePassword />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
 
             {/* Protected Routes */}
             {/* Redirect root to tenant overview if authenticated */}
             <Route
               path="/"
               element={
-                isAuthenticated ? (
+                mustChangePassword ? (
+                  <Navigate to="/force-change-password" replace />
+                ) : isAuthenticated ? (
                   <Navigate to="/tenant" replace />
                 ) : (
                   <Navigate to="/login" replace />
@@ -249,7 +383,17 @@ function App() {
             {/* Tenant Console */}
             <Route
               path="/tenant"
-              element={isAuthenticated ? <TenantLayout /> : <Navigate to="/login" replace />}
+              element={
+                mustChangePassword ? (
+                  <Navigate to="/force-change-password" replace />
+                ) : isAuthenticated ? (
+                  <OrgSetupGuard>
+                    <TenantLayout />
+                  </OrgSetupGuard>
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
             >
               <Route
                 index
@@ -322,6 +466,22 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <Analytics />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="events"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <Events />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="webhooks"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <Webhooks />
                   </Suspense>
                 }
               />
@@ -434,6 +594,248 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <McpServerList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/create"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <CreateInstance />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/deploy"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeployProgress />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/members"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceMembers />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/settings"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceSettings />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/genes"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceGenes />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/channels"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceChannels />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/files"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceFiles />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="audit-logs"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AuditLogs />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="trust-policies"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <TrustPolicies />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="decision-records"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DecisionRecords />
+                  </Suspense>
+                }
+              />
+              <Route path="org-settings" element={<OrgSettingsLayout />}>
+                <Route
+                  index
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgInfo />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="info"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgInfo />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="members"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgMembers />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="clusters"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgClusters />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="audit"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgAudit />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="registry"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgRegistry />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="smtp"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgSmtp />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="genes"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgGenes />
+                    </Suspense>
+                  }
+                />
+              </Route>
+              <Route
+                path="deploy"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeployProgress />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="deploy/:deployId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeployProgress />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="clusters"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ClusterList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="clusters/:clusterId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ClusterDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="genes"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <GeneMarket />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="genes/:geneId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <GeneDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instance-templates"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceTemplateList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instance-templates/:templateId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <TemplateDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="instances/:instanceId/evolution"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <EvolutionLog />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="genes/genomes/:genomeId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <GenomeDetail />
                   </Suspense>
                 }
               />
@@ -704,6 +1106,22 @@ function App() {
                 }
               />
               <Route
+                path=":tenantId/events"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <Events />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/webhooks"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <Webhooks />
+                  </Suspense>
+                }
+              />
+              <Route
                 path=":tenantId/billing"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -719,6 +1137,72 @@ function App() {
                   </Suspense>
                 }
               />
+              <Route
+                path=":tenantId/org-settings"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <OrgSettingsLayout />
+                  </Suspense>
+                }
+              >
+                <Route index element={<Navigate to="info" replace />} />
+                <Route
+                  path="info"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgInfo />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="members"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgMembers />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="clusters"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgClusters />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="audit"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgAudit />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="registry"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgRegistry />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="smtp"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgSmtp />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="genes"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <OrgGenes />
+                    </Suspense>
+                  }
+                />
+              </Route>
               <Route
                 path=":tenantId/patterns"
                 element={
@@ -788,6 +1272,182 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <PoolDashboard />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/create"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <CreateInstance />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/deploy"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeployProgress />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/members"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceMembers />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/settings"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceSettings />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/genes"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceGenes />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/channels"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceChannels />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/files"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceFiles />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/audit-logs"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AuditLogs />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/trust-policies"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <TrustPolicies />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/decision-records"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DecisionRecords />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/deploy"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeployProgress />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/deploy/:deployId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeployProgress />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/clusters"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ClusterList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/clusters/:clusterId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ClusterDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/genes"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <GeneMarket />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/genes/:geneId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <GeneDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instance-templates"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <InstanceTemplateList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instance-templates/:templateId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <TemplateDetail />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/instances/:instanceId/evolution"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <EvolutionLog />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/genes/genomes/:genomeId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <GenomeDetail />
                   </Suspense>
                 }
               />

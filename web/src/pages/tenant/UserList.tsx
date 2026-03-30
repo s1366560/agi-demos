@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, Filter, Mail, MoreVertical, Plus, Search, ShieldCheck, TrendingUp } from 'lucide-react';
+
 import { formatDateOnly } from '@/utils/date';
 
 import { useTenantStore } from '../../stores/tenant';
@@ -74,7 +76,7 @@ export const UserList: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{t('tenant.users.subtitle')}</p>
         </div>
         <button className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
-          <span className="material-symbols-outlined text-[20px]">add</span>
+          <Plus size={20} />
           {t('tenant.users.inviteMember')}
         </button>
       </div>
@@ -100,7 +102,7 @@ export const UserList: React.FC = () => {
             </div>
           </div>
           <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary">
-            <span className="material-symbols-outlined">badge</span>
+            <BadgeCheck size={16} />
           </div>
         </div>
         <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
@@ -110,12 +112,12 @@ export const UserList: React.FC = () => {
             </p>
             <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{members.length}</h3>
             <p className="text-xs text-green-600 font-medium mt-1 flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px]">trending_up</span>
+              <TrendingUp size={14} />
               100% {t('common.status.active')}
             </p>
           </div>
           <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600">
-            <span className="material-symbols-outlined">verified_user</span>
+            <ShieldCheck size={16} />
           </div>
         </div>
         <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
@@ -127,7 +129,7 @@ export const UserList: React.FC = () => {
             <p className="text-xs text-slate-400 mt-1">Awaiting acceptance</p>
           </div>
           <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-500">
-            <span className="material-symbols-outlined">mail</span>
+            <Mail size={16} />
           </div>
         </div>
       </div>
@@ -138,7 +140,7 @@ export const UserList: React.FC = () => {
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
           <div className="relative w-full sm:w-96">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-slate-400 text-[20px]">search</span>
+              <Search size={20} className="text-slate-400" />
             </div>
             <input
               className="block w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-surface-dark text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
@@ -165,7 +167,7 @@ export const UserList: React.FC = () => {
                 <option value="owner">Owner</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                <ChevronDown size={16} />
               </div>
             </div>
             <div className="relative">
@@ -182,11 +184,11 @@ export const UserList: React.FC = () => {
                 <option value="suspended">{t('common.status.suspended')}</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                <ChevronDown size={16} />
               </div>
             </div>
             <button className="p-2 text-slate-400 hover:text-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-surface-dark">
-              <span className="material-symbols-outlined text-[20px]">filter_list</span>
+              <Filter size={20} />
             </button>
           </div>
         </div>
@@ -281,7 +283,7 @@ export const UserList: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button className="text-slate-400 hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined">more_vert</span>
+                        <MoreVertical size={16} />
                       </button>
                     </td>
                   </tr>
@@ -309,7 +311,7 @@ export const UserList: React.FC = () => {
               >
                 <button className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-dark text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700">
                   <span className="sr-only">Previous</span>
-                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+                  <ChevronLeft size={20} />
                 </button>
                 <button
                   aria-current="page"
@@ -319,7 +321,7 @@ export const UserList: React.FC = () => {
                 </button>
                 <button className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-dark text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700">
                   <span className="sr-only">Next</span>
-                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+                  <ChevronRight size={20} />
                 </button>
               </nav>
             </div>

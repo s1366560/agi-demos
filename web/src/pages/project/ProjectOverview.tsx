@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+
+import { Bot, Brain, CheckCircle, ChevronDown, Cloud, FileText, Film, Image as ImageIcon, MoreVertical, Network, RefreshCw, Trash2, Users } from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
@@ -182,7 +185,7 @@ export const ProjectOverview: React.FC = () => {
               </span>
             </div>
             <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-md group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-              <span className="material-symbols-outlined">memory</span>
+              <Brain size={16} />
             </div>
           </div>
           <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
@@ -202,7 +205,7 @@ export const ProjectOverview: React.FC = () => {
               </span>
             </div>
             <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-md group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
-              <span className="material-symbols-outlined">cloud</span>
+              <Cloud size={16} />
             </div>
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
@@ -230,13 +233,11 @@ export const ProjectOverview: React.FC = () => {
               </span>
             </div>
             <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-md group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors">
-              <span className="material-symbols-outlined">hub</span>
+              <Network size={16} />
             </div>
           </div>
           <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-            <span className="material-symbols-outlined text-green-500" style={{ fontSize: '16px' }}>
-              check_circle
-            </span>
+            <CheckCircle size={16} className="text-green-500" style={{ fontSize: '16px' }} />
             <span>{t('project.overview.operational')}</span>
           </div>
         </div>
@@ -253,7 +254,7 @@ export const ProjectOverview: React.FC = () => {
               </span>
             </div>
             <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-md group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30 transition-colors">
-              <span className="material-symbols-outlined">diversity_3</span>
+              <Users size={16} />
             </div>
           </div>
           <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
@@ -316,16 +317,13 @@ export const ProjectOverview: React.FC = () => {
                           <td className="px-6 py-3">
                             <div className="flex items-center gap-3">
                               <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-                                <span
-                                  className="material-symbols-outlined"
-                                  style={{ fontSize: '20px' }}
-                                >
-                                  {memory.content_type === 'image'
-                                    ? 'image'
-                                    : memory.content_type === 'video'
-                                      ? 'movie'
-                                      : 'description'}
-                                </span>
+                                {memory.content_type === 'image' ? (
+                                  <ImageIcon size={20} />
+                                ) : memory.content_type === 'video' ? (
+                                  <Film size={20} />
+                                ) : (
+                                  <FileText size={20} />
+                                )}
                               </div>
                               <div>
                                 <div className="font-medium text-slate-900 dark:text-white">
@@ -361,9 +359,7 @@ export const ProjectOverview: React.FC = () => {
                                     key: 'reprocess',
                                     label: t('common.actions.reprocess') || 'Reprocess',
                                     icon: (
-                                      <span className="material-symbols-outlined text-sm">
-                                        refresh
-                                      </span>
+                                      <RefreshCw size={14} />
                                     ),
                                   },
                                   {
@@ -371,9 +367,7 @@ export const ProjectOverview: React.FC = () => {
                                     label: t('common.actions.delete') || 'Delete',
                                     danger: true,
                                     icon: (
-                                      <span className="material-symbols-outlined text-sm">
-                                        delete
-                                      </span>
+                                      <Trash2 size={14} />
                                     ),
                                   },
                                 ],
@@ -388,18 +382,13 @@ export const ProjectOverview: React.FC = () => {
                               }}
                               trigger={['click']}
                             >
-                              <button
+                              <button type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                 }}
                                 className="text-slate-400 hover:text-primary p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
                               >
-                                <span
-                                  className="material-symbols-outlined"
-                                  style={{ fontSize: '20px' }}
-                                >
-                                  more_vert
-                                </span>
+                                <MoreVertical size={16} style={{ fontSize: '20px' }} />
                               </button>
                             </LazyDropdown>
                           </td>
@@ -411,11 +400,9 @@ export const ProjectOverview: React.FC = () => {
               </table>
             </div>
             <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-surface-dark flex justify-center">
-              <button className="text-xs font-medium text-slate-500 hover:text-primary flex items-center gap-1">
+              <button type="button" className="text-xs font-medium text-slate-500 hover:text-primary flex items-center gap-1">
                 {t('common.actions.showMore')}{' '}
-                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                  expand_more
-                </span>
+                <ChevronDown size={16} style={{ fontSize: '16px' }} />
               </button>
             </div>
           </div>
@@ -429,16 +416,14 @@ export const ProjectOverview: React.FC = () => {
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wide">
                 {t('project.overview.projectTeam')}
               </h3>
-              <button className="p-1 text-slate-400 hover:text-primary rounded hover:bg-slate-100 dark:hover:bg-slate-800">
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  group
-                </span>
+              <button type="button" className="p-1 text-slate-400 hover:text-primary rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                <Users size={16} style={{ fontSize: '20px' }} />
               </button>
             </div>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full">
-                  <span className="material-symbols-outlined">diversity_3</span>
+                  <Users size={16} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-900 dark:text-white">
@@ -459,9 +444,7 @@ export const ProjectOverview: React.FC = () => {
               </h3>
               <div className="flex items-start gap-3 mb-4">
                 <div className="p-1.5 bg-white/20 rounded">
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    smart_toy
-                  </span>
+                  <Bot size={16} style={{ fontSize: '20px' }} />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t('project.overview.autoIndexing')}</p>
@@ -471,7 +454,7 @@ export const ProjectOverview: React.FC = () => {
               <div className="w-full bg-blue-900/50 h-1.5 rounded-full overflow-hidden">
                 <div className="bg-white h-full rounded-full w-full"></div>
               </div>
-              <div className="flex justify-between text-[10px] mt-1 text-blue-200">
+              <div className="flex justify-between text-2xs mt-1 text-blue-200">
                 <span>{t('project.overview.status')}</span>
                 <span>{t('project.overview.operationalStatus')}</span>
               </div>

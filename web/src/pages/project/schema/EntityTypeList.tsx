@@ -609,7 +609,7 @@ interface StatusBadgeProps {
 
 const StatusBadgeInternal: React.FC<StatusBadgeProps> = React.memo(({ status }) => (
   <span
-    className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+    className={`px-2 py-1 rounded-full text-2xs font-bold uppercase tracking-wide border ${
       status === 'ENABLED'
         ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
         : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
@@ -631,7 +631,7 @@ interface SourceBadgeProps {
 
 const SourceBadgeInternal: React.FC<SourceBadgeProps> = React.memo(({ source }) => (
   <span
-    className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+    className={`px-2 py-1 rounded-full text-2xs font-bold uppercase tracking-wide border ${
       source === 'generated'
         ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20'
         : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
@@ -689,18 +689,18 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
           .map(([key, val]: [string, any]) => (
             <div key={key} className="flex items-center gap-2 text-xs">
               <span className="text-emerald-600 dark:text-emerald-300 font-mono">{key}</span>
-              <span className="text-slate-500 dark:text-text-muted text-[10px]">
+              <span className="text-slate-500 dark:text-text-muted text-2xs">
                 : {typeof val === 'string' ? val : val.type}
               </span>
             </div>
           ))}
         {Object.keys(entity.schema || {}).length > 3 && (
-          <div className="text-[10px] text-slate-500 dark:text-text-muted mt-1 font-medium">
+          <div className="text-2xs text-slate-500 dark:text-text-muted mt-1 font-medium">
             +{Object.keys(entity.schema || {}).length - 3} more
           </div>
         )}
         {Object.keys(entity.schema || {}).length === 0 && (
-          <div className="text-[10px] text-slate-400 dark:text-text-muted italic">
+          <div className="text-2xs text-slate-400 dark:text-text-muted italic">
             {TEXTS.table.noAttributes}
           </div>
         )}
@@ -1012,7 +1012,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                   </h4>
                   <div className="grid grid-cols-1 gap-4">
                     <div>
-                      <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                      <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                         {TEXTS.modal.nameLabel}
                       </label>
                       <input
@@ -1027,7 +1027,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                      <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                         {TEXTS.modal.descLabel}
                       </label>
                       <textarea
@@ -1094,7 +1094,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                           <div className="p-5 flex flex-col gap-6">
                             <div className="grid grid-cols-12 gap-4">
                               <div className="col-span-5">
-                                <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                                <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                                   {TEXTS.modal.attrNameLabel}
                                 </label>
                                 <input
@@ -1108,7 +1108,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 />
                               </div>
                               <div className="col-span-4">
-                                <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                                <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                                   {TEXTS.modal.dataTypeLabel}
                                 </label>
                                 <div className="relative">
@@ -1147,7 +1147,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               </div>
                             </div>
                             <div>
-                              <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                              <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                                 {TEXTS.modal.docstringLabel}
                               </label>
                               <input
@@ -1173,7 +1173,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 {(attr.type === 'Integer' || attr.type === 'Float') && (
                                   <>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
+                                      <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         min_val (ge)
                                       </label>
                                       <input
@@ -1190,7 +1190,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
+                                      <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         max_val (le)
                                       </label>
                                       <input
@@ -1211,7 +1211,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 {attr.type === 'String' && (
                                   <>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
+                                      <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         min_len
                                       </label>
                                       <input
@@ -1228,7 +1228,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
+                                      <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         max_len
                                       </label>
                                       <input
@@ -1245,7 +1245,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       />
                                     </div>
                                     <div className="col-span-2">
-                                      <label className="text-[10px] text-slate-500 dark:text-text-muted block mb-1 font-mono">
+                                      <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
                                         regex
                                       </label>
                                       <input

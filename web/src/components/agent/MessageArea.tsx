@@ -536,7 +536,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 }}
                 aria-expanded={!pinnedCollapsed}
                 aria-controls={pinnedSectionId}
-                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 active:bg-slate-200 dark:active:bg-slate-700/70 transition-colors motion-reduce:transition-none min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 active:bg-slate-200 dark:active:bg-slate-700/70 transition-colors duration-150 motion-reduce:transition-none min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               >
                 <Pin size={12} />
                 <span>{t('agent.pinnedMessages', 'Pinned')}</span>
@@ -578,7 +578,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                               });
                             }
                           }}
-                          className="flex-1 min-w-0 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                          className="flex-1 min-w-0 text-left rounded-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           aria-label={t('agent.actions.jumpToMessage', 'Jump to message')}
                         >
                           <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
@@ -590,7 +590,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           onClick={() => {
                             if (event.id) togglePinEvent(event.id);
                           }}
-                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-opacity motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-all duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           aria-label={t('agent.actions.unpin', 'Unpin')}
                         >
                           <PinOff size={12} />
@@ -801,7 +801,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                     >
                       <div className={ASSISTANT_AVATAR_CLASSES}>
                         <svg
-                          className="w-[18px] h-[18px] text-primary"
+                          className="w-4.5 h-4.5 text-primary"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -837,7 +837,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           {includeScrollButton && showScrollButton && (
             <button
               onClick={contextValue.scroll.scrollToBottom}
-              className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] animate-fade-in"
+              className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 animate-fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               title={scrollButtonChild?.props.title || 'Scroll to bottom'}
               aria-label="Scroll to bottom"
               data-testid="scroll-button"

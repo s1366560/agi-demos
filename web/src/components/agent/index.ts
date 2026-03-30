@@ -41,12 +41,12 @@ export { WebSearchResultCard } from './WebSearchResultCard';
 export { SkillExecutionCard } from './SkillExecutionCard';
 
 // Layout & Chat Components
-export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
+export { ChatHistorySidebar } from './layout';
 export { IdleState } from './chat';
 export { TimelineEventItem } from './TimelineEventItem';
 export { ToolExecutionLive, ReasoningLog, FinalReport, FollowUpPills } from './execution';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
-export { MaterialIcon } from './shared';
+
 
 // Types
 export type { StarterTile } from './chat';

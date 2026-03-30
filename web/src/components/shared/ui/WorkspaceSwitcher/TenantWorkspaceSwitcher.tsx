@@ -8,6 +8,8 @@ import { useEffect } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
+import { Brain, ChevronsUpDown } from 'lucide-react';
+
 import { useTenantStore } from '@/stores/tenant';
 
 import { WorkspaceSwitcherRoot, WorkspaceSwitcherTrigger, WorkspaceSwitcherMenu } from './compound';
@@ -55,19 +57,17 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
     <WorkspaceSwitcherRoot mode="tenant">
       <WorkspaceSwitcherTrigger className={triggerClassName}>
         <div className="bg-primary/10 p-1.5 rounded-md shrink-0 flex items-center justify-center">
-          <span className="material-symbols-outlined text-primary text-[20px]">memory</span>
+          <Brain size={20} className="text-primary" />
         </div>
         <div className="flex flex-col overflow-hidden">
           <h1 className="text-slate-900 dark:text-white text-sm font-bold leading-none tracking-tight truncate">
             {currentTenant?.name || 'Select Tenant'}
           </h1>
-          <p className="text-[10px] text-slate-500 truncate leading-tight opacity-80">
+          <p className="text-2xs text-slate-500 truncate leading-tight opacity-80">
             Tenant Console
           </p>
         </div>
-        <span className="material-symbols-outlined text-slate-400 ml-auto text-[18px]">
-          unfold_more
-        </span>
+        <ChevronsUpDown size={18} className="text-slate-400 ml-auto" />
       </WorkspaceSwitcherTrigger>
 
       <WorkspaceSwitcherMenu label="Switch Tenant" className={menuClassName}>

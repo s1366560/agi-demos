@@ -7,9 +7,9 @@
 
 import React from 'react';
 
+import { Button, Tooltip } from 'antd';
 import { Download, File, FileText } from 'lucide-react';
 
-import { Button, Tooltip } from 'antd';
 
 interface FileDownloadButtonProps {
   /** The filename to display */

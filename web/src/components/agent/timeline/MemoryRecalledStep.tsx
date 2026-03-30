@@ -46,7 +46,7 @@ export const MemoryRecalledStep: React.FC<MemoryRecalledStepProps> = ({ event })
           <ul className="space-y-1">
             {event.memories.map((mem, idx) => (
               <li key={idx} className="text-xs text-gray-700 dark:text-gray-300">
-                <span className="mr-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-400">
+                <span className="mr-1 rounded bg-blue-100 px-1 py-0.5 text-2xs font-medium text-blue-600 dark:bg-blue-900 dark:text-blue-400">
                   {mem.category}
                 </span>
                 <span className="text-gray-400">|</span>

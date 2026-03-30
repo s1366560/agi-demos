@@ -112,7 +112,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           </div>
           <button
             onClick={handleClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             aria-label="Close create memory dialog"
           >
             <X className="h-5 w-5" />
@@ -125,7 +125,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('basic');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'basic'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -140,7 +140,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('extraction');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'extraction'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -155,7 +155,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('advanced');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'advanced'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -304,7 +304,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     type="button"
                     onClick={handleExtractEntities}
                     disabled={!formData.content.trim() || isExtracting || isLoading}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isExtracting ? (
                       <div className="flex items-center space-x-2">
@@ -319,7 +319,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     type="button"
                     onClick={handleExtractRelationships}
                     disabled={!formData.content.trim() || isExtracting || isLoading}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isExtracting ? (
                       <div className="flex items-center space-x-2">
@@ -484,7 +484,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             disabled={isLoading}
           >
             取消
@@ -492,7 +492,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           <button
             type="submit"
             form="memory-form"
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading || !formData.title.trim() || !formData.content.trim()}
             onClick={handleSubmit}
           >

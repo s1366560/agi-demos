@@ -1,12 +1,16 @@
 import React, { useMemo, useState } from 'react';
 
-import { ExclamationCircleOutlined, UserOutlined } from '@ant-design/icons';
-import { Avatar, Button, Input, List, Select, Space, Tag, Tooltip, Typography } from 'antd';
+import { useTranslation } from 'react-i18next';
+
+import { Avatar, Button, Input, List, Select, Tag, Tooltip, Typography } from 'antd';
+import { AlertCircle, User, ListTodo, PlayCircle, CheckCircle, Ban } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useWorkspaceStore } from '@/stores/workspace';
 
 import { workspaceTaskService } from '@/services/workspaceService';
+
+import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import type { WorkspaceTask, WorkspaceTaskStatus } from '@/types/workspace';
 
@@ -28,13 +32,6 @@ const PRIORITY_RANK: Record<string, number> = {
   P4: 1,
 };
 
-const STATUS_OPTIONS: { label: string; value: WorkspaceTaskStatus }[] = [
-  { label: 'To Do', value: 'todo' },
-  { label: 'In Progress', value: 'in_progress' },
-  { label: 'Blocked', value: 'blocked' },
-  { label: 'Done', value: 'done' },
-];
-
 const EFFORT_OPTIONS = [
   { label: 'S', value: 'S' },
   { label: 'M', value: 'M' },
@@ -51,11 +48,23 @@ const PRIORITY_OPTIONS = [
 ];
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
+  const { t } = useTranslation();
+  const message = useLazyMessage();
   const { tasks, agents } = useWorkspaceStore(
     useShallow((state) => ({
       tasks: state.tasks,
       agents: state.agents,
     }))
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      { label: <span className="flex items-center gap-1.5"><ListTodo size={14} className="text-slate-400" /> {t('workspaceDetail.taskBoard.statusTodo')}</span>, value: 'todo' },
+      { label: <span className="flex items-center gap-1.5"><PlayCircle size={14} className="text-blue-500" /> {t('workspaceDetail.taskBoard.statusInProgress')}</span>, value: 'in_progress' },
+      { label: <span className="flex items-center gap-1.5"><Ban size={14} className="text-red-500" /> {t('workspaceDetail.taskBoard.statusBlocked')}</span>, value: 'blocked' },
+      { label: <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-green-500" /> {t('workspaceDetail.taskBoard.statusDone')}</span>, value: 'done' },
+    ],
+    [t]
   );
 
   const [title, setTitle] = useState('');
@@ -96,6 +105,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
       setEffort('');
     } catch (err) {
       console.error('Failed to create task', err);
+      message?.error(t('workspaceDetail.taskBoard.createFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -106,6 +116,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
       await workspaceTaskService.update(workspaceId, taskId, { status: newStatus });
     } catch (err) {
       console.error('Failed to update status', err);
+      message?.error(t('workspaceDetail.taskBoard.updateStatusFailed'));
     }
   };
 
@@ -118,6 +129,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
       }
     } catch (err) {
       console.error('Failed to assign agent', err);
+      message?.error(t('workspaceDetail.taskBoard.assignFailed'));
     }
   };
 
@@ -126,38 +138,38 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
       label: agent.display_name || agent.agent_id,
       value: agent.id || agent.agent_id,
     }));
-    return [{ label: 'Unassigned', value: '' }, ...opts];
-  }, [agents]);
+    return [{ label: t('workspaceDetail.taskBoard.unassigned'), value: '' }, ...opts];
+  }, [agents, t]);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 transition-colors duration-200">
       <Typography.Title level={4} className="mb-4 mt-0">
-        Task Board
+        {t('workspaceDetail.taskBoard.title')}
       </Typography.Title>
 
-      <Space.Compact className="mb-4 flex w-full">
+      <div className="mb-4 flex flex-col sm:flex-row gap-2 w-full">
         <Input
-          placeholder="Task title..."
+          placeholder={t('workspaceDetail.taskBoard.taskTitlePlaceholder')}
           value={title}
           onChange={(e) => { setTitle(e.target.value); }}
           onPressEnter={() => {
             void handleAddTask();
           }}
-          style={{ flex: 1 }}
+          className="flex-1"
         />
         <Select
           options={PRIORITY_OPTIONS}
           value={priority}
           onChange={setPriority}
-          placeholder="Priority"
-          style={{ width: 100 }}
+          placeholder={t('workspaceDetail.taskBoard.priority')}
+          className="w-full sm:w-[100px]"
         />
         <Select
           options={EFFORT_OPTIONS}
           value={effort}
           onChange={setEffort}
-          placeholder="Effort"
-          style={{ width: 80 }}
+          placeholder={t('workspaceDetail.taskBoard.effort')}
+          className="w-full sm:w-[80px]"
           allowClear
         />
         <Button
@@ -167,10 +179,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
           }}
           loading={isSubmitting}
           disabled={!title.trim()}
+          className="w-full sm:w-auto"
         >
-          Add
+          {t('workspaceDetail.taskBoard.add')}
         </Button>
-      </Space.Compact>
+      </div>
 
       <List
         dataSource={sortedTasks}
@@ -180,18 +193,18 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
           const pColor = PRIORITY_COLORS[task.priority || ''] || 'default';
 
           return (
-            <List.Item className="border-b last:border-b-0 border-slate-100 hover:bg-slate-50 transition-colors">
+            <List.Item className="border-b last:border-b-0 border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
               <div
                 className={`flex w-full items-center justify-between gap-4 ${isDone ? 'opacity-50 grayscale' : ''}`}
               >
                 <div className="flex flex-1 items-center gap-2 overflow-hidden">
-                  <Tag color={pColor} className="m-0 min-w-[32px] text-center">
+                  <Tag color={pColor} className="m-0 min-w-8 text-center">
                     {task.priority || '-'}
                   </Tag>
 
                   {isBlocked && (
-                    <Tooltip title={task.blocker_reason || 'Task is blocked'}>
-                      <ExclamationCircleOutlined className="text-red-500" />
+                    <Tooltip title={task.blocker_reason || t('workspaceDetail.taskBoard.taskIsBlocked')}>
+                      <AlertCircle size={14} className="text-red-500" />
                     </Tooltip>
                   )}
 
@@ -200,7 +213,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                   </Typography.Text>
 
                   {task.estimated_effort && (
-                    <Tag className="m-0 rounded-full border-slate-200 text-xs">
+                    <Tag className="m-0 rounded-full border-slate-200 dark:border-slate-700 text-xs">
                       {task.estimated_effort}
                     </Tag>
                   )}
@@ -216,11 +229,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                     }}
                     style={{ width: 140 }}
                     placeholder="Assignee"
-                    suffixIcon={
+                    suffix={
                       task.assignee_agent_id ? (
                         <Avatar
                           size="small"
-                          icon={<UserOutlined />}
+                          icon={<User size={12} />}
                           className="bg-blue-100 text-blue-500 scale-50"
                         />
                       ) : null
@@ -230,7 +243,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                   <Select
                     size="small"
                     value={task.status}
-                    options={STATUS_OPTIONS}
+                    options={statusOptions}
                     onChange={(val) => {
                       void handleStatusChange(task.id, val as WorkspaceTaskStatus);
                     }}

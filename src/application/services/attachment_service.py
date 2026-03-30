@@ -481,7 +481,7 @@ class AttachmentService:
         if attachment.mime_type == "application/pdf":
             sandbox_path = attachment.sandbox_path or f"/workspace/{attachment.filename}"
             try:
-                import fitz  # pymupdf
+                import fitz  # type: ignore[import-untyped]  # pymupdf
 
                 pdf_doc = fitz.open(stream=content, filetype="pdf")
                 if pdf_doc.page_count > 0:

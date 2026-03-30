@@ -44,17 +44,42 @@ const api = httpClient;
 interface TokenResponse {
   access_token: string;
   token_type: string;
+  must_change_password?: boolean;
 }
 
 // Auth API types
 interface LoginResponse {
   token: string;
   user: User;
+  must_change_password: boolean;
+}
+
+// Backend user response (uses user_id instead of id)
+interface BackendUserResponse {
+  user_id: string;
+  email: string;
+  name: string;
+  roles: string[];
+  is_active: boolean;
+  created_at: string;
+  profile?: UserProfile;
 }
 
 // Share response types
 interface ShareListResponse {
   shares: unknown[];
+}
+
+// Tenant provider assignment response
+interface TenantProviderAssignment {
+  id: string;
+  provider_id: string;
+  tenant_id: string;
+  priority: number;
+  operation_type: 'llm' | 'embedding' | 'rerank';
+  provider?: ProviderConfig;
+  created_at: string;
+  updated_at: string;
 }
 
 export const authAPI = {
@@ -67,11 +92,12 @@ export const authAPI = {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
-    // Backend returns { access_token, token_type } - user is fetched separately
+    // Backend returns { access_token, token_type, must_change_password } - user is fetched separately
     const token = tokenResponse.access_token;
+    const must_change_password = tokenResponse.must_change_password;
 
     // Fetch user details
-    const userResponse = await api.get<any>('/auth/me', {
+    const userResponse = await api.get<BackendUserResponse>('/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -84,12 +110,13 @@ export const authAPI = {
       is_active: userResponse.is_active,
       created_at: userResponse.created_at,
       profile: userResponse.profile,
+      must_change_password,
     };
 
-    return { token, user };
+    return { token, user, must_change_password: must_change_password ?? false };
   },
   verifyToken: async (_token: string): Promise<User> => {
-    const userResponse = await api.get<any>('/auth/me');
+    const userResponse = await api.get<BackendUserResponse>('/auth/me');
     // Map backend response (user_id) to frontend format (id)
     return {
       id: userResponse.user_id,
@@ -103,6 +130,15 @@ export const authAPI = {
   },
   updateProfile: async (data: Partial<UserProfile>): Promise<User> => {
     return await api.put('/users/me', data);
+  },
+  changePassword: async (
+    oldPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> => {
+    return await api.post('/auth/force-change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
   },
 };
 
@@ -318,7 +354,7 @@ export const providerAPI = {
   listTenantAssignments: async (
     tenantId: string,
     operationType?: 'llm' | 'embedding' | 'rerank'
-  ): Promise<any[]> => {
+  ): Promise<TenantProviderAssignment[]> => {
     return await api.get(`/llm-providers/tenants/${tenantId}/assignments`, {
       params: { operation_type: operationType },
     });

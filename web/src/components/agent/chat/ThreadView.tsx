@@ -29,6 +29,7 @@ export const ThreadView = memo<ThreadViewProps>(
     const [expanded, setExpanded] = useState(false);
     const [replies, setReplies] = useState<ThreadReply[]>([]);
     const [loading, setLoading] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [replyText, setReplyText] = useState('');
 
     useEffect(() => {
@@ -36,6 +37,7 @@ export const ThreadView = memo<ThreadViewProps>(
       const abortController = new AbortController();
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
+      setFetchError(null);
       fetch(`/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`, {
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
@@ -49,9 +51,11 @@ export const ThreadView = memo<ThreadViewProps>(
             setLoading(false);
           }
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           if (!abortController.signal.aborted) {
-            console.error('Failed to fetch thread replies:', err);
+            const msg = err instanceof Error ? err.message : 'Failed to load thread replies';
+            setFetchError(msg);
+            console.error('ThreadView: fetch replies failed', err);
             setLoading(false);
           }
         });
@@ -69,7 +73,7 @@ export const ThreadView = memo<ThreadViewProps>(
           onClick={() => {
             setExpanded(!expanded);
           }}
-          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-600 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <MessageSquare size={12} />
@@ -91,6 +95,8 @@ export const ThreadView = memo<ThreadViewProps>(
                   className="animate-spin motion-reduce:animate-none text-slate-400"
                 />
               </div>
+            ) : fetchError ? (
+              <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{fetchError}</div>
             ) : (
               <>
                 {replies.map((reply) => (
@@ -135,7 +141,7 @@ export const ThreadView = memo<ThreadViewProps>(
                     }}
                     disabled={!replyText.trim()}
                     aria-label={t('agent.thread.sendReply', 'Send reply')}
-                    className="p-1.5 rounded-lg bg-primary text-white disabled:opacity-50"
+                    className="p-1.5 rounded-lg bg-primary text-white disabled:opacity-50 transition-colors duration-150 hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                   >
                     <Send size={12} />
                   </button>

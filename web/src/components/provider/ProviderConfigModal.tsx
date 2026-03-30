@@ -1,6 +1,21 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import { Select, Slider, InputNumber } from 'antd';
+import {
+  X,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Phone,
+  List,
+  Sparkles,
+  Loader2,
+  Bot,
+  Key,
+  Brain,
+  CheckCircle,
+  type LucideIcon
+} from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { PROVIDERS } from '../../constants/providers';
@@ -14,7 +29,6 @@ import {
   ProviderType,
   ProviderUpdate,
 } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { ProviderIcon } from './ProviderIcon';
 
@@ -181,16 +195,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     reranker: false,
   });
 
-  const steps: { key: Step; label: string; icon: string; description: string }[] = [
+  const steps: { key: Step; label: string; icon: LucideIcon; description: string }[] = [
     {
       key: 'provider',
       label: 'Select Provider',
-      icon: 'smart_toy',
+      icon: Bot,
       description: 'Choose LLM provider',
     },
-    { key: 'credentials', label: 'Credentials', icon: 'key', description: 'API key & config' },
-    { key: 'models', label: 'Models', icon: 'psychology', description: 'Configure models' },
-    { key: 'review', label: 'Review', icon: 'check_circle', description: 'Review & save' },
+    { key: 'credentials', label: 'Credentials', icon: Key, description: 'API key & config' },
+    { key: 'models', label: 'Models', icon: Brain, description: 'Configure models' },
+    { key: 'review', label: 'Review', icon: CheckCircle, description: 'Review & save' },
   ];
 
   const fetchModels = useCallback(async (type: ProviderType) => {
@@ -637,9 +651,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
-              <MaterialIcon name="close" size={20} />
+              <X size={20} />
             </button>
           </div>
 
@@ -663,9 +677,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         }`}
                       >
                         {isCompleted ? (
-                          <MaterialIcon name="check" size={16} />
+                          <Check size={16} />
                         ) : (
-                          <MaterialIcon name={step.icon} size={16} />
+                          <step.icon size={16} />
                         )}
                       </div>
                       <div className="ml-3 hidden sm:block">
@@ -711,7 +725,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <button
                       key={p.value}
                       onClick={() => handleProviderSelect(p.value)}
-                      className={`p-4 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left hover:shadow-md ${
+                      className={`p-4 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left hover:shadow-md ${
                         formData.provider_type === p.value
                           ? 'border-primary bg-primary/5 dark:bg-primary/10'
                           : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'
@@ -731,11 +745,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               <div className="space-y-4">
                 {!isEditing && envProviders[formData.provider_type] && (
                   <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-start gap-3">
-                    <MaterialIcon
-                      name="auto_awesome"
-                      size={20}
-                      className="text-green-600 dark:text-green-400 mt-0.5"
-                    />
+                    <Sparkles size={20} className="text-green-600 dark:text-green-400 mt-0.5" />
                     <div>
                       <h4 className="text-sm font-medium text-green-800 dark:text-green-300">
                         Environment Variables Detected
@@ -789,14 +799,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         <button
                           onClick={handleTestConnection}
                           disabled={isTesting || !formData.api_key}
-                          className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 font-medium"
+                          className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 font-medium"
                         >
                           {isTesting ? (
-                            <MaterialIcon
-                              name="progress_activity"
-                              size={18}
-                              className="animate-spin motion-reduce:animate-none"
-                            />
+                            <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
                           ) : (
                             'Test'
                           )}
@@ -867,15 +873,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           const el = document.getElementById('rtc-config-section');
                           if (el) el.classList.toggle('hidden');
                         }}
-                        className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                        className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
                       >
                         <div className="flex items-center gap-2">
-                          <MaterialIcon name="call" size={18} className="text-primary" />
+                          <Phone size={18} className="text-primary" />
                           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                             Voice & Video Call Settings (RTC)
                           </span>
                         </div>
-                        <MaterialIcon name="expand_more" size={18} className="text-slate-400" />
+                        <ChevronDown size={18} className="text-slate-400" />
                       </button>
                       <div
                         id="rtc-config-section"
@@ -1047,11 +1053,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               <div className="space-y-4">
                 {isLoadingModels && (
                   <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
-                    <MaterialIcon
-                      name="sync"
-                      size={16}
-                      className="animate-spin motion-reduce:animate-none"
-                    />
+                    <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
                     Fetching available models...
                   </div>
                 )}
@@ -1084,10 +1086,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                 llm_model: primaryModel,
                               });
                             }}
-                            className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                             title="Use preset model"
                           >
-                            <MaterialIcon name="list" size={18} />
+                            <List size={18} />
                           </button>
                         </div>
                       ) : (
@@ -1127,7 +1129,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             Model Info
                           </span>
                           {selectedModelMeta.is_deprecated && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
                               Deprecated
                             </span>
                           )}
@@ -1162,38 +1164,38 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {selectedModelMeta.reasoning && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">
                               Reasoning
                             </span>
                           )}
                           {selectedModelMeta.supports_tool_call && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">
                               Tools
                             </span>
                           )}
                           {selectedModelMeta.capabilities.includes('vision') && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
                               Vision
                             </span>
                           )}
                           {selectedModelMeta.supports_structured_output && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">
                               Structured
                             </span>
                           )}
                           {selectedModelMeta.supports_temperature && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 rounded">
                               Temperature
                             </span>
                           )}
                           {selectedModelMeta.open_weights && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 rounded">
+                            <span className="px-1.5 py-0.5 text-2xs font-medium bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 rounded">
                               Open
                             </span>
                           )}
                         </div>
                         {selectedModelMeta.knowledge_cutoff && (
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                          <div className="text-2xs text-slate-400 dark:text-slate-500">
                             Knowledge cutoff: {selectedModelMeta.knowledge_cutoff}
                           </div>
                         )}
@@ -1233,7 +1235,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
                           title="Use preset model"
                         >
-                          <MaterialIcon name="list" size={18} />
+                          <List size={18} />
                         </button>
                       </div>
                     ) : (
@@ -1274,16 +1276,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       onClick={() => {
                         setShowAdvancedLLM(!showAdvancedLLM);
                       }}
-                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
                     >
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                         Advanced LLM Settings
                       </span>
-                      <MaterialIcon
-                        name={showAdvancedLLM ? 'expand_less' : 'expand_more'}
-                        size={20}
-                        className="text-slate-500"
-                      />
+                      {showAdvancedLLM ? (
+                        <ChevronUp size={20} className="text-slate-500" />
+                      ) : (
+                        <ChevronDown size={20} className="text-slate-500" />
+                      )}
                     </button>
 
                     {showAdvancedLLM && (
@@ -1576,7 +1578,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
                           title="Use preset model"
                         >
-                          <MaterialIcon name="list" size={18} />
+                          <List size={18} />
                         </button>
                       </div>
                     ) : (
@@ -1617,16 +1619,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       onClick={() => {
                         setShowAdvancedEmbedding(!showAdvancedEmbedding);
                       }}
-                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
                     >
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                         Advanced Embedding Settings
                       </span>
-                      <MaterialIcon
-                        name={showAdvancedEmbedding ? 'expand_less' : 'expand_more'}
-                        size={20}
-                        className="text-slate-500"
-                      />
+                      {showAdvancedEmbedding ? (
+                        <ChevronUp size={20} className="text-slate-500" />
+                      ) : (
+                        <ChevronDown size={20} className="text-slate-500" />
+                      )}
                     </button>
 
                     {showAdvancedEmbedding && (
@@ -1749,7 +1751,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
                           title="Use preset model"
                         >
-                          <MaterialIcon name="list" size={18} />
+                          <List size={18} />
                         </button>
                       </div>
                     ) : (
@@ -1894,7 +1896,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         formData.config?.doubao_endpoint_id) && (
                         <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
                           <div className="flex items-center gap-1.5 mb-1.5">
-                            <MaterialIcon name="call" size={14} className="text-primary" />
+                            <Phone size={14} className="text-primary" />
                             <span className="text-xs font-medium text-slate-500">
                               Voice & Video Call (RTC)
                             </span>
@@ -1981,7 +1983,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       );
                     }
               }
-              className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               {currentStep === 'provider' ? 'Cancel' : 'Back'}
             </button>
@@ -1991,15 +1993,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <span className="flex items-center gap-2">
-                      <MaterialIcon
-                        name="progress_activity"
-                        size={18}
-                        className="animate-spin motion-reduce:animate-none"
-                      />
+                      <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
                       Saving...
                     </span>
                   ) : (
@@ -2014,7 +2012,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     );
                   }}
                   disabled={!canProceed()}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>

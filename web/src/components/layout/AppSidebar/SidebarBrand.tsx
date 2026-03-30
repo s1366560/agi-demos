@@ -4,6 +4,8 @@
  * Brand section of the sidebar, showing the MemStack logo and name.
  */
 
+import { Brain } from 'lucide-react';
+
 import type { SidebarVariant } from './types';
 
 export interface SidebarBrandProps {
@@ -20,7 +22,7 @@ function getDefaultBrand(_variant?: SidebarVariant): React.ReactNode {
   return (
     <div className="flex items-center gap-3 px-2">
       <div className="bg-primary/10 p-2 rounded-lg border border-primary/20">
-        <span className="material-symbols-outlined text-primary">memory</span>
+        <Brain size={24} className="text-primary" />
       </div>
       <h1 className="text-slate-900 dark:text-white text-lg font-bold leading-none tracking-tight">
         MemStack<span className="text-primary">.ai</span>

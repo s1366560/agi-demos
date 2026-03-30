@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 
+import { Search, X } from 'lucide-react';
+
 import { ProviderConfig } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { ProviderIcon } from './ProviderIcon';
 
@@ -32,15 +33,16 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
+        <div role="dialog" aria-modal="true" aria-labelledby="provider-selector-title" className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 shrink-0">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
+            <h2 id="provider-selector-title" className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              aria-label="Close"
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
-              <MaterialIcon name="close" size={20} />
+              <X size={20} />
             </button>
           </div>
 
@@ -48,12 +50,13 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MaterialIcon name="search" size={20} className="text-slate-400" />
+                <Search size={20} className="text-slate-400" />
               </div>
               <input
                 type="text"
                 className="block w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Search providers..."
+                aria-label="Search providers"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -75,7 +78,7 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
                     onClick={() => {
                       onSelect(provider);
                     }}
-                    className="w-full text-left p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 transition-colors group"
+                    className="w-full text-left p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset group"
                   >
                     <ProviderIcon providerType={provider.provider_type} size="sm" />
                     <div>

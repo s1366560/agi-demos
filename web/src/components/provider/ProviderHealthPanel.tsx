@@ -1,7 +1,55 @@
 import React from 'react';
 
+import { Activity, Bot, CheckCircle, Gauge, SlidersHorizontal ,
+  Square,
+  StopCircle,
+  Terminal,
+  Cloud,
+  Zap,
+  Ban,
+  Search,
+  Sparkles,
+  AlertTriangle,
+  FlaskConical,
+  RefreshCcw,
+  Settings,
+  Brain,
+  Info,
+  Loader2,
+  AlertCircle,
+  Globe,
+  User
+} from 'lucide-react';
+
 import { ProviderConfig, SystemResilienceStatus } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 interface ProviderHealthPanelProps {
   providers: ProviderConfig[];
@@ -71,7 +119,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
       <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">
-            <MaterialIcon name="monitoring" size={20} className="text-primary" />
+            <Activity size={20} className="text-primary" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">System Health</h2>
@@ -91,7 +139,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
                 : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
           }`}
         >
-          <MaterialIcon name={getHealthIcon()} size={18} className={getHealthColor()} />
+          {renderDynamicIcon(getHealthIcon(), 18, getHealthColor())}
           <span className={`text-sm font-semibold ${getHealthColor()}`}>
             {healthPercentage}% Healthy
           </span>
@@ -106,7 +154,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               Total Providers
             </span>
-            <MaterialIcon name="smart_toy" size={18} className="text-slate-400" />
+            <Bot size={18} className="text-slate-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -124,7 +172,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
               Healthy
             </span>
-            <MaterialIcon name="check_circle" size={18} className="text-emerald-500" />
+            <CheckCircle size={18} className="text-emerald-500" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
@@ -156,19 +204,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             >
               Issues
             </span>
-            <MaterialIcon
-              name={
-                unhealthyProviders > 0 ? 'error' : degradedProviders > 0 ? 'warning' : 'verified'
-              }
-              size={18}
-              className={
-                unhealthyProviders > 0
-                  ? 'text-red-500'
-                  : degradedProviders > 0
-                    ? 'text-amber-500'
-                    : 'text-slate-400'
-              }
-            />
+            {renderDynamicIcon(unhealthyProviders > 0 ? 'error' : degradedProviders > 0 ? 'warning' : 'verified', 18, unhealthyProviders > 0 ? 'text-red-500' : degradedProviders > 0 ? 'text-amber-500' : 'text-emerald-500')}
           </div>
           <div className="flex items-baseline gap-2">
             <span
@@ -210,11 +246,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             >
               Circuit Breakers
             </span>
-            <MaterialIcon
-              name="electric_bolt"
-              size={18}
-              className={openCircuitBreakers > 0 ? 'text-amber-500' : 'text-slate-400'}
-            />
+            {renderDynamicIcon('zap', 18, openCircuitBreakers > 0 ? 'text-amber-500' : 'text-slate-400')}
           </div>
           <div className="flex items-baseline gap-2">
             <span
@@ -238,7 +270,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
         <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/50 dark:to-slate-800/30">
           <div className="flex items-center gap-4">
             <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-              <MaterialIcon name="speed" size={20} className="text-primary" />
+              <Gauge size={20} className="text-primary" />
             </div>
             <div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -261,7 +293,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
                 </p>
               </div>
               <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                <MaterialIcon name="tune" size={20} className="text-primary" />
+                <SlidersHorizontal size={20} className="text-primary" />
               </div>
             </div>
           )}

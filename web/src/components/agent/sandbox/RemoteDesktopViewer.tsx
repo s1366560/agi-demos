@@ -5,7 +5,7 @@
  * the API proxy, with auto-resize and clipboard support.
  */
 
-import { DesktopOutlined } from '@ant-design/icons';
+import { Monitor } from 'lucide-react';
 
 import { getAuthToken } from '../../../utils/tokenResolver';
 
@@ -48,7 +48,7 @@ export function RemoteDesktopViewer({
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-900">
         <div className="text-center text-gray-500">
-          <DesktopOutlined className="text-4xl mb-2" />
+          <Monitor size={36} className="mb-2 mx-auto" />
           <p>Desktop is not running</p>
           <p className="text-sm">Start the desktop to connect</p>
         </div>

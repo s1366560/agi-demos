@@ -165,7 +165,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
             <button
               type="button"
               onClick={onMobileMenuOpen}
-              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors md:hidden"
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 md:hidden"
               aria-label="Menu"
             >
               <Menu size={18} className="text-slate-500" />
@@ -173,14 +173,14 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
             <button
               type="button"
               onClick={onSidebarToggle}
-              className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500"
+              className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-500"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {sidebarCollapsed ? <PanelRight size={18} /> : <PanelLeft size={18} />}
             </button>
             <Link
               to={basePath}
-              className="text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors hidden sm:block ml-1"
+              className="text-sm font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 hidden sm:block ml-1"
             >
               MemStack
             </Link>
@@ -193,7 +193,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
                 key={item.id}
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                  `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap ${
                     isActive
                       ? 'bg-primary/10 text-primary'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
@@ -245,7 +245,7 @@ function ProjectSubNav({
     <div className="h-10 px-3 sm:px-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark flex items-center gap-3 flex-none shrink-0 overflow-x-auto">
       <Link
         to={`${tenantBasePath}/projects`}
-        className="flex items-center gap-1 text-sm text-slate-500 hover:text-primary transition-colors flex-shrink-0"
+        className="flex items-center gap-1 text-sm text-slate-500 hover:text-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 flex-shrink-0"
       >
         <ArrowLeft size={14} />
         <span className="hidden sm:inline">{t('nav.projects', 'Projects')}</span>
@@ -266,7 +266,7 @@ function ProjectSubNav({
             <NavLink
               key={tab.id}
               to={fullPath}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap ${
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300'
@@ -310,7 +310,7 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
         onClick={() => {
           setOpen(!open);
         }}
-        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           isAnyActive
             ? 'bg-primary/10 text-primary'
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -331,7 +331,7 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
                   navigate(item.path);
                   setOpen(false);
                 }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
                   isActive
                     ? 'text-primary bg-primary/5'
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -359,12 +359,12 @@ function BackgroundTasksButton() {
     <button
       type="button"
       onClick={togglePanel}
-      className="relative p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+      className="relative p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       aria-label="Background tasks"
     >
       <Activity size={18} />
       {runningCount > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+        <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-primary text-white text-2xs font-bold rounded-full flex items-center justify-center">
           {runningCount}
         </span>
       )}
@@ -379,7 +379,7 @@ function SearchButton() {
   return (
     <button
       type="button"
-      className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+      className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       aria-label="Search"
     >
       <Search size={18} />
@@ -394,7 +394,7 @@ function NotificationButton() {
   return (
     <button
       type="button"
-      className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+      className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       aria-label="Notifications"
     >
       <Bell size={18} />
@@ -476,7 +476,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
         onClick={() => {
           setOpen(!open);
         }}
-        className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         aria-label="User menu"
       >
         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs font-medium overflow-hidden">
@@ -507,7 +507,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
             <button
               type="button"
               onClick={cycleTheme}
-              className="w-full flex items-center justify-between px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             >
               <span className="flex items-center gap-2.5">
                 <span className="text-slate-400">{themeIcon}</span>
@@ -518,7 +518,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
             <button
               type="button"
               onClick={toggleLanguage}
-              className="w-full flex items-center justify-between px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             >
               <span className="flex items-center gap-2.5">
                 <Languages size={16} className="text-slate-400" />
@@ -565,7 +565,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <LogOut size={16} />
             {t('common.logout', 'Logout')}
@@ -589,7 +589,7 @@ function MenuLink({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
     >
       <span className="text-slate-400">{icon}</span>
       {label}

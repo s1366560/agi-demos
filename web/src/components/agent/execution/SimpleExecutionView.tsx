@@ -5,7 +5,7 @@
  * Shows a simple vertical list of tool executions.
  */
 
-import { MaterialIcon } from '../shared';
+import { Wrench } from 'lucide-react';
 
 import { ToolExecutionDetail } from './ToolExecutionDetail';
 
@@ -43,7 +43,7 @@ export function SimpleExecutionView({ toolExecutions, isStreaming }: SimpleExecu
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <MaterialIcon name="build" size={20} className="text-primary" />
+              <Wrench size={20} className="text-primary" />
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white">Tool Executions</h3>

@@ -6,6 +6,8 @@ import { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { CheckCircle, XCircle } from 'lucide-react';
+
 import { TimeBadge } from './shared';
 
 import type { TimelineEvent } from '../../../types/agent';
@@ -23,9 +25,7 @@ export const TaskStartItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-2.5">
           <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0 mt-0.5">
-            <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-xs">
-              task_alt
-            </span>
+            <CheckCircle size={12} className="text-blue-600 dark:text-blue-400" />
           </div>
           <div className="flex-1 min-w-0 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/70 rounded-xl px-3 py-2 shadow-sm">
             <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
@@ -67,13 +67,11 @@ export const TaskCompleteItem = memo(
             isSuccess ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
           }`}
         >
-          <span
-            className={`material-symbols-outlined text-xs ${
-              isSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-            }`}
-          >
-            {isSuccess ? 'check_circle' : 'cancel'}
-          </span>
+          {isSuccess ? (
+            <CheckCircle size={12} className="text-green-600 dark:text-green-400" />
+          ) : (
+            <XCircle size={12} className="text-red-600 dark:text-red-400" />
+          )}
         </div>
         <div className="flex-1 min-w-0 text-sm text-slate-500 dark:text-slate-400 pt-1 break-words [overflow-wrap:anywhere] bg-white/70 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 rounded-xl px-3 py-2">
           {t('agent.timeline.taskStatus', 'Task {{current}}/{{total}} {{status}}', {

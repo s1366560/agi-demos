@@ -18,19 +18,34 @@ interface TrendingEntitiesProps {
 export const TrendingEntities = memo<TrendingEntitiesProps>(({ projectId, onEntityClick }) => {
   const { t } = useTranslation();
   const [entities, setEntities] = useState<TrendingEntity[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setError(null);
     projectStatsService
       .getTrending(projectId, 8)
       .then((data) => {
         if (!cancelled) setEntities(data);
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Failed to load trending entities';
+          setError(msg);
+          console.error('TrendingEntities: fetch failed', err);
+        }
+      });
     return () => {
       cancelled = true;
     };
   }, [projectId]);
+
+  if (error) {
+    return (
+      <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{error}</div>
+    );
+  }
 
   if (entities.length === 0) return null;
 
@@ -53,8 +68,8 @@ export const TrendingEntities = memo<TrendingEntitiesProps>(({ projectId, onEnti
               transition-colors cursor-pointer"
             title={entity.summary || entity.name}
           >
-            <span className="font-medium">{entity.name}</span>
-            <span className="text-[10px] text-slate-400">{entity.mention_count}</span>
+             <span className="font-medium">{entity.name}</span>
+             <span className="text-2xs text-slate-400">{entity.mention_count}</span>
           </button>
         ))}
       </div>

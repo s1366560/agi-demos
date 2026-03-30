@@ -177,7 +177,7 @@ export const ShortcutOverlay = memo(() => {
                       {item.keys.map((key) => (
                         <kbd
                           key={key}
-                          className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-xs font-mono text-slate-500 dark:text-slate-400 min-w-[28px] justify-center"
+                          className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-xs font-mono text-slate-500 dark:text-slate-400 min-w-7 justify-center"
                         >
                           {key}
                         </kbd>

@@ -57,7 +57,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
         <div className="flex-shrink-0 mt-1">
           <Avatar
             icon={isAgent ? <Bot size={16} /> : <User size={16} />}
-            className={isAgent ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-600'}
+            className={isAgent ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-600'}
             size="small"
           />
         </div>
@@ -78,7 +78,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
             className={`px-4 py-2 rounded-2xl shadow-sm text-sm whitespace-pre-wrap break-words ${
               isOwn
                 ? 'bg-blue-600 text-white rounded-tr-sm'
-                : 'bg-white border border-gray-100 text-gray-800 rounded-tl-sm'
+                : 'bg-white border border-slate-100 text-slate-800 rounded-tl-sm'
             }`}
           >
             {renderContentWithMentions(message.content, isOwn)}

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 
+import { Activity, AlertCircle, BarChart3, DollarSign, Gauge, Loader2, X } from 'lucide-react';
+
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderUsageStats as ProviderUsageStatsType } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 interface ProviderUsageStatsProps {
   provider: ProviderConfig;
@@ -40,35 +41,33 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+        <div role="dialog" aria-modal="true" aria-labelledby="provider-usage-stats-title" className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+              <h2 id="provider-usage-stats-title" className="text-xl font-semibold text-slate-900 dark:text-white">
                 Usage Statistics
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">{provider.name}</p>
             </div>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
-              <MaterialIcon name="close" />
+              <X size={16} />
             </button>
           </div>
 
           {/* Content */}
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6" aria-live="polite">
             {loading ? (
               <div className="flex justify-center items-center py-12">
-                <MaterialIcon
-                  name="progress_activity"
-                  className="animate-spin motion-reduce:animate-none text-primary text-4xl"
-                />
+                <Loader2 size={16} className="animate-spin motion-reduce:animate-none text-primary text-4xl" />
               </div>
             ) : error ? (
               <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-2">
-                <MaterialIcon name="error" />
+                <AlertCircle size={16} />
                 {error}
               </div>
             ) : stats ? (
@@ -77,7 +76,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <MaterialIcon name="analytics" className="text-blue-500" />
+                      <BarChart3 size={16} className="text-blue-500" />
                       <span className="text-sm text-blue-700 dark:text-blue-400">
                         Total Requests
                       </span>
@@ -89,7 +88,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
 
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <MaterialIcon name="data_usage" className="text-purple-500" />
+                      <Activity size={16} className="text-purple-500" />
                       <span className="text-sm text-purple-700 dark:text-purple-400">
                         Total Tokens
                       </span>
@@ -105,7 +104,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
 
                   <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <MaterialIcon name="attach_money" className="text-green-500" />
+                      <DollarSign size={16} className="text-green-500" />
                       <span className="text-sm text-green-700 dark:text-green-400">Total Cost</span>
                     </div>
                     <p className="text-2xl font-bold text-green-900 dark:text-green-100">
@@ -115,7 +114,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
 
                   <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <MaterialIcon name="speed" className="text-orange-500" />
+                      <Gauge size={16} className="text-orange-500" />
                       <span className="text-sm text-orange-700 dark:text-orange-400">
                         Avg Response
                       </span>
@@ -149,7 +148,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                     <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
                       <span className="text-slate-500">Provider ID</span>
                       <span
-                        className="font-mono text-slate-900 dark:text-white truncate max-w-[200px]"
+                        className="font-mono text-slate-900 dark:text-white truncate max-w-50"
                         title={stats.provider_id}
                       >
                         {stats.provider_id}

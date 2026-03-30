@@ -15,7 +15,7 @@
  *   - @/components/agent - ConversationSidebar, MessageArea
  *   - @/components/shared - Modal components, UI components
  *   - @/components/graph - GraphVisualization, EntityCard
- *   - @/components/agent/layout - WorkspaceSidebar, ResizablePanels
+ *   - @/components/agent/layout - ChatHistorySidebar, LayoutModeSelector
  *   - @/components/agent/chat - MessageBubble, InputBar, IdleState
  *   - @/components/agent/execution - WorkPlanProgress, ToolExecutionLive
  *   - @/components/agent/sandbox - SandboxTerminal, SandboxPanel

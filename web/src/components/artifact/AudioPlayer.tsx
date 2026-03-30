@@ -4,8 +4,8 @@
 
 import React, { useRef, useState } from 'react';
 
-import { SoundOutlined } from '@ant-design/icons';
 import { Space, Typography, Spin, Alert } from 'antd';
+import { Volume2 } from 'lucide-react';
 
 const { Text } = Typography;
 
@@ -73,7 +73,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         <Space direction="vertical" className="w-full">
           {!compact && filename && (
             <Space>
-              <SoundOutlined className="text-blue-500" />
+              <Volume2 className="text-blue-500" size={16} />
               <Text ellipsis style={{ maxWidth: 200 }}>
                 {filename}
               </Text>

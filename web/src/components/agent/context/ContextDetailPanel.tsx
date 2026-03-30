@@ -1,13 +1,7 @@
 import type { FC } from 'react';
 
-import {
-  CompressOutlined,
-  ClockCircleOutlined,
-  ThunderboltOutlined,
-  DatabaseOutlined,
-  CheckCircleOutlined,
-} from '@ant-design/icons';
 import { Drawer, Progress, Space, Tag, Typography, Divider, Empty, Timeline } from 'antd';
+import { Minimize2, Clock, Zap, Database, CheckCircle } from 'lucide-react';
 
 import { useThemeColors, resolveThemeColor } from '@/hooks/useThemeColor';
 
@@ -127,7 +121,7 @@ const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) 
     const time = new Date(record.timestamp).toLocaleTimeString();
     return {
       key: record.timestamp,
-      icon: <CompressOutlined style={{ fontSize: 14 }} />,
+      icon: <Minimize2 size={14} />,
       color: record.level.includes('l3') ? 'red' : record.level.includes('l2') ? 'orange' : 'blue',
       content: (
         <div style={{ fontSize: 12, lineHeight: 1.6 }}>
@@ -139,11 +133,11 @@ const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) 
           </div>
           <Space size={12} wrap>
             <span>
-              <ThunderboltOutlined /> Saved {formatTokens(record.tokens_saved)} tokens (
+              <Zap size={16} className="mr-1 inline-block align-text-bottom" /> Saved {formatTokens(record.tokens_saved)} tokens (
               {record.savings_pct.toFixed(0)}%)
             </span>
             <span>
-              <ClockCircleOutlined /> {record.duration_ms.toFixed(0)}ms
+              <Clock size={16} className="mr-1 inline-block align-text-bottom" /> {record.duration_ms.toFixed(0)}ms
             </span>
             <span>
               Messages: {record.messages_before} → {record.messages_after}
@@ -181,7 +175,7 @@ export const ContextDetailPanel: FC = () => {
     <Drawer
       title={
         <Space>
-          <DatabaseOutlined />
+          <Database size={16} />
           <span>Context Monitor</span>
         </Space>
       }
@@ -227,7 +221,7 @@ export const ContextDetailPanel: FC = () => {
                     ? 'orange'
                     : 'gold'
             }
-            icon={compressionLevel === 'none' ? <CheckCircleOutlined /> : <CompressOutlined />}
+            icon={compressionLevel === 'none' ? <CheckCircle size={16} /> : <Minimize2 size={16} />}
           >
             {levelDescriptions[compressionLevel]
               ? compressionLevel.replace('l', 'L').replace('_', ' ')

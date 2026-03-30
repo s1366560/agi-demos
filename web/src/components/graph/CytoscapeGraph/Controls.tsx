@@ -6,6 +6,8 @@
 
 import { useEffect } from 'react';
 
+import { RefreshCw, Focus, RefreshCcw, Download } from 'lucide-react';
+
 import { useGraphContext } from './CytoscapeGraph';
 
 // ========================================
@@ -44,34 +46,38 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
         <div className="flex items-center gap-2">
           {config.features?.enableRelayout !== false && (
             <button
+              type="button"
               onClick={actions.relayout}
               className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               title="Relayout"
             >
-              <span className="material-symbols-outlined">refresh</span>
+              <RefreshCw size={20} />
             </button>
           )}
           <button
+            type="button"
             onClick={actions.fitView}
             className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             title="Fit to View"
           >
-            <span className="material-symbols-outlined">center_focus_strong</span>
+            <Focus size={20} />
           </button>
           <button
+            type="button"
             onClick={actions.reloadData}
             className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             title="Reload Data"
           >
-            <span className="material-symbols-outlined">sync</span>
+            <RefreshCcw size={20} />
           </button>
           {config.features?.enableExport !== false && (
             <button
+              type="button"
               onClick={actions.exportImage}
               className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               title="Export as PNG"
             >
-              <span className="material-symbols-outlined">download</span>
+              <Download size={20} />
             </button>
           )}
         </div>
@@ -95,34 +101,38 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
       <div className="flex items-center gap-2">
         {config.features?.enableRelayout !== false && (
           <button
+            type="button"
             onClick={actions.relayout}
             className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             title="Relayout"
           >
-            <span className="material-symbols-outlined">refresh</span>
+            <RefreshCw size={20} />
           </button>
         )}
         <button
+          type="button"
           onClick={actions.fitView}
           className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           title="Fit to View"
         >
-          <span className="material-symbols-outlined">center_focus_strong</span>
+          <Focus size={20} />
         </button>
         <button
+          type="button"
           onClick={actions.reloadData}
           className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           title="Reload Data"
         >
-          <span className="material-symbols-outlined">sync</span>
+          <RefreshCcw size={20} />
         </button>
         {config.features?.enableExport !== false && (
           <button
+            type="button"
             onClick={actions.exportImage}
             className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             title="Export as PNG"
           >
-            <span className="material-symbols-outlined">download</span>
+            <Download size={20} />
           </button>
         )}
       </div>

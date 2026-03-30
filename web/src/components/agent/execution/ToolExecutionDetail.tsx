@@ -11,6 +11,23 @@
 
 import { useState } from 'react';
 
+import {
+  Clock,
+  Timer,
+  ChevronUp,
+  ChevronDown,
+  ExternalLink,
+  CheckCircle,
+  XCircle,
+  Globe,
+  Search,
+  Network,
+  History,
+  PlusCircle,
+  FileText,
+  Puzzle,
+} from 'lucide-react';
+
 import { formatTimeWithSeconds } from '@/utils/date';
 
 import {
@@ -19,7 +36,7 @@ import {
   extractImageUrl,
   foldTextWithMetadata,
 } from '../../../utils/toolResultUtils';
-import { MaterialIcon } from '../shared';
+
 
 import type { ToolExecution } from '../../../types/agent';
 
@@ -36,21 +53,21 @@ export interface ToolExecutionDetailProps {
 /**
  * Get tool icon based on name
  */
-function getToolIcon(name: string): string {
+function getToolIcon(name: string) {
   const lowerName = name.toLowerCase();
   if (
     lowerName.includes('web_search') ||
     (lowerName.includes('web') && lowerName.includes('search'))
   )
-    return 'language';
-  if (lowerName.includes('web_scrape') || lowerName.includes('scrape')) return 'public';
-  if (lowerName.includes('search') || lowerName.includes('memory')) return 'search';
-  if (lowerName.includes('entity')) return 'account_tree';
-  if (lowerName.includes('episode')) return 'history';
-  if (lowerName.includes('create')) return 'add_circle';
-  if (lowerName.includes('graph') || lowerName.includes('query')) return 'hub';
-  if (lowerName.includes('summary')) return 'summarize';
-  return 'extension';
+    return Globe;
+  if (lowerName.includes('web_scrape') || lowerName.includes('scrape')) return Globe;
+  if (lowerName.includes('search') || lowerName.includes('memory')) return Search;
+  if (lowerName.includes('entity')) return Network;
+  if (lowerName.includes('episode')) return History;
+  if (lowerName.includes('create')) return PlusCircle;
+  if (lowerName.includes('graph') || lowerName.includes('query')) return Network;
+  if (lowerName.includes('summary')) return FileText;
+  return Puzzle;
 }
 
 /**
@@ -95,32 +112,32 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
     running: {
       bg: 'bg-amber-100 dark:bg-amber-900/30',
       text: 'text-amber-600 dark:text-amber-400',
-      icon: 'hourglass_empty',
+      icon: Clock,
       label: 'Running',
     },
     success: {
       bg: 'bg-emerald-100 dark:bg-emerald-900/30',
       text: 'text-emerald-600 dark:text-emerald-400',
-      icon: 'check_circle',
+      icon: CheckCircle,
       label: 'Success',
     },
     failed: {
       bg: 'bg-red-100 dark:bg-red-900/30',
       text: 'text-red-600 dark:text-red-400',
-      icon: 'error',
+      icon: XCircle,
       label: 'Failed',
     },
   }[execution.status];
+
+  // eslint-disable-next-line react-hooks/static-components
+  const ToolIcon = getToolIcon(execution.toolName);
 
   if (compact) {
     return (
       <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
         <div className="flex items-center gap-2">
-          <MaterialIcon
-            name={getToolIcon(execution.toolName) as any}
-            size={16}
-            className="text-slate-500"
-          />
+          {/* eslint-disable-next-line react-hooks/static-components */}
+          <ToolIcon size={16} className="text-slate-500" />
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
             {execution.toolName}
           </span>
@@ -135,34 +152,43 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
     );
   }
 
+  const StatusIcon = statusConfig.icon;
+
   return (
     <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-            <MaterialIcon
-              name={getToolIcon(execution.toolName) as any}
-              size={16}
-              className="text-primary"
-            />
+            {/* eslint-disable-next-line react-hooks/static-components */}
+            <ToolIcon size={16} className="text-primary" />
           </div>
-          <span className="text-sm font-semibold text-slate-900 dark:text-white">
+          <h4 className="font-semibold text-sm text-slate-900 dark:text-white">
             {execution.toolName}
+          </h4>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span
+            className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.text}`}
+          >
+            {execution.status === 'running' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
+            )}
+            {execution.status !== 'running' && <StatusIcon size={12} />}
+            {statusConfig.label}
           </span>
         </div>
 
         {/* Status Badge */}
         <div className="flex items-center gap-2">
           <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
+            className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.text}`}
           >
             {execution.status === 'running' && (
               <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
             )}
-            {execution.status !== 'running' && (
-              <MaterialIcon name={statusConfig.icon as any} size={12} />
-            )}
+            {execution.status !== 'running' && <statusConfig.icon size={12} />}
             {statusConfig.label}
           </span>
           {execution.duration && (
@@ -176,12 +202,13 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
         {/* Input Parameters */}
         <div>
           <button
+            type="button"
             onClick={() => {
               setShowFullInput(!showFullInput);
             }}
             className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-300"
           >
-            <MaterialIcon name={showFullInput ? 'expand_less' : 'expand_more'} size={14} />
+            {showFullInput ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             Input Parameters
           </button>
           {showFullInput && (
@@ -196,12 +223,12 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
         {/* Timing Info */}
         <div className="flex items-center gap-4 text-xs text-slate-500">
           <span className="flex items-center gap-1">
-            <MaterialIcon name="schedule" size={12} />
+            <Clock size={12} />
             Start: {formatTime(execution.startTime)}
           </span>
           {execution.endTime && (
             <span className="flex items-center gap-1">
-              <MaterialIcon name="timer" size={12} />
+              <Timer size={12} />
               Duration: {formatDuration(execution.duration)}
             </span>
           )}
@@ -216,6 +243,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
               </h6>
               {!hasImageResult && isResultFolded && (
                 <button
+                  type="button"
                   onClick={() => {
                     setShowFullResult(!showFullResult);
                   }}
@@ -259,7 +287,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 mt-2 text-xs text-primary hover:underline"
                     >
-                      <MaterialIcon name="open_in_new" size={12} />
+                      <ExternalLink size={12} />
                       Open in new tab
                     </a>
                   </div>

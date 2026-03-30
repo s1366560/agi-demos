@@ -124,7 +124,7 @@ export const ContextStatusIndicator: FC = () => {
           {/* Compression level badge */}
           {levelLabel && (
             <span
-              className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-[10px] font-medium ${levelColorClass}`}
+              className={`inline-flex items-center gap-0.5 px-1 py-px rounded text-2xs font-medium ${levelColorClass}`}
             >
               <Minimize2 size={8} />
               {levelLabel}

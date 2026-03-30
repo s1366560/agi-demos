@@ -19,7 +19,7 @@ export function useHexDragDrop() {
   }, []);
 
   const updateDragTarget = useCallback((q: number, r: number) => {
-    setDragTarget(prev => {
+    setDragTarget((prev) => {
       if (prev && prev.q === q && prev.r === r) return prev;
       return { q, r };
     });
@@ -32,17 +32,18 @@ export function useHexDragDrop() {
     setDragTarget(null);
   }, []);
 
-  const endDrag = useCallback((
-    onMoveAgent?: (agentId: string, q: number, r: number) => void
-  ) => {
-    if (isDragging && draggedAgentId && dragTarget && onMoveAgent) {
-      if (!dragOrigin || dragOrigin.q !== dragTarget.q || dragOrigin.r !== dragTarget.r) {
-        onMoveAgent(draggedAgentId, dragTarget.q, dragTarget.r);
+  const endDrag = useCallback(
+    (onMoveAgent?: (agentId: string, q: number, r: number) => void) => {
+      if (isDragging && draggedAgentId && dragTarget && onMoveAgent) {
+        if (!dragOrigin || dragOrigin.q !== dragTarget.q || dragOrigin.r !== dragTarget.r) {
+          onMoveAgent(draggedAgentId, dragTarget.q, dragTarget.r);
+        }
       }
-    }
-    
-    cancelDrag();
-  }, [isDragging, draggedAgentId, dragTarget, dragOrigin, cancelDrag]);
+
+      cancelDrag();
+    },
+    [isDragging, draggedAgentId, dragTarget, dragOrigin, cancelDrag]
+  );
 
   return {
     isDragging,

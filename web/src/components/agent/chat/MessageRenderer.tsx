@@ -19,6 +19,8 @@
 
 import React from 'react';
 
+import { ChevronDown, ChevronUp, CircleAlert, RefreshCw, CheckCircle } from 'lucide-react';
+
 import {
   ChatMessage,
   UserMessage,
@@ -116,9 +118,11 @@ const SystemMessageRenderer: React.FC<{
         className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         aria-expanded={!collapsed}
       >
-        <span className="material-symbols-outlined text-sm align-middle mr-1">
-          {collapsed ? 'expand_more' : 'expand_less'}
-        </span>
+        {collapsed ? (
+          <ChevronDown size={14} className="align-middle mr-1" />
+        ) : (
+          <ChevronUp size={14} className="align-middle mr-1" />
+        )}
         {collapsed ? 'Show system message' : 'Hide system message'}
       </button>
       {!collapsed && (
@@ -149,13 +153,17 @@ const ToolMessageRenderer: React.FC<{
   return (
     <div className="my-2 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
       <div className="flex items-center gap-2 mb-2">
-        <span className="material-symbols-outlined text-sm text-slate-500">
-          {status === 'failed' ? 'error' : status === 'running' ? 'sync' : 'check_circle'}
-        </span>
+        {status === 'failed' ? (
+          <CircleAlert size={14} className="text-slate-500" />
+        ) : status === 'running' ? (
+          <RefreshCw size={14} className="text-slate-500" />
+        ) : (
+          <CheckCircle size={14} className="text-slate-500" />
+        )}
         <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
           {message.metadata?.toolName || 'Tool'}
         </span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColor}`}>{status}</span>
+        <span className={`text-2xs px-2 py-0.5 rounded-full ${statusColor}`}>{status}</span>
       </div>
       <div className="text-xs text-slate-600 dark:text-slate-400 font-mono whitespace-pre-wrap">
         {message.content}

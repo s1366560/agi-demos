@@ -9,9 +9,9 @@
 
 import React, { useState, memo } from 'react';
 
+import { Card, Typography, Space, Tag } from 'antd';
 import { ChevronDown, ChevronRight, Lightbulb } from 'lucide-react';
 
-import { Card, Typography, Space, Tag } from 'antd';
 
 import type { ThoughtLevel } from '../../types/agent';
 

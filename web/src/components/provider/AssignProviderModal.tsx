@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 
+import { AlertCircle, Loader2, X } from 'lucide-react';
+
 import { providerAPI } from '../../services/api';
 import { ProviderConfig } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 interface AssignProviderModalProps {
   isOpen: boolean;
@@ -55,24 +56,25 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div role="dialog" aria-modal="true" aria-labelledby="assign-provider-title" className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            <h2 id="assign-provider-title" className="text-lg font-semibold text-slate-900 dark:text-white">
               Assign Provider
             </h2>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
-              <MaterialIcon name="close" size={20} />
+              <X size={20} />
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center gap-2">
-                <MaterialIcon name="error" size={16} />
+                <AlertCircle size={16} />
                 {error}
               </div>
             )}
@@ -135,11 +137,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
                 className="px-4 py-2 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
               >
                 {isSubmitting && (
-                  <MaterialIcon
-                    name="progress_activity"
-                    className="animate-spin motion-reduce:animate-none"
-                    size={16}
-                  />
+                  <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
                 )}
                 Assign
               </button>

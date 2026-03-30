@@ -77,6 +77,34 @@ export interface UploadProgress {
 
 export type ProgressCallback = (progress: UploadProgress) => void;
 
+// API response DTOs (snake_case from backend)
+interface ApiErrorResponse {
+  detail: string;
+}
+
+interface InitiateUploadApiResponse {
+  attachment_id: string;
+  upload_id: string;
+  total_parts: number;
+  part_size: number;
+}
+
+interface ListAttachmentsApiResponse {
+  attachments: AttachmentResponse[];
+}
+
+/**
+ * Helper to extract error details from fetch response
+ */
+async function getErrorDetail(response: Response): Promise<string> {
+  try {
+    const error = (await response.json()) as ApiErrorResponse;
+    return error.detail || response.statusText;
+  } catch {
+    return response.statusText;
+  }
+}
+
 // ==================== Service ====================
 
 class AttachmentServiceClass {
@@ -130,13 +158,14 @@ class AttachmentServiceClass {
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
-            resolve(JSON.parse(xhr.responseText));
+            const response = JSON.parse(xhr.responseText) as AttachmentResponse;
+            resolve(response);
           } catch {
             reject(new Error('Invalid response'));
           }
         } else {
           try {
-            const error = JSON.parse(xhr.responseText);
+            const error = JSON.parse(xhr.responseText) as ApiErrorResponse;
             reject(new Error(error.detail || 'Upload failed'));
           } catch {
             reject(new Error(`Upload failed: ${xhr.statusText}`));
@@ -211,7 +240,7 @@ class AttachmentServiceClass {
       return await this.completeUpload(attachmentId, parts);
     } catch (error) {
       // Abort on error
-      await this.abortUpload(attachmentId).catch(() => {});
+      void this.abortUpload(attachmentId).catch(() => {});
       throw error;
     }
   }
@@ -237,11 +266,11 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Failed to initiate upload');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Failed to initiate upload');
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as InitiateUploadApiResponse;
     return {
       attachmentId: data.attachment_id,
       uploadId: data.upload_id,
@@ -270,11 +299,11 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Failed to upload part');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Failed to upload part');
     }
 
-    return response.json();
+    return response.json() as Promise<UploadPartResponse>;
   }
 
   /**
@@ -297,11 +326,11 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Failed to complete upload');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Failed to complete upload');
     }
 
-    return response.json();
+    return response.json() as Promise<AttachmentResponse>;
   }
 
   /**
@@ -318,8 +347,8 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Failed to abort upload');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Failed to abort upload');
     }
   }
 
@@ -337,11 +366,11 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Failed to list attachments');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Failed to list attachments');
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as ListAttachmentsApiResponse;
     return data.attachments;
   }
 
@@ -354,11 +383,11 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Attachment not found');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Attachment not found');
     }
 
-    return response.json();
+    return response.json() as Promise<AttachmentResponse>;
   }
 
   /**
@@ -378,8 +407,8 @@ class AttachmentServiceClass {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || 'Failed to delete attachment');
+      const detail = await getErrorDetail(response);
+      throw new Error(detail || 'Failed to delete attachment');
     }
   }
 

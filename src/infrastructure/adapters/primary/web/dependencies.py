@@ -1,6 +1,6 @@
 from fastapi import Request
 
-from src.domain.ports.services.graph_service import GraphServicePort
+from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 

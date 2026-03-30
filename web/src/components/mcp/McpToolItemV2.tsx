@@ -6,13 +6,62 @@
 import React from 'react';
 
 import { Tag, Tooltip } from 'antd';
-import { ChevronDown, FileJson } from 'lucide-react';
+import { ChevronDown, FileJson, Wrench ,
+  CheckCircle,
+  Square,
+  StopCircle,
+  Terminal,
+  Cloud,
+  Zap,
+  Ban,
+  Search,
+  Sparkles,
+  AlertTriangle,
+  Activity,
+  FlaskConical,
+  RefreshCcw,
+  Settings,
+  Brain,
+  Info,
+  Loader2,
+  AlertCircle,
+  Globe,
+  User
+} from 'lucide-react';
 
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { SERVER_TYPE_STYLES, CARD_STYLES } from './styles';
 
 import type { MCPToolInfo } from '@/types/agent';
+
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 export interface ToolWithServer extends MCPToolInfo {
   serverName: string;
@@ -54,7 +103,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
               }`}
             >
-              <MaterialIcon name="build" size={20} />
+              <Wrench size={20} />
             </div>
 
             {/* Tool Info */}
@@ -87,7 +136,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
             {/* Server Tag */}
             <Tag className="text-xs m-0 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border-0">
               <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                <MaterialIcon name={typeStyle.icon} size={12} />
+                {renderDynamicIcon(typeStyle.icon, 12, "")}
                 {tool.serverName}
               </span>
             </Tag>
@@ -115,7 +164,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
               <div
                 className={`w-6 h-6 rounded flex items-center justify-center ${typeStyle.bgColor}`}
               >
-                <MaterialIcon name={typeStyle.icon} size={14} className={typeStyle.textColor} />
+                {renderDynamicIcon(typeStyle.icon, 14, typeStyle.textColor)}
               </div>
               <span className="font-medium text-slate-700 dark:text-slate-300">
                 {tool.serverName}

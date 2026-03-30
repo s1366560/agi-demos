@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 
-import {
+import { Image as ImageIcon, Film, Music, FileText, Table, Presentation, Archive, FileCode, Paperclip, File, Download ,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -27,6 +27,7 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
+
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
@@ -260,15 +261,15 @@ function formatBytesSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getFileIconForMime(mimeType: string): string {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'movie';
-  if (mimeType.startsWith('audio/')) return 'audio_file';
-  if (mimeType === 'application/pdf') return 'picture_as_pdf';
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'table_chart';
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'slideshow';
+function getFileIconForMime(mimeType: string): React.ComponentType<{ size?: number; className?: string }> {
+  if (mimeType.startsWith('image/')) return ImageIcon;
+  if (mimeType.startsWith('video/')) return Film;
+  if (mimeType.startsWith('audio/')) return Music;
+  if (mimeType === 'application/pdf') return FileText;
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return Table;
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return Presentation;
   if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compress'))
-    return 'folder_zip';
+    return Archive;
   if (
     mimeType.startsWith('text/') ||
     mimeType.includes('json') ||
@@ -276,8 +277,8 @@ function getFileIconForMime(mimeType: string): string {
     mimeType.includes('javascript') ||
     mimeType.includes('typescript')
   )
-    return 'code';
-  return 'description';
+    return FileCode;
+  return FileText;
 }
 
 // User Message Component - Modern floating style with action bar
@@ -313,30 +314,30 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                 <div
                   className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-indigo-400 to-primary/90'}`}
                 >
-                  {isSubAgent ? (
-                    <svg
-                      className="w-[9px] h-[9px] text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <title>SubAgent Icon</title>
-                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                      <line x1="8" y1="21" x2="16" y2="21" />
-                      <line x1="12" y1="17" x2="12" y2="21" />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="w-[9px] h-[9px] text-white"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                    >
-                      <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
-                    </svg>
-                  )}
+                   {isSubAgent ? (
+                     <svg
+                       className="w-2.5 h-2.5 text-white"
+                       viewBox="0 0 24 24"
+                       fill="none"
+                       stroke="currentColor"
+                       strokeWidth="3"
+                       strokeLinecap="round"
+                       strokeLinejoin="round"
+                     >
+                       <title>SubAgent Icon</title>
+                       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                       <line x1="8" y1="21" x2="16" y2="21" />
+                       <line x1="12" y1="17" x2="12" y2="21" />
+                     </svg>
+                   ) : (
+                     <svg
+                       className="w-2.5 h-2.5 text-white"
+                       viewBox="0 0 16 16"
+                       fill="currentColor"
+                     >
+                       <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
+                     </svg>
+                   )}
                 </div>
               )}
 
@@ -359,7 +360,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               {/* Badge Label */}
               {isForced && (
                 <div
-                  className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[11px] font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary dark:text-primary-300'}`}
+                  className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-xs-plus font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary dark:text-primary-300'}`}
                 >
                   {isSubAgent ? `@${forcedSubAgentName}` : forcedSkillName}
                 </div>
@@ -378,15 +379,16 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                 key={idx}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg"
               >
-                <span className="material-symbols-outlined text-[16px] text-slate-500 dark:text-slate-400">
-                  {getFileIconForMime(file.mime_type)}
-                </span>
-                <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                {(() => {
+                  const FileIcon = getFileIconForMime(file.mime_type);
+                  return <FileIcon size={16} className="text-slate-500 dark:text-slate-400" />;
+                })()}
+                <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-50">
                   {file.filename}
                 </span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                  {formatBytesSize(file.size_bytes)}
-                </span>
+                 <span className="text-2xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                   {formatBytesSize(file.size_bytes)}
+                 </span>
               </div>
             ))}
           </div>
@@ -510,7 +512,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
+            className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               {t('agent.messageBubble.reasoning', 'Reasoning')}
@@ -578,7 +580,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <span className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">
@@ -611,9 +613,9 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
             <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700/50">
               {/* Input */}
               <div className="mt-3">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                  {t('agent.messageBubble.input', 'Input')}
-                </p>
+                 <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                   {t('agent.messageBubble.input', 'Input')}
+                 </p>
                 <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                   <div className="bg-slate-50 dark:bg-slate-900/50 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
@@ -630,9 +632,9 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
               {/* Output */}
               {observeEvent && (
                 <div className="mt-3">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                    {t('agent.messageBubble.output', 'Output')}
-                  </p>
+                   <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                     {t('agent.messageBubble.output', 'Output')}
+                   </p>
                   {(() => {
                     const formatted = formatToolOutput(observeEvent.toolOutput);
                     if (formatted.type === 'error') {
@@ -699,7 +701,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
@@ -934,24 +936,24 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
     }
   };
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryIcon = (category: string): React.ComponentType<{ size?: number; className?: string }> => {
     switch (category) {
       case 'image':
-        return 'image';
+        return ImageIcon;
       case 'video':
-        return 'movie';
+        return Film;
       case 'audio':
-        return 'audio_file';
+        return Music;
       case 'document':
-        return 'description';
+        return FileText;
       case 'code':
-        return 'code';
+        return FileCode;
       case 'data':
-        return 'table_chart';
+        return Table;
       case 'archive':
-        return 'folder_zip';
+        return Archive;
       default:
-        return 'attach_file';
+        return Paperclip;
     }
   };
 
@@ -973,17 +975,18 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
         <div className="bg-emerald-50/70 dark:bg-emerald-900/15 rounded-xl p-3.5 border border-emerald-200/50 dark:border-emerald-800/30 shadow-sm">
           {/* Header */}
           <div className="flex items-center gap-2 mb-2.5">
-            <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
-              {getCategoryIcon(event.category)}
-            </span>
+            {(() => {
+              const CatIcon = getCategoryIcon(event.category);
+              return <CatIcon size={18} className="text-emerald-600 dark:text-emerald-400" />;
+            })()}
             <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
               {t('agent.messageBubble.fileGenerated', 'File Generated')}
             </span>
-            {event.sourceTool && (
-              <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded-full">
-                {event.sourceTool}
-              </span>
-            )}
+             {event.sourceTool && (
+               <span className="text-2xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded-full">
+                 {event.sourceTool}
+               </span>
+             )}
           </div>
 
           {/* Image Preview */}
@@ -1028,7 +1031,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                   void handleRefreshUrl();
                 }}
                 disabled={refreshingUrl}
-                className="touch-target flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="touch-target flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors duration-150 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               >
                 <RefreshCw
                   size={12}
@@ -1044,9 +1047,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
           {/* File Info */}
           <div className="flex items-center gap-3 text-sm bg-white/60 dark:bg-slate-800/40 rounded-lg p-2.5 border border-emerald-100 dark:border-emerald-800/20">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="material-symbols-outlined text-emerald-500 dark:text-emerald-400 text-base">
-                insert_drive_file
-              </span>
+              <File size={16} className="text-emerald-500 dark:text-emerald-400" />
               <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
                 {event.filename}
               </span>
@@ -1059,10 +1060,10 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="touch-target flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+                className="touch-target flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors duration-150 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
                 download={event.filename}
               >
-                <span className="material-symbols-outlined text-base">download</span>
+                <Download size={16} />
                 {t('agent.messageBubble.download', 'Download')}
               </a>
             )}
@@ -1072,7 +1073,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 onClick={() => {
                   void handleOpenInCanvas();
                 }}
-                className="touch-target flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+                className="touch-target flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors duration-150 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
               >
                 <PanelRight size={14} />
                 {t('agent.messageBubble.openInCanvas', 'Canvas')}
@@ -1098,7 +1099,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                   void handleRefreshUrl();
                 }}
                 disabled={refreshingUrl}
-                className="touch-target flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
+                className="touch-target flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors duration-150 font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
               >
                 <RefreshCw
                   size={14}
@@ -1114,8 +1115,8 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             )}
           </div>
 
-          {/* Additional metadata */}
-          <div className="mt-3 flex items-center gap-2 text-xs">
+           {/* Additional metadata */}
+           <div className="mt-3 flex items-center gap-2 text-2xs">
             <span className="px-2 py-1 bg-white/50 dark:bg-slate-800/50 rounded text-slate-500 dark:text-slate-400 border border-emerald-100 dark:border-emerald-800/20">
               {event.mimeType}
             </span>

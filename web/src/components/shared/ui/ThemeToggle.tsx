@@ -16,7 +16,7 @@ export const ThemeToggle: React.FC = () => {
         }}
         aria-label="Switch to light mode"
         aria-pressed={theme === 'light'}
-        className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+        className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           theme === 'light'
             ? 'bg-white dark:bg-slate-600 text-yellow-500 shadow-sm'
             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -32,7 +32,7 @@ export const ThemeToggle: React.FC = () => {
         }}
         aria-label="Use system theme"
         aria-pressed={theme === 'system'}
-        className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+        className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           theme === 'system'
             ? 'bg-white dark:bg-slate-600 text-blue-500 shadow-sm'
             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -48,7 +48,7 @@ export const ThemeToggle: React.FC = () => {
         }}
         aria-label="Switch to dark mode"
         aria-pressed={theme === 'dark'}
-        className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+        className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           theme === 'dark'
             ? 'bg-white dark:bg-slate-600 text-indigo-400 shadow-sm'
             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'

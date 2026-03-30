@@ -59,7 +59,7 @@ const BindingCard: FC<BindingCardProps> = memo(({ binding, onToggle, onDelete, a
             aria-label={`Toggle ${agentName} binding`}
             className="sr-only peer"
           />
-          <div className="w-9 h-5 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:bg-blue-600" />
+          <div className="w-9 h-5 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:bg-blue-600" />
         </label>
       </div>
 
@@ -82,7 +82,7 @@ const BindingCard: FC<BindingCardProps> = memo(({ binding, onToggle, onDelete, a
       </div>
 
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-        <span className="text-[10px] text-slate-400">
+        <span className="text-2xs text-slate-400">
           Priority: {binding.priority} | Specificity: {binding.specificity_score ?? 0}
         </span>
         <button

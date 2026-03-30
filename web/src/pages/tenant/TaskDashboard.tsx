@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { RefreshCw, Plus, ListTodo, Gauge, Hourglass, AlertCircle } from 'lucide-react';
+import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, Plus, RefreshCw } from 'lucide-react';
+
 
 import { formatTimeOnly } from '@/utils/date';
 
@@ -15,9 +16,7 @@ const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200
     className={`w-full ${height} flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg`}
   >
     <div className="text-center">
-      <span className="material-symbols-outlined text-2xl text-blue-600 animate-spin motion-reduce:animate-none">
-        progress_activity
-      </span>
+      <Loader2 size={24} className="text-blue-600 animate-spin motion-reduce:animate-none" />
       <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">Loading chart...</p>
     </div>
   </div>
@@ -327,7 +326,7 @@ const TaskDashboardInner: React.FC<{
               </p>
             </div>
           </div>
-          <div className="w-full h-[200px] mt-2 relative">
+          <div className="w-full h-50 mt-2 relative">
             <Line options={lineChartOptions} data={lineChartData} />
           </div>
         </div>

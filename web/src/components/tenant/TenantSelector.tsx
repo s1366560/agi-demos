@@ -55,7 +55,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
           </div>
           <button
             onClick={onCreateTenant}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-sm"
           >
             <Plus className="h-4 w-4" />
             <span>新建</span>
@@ -70,7 +70,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
             <p className="text-gray-600 dark:text-slate-400 mb-4">暂无工作空间</p>
             <button
               onClick={onCreateTenant}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               创建工作空间
             </button>
@@ -80,7 +80,15 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
             {tenants.map((tenant) => (
               <div
                 key={tenant.id}
-                className={`p-3 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleTenantSelect(tenant);
+                  }
+                }}
+                className={`p-3 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
                   currentTenant?.id === tenant.id
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
@@ -118,7 +126,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                         e.stopPropagation();
                         onManageTenant?.(tenant);
                       }}
-                      className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors"
+                      className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     >
                       <Settings className="h-4 w-4" />
                     </button>

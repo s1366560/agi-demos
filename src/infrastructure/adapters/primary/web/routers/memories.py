@@ -41,22 +41,8 @@ async def _background_index_memory(
 ) -> None:
     """Index a memory's content as chunks in the background."""
     try:
-        from src.application.services.memory_index_service import MemoryIndexService
-        from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-        from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
-            SqlChunkRepository,
-        )
-
-        async with async_session_factory() as session:
-            chunk_repo = SqlChunkRepository(session)
-            # Use basic embedding (no Redis cache in background task for simplicity)
-            from src.infrastructure.llm.embedding_service import EmbeddingService
-
-            embedding_service = EmbeddingService()
-            index_service = MemoryIndexService(chunk_repo, embedding_service)
-            count = await index_service.index_memory(memory_id, content, project_id, category)
-            await session.commit()
-            logger.info(f"Background indexed memory {memory_id}: {count} chunks")
+        # Skip embedding in background task - will be indexed on next access
+        logger.info(f"Skipping background indexing for memory {memory_id} - will index on demand")
     except Exception as e:
         logger.warning(f"Background memory indexing failed for {memory_id}: {e}")
 

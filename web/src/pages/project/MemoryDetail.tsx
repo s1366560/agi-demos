@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+
+import { Download, FileEdit, FileText, History, Loader2, Network, Pencil, RefreshCw, Share2, Trash2 } from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
@@ -225,7 +228,7 @@ export const MemoryDetail: React.FC = () => {
             </Link>
             <span className="text-slate-400 text-sm">/</span>
             <div className="flex items-center gap-2">
-              <span className="text-slate-900 dark:text-white text-sm font-medium truncate max-w-[200px]">
+              <span className="text-slate-900 dark:text-white text-sm font-medium truncate max-w-50">
                 {memory.title || t('common.untitled')}
               </span>
               <span
@@ -243,7 +246,7 @@ export const MemoryDetail: React.FC = () => {
           </div>
           {/* Toolbar Actions */}
           <div className="flex items-center gap-1">
-            <button
+            <button type="button"
               onClick={handleReprocess}
               disabled={
                 isReprocessing ||
@@ -259,42 +262,42 @@ export const MemoryDetail: React.FC = () => {
               }`}
               title={t('project.memories.actions.reprocess') || 'Reprocess'}
             >
-              <span
-                className={`material-symbols-outlined text-[20px] ${isReprocessing ? 'animate-spin motion-reduce:animate-none' : ''}`}
-              >
-                {isReprocessing ? 'progress_activity' : 'refresh'}
-              </span>
+              {isReprocessing ? (
+                <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
             </button>
-            <button
+            <button type="button"
               onClick={() => {
                 setEditModalOpen(true);
               }}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Edit"
             >
-              <span className="material-symbols-outlined text-[20px]">edit</span>
+              <Pencil size={20} />
             </button>
-            <button
+            <button type="button"
               onClick={() => {
                 setDeleteModalOpen(true);
               }}
               className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Delete"
             >
-              <span className="material-symbols-outlined text-[20px]">delete</span>
+              <Trash2 size={20} />
             </button>
             <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-            <button
+            <button type="button"
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Share"
             >
-              <span className="material-symbols-outlined text-[20px]">share</span>
+              <Share2 size={20} />
             </button>
-            <button
+            <button type="button"
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title="Export"
             >
-              <span className="material-symbols-outlined text-[20px]">download</span>
+              <Download size={20} />
             </button>
           </div>
         </header>
@@ -310,7 +313,7 @@ export const MemoryDetail: React.FC = () => {
                   <div className="flex gap-5 items-center">
                     <div className="relative">
                       <div className="bg-center bg-no-repeat bg-cover rounded-full h-16 w-16 md:h-20 md:w-20 ring-4 ring-slate-50 dark:ring-slate-800 shadow-sm bg-slate-200 flex items-center justify-center text-slate-400">
-                        <span className="material-symbols-outlined text-3xl">description</span>
+                        <FileText size={28} />
                       </div>
                       <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-900 rounded-full p-1 shadow-sm border border-slate-100 dark:border-slate-700">
                         <div
@@ -339,13 +342,13 @@ export const MemoryDetail: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setEditModalOpen(true);
                     }}
                     className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm shadow-primary/20"
                   >
-                    <span className="material-symbols-outlined text-[18px]">edit_note</span>
+                    <FileEdit size={18} />
                     {t('project.memories.detail.edit_memory')}
                   </button>
                 </div>
@@ -359,9 +362,7 @@ export const MemoryDetail: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-2">
-                        <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[20px] animate-spin motion-reduce:animate-none">
-                          progress_activity
-                        </span>
+                        <Loader2 size={20} className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -393,7 +394,7 @@ export const MemoryDetail: React.FC = () => {
               {/* Tabs */}
               <div className="mt-8 px-6 md:px-8 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex gap-8 overflow-x-auto">
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setActiveTab('content');
                     }}
@@ -405,7 +406,7 @@ export const MemoryDetail: React.FC = () => {
                   >
                     {t('project.memories.detail.tabs.content')}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setActiveTab('metadata');
                     }}
@@ -417,7 +418,7 @@ export const MemoryDetail: React.FC = () => {
                   >
                     {t('project.memories.detail.tabs.metadata')}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setActiveTab('raw');
                     }}
@@ -429,7 +430,7 @@ export const MemoryDetail: React.FC = () => {
                   >
                     {t('project.memories.detail.tabs.raw')}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setActiveTab('tasks');
                     }}
@@ -486,7 +487,7 @@ export const MemoryDetail: React.FC = () => {
               {/* Footer / Activity Snippet */}
               <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px]">history</span>
+                  <History size={16} />
                   {t('common.created_at')} {formatDateTime(memory.created_at)}
                 </div>
                 <div>ID: {memory.id ? memory.id.slice(0, 12) : 'N/A'}...</div>
@@ -502,7 +503,7 @@ export const MemoryDetail: React.FC = () => {
       <aside className="w-80 bg-surface-light dark:bg-surface-dark border-l border-slate-200 dark:border-slate-800 hidden xl:flex flex-col flex-shrink-0 z-10">
         <div className="p-5 border-b border-slate-200 dark:border-slate-800">
           <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[18px]">hub</span>
+            <Network size={18} className="text-primary" />
             {t('project.memories.detail.sidebar.knowledge_context')}
           </h2>
         </div>

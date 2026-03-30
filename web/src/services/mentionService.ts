@@ -15,6 +15,29 @@ export interface MentionItem {
   summary?: string | undefined;
 }
 
+interface EntitySearchResult {
+  id?: string;
+  uuid?: string;
+  name: string;
+  entity_type?: string;
+  type?: string;
+  summary?: string;
+  description?: string;
+}
+
+interface EpisodeSearchResult {
+  id?: string;
+  uuid?: string;
+  name?: string;
+  title?: string;
+  content?: string;
+}
+
+interface EnhancedSearchResponse {
+  entities?: EntitySearchResult[];
+  episodes?: EpisodeSearchResult[];
+}
+
 export const mentionService = {
   async search(query: string, projectId: string): Promise<MentionItem[]> {
     const res = await apiFetch.post('/search-enhanced/advanced', {
@@ -22,7 +45,7 @@ export const mentionService = {
       project_id: projectId,
       limit: 10,
     });
-    const data = await res.json();
+    const data = (await res.json()) as EnhancedSearchResponse;
 
     const items: MentionItem[] = [];
 
@@ -41,8 +64,8 @@ export const mentionService = {
     if (data.episodes) {
       for (const ep of data.episodes) {
         items.push({
-          id: ep.id || ep.uuid,
-          name: ep.name || ep.title || ep.content?.slice(0, 40),
+          id: ep.id || ep.uuid || '',
+          name: ep.name || ep.title || ep.content?.slice(0, 40) || '',
           type: 'memory',
           summary: ep.content?.slice(0, 80),
         });

@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type React from 'react';
+
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
+
+import { AlertTriangle, Info, Lightbulb, Wrench } from 'lucide-react';
 
 import { MaintenanceOperation } from '../../components/maintenance/MaintenanceOperation';
 import { graphService } from '../../services/graphService';
@@ -42,7 +46,7 @@ export const Maintenance: React.FC = () => {
       const episodesValue = res.episodes_to_process ?? 0;
       const count = typeof episodesValue === 'number' ? episodesValue : 0;
       // If the response contains a descriptive message, use it directly
-      if (typeof res.episodes_to_process === 'string' && isNaN(Number(res.episodes_to_process))) {
+      if (typeof res.episodes_to_process === 'string' && Number.isNaN(Number(res.episodes_to_process))) {
         setMessage(`已刷新 ${res.episodes_to_process}`);
       } else {
         setMessage(t('project.maintenance.messages.refreshed', { count }));
@@ -176,7 +180,7 @@ export const Maintenance: React.FC = () => {
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
         <div className="p-6 border-b border-slate-200 dark:border-slate-800">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">build</span>
+            <Wrench size={16} className="text-primary" />
             {t('project.maintenance.ops.title')}
           </h2>
         </div>
@@ -279,12 +283,12 @@ export const Maintenance: React.FC = () => {
       {/* Recommendations */}
       <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800 p-6">
         <h2 className="text-lg font-semibold text-indigo-900 dark:text-indigo-300 mb-4 flex items-center gap-2">
-          <span className="material-symbols-outlined">lightbulb</span>
+          <Lightbulb size={16} />
           {t('project.maintenance.recommendations.title')}
         </h2>
         <div className="space-y-3">
           <div className="flex items-start gap-3 p-3 bg-white dark:bg-surface-dark rounded-lg border border-indigo-100 dark:border-indigo-800/50 shadow-sm">
-            <span className="material-symbols-outlined text-yellow-500 mt-0.5">warning</span>
+            <AlertTriangle size={16} className="text-yellow-500 mt-0.5" />
             <div>
               <p className="font-medium text-slate-900 dark:text-white">
                 {t('project.maintenance.recommendations.high_duplication.title')}
@@ -299,7 +303,7 @@ export const Maintenance: React.FC = () => {
 
       <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800 p-6">
         <h2 className="text-lg font-semibold text-yellow-800 dark:text-yellow-300 mb-2 flex items-center gap-2">
-          <span className="material-symbols-outlined">info</span>
+          <Info size={16} />
           {t('project.maintenance.warning.title')}
         </h2>
         <p className="text-yellow-700 dark:text-yellow-400 text-sm">

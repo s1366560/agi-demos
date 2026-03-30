@@ -17,6 +17,8 @@ import React, {
 
 import { useParams } from 'react-router-dom';
 
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Clock, Info as InfoIcon, Loader2, RefreshCw, Users, X } from 'lucide-react';
+
 import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { VirtualGrid } from '../../../components/common';
@@ -426,7 +428,6 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         closeDetail,
         rebuildCommunities,
         cancelTask,
-        setPage,
         clearError,
         dismissTask,
         totalPages,
@@ -461,22 +462,20 @@ const Header: React.FC = memo(() => {
         <p className="text-slate-600 dark:text-slate-400 mt-1">{TEXTS.subtitle}</p>
       </div>
       <div className="flex gap-2">
-        <button
+        <button type="button"
           onClick={rebuildCommunities}
           disabled={rebuilding}
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span className="material-symbols-outlined">
-            {rebuilding ? 'progress_activity' : 'refresh'}
-          </span>
+          <AlertCircle size={16} />
           {rebuilding ? TEXTS.rebuilding : TEXTS.rebuild}
         </button>
-        <button
+        <button type="button"
           onClick={loadCommunities}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
         >
-          <span className="material-symbols-outlined">refresh</span>
+          <RefreshCw size={16} />
           {TEXTS.refresh}
         </button>
       </div>
@@ -519,9 +518,7 @@ const List: React.FC = memo(() => {
   if (loading) {
     return (
       <div data-testid="loading-indicator" className="text-center py-12">
-        <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin motion-reduce:animate-none">
-          progress_activity
-        </span>
+        <Loader2 size={32} className="text-slate-400 animate-spin motion-reduce:animate-none" />
         <p className="text-slate-500 mt-2">{TEXTS.loading}</p>
       </div>
     );
@@ -535,11 +532,12 @@ const List: React.FC = memo(() => {
     <VirtualGrid
       items={communities}
       renderItem={(community: Community, index: number) => (
-        <div
+        <button
+          type="button"
           onClick={() => {
             selectCommunity(community);
           }}
-          className={`bg-white dark:bg-slate-800 rounded-lg border p-5 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
+          className={`text-left block w-full bg-white dark:bg-slate-800 rounded-lg border p-5 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-md ${
             selectedCommunity?.uuid === community.uuid
               ? 'border-purple-500 shadow-md ring-2 ring-purple-500 ring-opacity-20'
               : 'border-slate-200 dark:border-slate-700'
@@ -549,7 +547,7 @@ const List: React.FC = memo(() => {
             <div
               className={`p-3 rounded-lg bg-gradient-to-br ${getCommunityColor(index)} text-white`}
             >
-              <span className="material-symbols-outlined">groups</span>
+              <Users size={16} />
             </div>
             <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 px-2 py-1 rounded-full text-xs font-medium">
               {community.member_count} members
@@ -568,7 +566,7 @@ const List: React.FC = memo(() => {
               Created: {formatDateOnly(community.created_at)}
             </div>
           )}
-        </div>
+        </button>
       )}
       estimateSize={() => 180}
       containerHeight={600}
@@ -576,7 +574,7 @@ const List: React.FC = memo(() => {
       columns="responsive"
       emptyComponent={
         <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-          <span className="material-symbols-outlined text-4xl text-slate-400">groups</span>
+          <Users size={32} className="text-slate-400" />
           <p className="text-slate-500 mt-2">{TEXTS.emptyTitle}</p>
           <p className="text-sm text-slate-400 mt-1">{TEXTS.emptyDesc}</p>
         </div>
@@ -593,20 +591,20 @@ const Pagination: React.FC = memo(() => {
 
   return (
     <div className="flex items-center justify-center gap-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-      <button
+      <button type="button"
         onClick={() => {
           setPage(Math.max(0, page - 1));
         }}
         disabled={!hasPrevPage}
         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
-        <span className="material-symbols-outlined text-sm">chevron_left</span>
+        <ChevronLeft size={14} />
         Previous
       </button>
       <span className="text-sm text-slate-600 dark:text-slate-400">
         Page {page + 1} of {totalPages}
       </span>
-      <button
+      <button type="button"
         onClick={() => {
           setPage(page + 1);
         }}
@@ -614,7 +612,7 @@ const Pagination: React.FC = memo(() => {
         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
         Next
-        <span className="material-symbols-outlined text-sm">chevron_right</span>
+        <ChevronRight size={14} />
       </button>
     </div>
   );
@@ -627,7 +625,7 @@ const Detail: React.FC = memo(() => {
   if (!selectedCommunity) {
     return (
       <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-12 text-center sticky top-6">
-        <span className="material-symbols-outlined text-4xl text-slate-400">groups</span>
+        <Users size={32} className="text-slate-400" />
         <p className="text-slate-500 mt-2">{TEXTS.selectPrompt}</p>
         <p className="text-sm text-slate-400 mt-1">{TEXTS.clickPrompt}</p>
       </div>
@@ -640,32 +638,32 @@ const Detail: React.FC = memo(() => {
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">
           {TEXTS.communityDetails}
         </h2>
-        <button
+        <button type="button"
           onClick={closeDetail}
           className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
         >
-          <span className="material-symbols-outlined">close</span>
+          <X size={16} />
         </button>
       </div>
 
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.name}</label>
+          <span className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.name}</span>
           <p className="text-slate-900 dark:text-white font-medium mt-1">
             {selectedCommunity.name || 'Unnamed Community'}
           </p>
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.members}</label>
+          <span className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.members}</span>
           <p className="text-2xl font-bold text-purple-600">{selectedCommunity.member_count}</p>
         </div>
 
         {selectedCommunity.summary && (
           <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase">
+            <span className="text-xs font-semibold text-slate-500 uppercase">
               {TEXTS.summary}
-            </label>
+            </span>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
               {selectedCommunity.summary}
             </p>
@@ -673,7 +671,7 @@ const Detail: React.FC = memo(() => {
         )}
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.uuid}</label>
+          <span className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.uuid}</span>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-mono break-all mt-1">
             {selectedCommunity.uuid}
           </p>
@@ -681,9 +679,9 @@ const Detail: React.FC = memo(() => {
 
         {selectedCommunity.created_at && (
           <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase">
+            <span className="text-xs font-semibold text-slate-500 uppercase">
               {TEXTS.created}
-            </label>
+            </span>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {formatDateTime(selectedCommunity.created_at)}
             </p>
@@ -691,7 +689,7 @@ const Detail: React.FC = memo(() => {
         )}
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.tasks}</label>
+          <span className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.tasks}</span>
           <div className="mt-2">
             <TaskList entityId={selectedCommunity.uuid} entityType="community" embedded />
           </div>
@@ -751,25 +749,15 @@ const TaskStatus: React.FC = memo(() => {
       }`}
     >
       <div className="flex items-start gap-3">
-        <span
-          className={`material-symbols-outlined text-2xl ${
-            currentTask.status === 'completed'
-              ? 'text-green-600 dark:text-green-400'
-              : currentTask.status === 'failed'
-                ? 'text-red-600 dark:text-red-400'
-                : currentTask.status === 'running'
-                  ? 'text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none'
-                  : 'text-slate-400'
-          }`}
-        >
-          {currentTask.status === 'running'
-            ? 'progress_activity'
-            : currentTask.status === 'completed'
-              ? 'check_circle'
-              : currentTask.status === 'failed'
-                ? 'error'
-                : 'schedule'}
-        </span>
+        {currentTask.status === 'running' ? (
+          <Loader2 size={24} className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />
+        ) : currentTask.status === 'completed' ? (
+          <CheckCircle size={24} className="text-green-600 dark:text-green-400" />
+        ) : currentTask.status === 'failed' ? (
+          <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
+        ) : (
+          <Clock size={24} className="text-slate-400" />
+        )}
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <h3
@@ -790,7 +778,7 @@ const TaskStatus: React.FC = memo(() => {
                     : 'Rebuild Scheduled'}
             </h3>
             {(currentTask.status === 'running' || currentTask.status === 'pending') && (
-              <button
+              <button type="button"
                 onClick={cancelTask}
                 className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
               >
@@ -798,7 +786,7 @@ const TaskStatus: React.FC = memo(() => {
               </button>
             )}
             {currentTask.status === 'failed' && (
-              <button
+              <button type="button"
                 onClick={dismissTask}
                 className="px-3 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
               >
@@ -868,7 +856,7 @@ const TaskStatus: React.FC = memo(() => {
 });
 TaskStatus.displayName = 'CommunitiesList.TaskStatus';
 
-const Error: React.FC = memo(() => {
+const ErrorMessage: React.FC = memo(() => {
   const { error, clearError } = useCommunitiesListContext();
 
   if (!error) return null;
@@ -878,21 +866,21 @@ const Error: React.FC = memo(() => {
       data-testid="error-message"
       className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3"
     >
-      <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
+      <AlertCircle size={16} className="text-red-600 dark:text-red-400" />
       <div>
         <h3 className="font-semibold text-red-900 dark:text-red-300">{TEXTS.error}</h3>
         <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
       </div>
-      <button
+      <button type="button"
         onClick={clearError}
         className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
       >
-        <span className="material-symbols-outlined">close</span>
+        <X size={16} />
       </button>
     </div>
   );
 });
-Error.displayName = 'CommunitiesList.Error';
+ErrorMessage.displayName = 'CommunitiesList.Error';
 
 // ========================================
 // Info Component
@@ -902,9 +890,7 @@ const Info: React.FC = memo(() => {
   return (
     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
       <div className="flex gap-3">
-        <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">
-          info
-        </span>
+        <InfoIcon size={24} className="text-blue-600 dark:text-blue-400" />
         <div>
           <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">
             {TEXTS.infoTitle}
@@ -934,7 +920,7 @@ const Root: React.FC<RootProps> = memo(({ children, projectId, limit }) => {
         <>
           <Header />
           <TaskStatus />
-          <Error />
+          <ErrorMessage />
           <Stats />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
@@ -966,7 +952,7 @@ CommunitiesList.List = List;
 CommunitiesList.Pagination = Pagination;
 CommunitiesList.Detail = Detail;
 CommunitiesList.TaskStatus = TaskStatus;
-CommunitiesList.Error = Error;
+CommunitiesList.Error = ErrorMessage;
 CommunitiesList.Info = Info;
 CommunitiesList.Root = Root;
 CommunitiesList.Provider = CommunitiesListProvider;

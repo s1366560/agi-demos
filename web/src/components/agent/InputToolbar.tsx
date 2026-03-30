@@ -92,7 +92,7 @@ export const InputToolbar = memo<InputToolbarProps>(
     const [overflowOpen, setOverflowOpen] = useState(false);
 
     const overflowContent = (
-      <div className="flex flex-col gap-1 p-1 min-w-[200px]">
+      <div className="flex flex-col gap-1 p-1 min-w-50">
         <LlmOverridePopover
           conversationId={activeConversationId}
           disabled={!!(isStreaming || disabled)}

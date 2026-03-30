@@ -27,9 +27,9 @@
 
 import React, { useMemo, useState, memo, useCallback, Children } from 'react';
 
+import { Segmented } from 'antd';
 import { BarChart3, Clock, Lightbulb, Wrench } from 'lucide-react';
 
-import { Segmented } from 'antd';
 
 import {
   adaptTimelineData,

@@ -1,9 +1,60 @@
 import React from 'react';
 
+import { BarChart, Pencil, Star, Trash2, UserCheck ,
+  CheckCircle,
+  Square,
+  StopCircle,
+  Terminal,
+  Cloud,
+  Zap,
+  Ban,
+  Search,
+  Sparkles,
+  AlertTriangle,
+  Activity,
+  FlaskConical,
+  RefreshCcw,
+  Settings,
+  Brain,
+  Info,
+  Loader2,
+  AlertCircle,
+  Globe,
+  User
+} from 'lucide-react';
+
 import { ProviderConfig, CircuitBreakerState } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { ProviderIcon } from './ProviderIcon';
+
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 export interface ProviderCardProps {
   provider: ProviderConfig;
@@ -118,8 +169,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                   {provider.name}
                 </h3>
                 {provider.is_default && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
-                    <MaterialIcon name="star" size={10} filled />
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-2xs font-medium bg-primary/10 text-primary border border-primary/20">
+                    <Star size={10} className="fill-current" />
                     <span className="ml-0.5">Default</span>
                   </span>
                 )}
@@ -177,7 +228,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 {provider.embedding_model}
               </code>
               {provider.embedding_config?.dimensions && (
-                <span className="text-[10px] text-slate-400 shrink-0">
+                <span className="text-2xs text-slate-400 shrink-0">
                   {provider.embedding_config.dimensions}d
                 </span>
               )}
@@ -201,13 +252,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         >
           {/* Health Status */}
           <div className="flex items-center gap-2">
-            <MaterialIcon name={statusConfig.icon} size={16} className={statusConfig.color} />
+            {renderDynamicIcon(statusConfig.icon, 16, statusConfig.color)}
             <div className="flex flex-col">
               <span className={`text-xs font-medium ${statusConfig.color}`}>
                 {statusConfig.label}
               </span>
               {provider.response_time_ms && (
-                <span className="text-[10px] text-slate-500">{provider.response_time_ms}ms</span>
+                <span className="text-2xs text-slate-500">{provider.response_time_ms}ms</span>
               )}
             </div>
           </div>
@@ -217,11 +268,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
           {/* Circuit Breaker */}
           <div className="flex items-center gap-2">
-            <MaterialIcon name={cbConfig.icon} size={16} className={cbConfig.color} />
+            {renderDynamicIcon(cbConfig.icon, 16, cbConfig.color)}
             <div className="flex flex-col">
               <span className={`text-xs font-medium ${cbConfig.color}`}>{cbConfig.label}</span>
               {provider.resilience?.failure_count ? (
-                <span className="text-[10px] text-red-500">
+                <span className="text-2xs text-red-500">
                   {provider.resilience.failure_count} fails
                 </span>
               ) : null}
@@ -240,11 +291,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
           title="Check Health"
         >
-          <MaterialIcon
-            name={isCheckingHealth ? 'progress_activity' : 'monitor_heart'}
-            size={16}
-            className={isCheckingHealth ? 'animate-spin motion-reduce:animate-none' : ''}
-          />
+          {renderDynamicIcon(isCheckingHealth ? 'progress_activity' : 'monitor_heart', 16, isCheckingHealth ? 'animate-spin motion-reduce:animate-none' : '')}
           Health
         </button>
 
@@ -258,13 +305,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-amber-200 dark:hover:border-amber-800"
               title="Reset Circuit Breaker"
             >
-              <MaterialIcon
-                name={isResettingCircuitBreaker ? 'progress_activity' : 'refresh'}
-                size={16}
-                className={
-                  isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : ''
-                }
-              />
+              {renderDynamicIcon(isResettingCircuitBreaker ? 'progress_activity' : 'refresh', 16, isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : '')}
               Reset
             </button>
           )}
@@ -277,7 +318,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
             title="View Statistics"
           >
-            <MaterialIcon name="bar_chart" size={18} />
+            <BarChart size={18} />
           </button>
         )}
 
@@ -288,7 +329,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title="Assign to Tenant"
         >
-          <MaterialIcon name="assignment_ind" size={18} />
+          <UserCheck size={18} />
         </button>
 
         <button
@@ -298,7 +339,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title="Edit"
         >
-          <MaterialIcon name="edit" size={18} />
+          <Pencil size={18} />
         </button>
 
         <button
@@ -308,7 +349,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title="Delete"
         >
-          <MaterialIcon name="delete" size={18} />
+          <Trash2 size={18} />
         </button>
       </div>
     </div>

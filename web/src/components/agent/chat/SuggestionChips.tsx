@@ -50,7 +50,7 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(
                   hover:bg-primary/5 dark:hover:bg-primary/10
                   hover:shadow-sm
                   transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200
-                  cursor-pointer
+                  cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1
                 "
               >
                 <span>{suggestion}</span>

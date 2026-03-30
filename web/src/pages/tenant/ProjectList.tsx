@@ -3,6 +3,8 @@ import React, { useEffect, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
+import { Brain, ChevronDown, LayoutGrid, List, MoreVertical, Network, Pencil, Plus, Search, Trash2, User } from 'lucide-react';
+
 import { formatDateOnly } from '@/utils/date';
 
 import { useProjectStore } from '../../stores/project';
@@ -87,7 +89,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         </div>
         <Link to={`/tenant/${currentTenant.id}/projects/new`}>
           <button className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
-            <span className="material-symbols-outlined text-lg">add</span>
+            <Plus size={16} />
             {t('tenant.projects.create')}
           </button>
         </Link>
@@ -98,7 +100,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         {/* Search */}
         <div className="relative w-full md:max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <span className="material-symbols-outlined text-slate-400">search</span>
+            <Search size={16} className="text-slate-400" />
           </div>
           <input
             type="text"
@@ -117,11 +119,11 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           </span>
           <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-sm font-medium whitespace-nowrap transition-colors">
             {t('common.status.all')}
-            <span className="material-symbols-outlined text-lg">arrow_drop_down</span>
+            <ChevronDown size={16} />
           </button>
           <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-medium whitespace-nowrap transition-colors">
             {t('common.stats.owner')}
-            <span className="material-symbols-outlined text-lg">arrow_drop_down</span>
+            <ChevronDown size={16} />
           </button>
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
@@ -131,7 +133,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               }}
               className={`p-1.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
-              <span className="material-symbols-outlined text-lg block">grid_view</span>
+              <LayoutGrid size={16} className="block" />
             </button>
             <button
               onClick={() => {
@@ -139,7 +141,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               }}
               className={`p-1.5 rounded transition-[color,background-color,border-color,box-shadow,opacity,transform] ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
-              <span className="material-symbols-outlined text-lg block">view_list</span>
+              <List size={16} className="block" />
             </button>
           </div>
         </div>
@@ -158,7 +160,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               <div className="flex justify-between items-start">
                 <div className="flex gap-3">
                   <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-primary">
-                    <span className="material-symbols-outlined">psychology</span>
+                    <Brain size={16} />
                   </div>
                   <div>
                     <Link
@@ -194,11 +196,11 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                 </div>
                 <div className="flex gap-4 pt-1">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <span className="material-symbols-outlined text-base">memory</span>
+                    <Brain size={16} />
                     {project.stats?.memory_count || 0} {t('common.stats.memories')}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <span className="material-symbols-outlined text-base">hub</span>
+                    <Network size={16} />
                     {project.stats?.node_count || 0} {t('common.stats.nodes')}
                   </div>
                 </div>
@@ -208,7 +210,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   <div className="flex -space-x-2">
                     {/* Mock avatars based on count */}
                     <div className="w-8 h-8 rounded-full border-2 border-white dark:border-surface-dark bg-slate-200 flex items-center justify-center text-xs text-slate-500">
-                      <span className="material-symbols-outlined text-sm">person</span>
+                      <User size={14} />
                     </div>
                   </div>
                   <span className="text-xs text-slate-500">
@@ -226,7 +228,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     }}
                     className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                   >
-                    <span className="material-symbols-outlined text-lg">more_vert</span>
+                    <MoreVertical size={16} />
                   </button>
 
                   {activeMenu === project.id && (
@@ -238,7 +240,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                           setActiveMenu(null);
                         }}
                       >
-                        <span className="material-symbols-outlined text-lg">edit</span>
+                        <Pencil size={16} />
                         {t('common.edit')}
                       </Link>
                       <button
@@ -248,7 +250,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                       >
-                        <span className="material-symbols-outlined text-lg">delete</span>
+                        <Trash2 size={16} />
                         {t('common.delete')}
                       </button>
                     </div>
@@ -261,10 +263,10 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           {/* New Project Placeholder */}
           <Link
             to={`/tenant/${currentTenant.id}/projects/new`}
-            className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-[color,background-color,border-color,box-shadow,opacity,transform] group min-h-[200px]"
+            className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-[color,background-color,border-color,box-shadow,opacity,transform] group min-h-50"
           >
             <div className="h-12 w-12 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:scale-110 transition-[color,background-color,border-color,box-shadow,opacity,transform]">
-              <span className="material-symbols-outlined text-2xl">add</span>
+              <Plus size={24} />
             </div>
             <div className="text-center">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-primary">
@@ -312,7 +314,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-primary">
-                          <span className="material-symbols-outlined text-lg">psychology</span>
+                          <Brain size={16} />
                         </div>
                         <div>
                           <Link
@@ -353,11 +355,11 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1 text-xs text-slate-500">
                         <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-sm">memory</span>
+                          <Brain size={14} />
                           {project.stats?.memory_count || 0}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-sm">hub</span>
+                          <Network size={14} />
                           {project.stats?.node_count || 0}
                         </div>
                       </div>
@@ -366,7 +368,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                       <div className="flex items-center gap-2">
                         <div className="flex -space-x-2">
                           <div className="w-7 h-7 rounded-full border-2 border-white dark:border-surface-dark bg-slate-200 flex items-center justify-center text-xs text-slate-500">
-                            <span className="material-symbols-outlined text-sm">person</span>
+                            <User size={14} />
                           </div>
                         </div>
                         <span className="text-xs text-slate-500">
@@ -386,7 +388,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                           }}
                           className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                         >
-                          <span className="material-symbols-outlined text-lg">more_vert</span>
+                          <MoreVertical size={16} />
                         </button>
                         {activeMenu === project.id && (
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-10">
@@ -397,7 +399,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                                 setActiveMenu(null);
                               }}
                             >
-                              <span className="material-symbols-outlined text-lg">edit</span>
+                              <Pencil size={16} />
                               {t('common.edit')}
                             </Link>
                             <button
@@ -407,7 +409,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                             >
-                              <span className="material-symbols-outlined text-lg">delete</span>
+                              <Trash2 size={16} />
                               {t('common.delete')}
                             </button>
                           </div>

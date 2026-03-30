@@ -252,7 +252,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
             </div>
             {viewMode === 'grid' && (
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                <span className="text-2xs font-bold text-slate-400 uppercase tracking-wide">
                   {result.metadata.type || 'Result'}
                 </span>
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
@@ -266,7 +266,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
               <span className={`text-sm font-bold ${getScoreColor(result.score)}`}>
                 {Math.round(result.score * 100)}%
               </span>
-              <span className="text-[10px] text-slate-400">Relevance</span>
+              <span className="text-2xs text-slate-400">Relevance</span>
             </div>
           )}
         </div>
@@ -312,13 +312,13 @@ const SearchResultCard = memo<SearchResultCardProps>(
                 result.metadata.tags.map((tag: string, i: number) => (
                   <span
                     key={i}
-                    className="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded"
+                    className="text-2xs text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded"
                   >
                     #{tag}
                   </span>
                 ))}
             </div>
-            <span className="text-[10px] text-slate-400 font-medium">
+            <span className="text-2xs text-slate-400 font-medium">
               {result.metadata.created_at || 'Unknown Date'}
             </span>
           </div>
@@ -337,7 +337,7 @@ interface NodeIdCopyButtonProps {
 
 const NodeIdCopyButton = memo<NodeIdCopyButtonProps>(({ uuid, copiedId, onCopyId }) => (
   <div
-    className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[10px] text-slate-500 font-mono hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors group/id"
+    className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-2xs text-slate-500 font-mono hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors group/id"
     onClick={(e) => {
       onCopyId(uuid, e);
     }}
@@ -369,7 +369,7 @@ const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => (
         </div>
         {viewMode === 'grid' && (
           <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+            <span className="text-2xs font-bold text-slate-400 uppercase tracking-wide">
               Document
             </span>
             <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">PDF</span>
@@ -379,7 +379,7 @@ const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => (
       {viewMode === 'grid' && (
         <div className="flex flex-col items-end">
           <span className="text-sm font-bold text-blue-600">98%</span>
-          <span className="text-[10px] text-slate-400">Relevance</span>
+          <span className="text-2xs text-slate-400">Relevance</span>
         </div>
       )}
     </div>
@@ -400,11 +400,11 @@ const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => (
         className={`flex items-center justify-between ${viewMode === 'grid' ? 'mt-auto pt-3 border-t border-slate-50 dark:border-slate-800' : ''}`}
       >
         <div className="flex gap-2">
-          <span className="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+          <span className="text-2xs text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
             #specs
           </span>
         </div>
-        <span className="text-[10px] text-slate-400 font-medium">Oct 12, 2023</span>
+        <span className="text-2xs text-slate-400 font-medium">Oct 12, 2023</span>
       </div>
     </div>
   </div>

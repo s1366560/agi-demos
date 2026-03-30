@@ -1,10 +1,12 @@
+import { memo } from 'react';
+
+import { Brain } from 'lucide-react';
 /**
  * StreamingThoughtBubble - Streaming thought display component
  *
  * Uses same styling as ReasoningLogCard for consistency with final render.
  */
 
-import { memo } from 'react';
 
 interface StreamingThoughtBubbleProps {
   content: string;
@@ -16,9 +18,7 @@ export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
     return (
       <div className="flex items-start gap-3 pb-4 animate-fade-in-up">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30 flex items-center justify-center flex-shrink-0">
-          <span className="material-symbols-outlined text-base text-amber-600 dark:text-amber-400">
-            psychology
-          </span>
+          <Brain size={16} className="text-amber-600 dark:text-amber-400" />
         </div>
         <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
           <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/50 dark:from-amber-900/20 dark:to-orange-900/10 border border-amber-200/50 dark:border-amber-800/30 rounded-xl overflow-hidden">

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { App } from 'antd';
+import { AlertCircle, GitMerge, Info, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, TenantProviderMapping } from '../../types/memory';
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { AssignProviderModal } from './AssignProviderModal';
 import { ProviderIcon } from './ProviderIcon';
@@ -116,7 +116,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           }}
           className="text-primary hover:text-primary-dark text-sm font-medium flex items-center gap-1 transition-colors"
         >
-          <MaterialIcon name="add" size={16} />
+          <Plus size={16} />
           Add
         </button>
       </div>
@@ -124,11 +124,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto flex-1 p-0">
         {items.length === 0 ? (
           <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm italic flex flex-col items-center gap-2">
-            <MaterialIcon
-              name="alt_route"
-              size={24}
-              className="text-slate-300 dark:text-slate-600"
-            />
+            <GitMerge size={24} className="text-slate-300 dark:text-slate-600" />
             No provider assigned. System defaults will be used.
           </div>
         ) : (
@@ -152,7 +148,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
                         {provider.name}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 truncate">
-                        <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-[10px]">
+                        <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-2xs">
                           {provider.llm_model}
                         </code>
                       </div>
@@ -167,14 +163,14 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
                       className="p-1.5 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                       title="Edit Assignment"
                     >
-                      <MaterialIcon name="edit" size={16} />
+                      <Pencil size={16} />
                     </button>
                     <button
                       onClick={() => handleUnassign(assignment.provider_id, type)}
                       className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       title="Remove Assignment"
                     >
-                      <MaterialIcon name="delete" size={16} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
@@ -189,11 +185,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   if (isLoading) {
     return (
       <div className="p-12 text-center">
-        <MaterialIcon
-          name="progress_activity"
-          size={32}
-          className="animate-spin motion-reduce:animate-none text-primary mx-auto"
-        />
+        <Loader2 size={32} className="animate-spin motion-reduce:animate-none text-primary mx-auto" />
       </div>
     );
   }
@@ -201,7 +193,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   if (error) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-3 border border-red-200 dark:border-red-800">
-        <MaterialIcon name="error" size={20} />
+        <AlertCircle size={20} />
         {error}
       </div>
     );
@@ -210,7 +202,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
-        <MaterialIcon name="info" className="text-blue-600 dark:text-blue-400 shrink-0" size={20} />
+        <Info size={20} className="text-blue-600 dark:text-blue-400 shrink-0" />
         <div className="text-sm text-blue-800 dark:text-blue-200">
           <p className="font-medium mb-1">Provider Routing Configuration</p>
           <p>

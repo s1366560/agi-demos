@@ -7,6 +7,7 @@ if TYPE_CHECKING:
         ChannelConfigModel,
     )
 
+
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -19,7 +20,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -53,6 +56,9 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
@@ -2238,3 +2244,639 @@ class WorkspaceMessageModel(Base):
 from src.infrastructure.adapters.secondary.persistence.channel_models import (  # noqa: E402
     ChannelConfigModel as ChannelConfigModel,
 )
+
+
+class TenantEventLogModel(Base):
+    __tablename__ = "tenant_event_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), index=True
+    )
+
+    __table_args__ = (Index("ix_tenant_event_logs_tenant_created", "tenant_id", "created_at"),)
+
+
+class ClusterModel(Base):
+    """Compute cluster registered to a tenant."""
+
+    __tablename__ = "clusters"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    compute_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="docker")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="disconnected")
+    health_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_health_check: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    proxy_endpoint: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by: Mapped[str] = mapped_column(String, default="", nullable=False)
+    provider_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    credentials_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_clusters_tenant_name"),
+        Index("ix_clusters_tenant_status", "tenant_id", "status"),
+    )
+
+
+class WebhookModel(Base):
+    __tablename__ = "webhooks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    events: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_webhooks_tenant_name",
+            "tenant_id",
+            "name",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Instance / Deploy / Gene / Genome models
+# ---------------------------------------------------------------------------
+
+
+class InstanceModel(Base):
+    """AI agent instance belonging to a tenant."""
+
+    __tablename__ = "instances"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    cluster_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    namespace: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    image_version: Mapped[str] = mapped_column(String(100), default="latest")
+    replicas: Mapped[int] = mapped_column(Integer, default=1)
+    cpu_request: Mapped[str] = mapped_column(String(20), default="100m")
+    cpu_limit: Mapped[str] = mapped_column(String(20), default="500m")
+    mem_request: Mapped[str] = mapped_column(String(20), default="256Mi")
+    mem_limit: Mapped[str] = mapped_column(String(20), default="512Mi")
+    service_type: Mapped[str] = mapped_column(String(20), default="ClusterIP")
+    ingress_domain: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    proxy_token: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    env_vars: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    quota_cpu: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    quota_memory: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    quota_max_pods: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    storage_class: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    storage_size: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    advanced_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    llm_providers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    pending_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    available_replicas: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="creating")
+    health_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    current_revision: Mapped[int] = mapped_column(Integer, default=0)
+    compute_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    runtime: Mapped[str] = mapped_column(String(50), default="default")
+    created_by: Mapped[str] = mapped_column(String(100), default="")
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    hex_position_q: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hex_position_r: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    agent_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    theme_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slug", name="uq_instances_tenant_slug"),
+        Index("ix_instances_tenant_status", "tenant_id", "status"),
+    )
+
+
+class InstanceMemberModel(Base):
+    """Membership link between a user and an instance."""
+
+    __tablename__ = "instance_members"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("instances.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(20), default="viewer")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("instance_id", "user_id", name="uq_instance_members_instance_user"),
+    )
+
+
+class DeployRecordModel(Base):
+    """Deployment record for an instance revision."""
+
+    __tablename__ = "deploy_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("instances.id", ondelete="CASCADE"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    image_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    replicas: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    config_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    triggered_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class InstanceTemplateModel(Base):
+    """Predefined instance configuration template."""
+
+    __tablename__ = "instance_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    image_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    default_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    install_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TemplateItemModel(Base):
+    """Item within an instance template (e.g. a gene to install)."""
+
+    __tablename__ = "template_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    template_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("instance_templates.id", ondelete="CASCADE"), nullable=False
+    )
+    item_type: Mapped[str] = mapped_column(String(20), default="gene")
+    item_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GeneMarketModel(Base):
+    """Gene listing in the marketplace."""
+
+    __tablename__ = "gene_market"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    short_description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="official")
+    source_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    version: Mapped[str] = mapped_column(String(20), default="1.0.0")
+    manifest: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    dependencies: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    synergies: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    parent_gene_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by_instance_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    install_count: Mapped[int] = mapped_column(Integer, default=0)
+    avg_rating: Mapped[float] = mapped_column(Float, default=0.0)
+    effectiveness_score: Mapped[float] = mapped_column(Float, default=0.0)
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_status: Mapped[str] = mapped_column(String(20), default="pending")
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    visibility: Mapped[str] = mapped_column(String(20), default="public")
+    created_by: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GenomeModel(Base):
+    """Curated gene bundle (genome)."""
+
+    __tablename__ = "genomes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    short_description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    gene_slugs: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    config_override: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    install_count: Mapped[int] = mapped_column(Integer, default=0)
+    avg_rating: Mapped[float] = mapped_column(Float, default=0.0)
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    visibility: Mapped[str] = mapped_column(String(20), default="public")
+    created_by: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class InstanceGeneModel(Base):
+    """Gene installed on a specific instance."""
+
+    __tablename__ = "instance_genes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("instances.id", ondelete="CASCADE"), nullable=False
+    )
+    gene_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("gene_market.id", ondelete="CASCADE"), nullable=False
+    )
+    genome_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="installing")
+    installed_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    learning_output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    agent_self_eval: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usage_count: Mapped[int] = mapped_column(Integer, default=0)
+    variant_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    installed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("instance_id", "gene_id", name="uq_instance_genes_instance_gene"),
+    )
+
+
+class GeneEffectLogModel(Base):
+    """Metric log for gene effectiveness tracking."""
+
+    __tablename__ = "gene_effect_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    gene_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    metric_type: Mapped[str] = mapped_column(String(30), default="custom")
+    value: Mapped[float] = mapped_column(Float, default=0.0)
+    context: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GeneReviewModel(Base):
+    """User review of a gene."""
+
+    __tablename__ = "gene_reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    gene_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("gene_market.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, default=0)
+    content: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GeneRatingModel(Base):
+    """Numeric rating for a gene."""
+
+    __tablename__ = "gene_ratings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    gene_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("gene_market.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, default=0)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("gene_id", "user_id", name="uq_gene_ratings_gene_user"),)
+
+
+class GenomeRatingModel(Base):
+    """Numeric rating for a genome."""
+
+    __tablename__ = "genome_ratings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    genome_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("genomes.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, default=0)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("genome_id", "user_id", name="uq_genome_ratings_genome_user"),
+    )
+
+
+class EvolutionEventModel(Base):
+    """Evolution event log for an instance."""
+
+    __tablename__ = "evolution_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("instances.id", ondelete="CASCADE"), nullable=False
+    )
+    gene_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    genome_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(30), default="learned")
+    gene_name: Mapped[str] = mapped_column(String(100), default="")
+    gene_slug: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OrgGenePolicyModel(Base):
+    """Organization-level gene policy configuration."""
+
+    __tablename__ = "org_gene_policies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    policy_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    policy_value: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_org_gene_policies_tenant", "tenant_id"),)
+
+
+class RegistryConfigModel(Base):
+    """Container registry configuration per tenant."""
+
+    __tablename__ = "registry_configs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    registry_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    password_encrypted: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_registry_configs_tenant", "tenant_id"),)
+
+
+class DecisionRecordModel(Base):
+    """Decision record for agent trust and governance."""
+
+    __tablename__ = "decision_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    agent_instance_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    decision_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    context_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposal: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    outcome: Mapped[str] = mapped_column(String(30), default="pending")
+    reviewer_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    review_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_decision_records_tenant_ws", "tenant_id", "workspace_id"),)
+
+
+class TrustPolicyModel(Base):
+    """Trust policy granting agent permissions."""
+
+    __tablename__ = "trust_policies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    agent_instance_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    granted_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    grant_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_trust_policies_tenant_ws", "tenant_id", "workspace_id"),)
+
+
+class InvitationModel(Base):
+    """Tenant member invitation."""
+
+    __tablename__ = "invitations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(30), default="member")
+    token: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    invited_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    accepted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_invitations_tenant", "tenant_id"),
+        Index("ix_invitations_token", "token"),
+    )
+
+
+class SmtpConfigModel(Base):
+    """SMTP email configuration per tenant."""
+
+    __tablename__ = "smtp_configs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    smtp_host: Mapped[str] = mapped_column(String(255), nullable=False)
+    smtp_port: Mapped[int] = mapped_column(Integer, default=587)
+    smtp_username: Mapped[str] = mapped_column(String(255), nullable=False)
+    smtp_password_encrypted: Mapped[str] = mapped_column(String(500), nullable=False)
+    from_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    from_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    use_tls: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_smtp_configs_tenant", "tenant_id"),)
+
+
+class EventLogModel(Base):
+    """Observability event log entry."""
+
+    __tablename__ = "observability_event_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_event_logs_tenant_ws", "tenant_id", "workspace_id"),)
+
+
+class MessageQueueItemModel(Base):
+    """Observability message queue item."""
+
+    __tablename__ = "observability_message_queue"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="queued")
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_mq_items_tenant_ws", "tenant_id", "workspace_id"),)
+
+
+class ObservabilityDeadLetterModel(Base):
+    """Observability dead letter queue entry."""
+
+    __tablename__ = "observability_dead_letters"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    original_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_node_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    retried_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_dead_letters_tenant_ws", "tenant_id", "workspace_id"),)
+
+
+class CircuitStateModel(Base):
+    """Observability circuit breaker state."""
+
+    __tablename__ = "observability_circuit_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    node_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    state: Mapped[str] = mapped_column(String(30), default="closed")
+    failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_circuit_states_tenant_ws", "tenant_id", "workspace_id"),)
+
+
+class NodeCardModel(Base):
+    """Observability node card metadata."""
+
+    __tablename__ = "observability_node_cards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    node_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    node_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_node_cards_tenant_ws", "tenant_id", "workspace_id"),)

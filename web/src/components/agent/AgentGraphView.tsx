@@ -280,10 +280,10 @@ export const AgentGraphView = memo(() => {
                   className="overflow-visible"
                 >
                   <div className="flex justify-center w-full h-full items-center">
-                    <span className="text-[10px] font-medium bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 shadow-sm truncate max-w-full">
-                      Handoff
-                    </span>
-                  </div>
+                     <span className="text-2xs font-medium bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 shadow-sm truncate max-w-full">
+                       Handoff
+                     </span>
+                   </div>
                 </foreignObject>
               </g>
             );
@@ -312,9 +312,9 @@ export const AgentGraphView = memo(() => {
                     <span className="font-semibold text-sm truncate w-full text-center px-2">
                       {node.label}
                     </span>
-                    <span className="text-[11px] font-medium opacity-90 uppercase tracking-wider mt-0.5">
-                      {node.status}
-                    </span>
+                    <span className="text-2xs font-medium opacity-90 uppercase tracking-wider mt-0.5">
+                       {node.status}
+                     </span>
                   </div>
                 </div>
               </foreignObject>

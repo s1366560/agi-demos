@@ -6,14 +6,8 @@
 
 import { useCallback } from 'react';
 
-import {
-  DesktopOutlined,
-  CodeOutlined,
-  PlayCircleOutlined,
-  StopOutlined,
-  LinkOutlined,
-} from '@ant-design/icons';
 import { Card, Space, Button, Badge, Typography, Divider, Tooltip } from 'antd';
+import { Monitor, Code, PlayCircle, Square, Link } from 'lucide-react';
 
 import type { DesktopStatus, TerminalStatus } from '../../../types/agent';
 
@@ -50,7 +44,7 @@ interface ServiceStatusProps {
 
 function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: ServiceStatusProps) {
   const isRunning = status?.running ?? false;
-  const icon = type === 'desktop' ? <DesktopOutlined /> : <CodeOutlined />;
+  const icon = type === 'desktop' ? <Monitor size={16} /> : <Code size={16} />;
   const name = type === 'desktop' ? 'Remote Desktop' : 'Web Terminal';
 
   return (
@@ -83,7 +77,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
             <div className="space-y-1">
               {status.url && (
                 <div className="flex items-center gap-2">
-                  <LinkOutlined className="text-gray-500 text-xs" />
+                  <Link size={12} className="text-gray-500" />
                   <Text copyable={{ text: status.url }} className="text-xs text-gray-600">
                     {status.url.length > 50 ? `${status.url.slice(0, 47)}...` : status.url}
                   </Text>
@@ -126,7 +120,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
                 type="primary"
                 danger
                 size="small"
-                icon={<StopOutlined />}
+                icon={<Square size={16} />}
                 onClick={onStop}
                 disabled={isLoading}
               >
@@ -138,7 +132,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
               <Button
                 type="primary"
                 size="small"
-                icon={<PlayCircleOutlined />}
+                icon={<PlayCircle size={16} />}
                 onClick={onStart}
                 loading={isLoading}
               >

@@ -662,7 +662,7 @@ async def get_embedding_status(
     and count of nodes missing embeddings.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]  # type: ignore[import-untyped]
             get_existing_embedding_dimension,
         )
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
@@ -725,7 +725,7 @@ async def rebuild_embeddings(
     using the current embedder. Useful after switching LLM providers.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]
             rebuild_embeddings_for_project,
         )
 
@@ -758,7 +758,7 @@ async def check_embedding_dimensions(
     vector similarity operations to fail.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]
             detect_mixed_dimensions,
         )
 
@@ -810,7 +810,7 @@ async def validate_embeddings(
     Returns detailed validation report.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]
             validate_embeddings_in_db,
         )
 

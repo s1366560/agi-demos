@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
+
+import { Building2, Fingerprint, X } from 'lucide-react';
 
 import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph';
 
@@ -32,7 +35,7 @@ export const MemoryGraph: React.FC = () => {
             <div className="p-5 border-b border-slate-200 dark:border-[#2b324a] bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/10 dark:to-transparent">
               <div className="flex justify-between items-start mb-2">
                 <div
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
+                  className={`px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border ${
                     selectedNode.type === 'Entity'
                       ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30'
                       : selectedNode.type === 'Episodic'
@@ -45,12 +48,13 @@ export const MemoryGraph: React.FC = () => {
                   {selectedNode.type}
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     setSelectedNode(null);
                   }}
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[20px]">close</span>
+                  <X size={20} />
                 </button>
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
@@ -58,7 +62,7 @@ export const MemoryGraph: React.FC = () => {
               </h2>
               {selectedNode.uuid && (
                 <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
-                  <span className="material-symbols-outlined text-[14px]">fingerprint</span>
+                  <Fingerprint size={14} />
                   <span className="font-mono text-slate-500">
                     {selectedNode.uuid.slice(0, 8)}...
                   </span>
@@ -70,9 +74,9 @@ export const MemoryGraph: React.FC = () => {
               {/* Impact Score / Stats Placeholder */}
               <div>
                 <div className="flex justify-between items-end mb-1">
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
                     {t('project.graph.node_detail.relevance')}
-                  </label>
+                  </span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">
                     {t('project.graph.node_detail.high')}
                   </span>
@@ -88,9 +92,9 @@ export const MemoryGraph: React.FC = () => {
               {/* Entity Type */}
               {selectedNode.entity_type && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
                     {t('project.graph.node_detail.type')}
-                  </label>
+                  </span>
                   <p className="text-sm text-slate-700 dark:text-slate-300">
                     {selectedNode.entity_type}
                   </p>
@@ -100,9 +104,9 @@ export const MemoryGraph: React.FC = () => {
               {/* Summary */}
               {selectedNode.summary && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
                     {t('project.graph.node_detail.description')}
-                  </label>
+                  </span>
                   <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                     {selectedNode.summary}
                   </p>
@@ -112,9 +116,9 @@ export const MemoryGraph: React.FC = () => {
               {/* Member Count */}
               {selectedNode.member_count !== undefined && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 block">
                     {t('project.graph.node_detail.members')}
-                  </label>
+                  </span>
                   <p className="text-sm text-slate-700 dark:text-slate-300">
                     {selectedNode.member_count} entities
                   </p>
@@ -126,7 +130,7 @@ export const MemoryGraph: React.FC = () => {
                 <div className="pt-4 border-t border-slate-200 dark:border-[#2b324a]">
                   <div className="space-y-2 text-xs text-slate-500">
                     <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px]">domain</span>
+                      <Building2 size={16} />
                       <span>
                         {t('project.graph.node_detail.tenant')}: {selectedNode.tenant_id}
                       </span>
@@ -137,10 +141,10 @@ export const MemoryGraph: React.FC = () => {
             </div>
 
             <div className="p-4 border-t border-slate-200 dark:border-[#2b324a] bg-slate-50 dark:bg-[#111521] flex gap-2">
-              <button className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-[#2b324a] bg-white dark:bg-[#1e2332] text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-[#2b324a] hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button type="button" className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-[#2b324a] bg-white dark:bg-[#1e2332] text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-[#2b324a] hover:text-slate-900 dark:hover:text-white transition-colors">
                 {t('project.graph.node_detail.expand')}
               </button>
-              <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-colors">
+              <button type="button" className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-colors">
                 {t('project.graph.node_detail.edit')}
               </button>
             </div>

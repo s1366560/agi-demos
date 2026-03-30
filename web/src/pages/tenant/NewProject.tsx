@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 
+import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
+
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -60,7 +62,7 @@ export const NewProject: React.FC = () => {
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex items-center gap-2">
-          <span className="material-symbols-outlined text-lg">error</span>
+          <AlertCircle size={16} />
           {error}
         </div>
       )}
@@ -70,7 +72,7 @@ export const NewProject: React.FC = () => {
         <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg">
-              <span className="material-symbols-outlined">settings</span>
+              <Settings size={16} />
             </div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
               {t('tenant.newProject.basicInfo')}
@@ -132,7 +134,7 @@ export const NewProject: React.FC = () => {
           <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm h-full">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
-                <span className="material-symbols-outlined">psychology</span>
+                <Brain size={16} />
               </div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {t('tenant.newProject.memoryRules')}
@@ -220,7 +222,7 @@ export const NewProject: React.FC = () => {
                     }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
                 </label>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {t('tenant.newProject.enableAutoRefresh')}
@@ -233,7 +235,7 @@ export const NewProject: React.FC = () => {
           <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm h-full">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg">
-                <span className="material-symbols-outlined">hub</span>
+                <Network size={16} />
               </div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {t('tenant.newProject.graphConfig')}
@@ -332,7 +334,7 @@ export const NewProject: React.FC = () => {
                     }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
                 </label>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {t('tenant.newProject.enableCommunityDetection')}
@@ -358,9 +360,7 @@ export const NewProject: React.FC = () => {
             className="px-6 py-2.5 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isLoading && (
-              <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-sm">
-                progress_activity
-              </span>
+              <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
             )}
             {t('tenant.newProject.submit')}
           </button>

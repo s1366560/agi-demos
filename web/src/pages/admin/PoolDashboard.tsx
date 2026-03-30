@@ -8,18 +8,8 @@
 
 import React, { useEffect, useCallback, useRef } from 'react';
 
-import {
-  ReloadOutlined,
-  PauseCircleOutlined,
-  PlayCircleOutlined,
-  StopOutlined,
-  ThunderboltOutlined,
-  CloudOutlined,
-  HistoryOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
-  CloseCircleOutlined,
-} from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+
 import {
   Card,
   Row,
@@ -38,6 +28,18 @@ import {
   Popconfirm,
   message,
 } from 'antd';
+import {
+  RefreshCw,
+  PauseCircle,
+  PlayCircle,
+  Square,
+  Zap,
+  Cloud,
+  History,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+} from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
 
@@ -53,13 +55,13 @@ const { Title, Text } = Typography;
 // ============================================================================
 
 const TierTag: React.FC<{ tier: ProjectTier }> = ({ tier }) => {
-  const config = {
-    hot: { color: 'red', icon: <ThunderboltOutlined />, label: 'HOT' },
-    warm: { color: 'orange', icon: <CloudOutlined />, label: 'WARM' },
-    cold: { color: 'blue', icon: <HistoryOutlined />, label: 'COLD' },
+  const config: Record<ProjectTier, { color: string; icon: React.ReactNode; label: string }> = {
+    hot: { color: 'red', icon: <Zap size={16} />, label: 'HOT' },
+    warm: { color: 'orange', icon: <Cloud size={16} />, label: 'WARM' },
+    cold: { color: 'blue', icon: <History size={16} />, label: 'COLD' },
   };
 
-  const { color, icon, label } = config[tier] || config.cold;
+  const { color, icon, label } = config[tier];
 
   return (
     <Tag color={color} icon={icon}>
@@ -70,17 +72,17 @@ const TierTag: React.FC<{ tier: ProjectTier }> = ({ tier }) => {
 
 const StatusTag: React.FC<{ status: string }> = ({ status }) => {
   const config: Record<string, { color: string; icon: React.ReactNode }> = {
-    ready: { color: 'green', icon: <CheckCircleOutlined /> },
-    executing: { color: 'blue', icon: <ThunderboltOutlined /> },
-    paused: { color: 'orange', icon: <PauseCircleOutlined /> },
-    unhealthy: { color: 'red', icon: <ExclamationCircleOutlined /> },
-    degraded: { color: 'gold', icon: <ExclamationCircleOutlined /> },
-    initializing: { color: 'cyan', icon: <ReloadOutlined spin /> },
-    terminated: { color: 'default', icon: <StopOutlined /> },
-    initialization_failed: { color: 'red', icon: <CloseCircleOutlined /> },
+    ready: { color: 'green', icon: <CheckCircle2 size={16} /> },
+    executing: { color: 'blue', icon: <Zap size={16} /> },
+    paused: { color: 'orange', icon: <PauseCircle size={16} /> },
+    unhealthy: { color: 'red', icon: <AlertCircle size={16} /> },
+    degraded: { color: 'gold', icon: <AlertCircle size={16} /> },
+    initializing: { color: 'cyan', icon: <RefreshCw size={16} className="animate-spin" /> },
+    terminated: { color: 'default', icon: <Square size={16} /> },
+    initialization_failed: { color: 'red', icon: <XCircle size={16} /> },
   };
 
-  const { color, icon } = config[status] || { color: 'default', icon: null };
+  const { color, icon } = config[status] ?? { color: 'default', icon: null };
 
   return (
     <Tag color={color} icon={icon}>
@@ -97,7 +99,7 @@ const HealthTag: React.FC<{ health: string }> = ({ health }) => {
     unknown: { color: 'default' },
   };
 
-  const { color } = config[health] || { color: 'default' };
+  const { color } = config[health] ?? { color: 'default' };
 
   return <Tag color={color}>{health.toUpperCase()}</Tag>;
 };
@@ -140,18 +142,18 @@ const PoolDashboard: React.FC = () => {
 
   // Initial load
   useEffect(() => {
-    fetchStatus();
-    fetchInstances();
-    fetchMetrics();
+    void fetchStatus();
+    void fetchInstances();
+    void fetchMetrics();
   }, [fetchStatus, fetchInstances, fetchMetrics]);
 
   // Auto-refresh
   useEffect(() => {
     if (autoRefresh) {
       refreshTimerRef.current = setInterval(() => {
-        fetchStatus();
-        fetchInstances();
-        fetchMetrics();
+        void fetchStatus();
+        void fetchInstances();
+        void fetchMetrics();
       }, refreshInterval * 1000);
     }
 
@@ -162,43 +164,45 @@ const PoolDashboard: React.FC = () => {
     };
   }, [autoRefresh, refreshInterval, fetchStatus, fetchInstances, fetchMetrics]);
 
+  const { t } = useTranslation();
+
   const handleRefresh = useCallback(() => {
-    fetchStatus();
-    fetchInstances();
-    fetchMetrics();
+    void fetchStatus();
+    void fetchInstances();
+    void fetchMetrics();
   }, [fetchStatus, fetchInstances, fetchMetrics]);
 
   const handlePause = async (instanceKey: string) => {
     const success = await pauseInstance(instanceKey);
     if (success) {
-      message.success('Instance paused');
+      message.success(t('admin.poolDashboard.messages.instancePaused'));
     } else {
-      message.error('Failed to pause instance');
+      message.error(t('admin.poolDashboard.messages.failedToPause'));
     }
   };
 
   const handleResume = async (instanceKey: string) => {
     const success = await resumeInstance(instanceKey);
     if (success) {
-      message.success('Instance resumed');
+      message.success(t('admin.poolDashboard.messages.instanceResumed'));
     } else {
-      message.error('Failed to resume instance');
+      message.error(t('admin.poolDashboard.messages.failedToResume'));
     }
   };
 
   const handleTerminate = async (instanceKey: string) => {
     const success = await terminateInstance(instanceKey);
     if (success) {
-      message.success('Instance terminated');
+      message.success(t('admin.poolDashboard.messages.instanceTerminated'));
     } else {
-      message.error('Failed to terminate instance');
+      message.error(t('admin.poolDashboard.messages.failedToTerminate'));
     }
   };
 
   // Table columns
   const columns: ColumnsType<PoolInstance> = [
     {
-      title: 'Instance Key',
+      title: t('admin.poolDashboard.columns.instanceKey'),
       dataIndex: 'instance_key',
       key: 'instance_key',
       width: 250,
@@ -212,89 +216,89 @@ const PoolDashboard: React.FC = () => {
       ),
     },
     {
-      title: 'Tier',
+      title: t('admin.poolDashboard.columns.tier'),
       dataIndex: 'tier',
       key: 'tier',
       width: 100,
       render: (tier: ProjectTier) => <TierTag tier={tier} />,
     },
     {
-      title: 'Status',
+      title: t('admin.poolDashboard.columns.status'),
       dataIndex: 'status',
       key: 'status',
       width: 140,
       render: (status: string) => <StatusTag status={status} />,
     },
     {
-      title: 'Health',
+      title: t('admin.poolDashboard.columns.health'),
       dataIndex: 'health_status',
       key: 'health_status',
       width: 100,
       render: (health: string) => <HealthTag health={health} />,
     },
     {
-      title: 'Requests',
+      title: t('admin.poolDashboard.columns.requests'),
       key: 'requests',
       width: 120,
       render: (_: unknown, record: PoolInstance) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Active: {record.active_requests}
+            {t('admin.poolDashboard.columns.active')}: {record.active_requests}
           </Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Total: {record.total_requests}
+            {t('admin.poolDashboard.columns.total')}: {record.total_requests}
           </Text>
         </Space>
       ),
     },
     {
-      title: 'Memory',
+      title: t('admin.poolDashboard.columns.memory'),
       dataIndex: 'memory_used_mb',
       key: 'memory_used_mb',
       width: 100,
       render: (mb: number) => `${mb.toFixed(1)} MB`,
     },
     {
-      title: 'Last Request',
+      title: t('admin.poolDashboard.columns.lastRequest'),
       dataIndex: 'last_request_at',
       key: 'last_request_at',
       width: 160,
       render: (time: string | null) => (time ? formatDateTime(time) : '-'),
     },
     {
-      title: 'Actions',
+      title: t('admin.poolDashboard.columns.actions'),
       key: 'actions',
       width: 150,
       fixed: 'right',
       render: (_: unknown, record: PoolInstance) => (
         <Space size="small">
           {record.status === 'ready' || record.status === 'executing' ? (
-            <Tooltip title="Pause">
+            <Tooltip title={t('admin.poolDashboard.actions.pause')}>
               <Button
                 type="text"
                 size="small"
-                icon={<PauseCircleOutlined />}
-                onClick={() => handlePause(record.instance_key)}
+                icon={<PauseCircle size={16} />}
+                onClick={() => void handlePause(record.instance_key)}
               />
             </Tooltip>
           ) : record.status === 'paused' ? (
-            <Tooltip title="Resume">
+            <Tooltip title={t('admin.poolDashboard.actions.resume')}>
               <Button
                 type="text"
                 size="small"
-                icon={<PlayCircleOutlined />}
-                onClick={() => handleResume(record.instance_key)}
+                icon={<PlayCircle size={16} />}
+                onClick={() => void handleResume(record.instance_key)}
               />
             </Tooltip>
           ) : null}
           <Popconfirm
-            title="Terminate this instance?"
-            onConfirm={() => handleTerminate(record.instance_key)}
-            okText="Yes"
-            cancelText="No"
+            title={t('admin.poolDashboard.confirm.terminateInstance')}
+            onConfirm={() => void handleTerminate(record.instance_key)}
+            okText={t('common.yes')}
+            cancelText={t('common.no')}
           >
-            <Tooltip title="Terminate">
-              <Button type="text" size="small" danger icon={<StopOutlined />} />
+            <Tooltip title={t('admin.poolDashboard.actions.terminate')}>
+              <Button type="text" size="small" danger icon={<Square size={16} />} />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -310,6 +314,21 @@ const PoolDashboard: React.FC = () => {
     ? (status.resource_usage.used_cpu_cores / status.resource_usage.total_cpu_cores) * 100
     : 0;
 
+  // Format helpers for Progress components
+  const formatMemoryProgress = (): string => {
+    if (!status?.resource_usage) return '0 / 0 MB';
+    const used = status.resource_usage.used_memory_mb.toFixed(0);
+    const total = status.resource_usage.total_memory_mb.toFixed(0);
+    return `${used} / ${total} MB`;
+  };
+
+  const formatCpuProgress = (): string => {
+    if (!status?.resource_usage) return '0 / 0 cores';
+    const used = status.resource_usage.used_cpu_cores.toFixed(1);
+    const total = status.resource_usage.total_cpu_cores.toFixed(1);
+    return `${used} / ${total} cores`;
+  };
+
   return (
     <div style={{ padding: 24 }}>
       {/* Header */}
@@ -322,17 +341,17 @@ const PoolDashboard: React.FC = () => {
         }}
       >
         <Title level={2} style={{ margin: 0 }}>
-          Agent Pool Dashboard
+          {t('admin.poolDashboard.title')}
         </Title>
         <Space>
-          <Text type="secondary">Auto-refresh</Text>
+          <Text type="secondary">{t('admin.poolDashboard.autoRefresh')}</Text>
           <Switch checked={autoRefresh} onChange={setAutoRefresh} size="small" />
           <Button
-            icon={<ReloadOutlined />}
+            icon={<RefreshCw size={16} />}
             onClick={handleRefresh}
             loading={isStatusLoading || isInstancesLoading}
           >
-            Refresh
+            {t('common.refresh')}
           </Button>
         </Space>
       </div>
@@ -340,7 +359,7 @@ const PoolDashboard: React.FC = () => {
       {/* Error alerts */}
       {statusError && (
         <Alert
-          message="Failed to load pool status"
+          title={t('admin.poolDashboard.errors.failedToLoadPoolStatus')}
           description={statusError}
           type="error"
           showIcon
@@ -354,41 +373,43 @@ const PoolDashboard: React.FC = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card loading={isStatusLoading}>
             <Statistic
-              title="Total Instances"
+              title={t('admin.poolDashboard.status.totalInstances')}
               value={status?.total_instances ?? 0}
-              prefix={<CloudOutlined />}
+              prefix={<Cloud size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card loading={isStatusLoading}>
             <Statistic
-              title="Ready"
+              title={t('admin.poolDashboard.status.ready')}
               value={status?.ready_instances ?? 0}
-              valueStyle={{ color: '#52c41a' }}
-              prefix={<CheckCircleOutlined />}
+              styles={{ content: { color: '#52c41a' } }}
+              prefix={<CheckCircle2 size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card loading={isStatusLoading}>
             <Statistic
-              title="Executing"
+              title={t('admin.poolDashboard.status.executing')}
               value={status?.executing_instances ?? 0}
-              valueStyle={{ color: '#1890ff' }}
-              prefix={<ThunderboltOutlined />}
+              styles={{ content: { color: '#1890ff' } }}
+              prefix={<Zap size={20} />}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card loading={isStatusLoading}>
             <Statistic
-              title="Unhealthy"
+              title={t('admin.poolDashboard.status.unhealthy')}
               value={status?.unhealthy_instances ?? 0}
-              valueStyle={{
-                color: (status?.unhealthy_instances ?? 0) > 0 ? '#f5222d' : undefined,
+              styles={{
+                content: {
+                  color: (status?.unhealthy_instances ?? 0) > 0 ? '#f5222d' : undefined,
+                },
               }}
-              prefix={<ExclamationCircleOutlined />}
+              prefix={<AlertCircle size={20} />}
             />
           </Card>
         </Col>
@@ -397,14 +418,14 @@ const PoolDashboard: React.FC = () => {
       {/* Tier Distribution & Resources */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={12}>
-          <Card title="Tier Distribution" loading={isStatusLoading}>
+          <Card title={t('admin.poolDashboard.tierDistribution')} loading={isStatusLoading}>
             <Row gutter={16}>
               <Col span={8}>
                 <Statistic
                   title={
                     <Space>
-                      <ThunderboltOutlined style={{ color: '#f5222d' }} />
-                      HOT
+                      <Zap size={16} style={{ color: '#f5222d' }} />
+                      {t('admin.poolDashboard.tiers.hot')}
                     </Space>
                   }
                   value={status?.hot_instances ?? 0}
@@ -414,8 +435,8 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <CloudOutlined style={{ color: '#fa8c16' }} />
-                      WARM
+                      <Cloud size={16} style={{ color: '#fa8c16' }} />
+                      {t('admin.poolDashboard.tiers.warm')}
                     </Space>
                   }
                   value={status?.warm_instances ?? 0}
@@ -425,8 +446,8 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <HistoryOutlined style={{ color: '#1890ff' }} />
-                      COLD
+                      <History size={16} style={{ color: '#1890ff' }} />
+                      {t('admin.poolDashboard.tiers.cold')}
                     </Space>
                   }
                   value={status?.cold_instances ?? 0}
@@ -436,26 +457,22 @@ const PoolDashboard: React.FC = () => {
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title="Resource Usage" loading={isStatusLoading}>
-            <Space direction="vertical" style={{ width: '100%' }}>
+          <Card title={t('admin.poolDashboard.resourceUsage')} loading={isStatusLoading}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <div>
-                <Text type="secondary">Memory</Text>
+                <Text type="secondary">{t('admin.poolDashboard.resources.memory')}</Text>
                 <Progress
                   percent={Math.round(memoryUsagePct)}
                   status={memoryUsagePct > 80 ? 'exception' : 'normal'}
-                  format={() =>
-                    `${status?.resource_usage?.used_memory_mb?.toFixed(0) ?? 0} / ${status?.resource_usage?.total_memory_mb?.toFixed(0) ?? 0} MB`
-                  }
+                  format={formatMemoryProgress}
                 />
               </div>
               <div>
-                <Text type="secondary">CPU</Text>
+                <Text type="secondary">{t('admin.poolDashboard.resources.cpu')}</Text>
                 <Progress
                   percent={Math.round(cpuUsagePct)}
                   status={cpuUsagePct > 80 ? 'exception' : 'normal'}
-                  format={() =>
-                    `${status?.resource_usage?.used_cpu_cores?.toFixed(1) ?? 0} / ${status?.resource_usage?.total_cpu_cores?.toFixed(1) ?? 0} cores`
-                  }
+                  format={formatCpuProgress}
                 />
               </div>
             </Space>
@@ -466,27 +483,27 @@ const PoolDashboard: React.FC = () => {
       {/* Prewarm Pool */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col span={24}>
-          <Card title="Prewarm Pool" loading={isStatusLoading}>
+          <Card title={t('admin.poolDashboard.prewarmPool')} loading={isStatusLoading}>
             <Row gutter={16}>
               <Col span={8}>
                 <Statistic
-                  title="L1 (Hot)"
-                  value={status?.prewarm_pool?.l1 ?? 0}
-                  suffix="instances"
+                  title={t('admin.poolDashboard.prewarm.l1')}
+                  value={status?.prewarm_pool.l1 ?? 0}
+                  suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
               <Col span={8}>
                 <Statistic
-                  title="L2 (Warm)"
-                  value={status?.prewarm_pool?.l2 ?? 0}
-                  suffix="instances"
+                  title={t('admin.poolDashboard.prewarm.l2')}
+                  value={status?.prewarm_pool.l2 ?? 0}
+                  suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
               <Col span={8}>
                 <Statistic
-                  title="L3 (Cold)"
-                  value={status?.prewarm_pool?.l3 ?? 0}
-                  suffix="instances"
+                  title={t('admin.poolDashboard.prewarm.l3')}
+                  value={status?.prewarm_pool.l3 ?? 0}
+                  suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
             </Row>
@@ -496,26 +513,26 @@ const PoolDashboard: React.FC = () => {
 
       {/* Instances Table */}
       <Card
-        title="Active Instances"
+        title={t('admin.poolDashboard.activeInstances')}
         extra={
           <Space>
             <Select
-              placeholder="Filter by tier"
+              placeholder={t('admin.poolDashboard.filterByTier')}
               allowClear
               style={{ width: 120 }}
               value={tierFilter}
               onChange={setTierFilter}
               options={[
-                { value: 'hot', label: 'HOT' },
-                { value: 'warm', label: 'WARM' },
-                { value: 'cold', label: 'COLD' },
+                { value: 'hot', label: t('admin.poolDashboard.tiers.hot') },
+                { value: 'warm', label: t('admin.poolDashboard.tiers.warm') },
+                { value: 'cold', label: t('admin.poolDashboard.tiers.cold') },
               ]}
             />
           </Space>
         }
       >
         {instancesError && (
-          <Alert message={instancesError} type="error" showIcon style={{ marginBottom: 16 }} />
+          <Alert title={instancesError} type="error" showIcon style={{ marginBottom: 16 }} />
         )}
         <Table
           columns={columns}
@@ -527,7 +544,7 @@ const PoolDashboard: React.FC = () => {
             pageSize: pageSize,
             total: totalInstances,
             showSizeChanger: true,
-            showTotal: (total) => `Total ${total} instances`,
+            showTotal: (total) => t('admin.poolDashboard.pagination.total', { count: total }),
             onChange: (page) => {
               setPage(page);
             },

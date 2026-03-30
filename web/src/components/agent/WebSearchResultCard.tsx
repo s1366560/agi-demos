@@ -6,9 +6,9 @@
 
 import { useState } from 'react';
 
-import { formatDateTime, formatDateOnly } from '@/utils/date';
+import { Globe, Clock, Link } from 'lucide-react';
 
-import { MaterialIcon } from './shared';
+import { formatDateTime, formatDateOnly } from '@/utils/date';
 
 export interface SearchResult {
   title: string;
@@ -55,7 +55,7 @@ export function WebSearchResultCard({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
-          <MaterialIcon name="language" size={18} className="text-blue-500" />
+          <Globe size={18} className="text-blue-500" />
           <span className="font-semibold text-slate-900 dark:text-white">Web Search Results</span>
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -69,7 +69,7 @@ export function WebSearchResultCard({
         </div>
         {timestamp && (
           <div className="flex items-center gap-1 text-xs text-slate-500">
-            <MaterialIcon name="schedule" size={12} />
+            <Clock size={12} />
             {formatTimestamp(timestamp)}
           </div>
         )}
@@ -85,7 +85,7 @@ export function WebSearchResultCard({
         <div className="grid grid-cols-2 gap-3">
           {results.map((result, index) => (
             <div
-              key={index}
+              key={result.url}
               className="p-3 rounded-lg border bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800"
             >
               <div className="space-y-2">
@@ -106,7 +106,7 @@ export function WebSearchResultCard({
 
                 {/* URL */}
                 <div className="flex items-center gap-1 text-xs text-slate-500">
-                  <MaterialIcon name="link" size={12} />
+                  <Link size={12} />
                   <span className="font-mono truncate">{result.url}</span>
                 </div>
 
@@ -126,6 +126,7 @@ export function WebSearchResultCard({
                   )}
                   {result.content.length > 200 && (
                     <button
+                      type="button"
                       onClick={() => {
                         toggleExpand(index);
                       }}

@@ -3,7 +3,10 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
 import { agentService } from '../services/agentService';
-import { Message, AgentStreamHandler, TimelineEvent, UserMessageEvent } from '../types/agent';
+import {
+  Message, AgentStreamHandler, TimelineEvent, UserMessageEvent, AgentTask, SubscribeOptions,
+  ClarificationType, DecisionType, ClarificationOption, DecisionOption, EnvVarField,
+} from '../types/agent';
 import {
   type ConversationState,
   type HITLSummary,
@@ -53,6 +56,8 @@ import { useCanvasStore } from './canvasStore';
 import { useLayoutModeStore } from './layoutMode';
 
 import type { LLMConfigOverrides } from '../types/memory';
+
+// API Response types for type safety
 
 // Re-export types for external consumers
 export type { AdditionalAgentHandlers, AgentV3State } from './agent/types';
@@ -415,9 +420,10 @@ export const useAgentV3Store = create<AgentV3State>()(
             set({ conversationStates: newStates });
 
             // Persist to IndexedDB
-            saveConversationState(activeConversationId, newStates.get(activeConversationId)!).catch(
-              console.error
-            );
+            saveConversationState(
+              activeConversationId,
+              newStates.get(activeConversationId) as ConversationState
+            ).catch(console.error);
           }
 
           // Track LRU access order and evict stale entries
@@ -438,9 +444,9 @@ export const useAgentV3Store = create<AgentV3State>()(
             if (newState) {
               // Sort timeline by eventTimeUs + eventCounter to ensure correct order
               const sortedTimeline = [...newState.timeline].sort((a, b) => {
-                const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+                const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
                 if (timeDiff !== 0) return timeDiff;
-                return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+                return a.eventCounter - b.eventCounter;
               });
               set({
                 activeConversationId: id,
@@ -663,7 +669,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
           // DEBUG: Log recovery attempt parameters
           logger.debug(
-            `[AgentV3] loadMessages starting for ${conversationId}, lastKnownTimeUs=${lastKnownTimeUs}`
+            `[AgentV3] loadMessages starting for ${conversationId}, lastKnownTimeUs=${String(lastKnownTimeUs)}`
           );
 
           // Try to load from IndexedDB first
@@ -675,7 +681,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           const currentTimeline = get().timeline;
           const hasExistingData = currentTimeline.length > 0;
 
-          const stateUpdate: Record<string, any> = {
+          const stateUpdate: Partial<AgentV3State> = {
             // Only show loading state when there's no cached data to display —
             // when data exists, keep UI interactive during background refresh.
             isLoadingHistory: !hasExistingData,
@@ -711,36 +717,36 @@ export const useAgentV3Store = create<AgentV3State>()(
                   conversationId,
                   projectId,
                   200 // Load latest 200 messages
-                ) as Promise<any>,
+                ),
                 agentService
                   .getExecutionStatus(conversationId, true, lastKnownTimeUs)
-                  .catch((e) => {
-                    logger.warn(`[AgentV3] getExecutionStatus failed:`, e);
+                  .catch((_err: unknown) => {
+                    logger.warn(`[AgentV3] getExecutionStatus failed:`, _err);
                     return null;
                   }),
                 // Restore context status indicator on conversation switch / page refresh
                 (async () => {
                   const { useContextStore } = await import('../stores/contextStore');
                   await useContextStore.getState().fetchContextStatus(conversationId, projectId);
-                })().catch((e) => {
-                  logger.warn(`[AgentV3] fetchContextStatus failed:`, e);
+                })().catch((_err: unknown) => {
+                  logger.warn(`[AgentV3] fetchContextStatus failed:`, _err);
                   return null;
                 }),
                 // Fetch plan mode status from API
                 (async () => {
                   const { planService } = await import('../services/planService');
                   return planService.getMode(conversationId);
-                })().catch((e) => {
-                  logger.debug(`[AgentV3] getMode failed:`, e);
+                })().catch((_err: unknown) => {
+                  logger.debug(`[AgentV3] getMode failed:`, _err);
                   return null;
                 }),
                 // Fetch tasks for conversation
                 (async () => {
                   const { httpClient } = await import('../services/client/httpClient');
-                  const res = await httpClient.get(`/agent/plan/tasks/${conversationId}`);
-                  return res as any;
-                })().catch((e) => {
-                  logger.debug(`[AgentV3] fetchTasks failed:`, e);
+                  const res = await httpClient.get<{ tasks?: AgentTask[] }>(`/agent/plan/tasks/${conversationId}`);
+                  return res;
+                })().catch((_err: unknown) => {
+                  logger.debug(`[AgentV3] fetchTasks failed:`, _err);
                   return null;
                 }),
               ]);
@@ -789,7 +795,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               ) {
                 isOrdered = false;
                 console.error(
-                  `[AgentV3] Timeline out of order! timeUs=${event.eventTimeUs},counter=${event.eventCounter} <= prev timeUs=${prevTimeUs},counter=${prevCounter}`,
+                  `[AgentV3] Timeline out of order! timeUs=${String(event.eventTimeUs)},counter=${String(event.eventCounter)} <= prev timeUs=${String(prevTimeUs)},counter=${String(prevCounter)}`,
                   event
                 );
               }
@@ -810,9 +816,9 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             // Ensure timeline is sorted by eventTimeUs + eventCounter (defensive fix)
             const sortedTimeline = [...response.timeline].sort((a, b) => {
-              const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+              const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
               if (timeDiff !== 0) return timeDiff;
-              return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+              return a.eventCounter - b.eventCounter;
             });
 
             // Merge HITL response events into request events for single-card rendering
@@ -825,16 +831,20 @@ export const useAgentV3Store = create<AgentV3State>()(
             const lastTimeUs = response.last_time_us ?? null;
 
             // DEBUG: Log assistant_message events
-            const assistantMsgs = mergedTimeline.filter((e: any) => e.type === 'assistant_message');
+            const assistantMsgs = mergedTimeline.filter(
+              (e: TimelineEvent) => e.type === 'assistant_message'
+            );
             logger.debug(
-              `[AgentV3] loadMessages: Found ${assistantMsgs.length} assistant_message events`,
+              `[AgentV3] loadMessages: Found ${String(assistantMsgs.length)} assistant_message events`,
               assistantMsgs
             );
 
             // DEBUG: Log artifact events in timeline
-            const artifactEvents = mergedTimeline.filter((e: any) => e.type === 'artifact_created');
+            const artifactEvents = mergedTimeline.filter(
+              (e: TimelineEvent) => e.type === 'artifact_created'
+            );
             logger.debug(
-              `[AgentV3] loadMessages: Found ${artifactEvents.length} artifact_created events in timeline`,
+              `[AgentV3] loadMessages: Found ${String(artifactEvents.length)} artifact_created events in timeline`,
               artifactEvents
             );
 
@@ -895,9 +905,9 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                 // Convert back to array and sort by eventTimeUs + eventCounter
                 finalTimeline = Array.from(eventMap.values()).sort((a, b) => {
-                  const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+                  const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
                   if (timeDiff !== 0) return timeDiff;
-                  return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+                  return a.eventCounter - b.eventCounter;
                 });
                 finalMessages = timelineToMessages(finalTimeline);
               } else {
@@ -941,7 +951,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             // If agent is already running, recover streaming state before subscribing.
             // This avoids clearing freshly-arrived deltas after subscription.
-            if (execStatus?.is_running) {
+            if ((execStatus as { is_running?: boolean })?.is_running) {
               logger.debug(
                 `[AgentV3] Conversation ${conversationId} is running, recovering live stream...`
               );
@@ -988,20 +998,22 @@ export const useAgentV3Store = create<AgentV3State>()(
                 }
               );
 
-              agentService.subscribe(conversationId, streamHandler, {
-                message_id:
-                  typeof (execStatus as any)?.current_message_id === 'string'
-                    ? (execStatus as any).current_message_id
-                    : undefined,
-                from_time_us:
-                  typeof execStatus?.last_event_time_us === 'number'
-                    ? execStatus.last_event_time_us
-                    : (lastTimeUs ?? undefined),
-                from_counter:
-                  typeof execStatus?.last_event_counter === 'number'
-                    ? execStatus.last_event_counter
-                    : (response.last_counter ?? undefined),
-              });
+              const subscribeOpts: SubscribeOptions = {};
+              const currentMsgId = (execStatus as { current_message_id?: string })?.current_message_id;
+              if (typeof currentMsgId === 'string') {
+                subscribeOpts.message_id = currentMsgId;
+              }
+              if (typeof execStatus?.last_event_time_us === 'number') {
+                subscribeOpts.from_time_us = execStatus.last_event_time_us;
+              } else if (typeof lastTimeUs === 'number') {
+                subscribeOpts.from_time_us = lastTimeUs;
+              }
+              if (typeof execStatus?.last_event_counter === 'number') {
+                subscribeOpts.from_counter = execStatus.last_event_counter;
+              } else if (typeof response.last_counter === 'number') {
+                subscribeOpts.from_counter = response.last_counter;
+              }
+              agentService.subscribe(conversationId, streamHandler, subscribeOpts);
               logger.debug(`[AgentV3] Subscribed to conversation ${conversationId}`);
             }
           } catch (error) {
@@ -1038,7 +1050,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           set({ isLoadingEarlier: true });
 
           try {
-            const response = (await agentService.getConversationMessages(
+            const response = await agentService.getConversationMessages(
               conversationId,
               projectId,
               200, // Load 200 more messages (increased from 50)
@@ -1046,7 +1058,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               undefined, // fromCounter
               earliestTimeUs, // beforeTimeUs
               earliestCounter ?? undefined // beforeCounter
-            )) as any;
+            );
 
             // Check if conversation is still active
             if (get().activeConversationId !== conversationId) {
@@ -1058,10 +1070,10 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             // Prepend new events to existing timeline and sort by eventTimeUs + eventCounter
             const combinedTimeline = [...response.timeline, ...timeline];
-            const sortedTimeline = combinedTimeline.sort((a: any, b: any) => {
-              const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+            const sortedTimeline = combinedTimeline.sort((a: TimelineEvent, b: TimelineEvent) => {
+              const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
               if (timeDiff !== 0) return timeDiff;
-              return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+              return a.eventCounter - b.eventCounter;
             });
             // Merge HITL response events into request events for single-card rendering
             const mergedTimeline = mergeHITLResponseEvents(sortedTimeline);
@@ -1102,7 +1114,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           const streamingCount = getStreamingConversationCount();
           if (streamingCount >= MAX_CONCURRENT_STREAMING_CONVERSATIONS) {
             set({
-              error: `Maximum ${MAX_CONCURRENT_STREAMING_CONVERSATIONS} concurrent conversations reached. Please wait for one to complete.`,
+              error: `Maximum ${String(MAX_CONCURRENT_STREAMING_CONVERSATIONS)} concurrent conversations reached. Please wait for one to complete.`,
             });
             return null;
           }
@@ -1122,12 +1134,13 @@ export const useAgentV3Store = create<AgentV3State>()(
 
               // Create fresh state for new conversation
               const newConvState = createDefaultConversationState();
+              const newConvId = conversationId;
 
               set((state) => {
                 const newStates = new Map(state.conversationStates);
-                newStates.set(conversationId!, newConvState);
+                newStates.set(newConvId, newConvState);
                 return {
-                  activeConversationId: conversationId,
+                  activeConversationId: newConvId,
                   conversations: [newConv, ...state.conversations],
                   conversationStates: newStates,
                 };
@@ -1405,9 +1418,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                     pendingClarification: {
                       request_id: request.id,
                       question: request.question,
-                      clarification_type: request.metadata?.clarification_type || 'custom',
-                      options: request.options || [],
-                      allow_custom: request.metadata?.allow_custom ?? true,
+                      clarification_type:
+                        (request.metadata?.clarification_type as ClarificationType) || 'custom',
+                      options: (request.options as ClarificationOption[] | undefined) || [],
+                      allow_custom: (request.metadata?.allow_custom as boolean) ?? true,
                       context: request.context || {},
                     },
                     agentState: 'awaiting_input',
@@ -1419,9 +1433,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                     pendingDecision: {
                       request_id: request.id,
                       question: request.question,
-                      decision_type: request.metadata?.decision_type || 'custom',
-                      options: request.options || [],
-                      allow_custom: request.metadata?.allow_custom ?? true,
+                      decision_type:
+                        (request.metadata?.decision_type as DecisionType) || 'custom',
+                      options: (request.options as DecisionOption[] | undefined) || [],
+                      allow_custom: (request.metadata?.allow_custom as boolean) ?? true,
                       context: request.context || {},
                     },
                     agentState: 'awaiting_input',
@@ -1431,12 +1446,12 @@ export const useAgentV3Store = create<AgentV3State>()(
                 case 'env_var': {
                   // Use new format directly: name, label, required
                   // Data comes from request.options (stored in DB)
-                  const fields = request.options || [];
+                  const fields = (request.options as EnvVarField[] | undefined) || [];
 
                   set({
                     pendingEnvVarRequest: {
                       request_id: request.id,
-                      tool_name: request.metadata?.tool_name || 'unknown',
+                      tool_name: (request.metadata?.tool_name as string) || 'unknown',
                       fields: fields,
                       message: request.question,
                       context: request.context || {},

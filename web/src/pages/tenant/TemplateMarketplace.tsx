@@ -195,7 +195,7 @@ export const TemplateMarketplace: React.FC = () => {
                     <h3 className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate max-w-[180px]">
                       {tpl.display_name || tpl.name}
                     </h3>
-                    <span className="text-[10px] text-slate-400">v{tpl.version}</span>
+                    <span className="text-2xs text-slate-400">v{tpl.version}</span>
                   </div>
                 </div>
                 {tpl.is_builtin && (
@@ -205,18 +205,18 @@ export const TemplateMarketplace: React.FC = () => {
                 )}
               </div>
 
-              {/* Description */}
-              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3 min-h-[32px]">
-                {tpl.description || 'No description'}
-              </p>
+               {/* Description */}
+               <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3 min-h-8">
+                 {tpl.description || 'No description'}
+               </p>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-1 mb-3">
-                <Tag color={CATEGORY_COLORS[tpl.category] || 'default'} className="text-[10px]">
+                <Tag color={CATEGORY_COLORS[tpl.category] || 'default'} className="text-2xs">
                   {tpl.category}
                 </Tag>
                 {tpl.tags.slice(0, 3).map((tag) => (
-                  <Tag key={tag} className="text-[10px]">
+                  <Tag key={tag} className="text-2xs">
                     {tag}
                   </Tag>
                 ))}
@@ -224,7 +224,7 @@ export const TemplateMarketplace: React.FC = () => {
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                <div className="flex items-center gap-3 text-2xs text-slate-400">
                   <span className="flex items-center gap-0.5">
                     <Download size={10} />
                     {tpl.install_count}

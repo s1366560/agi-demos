@@ -199,7 +199,7 @@ const TimelineStepItem = memo<{
             )}
           </div>
           {!isLast && (
-            <div className="w-px flex-1 min-h-[16px] bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+            <div className="w-px flex-1 min-h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
           )}
         </div>
         <div className="flex-1 pb-1.5 min-w-0">
@@ -265,7 +265,7 @@ const TimelineStepItem = memo<{
           )}
         </div>
         {!isLast && (
-          <div className="w-px flex-1 min-h-[16px] bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+          <div className="w-px flex-1 min-h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
         )}
       </div>
 
@@ -301,7 +301,7 @@ const TimelineStepItem = memo<{
                 {stepLabel}
               </span>
               {step.duration != null && (
-                <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                <span className="flex items-center gap-1 text-2xs text-slate-400">
                   <Clock size={10} />
                   {formatDuration(step.duration)}
                 </span>
@@ -320,7 +320,7 @@ const TimelineStepItem = memo<{
                 onClick={() => {
                   onUndoRequest(step.id, step.toolName);
                 }}
-                className="ml-1 p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 active:bg-slate-300 dark:active:bg-slate-500 text-slate-400 hover:text-amber-500 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                className="ml-1 p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 active:bg-slate-300 dark:active:bg-slate-500 text-slate-400 hover:text-amber-500 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 min-w-8 min-h-8 flex items-center justify-center"
                 aria-label={t('agent.undo.button', 'Undo this action')}
                 title={t('agent.undo.button', 'Undo this action')}
               >
@@ -337,7 +337,7 @@ const TimelineStepItem = memo<{
               aria-label={t('agent.timeline.showStepDetails', 'Show details for {{tool}}', {
                 tool: stepLabel,
               })}
-              className="mt-1 w-full text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate text-left rounded-sm hover:text-slate-600 dark:hover:text-slate-300 active:text-slate-700 dark:active:text-slate-200 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 cursor-pointer"
+              className="mt-1 w-full text-xs-plus text-slate-500 dark:text-slate-400 font-mono truncate text-left rounded-sm hover:text-slate-600 dark:hover:text-slate-300 active:text-slate-700 dark:active:text-slate-200 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 cursor-pointer"
             >
               {preview}
             </button>
@@ -369,10 +369,10 @@ const TimelineStepItem = memo<{
           >
             {step.input && Object.keys(step.input).length > 0 && (
               <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-2 border border-slate-200/60 dark:border-slate-700/40">
-                <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1">
+                <div className="text-2xs font-medium text-slate-400 uppercase tracking-wider mb-1">
                   {t('agent.timeline.input', 'Input')}
                 </div>
-                <pre className="text-slate-600 dark:text-slate-300 font-mono whitespace-pre-wrap break-words overflow-x-auto max-h-[200px] overflow-y-auto">
+                <pre className="text-slate-600 dark:text-slate-300 font-mono whitespace-pre-wrap break-words overflow-x-auto max-h-50 overflow-y-auto">
                   {JSON.stringify(step.input, null, 2)}
                 </pre>
               </div>
@@ -385,11 +385,11 @@ const TimelineStepItem = memo<{
                     : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/40'
                 }`}
               >
-                <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1">
+                <div className="text-2xs font-medium text-slate-400 uppercase tracking-wider mb-1">
                   {t('agent.timeline.output', 'Output')}
                 </div>
                 <pre
-                  className={`font-mono whitespace-pre-wrap break-words overflow-x-auto max-h-[200px] overflow-y-auto ${
+                  className={`font-mono whitespace-pre-wrap break-words overflow-x-auto max-h-50 overflow-y-auto ${
                     step.isError
                       ? 'text-red-600 dark:text-red-400'
                       : 'text-slate-600 dark:text-slate-300'
@@ -444,7 +444,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
               ? t('agent.timeline.showTimeline', 'Show execution steps')
               : t('agent.timeline.hideTimeline', 'Hide execution steps')
           }
-          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer rounded min-h-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer rounded min-h-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
         >
           {collapsed ? (
             <ChevronRight size={14} className="text-slate-400" />
@@ -462,7 +462,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
                 })}
           </span>
           {summary.failed > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
+            <span className="text-2xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
               {summary.failed} {t('agent.timeline.failed', 'Failed')}
             </span>
           )}

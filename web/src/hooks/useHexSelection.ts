@@ -3,12 +3,15 @@ import { useState, useCallback } from 'react';
 export function useHexSelection() {
   const [selectedHexes, setSelectedHexes] = useState<Set<string>>(new Set());
 
-  const isSelected = useCallback((q: number, r: number) => {
-    return selectedHexes.has(`${q},${r}`);
-  }, [selectedHexes]);
+  const isSelected = useCallback(
+    (q: number, r: number) => {
+      return selectedHexes.has(`${q},${r}`);
+    },
+    [selectedHexes]
+  );
 
   const toggleSelect = useCallback((q: number, r: number) => {
-    setSelectedHexes(prev => {
+    setSelectedHexes((prev) => {
       const next = new Set(prev);
       const key = `${q},${r}`;
       if (next.has(key)) {
@@ -38,6 +41,6 @@ export function useHexSelection() {
     toggleSelect,
     selectSingle,
     clearSelection,
-    selectAll
+    selectAll,
   };
 }

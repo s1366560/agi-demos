@@ -6,9 +6,10 @@
 
 import { useState, useEffect } from 'react';
 
+import { CheckCircle } from 'lucide-react';
+
 import { formatDateTime } from '@/utils/date';
 
-import { MaterialIcon } from '../shared';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 export interface FinalReportProps {
@@ -57,11 +58,13 @@ export function FinalReport({
     if (!text) return null;
 
     const lines = text.split('\n');
-    return lines.map((line, index) => {
+    let idCounter = 0;
+    return lines.map((line) => {
+      const currentId = idCounter++;
       // Headers
       if (line.startsWith('# ')) {
         return (
-          <h2 key={index} className="text-xl font-bold text-slate-900 dark:text-white mt-4 mb-2">
+          <h2 key={`h2-${currentId}`} className="text-xl font-bold text-slate-900 dark:text-white mt-4 mb-2">
             {line.replace('# ', '')}
           </h2>
         );
@@ -69,7 +72,7 @@ export function FinalReport({
       if (line.startsWith('## ')) {
         return (
           <h2
-            key={index}
+            key={`h2sub-${currentId}`}
             className="text-lg font-semibold text-slate-900 dark:text-white mt-3 mb-2"
           >
             {line.replace('## ', '')}
@@ -79,7 +82,7 @@ export function FinalReport({
       if (line.startsWith('### ')) {
         return (
           <h3
-            key={index}
+            key={`h3-${currentId}`}
             className="text-base font-semibold text-slate-900 dark:text-white mt-2 mb-1"
           >
             {line.replace('### ', '')}
@@ -90,7 +93,7 @@ export function FinalReport({
       // Bullet points
       if (line.trim().startsWith('- ')) {
         return (
-          <li key={index} className="text-sm text-slate-700 dark:text-slate-300 ml-4">
+          <li key={`li-${currentId}`} className="text-sm text-slate-700 dark:text-slate-300 ml-4">
             {line.trim().replace('- ', '')}
           </li>
         );
@@ -99,29 +102,31 @@ export function FinalReport({
       // Bold text
       if (line.includes('**')) {
         const parts = line.split('**');
+        let partIdCounter = 0;
         return (
-          <p key={index} className="text-sm text-slate-700 dark:text-slate-300 mb-1">
-            {parts.map((part, i) =>
-              i % 2 === 1 ? (
-                <strong key={i} className="font-semibold text-slate-900 dark:text-white">
+          <p key={`p-bold-${currentId}`} className="text-sm text-slate-700 dark:text-slate-300 mb-1">
+            {parts.map((part, i) => {
+              const currentPartId = partIdCounter++;
+              return i % 2 === 1 ? (
+                <strong key={`strong-${currentId}-${currentPartId}`} className="font-semibold text-slate-900 dark:text-white">
                   {part}
                 </strong>
               ) : (
-                part
-              )
-            )}
+                <span key={`span-${currentId}-${currentPartId}`}>{part}</span>
+              );
+            })}
           </p>
         );
       }
 
       // Empty line
       if (!line.trim()) {
-        return <br key={index} />;
+        return <br key={`br-${currentId}`} />;
       }
 
       // Regular paragraph
       return (
-        <p key={index} className="text-sm text-slate-700 dark:text-slate-300 mb-1">
+        <p key={`p-${currentId}`} className="text-sm text-slate-700 dark:text-slate-300 mb-1">
           {line}
         </p>
       );
@@ -148,7 +153,7 @@ export function FinalReport({
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-            <MaterialIcon name="check_circle" size={18} />
+            <CheckCircle size={18} />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Final Response</h3>

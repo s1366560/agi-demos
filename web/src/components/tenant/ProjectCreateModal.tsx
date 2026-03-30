@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+import { message } from 'antd';
 import { X, Folder, AlertCircle, Settings, Brain, Users, Cloud, Monitor } from 'lucide-react';
 
 import { useProjectStore } from '../../stores/project';
@@ -98,7 +99,10 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       onClose();
       resetFormData();
     } catch (_error) {
-      // Error is handled in store
+      void message.error(
+        _error instanceof Error ? _error.message : 'Failed to create project'
+      );
+      console.error('ProjectCreateModal: create failed', _error);
     }
   };
 
@@ -119,7 +123,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
           </div>
           <button
             onClick={handleClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             aria-label="Close create project dialog"
           >
             <X className="h-5 w-5" />
@@ -132,7 +136,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('basic');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'basic'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -147,7 +151,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('memory');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'memory'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -162,7 +166,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('graph');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'graph'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -177,7 +181,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               onClick={() => {
                 setActiveTab('sandbox');
               }}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                 activeTab === 'sandbox'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
@@ -739,7 +743,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             disabled={isLoading}
           >
             取消
@@ -747,7 +751,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
           <button
             type="submit"
             form="project-form"
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading || !formData.name.trim()}
             onClick={handleSubmit}
           >

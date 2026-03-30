@@ -81,7 +81,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -171,7 +171,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                         setShowDeleteConfirm(false);
                       }}
                       disabled={isDeleting}
-                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       取消
                     </button>
@@ -179,7 +179,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                       type="button"
                       onClick={handleDelete}
                       disabled={isDeleting}
-                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isDeleting ? '删除中...' : '确认删除'}
                     </button>
@@ -191,7 +191,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                   onClick={() => {
                     setShowDeleteConfirm(true);
                   }}
-                  className="w-full px-4 py-2 border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center space-x-2"
+                  className="w-full px-4 py-2 border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 flex items-center justify-center space-x-2"
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>删除项目</span>
@@ -206,7 +206,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             取消
           </button>
@@ -214,7 +214,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             type="button"
             onClick={handleSave}
             disabled={isSaving || !name.trim()}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? '保存中...' : '保存更改'}
           </button>

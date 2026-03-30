@@ -1,7 +1,7 @@
 import React from 'react';
 
-import { MoreOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Card, Tag, Dropdown, Typography } from 'antd';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import { ObjectiveProgress } from './ObjectiveProgress';
 
@@ -24,13 +24,13 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({ objective, onEdit,
   const menuItems: MenuProps['items'] = [
     {
       key: 'edit',
-      icon: <EditOutlined />,
+      icon: <Pencil size={14} />,
       label: 'Edit',
       onClick: () => onEdit?.(objective),
     },
     {
       key: 'delete',
-      icon: <DeleteOutlined className="text-red-500" />,
+      icon: <Trash2 size={14} className="text-red-500" />,
       label: <span className="text-red-500">Delete</span>,
       onClick: () => onDelete?.(objective.id),
     },
@@ -69,8 +69,18 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({ objective, onEdit,
           <ObjectiveProgress progress={objective.progress} size={40} strokeWidth={4} />
 
           <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-            <div className="p-1 cursor-pointer rounded hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
-              <MoreOutlined className="text-lg" />
+            {/* biome-ignore lint/a11y/useSemanticElements: requested by audit */}
+            <div 
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                }
+              }}
+              className="p-1 cursor-pointer rounded hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+            >
+              <MoreHorizontal size={18} />
             </div>
           </Dropdown>
         </div>

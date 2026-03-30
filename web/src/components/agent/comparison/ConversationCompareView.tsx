@@ -191,7 +191,7 @@ export const ConversationCompareView = memo(
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             title={t('comparison.exitCompare', 'Exit comparison')}
           >
             <X size={16} />
@@ -222,7 +222,7 @@ export const ConversationCompareView = memo(
                   <button
                     type="button"
                     onClick={onSelectRight}
-                    className="px-3 py-1.5 text-sm rounded-md bg-primary/10 text-primary-600 dark:text-primary-400 hover:bg-primary/20 transition-colors"
+                    className="px-3 py-1.5 text-sm rounded-md bg-primary/10 text-primary-600 dark:text-primary-400 hover:bg-primary/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                   >
                     {t('comparison.selectConversation', 'Select conversation to compare')}
                   </button>

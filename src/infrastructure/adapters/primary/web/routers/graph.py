@@ -859,7 +859,7 @@ async def rebuild_communities(
             # Use community updater if available
             communities_count = 0
             if hasattr(graph_service, "community_updater"):
-                communities = await graph_service.community_updater.update_communities_for_entities(
+                communities = await graph_service.community_updater.update_communities_for_entities(  # type: ignore[union-attr]
                     entities=entities,
                     project_id=target_project_id,
                     regenerate_all=True,

@@ -129,11 +129,11 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-labelledby="memory-detail-title" className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 id="memory-detail-title" className="text-lg font-semibold text-gray-900 dark:text-white">
               {isEditing ? '编辑记忆' : '记忆详情'}
             </h2>
           </div>
@@ -143,7 +143,8 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <button
                   onClick={handleSave}
                   disabled={isLoading}
-                  className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors disabled:opacity-50"
+                  className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
+                  aria-label="Save"
                   title="保存"
                 >
                   {isLoading ? (
@@ -155,7 +156,8 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <button
                   onClick={handleCancel}
                   disabled={isLoading}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors disabled:opacity-50"
+                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
+                  aria-label="Cancel editing"
                   title="取消"
                 >
                   <XCircle className="h-4 w-4" />
@@ -165,21 +167,24 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               <>
                 <button
                   onClick={handleEdit}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors"
+                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  aria-label="Edit"
                   title="编辑"
                 >
                   <Edit3 className="h-4 w-4" />
                 </button>
                 <button
                   onClick={handleShare}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 rounded-md transition-colors"
+                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  aria-label="Share"
                   title="分享"
                 >
                   <Share2 className="h-4 w-4" />
                 </button>
                 <button
                   onClick={handleDownload}
-                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors"
+                  className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  aria-label="Download"
                   title="下载"
                 >
                   <Download className="h-4 w-4" />
@@ -188,7 +193,8 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+              aria-label="Close"
+              className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               <X className="h-5 w-5" />
             </button>
@@ -213,6 +219,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     }}
                     className="flex-1 text-xl font-semibold text-gray-900 dark:text-white bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="记忆标题"
+                    aria-label="Edit memory title"
                   />
                 ) : (
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -252,6 +259,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     }}
                     className="w-full h-64 px-4 py-3 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-slate-200 whitespace-pre-wrap leading-relaxed resize-y"
                     placeholder="输入记忆内容..."
+                    aria-label="Edit memory content"
                   />
                   {error && (
                     <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md">

@@ -13,6 +13,30 @@
     "error": "Error",
     "add": "Add",
     "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "copy": "Copy",
+    "notFound": "Not Found",
+    "back": "Back",
+    "previous": "Previous",
+    "next": "Next",
+    "remove": "Remove",
+    "actions": {
+      "viewAll": "View All",
+      "showMore": "Show More",
+      "confirmDelete": "Are you sure you want to delete this?",
+      "invite": "Invite",
+      "add": "Add",
+      "retry": "Retry",
+      "checkHealth": "Check Health",
+      "deleteMemory": "Delete Memory",
+      "deleteMemoryConfirm": "Are you sure you want to delete this memory? This action cannot be undone and will remove all associated graph data."
+    },
+    "noTenant": "No tenant selected",
+    "requiredFields": "Please fill in all required fields",
+    "pagination": {
+      "total": "Total {{total}} items"
+    },
     "status": {
       "active": "Active",
       "inactive": "Inactive",
@@ -64,17 +88,6 @@
       "systemStatus": "System Status",
       "successRate": "Success Rate",
       "success": "Successes"
-    },
-    "actions": {
-      "viewAll": "View All",
-      "showMore": "Show More",
-      "confirmDelete": "Are you sure you want to delete this?",
-      "invite": "Invite",
-      "add": "Add",
-      "retry": "Retry",
-      "checkHealth": "Check Health",
-      "deleteMemory": "Delete Memory",
-      "deleteMemoryConfirm": "Are you sure you want to delete this memory? This action cannot be undone and will remove all associated graph data."
     },
     "forms": {
       "name": "Name",
@@ -132,6 +145,20 @@
       "title": "Demo Account (Click to fill)",
       "admin": "Administrator",
       "user": "Regular User"
+    },
+    "oauth": {
+      "processing": "Completing sign in...",
+      "authenticating": "Authenticating...",
+      "authenticatingWith": "Authenticating with {{provider}}...",
+      "success": "Sign in successful!",
+      "redirecting": "Redirecting you now...",
+      "failed": "Sign in failed",
+      "tryAgain": "Try again",
+      "errors": {
+        "noCode": "Authorization code not found",
+        "noProvider": "OAuth provider not specified",
+        "exchangeFailed": "Failed to complete OAuth authentication"
+      }
     }
   },
   "nav": {
@@ -165,6 +192,8 @@
     "providers": "Model Services",
     "platform": "Platform",
     "administration": "Administration",
+    "events": "Events",
+    "webhooks": "Webhooks",
     "billing": "Billing",
     "profile": "Profile",
     "mcpServers": "MCP",
@@ -174,7 +203,15 @@
     "cronJobs": "Scheduled Tasks",
     "agentDefinitions": "Agent Definitions",
     "agentBindings": "Agent Bindings",
-    "workspaces": "Workspaces"
+    "workspaces": "Workspaces",
+    "infrastructure": "Infrastructure",
+    "instances": "Instances",
+    "clusters": "Clusters",
+    "deploy": "Deploy",
+    "genes": "Gene Market",
+    "instanceTemplates": "Instance Templates",
+    "auditLogs": "Audit Logs",
+    "orgSettings": "Organization Settings"
   },
   "user": {
     "profile": "Profile",
@@ -482,7 +519,24 @@
       "subtitle": "Bind agents to channels to control which agent handles which conversations",
       "createNew": "Create Binding",
       "createFirst": "Create your first binding",
-      "testRouting": "Test Routing",
+      "testRouting": {
+        "title": "Test Routing Resolution",
+        "test": "Test",
+        "channelType": "Channel Type",
+        "channelTypeRequired": "Please select a channel type",
+        "selectChannelType": "Select channel type",
+        "channelId": "Channel ID",
+        "channelIdPlaceholder": "Optional: specific channel identifier",
+        "accountId": "Account ID",
+        "accountIdPlaceholder": "Optional: user account identifier",
+        "peerId": "Peer ID",
+        "peerIdPlaceholder": "Optional: peer identifier",
+        "result": "Routing Result",
+        "matchedAgent": "Matched Agent",
+        "specificity": "Specificity Score",
+        "confidence": "Confidence",
+        "noMatch": "No matching binding found for this context"
+      },
       "search": "Search bindings...",
       "empty": "No agent bindings yet",
       "noResults": "No bindings match your search",
@@ -522,24 +576,6 @@
         "priorityTooltip": "Higher priority bindings are matched first. Default is 0.",
         "specificityPreview": "Specificity Preview",
         "specificityHint": "Higher specificity = higher routing priority. The more fields filled, the higher the score."
-      },
-      "testRouting": {
-        "title": "Test Routing Resolution",
-        "test": "Test",
-        "channelType": "Channel Type",
-        "channelTypeRequired": "Please select a channel type",
-        "selectChannelType": "Select channel type",
-        "channelId": "Channel ID",
-        "channelIdPlaceholder": "Optional: specific channel identifier",
-        "accountId": "Account ID",
-        "accountIdPlaceholder": "Optional: user account identifier",
-        "peerId": "Peer ID",
-        "peerIdPlaceholder": "Optional: peer identifier",
-        "result": "Routing Result",
-        "matchedAgent": "Matched Agent",
-        "specificity": "Specificity Score",
-        "confidence": "Confidence",
-        "noMatch": "No matching binding found for this context"
       },
       "specificity": {
         "veryHigh": "Very High",
@@ -589,6 +625,712 @@
         "pending": "Pending",
         "failed": "Failed"
       }
+    },
+    "instances": {
+      "title": "Instance Management",
+      "subtitle": "Manage your AI agent instances",
+      "createNew": "Create Instance",
+      "searchPlaceholder": "Search instances...",
+      "restartSuccess": "Instance restarted successfully",
+      "deleteSuccess": "Instance deleted successfully",
+      "scaleSuccess": "Instance scaled successfully",
+      "tokenCopied": "Proxy token copied to clipboard",
+      "columns": {
+        "name": "Name",
+        "status": "Status",
+        "imageVersion": "Image Version",
+        "replicas": "Replicas",
+        "clusterId": "Cluster",
+        "createdAt": "Created At",
+        "actions": "Actions",
+        "userId": "User ID",
+        "role": "Role"
+      },
+      "actions": {
+        "view": "View",
+        "restart": "Restart",
+        "restartConfirm": "Are you sure you want to restart this instance?",
+        "delete": "Delete",
+        "deleteConfirm": "Are you sure you want to delete this instance? This action cannot be undone.",
+        "scale": "Scale",
+        "removeMember": "Remove"
+      },
+      "stats": {
+        "total": "Total Instances",
+        "running": "Running",
+        "stopped": "Stopped"
+      },
+      "status": {
+        "all": "All Status",
+        "provisioning": "Provisioning",
+        "running": "Running",
+        "stopped": "Stopped",
+        "error": "Error",
+        "terminated": "Terminated"
+      },
+      "detail": {
+        "status": "Status",
+        "replicas": "Replicas",
+        "imageVersion": "Image Version",
+        "runtime": "Runtime",
+        "proxyToken": "Proxy Token",
+        "resources": "Resources",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "storage": "Storage",
+        "quota": "Quota",
+        "members": "Members",
+        "config": "Configuration",
+        "envVars": "Environment Variables",
+        "advancedConfig": "Advanced Configuration"
+      },
+      "create": {
+        "title": "Create Instance",
+        "success": "Instance created successfully",
+        "error": "Failed to create instance",
+        "steps": {
+          "basic": {
+            "title": "Basic Info"
+          },
+          "infra": {
+            "title": "Infrastructure"
+          },
+          "resources": {
+            "title": "Resources"
+          },
+          "storage": {
+            "title": "Storage & Quota"
+          },
+          "config": {
+            "title": "Configuration"
+          },
+          "review": {
+            "title": "Review"
+          }
+        },
+        "basic": {
+          "name": "Instance Name",
+          "slug": "Slug",
+          "agent_display_name": "Agent Display Name",
+          "agent_label": "Agent Label",
+          "theme_color": "Theme Color"
+        },
+        "infra": {
+          "cluster_id": "Cluster",
+          "namespace": "Namespace",
+          "image_version": "Image Version",
+          "runtime": "Runtime",
+          "compute_provider": "Compute Provider"
+        },
+        "resources": {
+          "replicas": "Replicas",
+          "cpu_request": "CPU Request",
+          "cpu_limit": "CPU Limit",
+          "mem_request": "Memory Request",
+          "mem_limit": "Memory Limit",
+          "service_type": "Service Type",
+          "ingress_domain": "Ingress Domain"
+        },
+        "storage": {
+          "storage_class": "Storage Class",
+          "storage_size": "Storage Size",
+          "quota_cpu": "CPU Quota",
+          "quota_memory": "Memory Quota",
+          "quota_max_pods": "Max Pods"
+        },
+        "config": {
+          "env_vars": "Environment Variables",
+          "advanced_config": "Advanced Configuration",
+          "llm_providers": "LLM Providers"
+        },
+        "actions": {
+          "back": "Back",
+          "cancel": "Cancel",
+          "next": "Next",
+          "submit": "Create Instance"
+        }
+      },
+      "members": {
+        "title": "Instance Members",
+        "description": "Manage who has access to this instance",
+        "addMember": "Add Member",
+        "searchUser": "Search Users",
+        "searchUserPlaceholder": "Search by email or name...",
+        "searchPlaceholder": "Filter members...",
+        "colUser": "User",
+        "colRole": "Role",
+        "colJoined": "Joined",
+        "totalMembers": "Total Members",
+        "admins": "Admins",
+        "viewers": "Viewers",
+        "noMembers": "No members found",
+        "roleUpdated": "Member role updated",
+        "removeSuccess": "Member removed",
+        "addSuccess": "Member added",
+        "removeConfirm": "Are you sure you want to remove this member?"
+      },
+      "settings": {
+        "title": "Instance Settings",
+        "description": "Configure your instance settings",
+        "generalSettings": "General Settings",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Enter a description for this instance...",
+        "updateSuccess": "Instance updated successfully",
+        "dangerZone": "Danger Zone",
+        "dangerZoneDescription": "Irreversible and destructive actions",
+        "deleteInstance": "Delete this instance",
+        "deleteInstanceDescription": "Once deleted, all data will be permanently removed.",
+        "deleteConfirm": "Are you sure you want to delete this instance? This action cannot be undone.",
+        "deleteSuccess": "Instance deleted successfully",
+        "llmConfig": "LLM Configuration",
+        "llmConfigDescription": "Configure the LLM provider and model for this instance",
+        "llmProvider": "Provider",
+        "llmProviderPlaceholder": "Select a provider",
+        "llmModel": "Model",
+        "llmModelPlaceholder": "Select a model",
+        "llmApiKeyOverride": "API Key Override",
+        "llmApiKeyOverridePlaceholder": "Leave empty to use default provider key",
+        "llmApiKeyOverrideHint": "Override the provider API key for this instance only",
+        "llmApiKeySet": "API key override is set",
+        "llmConfigUpdateSuccess": "LLM configuration updated successfully",
+        "llmConfigLoadError": "Failed to load LLM configuration"
+      }
+    },
+    "deploy": {
+      "listTitle": "Deploy Records",
+      "detailTitle": "Deploy Details",
+      "notFound": "Deploy record not found",
+      "defaultDescription": "New deployment",
+      "empty": "No deploy records",
+      "states": {
+        "created": "Created",
+        "inProgress": "In Progress",
+        "success": "Success",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "completed": "Completed"
+      },
+      "fields": {
+        "id": "Deploy ID",
+        "image": "Image",
+        "triggeredBy": "Triggered By",
+        "config": "Config Snapshot"
+      },
+      "actions": {
+        "back": "Back to List",
+        "cancel": "Cancel Deploy",
+        "markSuccess": "Mark Success",
+        "markFailed": "Mark Failed",
+        "new": "New Deploy"
+      }
+    },
+    "auditLogs": {
+      "title": "Audit Logs",
+      "description": "Review all activity and changes in your organization",
+      "filterActionPlaceholder": "Filter by action...",
+      "filterResourceType": "Resource Type",
+      "filterFromDate": "From date",
+      "filterToDate": "To date",
+      "exportCsv": "Export CSV",
+      "exportJson": "Export JSON",
+      "exportSuccess": "Export started",
+      "stats": {
+        "total": "Total Events",
+        "thisPage": "This Page",
+        "pages": "Total Pages"
+      },
+      "colTimestamp": "Timestamp",
+      "colActor": "Actor",
+      "colAction": "Action",
+      "colResourceType": "Resource Type",
+      "colResourceId": "Resource ID",
+      "noLogs": "No audit logs found",
+      "viewDetails": "Details",
+      "detailTitle": "Audit Log Detail",
+      "details": "Details",
+      "showing": "Showing {{from}}-{{to}} of {{total}}"
+    },
+    "clusters": {
+      "title": "Cluster Management",
+      "subtitle": "Manage your Kubernetes clusters",
+      "createButton": "Add Cluster",
+      "deletedSuccess": "Cluster deleted successfully",
+      "updatedSuccess": "Cluster updated successfully",
+      "createdSuccess": "Cluster created successfully",
+      "invalidJsonError": "Invalid JSON format",
+      "deleteConfirm": "Are you sure you want to delete this cluster?",
+      "createTitle": "Add Cluster",
+      "editTitle": "Edit Cluster",
+      "columns": {
+        "name": "Name",
+        "provider": "Provider",
+        "region": "Region",
+        "apiEndpoint": "API Endpoint",
+        "status": "Status",
+        "nodeCount": "Nodes",
+        "actions": "Actions"
+      },
+      "actions": {
+        "healthCheck": "Health Check",
+        "edit": "Edit",
+        "delete": "Delete"
+      },
+      "stats": {
+        "total": "Total Clusters",
+        "healthy": "Healthy",
+        "unhealthy": "Unhealthy"
+      },
+      "form": {
+        "name": "Cluster Name",
+        "nameRequired": "Cluster name is required",
+        "provider": "Provider",
+        "region": "Region",
+        "apiEndpoint": "API Endpoint",
+        "authConfig": "Auth Config (JSON)",
+        "metadata": "Metadata (JSON)"
+      },
+      "healthDrawer": {
+        "title": "Cluster Health",
+        "loading": "Checking cluster health...",
+        "status": "Status",
+        "nodeCount": "Node Count",
+        "cpuUsage": "CPU Usage",
+        "memoryUsage": "Memory Usage",
+        "checkedAt": "Checked At",
+        "noData": "No health data available"
+      },
+      "status": {
+        "active": "Active",
+        "pending": "Pending",
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "maintenance": "Maintenance",
+        "error": "Error",
+        "healthy": "Healthy",
+        "unhealthy": "Unhealthy",
+        "provisioning": "Provisioning",
+        "warning": "Warning"
+      },
+      "detail": {
+        "backToList": "Back to Cluster List",
+        "provider": "Provider",
+        "name": "Name",
+        "status": "Status",
+        "healthStatus": "Health Status",
+        "endpoint": "Endpoint",
+        "lastHealthCheck": "Last Health Check",
+        "createdAt": "Created At",
+        "updatedAt": "Updated At",
+        "createdBy": "Created By",
+        "cpuUsage": "CPU Usage",
+        "memoryUsage": "Memory Usage",
+        "notConfigured": "Not configured",
+        "info": "Cluster Information",
+        "providerConfig": "Provider Configuration",
+        "noEvents": "No recent events",
+        "nodes": {
+          "title": "Cluster Nodes",
+          "empty": "No node information available",
+          "name": "Node Name",
+          "status": "Status",
+          "cpu": "CPU",
+          "memory": "Memory",
+          "roles": "Roles",
+          "version": "Version"
+        },
+        "events": {
+          "title": "Recent Events"
+        }
+      }
+    },
+    "genes": {
+      "title": "Gene Market",
+      "subtitle": "Discover and install genes for your instances",
+      "publishButton": "Publish Gene",
+      "searchPlaceholder": "Search genes...",
+      "loading": "Loading genes...",
+      "ratings": "ratings",
+      "genesCount": "genes",
+      "fetchError": "Failed to fetch gene details",
+      "installSuccess": "Gene installed successfully",
+      "invalidJson": "Invalid JSON format",
+      "rateSuccess": "Rating submitted successfully",
+      "notFound": "Gene not found",
+      "back": "Back to Market",
+      "rateAction": "Rate",
+      "installAction": "Install",
+      "downloads": "Downloads",
+      "averageRating": "Average Rating",
+      "tags": "Tags",
+      "noTags": "No tags",
+      "description": "Description",
+      "noDescription": "No description available",
+      "manifest": "Manifest",
+      "evolutionHistory": "Evolution History",
+      "triggeredBy": "Triggered by",
+      "noEvolutionEvents": "No evolution events",
+      "installGene": "Install Gene",
+      "instanceId": "Instance ID",
+      "instanceIdRequired": "Instance ID is required",
+      "instanceIdPlaceholder": "Enter instance ID",
+      "configOverride": "Config Override (JSON)",
+      "configOverrideTooltip": "Optional JSON configuration to override gene defaults",
+      "rateGene": "Rate Gene",
+      "rating": "Rating",
+      "ratingRequired": "Rating is required",
+      "comment": "Comment",
+      "commentPlaceholder": "Leave a comment...",
+      "filters": {
+        "allCategories": "All Categories",
+        "catAi": "AI",
+        "catTool": "Tool",
+        "allVisibility": "All Visibility",
+        "visPublic": "Public",
+        "visPrivate": "Private"
+      },
+      "tabs": {
+        "genes": "Genes",
+        "genomes": "Genomes"
+      },
+      "actions": {
+        "install": "Install",
+        "rate": "Rate"
+      }
+    },
+    "templates": {
+      "title": "Instance Templates",
+      "subtitle": "Create and manage instance templates",
+      "createTemplate": "Create Template",
+      "searchPlaceholder": "Search templates...",
+      "filterAll": "All",
+      "filterPublished": "Published",
+      "filterDraft": "Draft",
+      "empty": "No templates found",
+      "publishConfirm": "Are you sure you want to publish this template?",
+      "deleteConfirm": "Are you sure you want to delete this template?",
+      "fetchError": "Failed to fetch templates",
+      "createSuccess": "Template created successfully",
+      "invalidJson": "Invalid JSON format",
+      "cloneSuccess": "Template cloned successfully",
+      "publishSuccess": "Template published successfully",
+      "deleteSuccess": "Template deleted successfully",
+      "statusPublished": "Published",
+      "statusDraft": "Draft",
+      "noDescription": "No description",
+      "name": "Template Name",
+      "nameRequired": "Template name is required",
+      "namePlaceholder": "Enter template name",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter template description",
+      "tags": "Tags",
+      "tagsTooltip": "Press enter to add tags",
+      "tagsPlaceholder": "Add tags...",
+      "baseConfig": "Base Config (JSON)"
+    },
+    "evolution": {
+      "noInstance": "No instance ID provided",
+      "title": "Evolution Log",
+      "filterByType": "Filter by type",
+      "types": {
+        "installed": "Installed",
+        "uninstalled": "Uninstalled",
+        "upgraded": "Upgraded",
+        "downgraded": "Downgraded",
+        "configChanged": "Config Changed",
+        "error": "Error"
+      },
+      "empty": "No evolution events found",
+      "trigger": "Trigger"
+    },
+    "genomeDetail": {
+      "notFound": "Genome not found",
+      "fields": {
+        "id": "Genome ID",
+        "visibility": "Visibility",
+        "description": "Description",
+        "rating": "Rating",
+        "createdAt": "Created At"
+      },
+      "genesTitle": "Included Genes",
+      "noGenes": "No genes in this genome",
+      "configTitle": "Configuration"
+    },
+    "templateDetail": {
+      "notFound": "Template not found",
+      "published": "Published",
+      "fields": {
+        "id": "Template ID",
+        "cloneCount": "Clone Count",
+        "description": "Description",
+        "tags": "Tags",
+        "createdAt": "Created At"
+      },
+      "itemsTitle": "Gene Assignments",
+      "noItems": "No gene assignments",
+      "hasConfigOverride": "Has Config Override",
+      "defaultConfig": "Default Config",
+      "baseConfigTitle": "Base Configuration",
+      "deployFromTemplate": "Deploy from Template",
+      "clone": "Clone Template",
+      "cloneSuccess": "Template cloned successfully",
+      "cloneError": "Failed to clone template"
+    },
+    "orgSettings": {
+      "title": "Organization Settings",
+      "subtitle": "Manage your organization settings and configurations",
+      "info": {
+        "title": "Organization Info",
+        "general": "General Settings",
+        "logo": "Organization Logo",
+        "uploadLogo": "Upload Logo",
+        "logoHint": "JPG, PNG or GIF. Max 2MB.",
+        "name": "Organization Name",
+        "description": "Description",
+        "statistics": "Statistics",
+        "created": "Created",
+        "plan": "Plan",
+        "tenantId": "Organization ID",
+        "stats": {
+          "projects": "Projects",
+          "members": "Members",
+          "clusters": "Clusters",
+          "storage": "Storage"
+        }
+      },
+      "members": {
+        "title": "Members",
+        "description": "Manage organization members and their roles",
+        "invite": "Invite Member",
+        "inviteMember": "Invite New Member",
+        "email": "Email Address",
+        "emailPlaceholder": "Enter member email",
+        "role": "Role",
+        "searchPlaceholder": "Search members...",
+        "filterByRole": "Filter by role",
+        "allRoles": "All Roles",
+        "colUser": "User",
+        "colRole": "Role",
+        "colJoined": "Joined",
+        "roleUpdated": "Member role updated",
+        "removeSuccess": "Member removed successfully",
+        "removeConfirm": "Are you sure you want to remove this member?",
+        "inviteSuccess": "Invitation sent successfully",
+        "inviteError": "Failed to send invitation",
+        "noMembers": "No members found",
+        "stats": {
+          "total": "Total Members",
+          "owners": "Owners",
+          "admins": "Admins",
+          "editors": "Editors",
+          "viewers": "Viewers"
+        }
+      },
+      "clusters": {
+        "title": "Clusters",
+        "description": "Overview of organization clusters",
+        "manage": "Manage Clusters",
+        "viewDetails": "View Details",
+        "addCluster": "Add Cluster",
+        "noClusters": "No clusters configured",
+        "nodes": "Nodes",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "endpoint": "Endpoint",
+        "stats": {
+          "total": "Total",
+          "active": "Active",
+          "maintenance": "Maintenance",
+          "error": "Error"
+        }
+      },
+      "audit": {
+        "title": "Audit Logs",
+        "description": "Organization-level audit trail",
+        "exportCsv": "Export CSV",
+        "exportJson": "Export JSON",
+        "exportSuccess": "Export completed",
+        "filterUser": "Filter by user...",
+        "filterAction": "Filter by action",
+        "filterResourceType": "Resource type",
+        "filterFromDate": "From date",
+        "filterToDate": "To date",
+        "colTimestamp": "Timestamp",
+        "colActor": "Actor",
+        "colAction": "Action",
+        "colResourceType": "Resource Type",
+        "colResourceId": "Resource ID",
+        "viewDetails": "View Details",
+        "detailTitle": "Audit Log Details",
+        "details": "Details",
+        "noLogs": "No audit logs found",
+        "showing": "Showing {{from}}-{{to}} of {{total}}",
+        "stats": {
+          "total": "Total Logs",
+          "thisPage": "This Page",
+          "pages": "Total Pages"
+        }
+      },
+      "registry": {
+        "title": "Container Registry",
+        "description": "Manage container registry configurations",
+        "addRegistry": "Add Registry",
+        "editRegistry": "Edit Registry",
+        "addFirstRegistry": "Add Your First Registry",
+        "noRegistries": "No registries configured",
+        "default": "Default",
+        "deleteConfirm": "Are you sure you want to delete this registry?",
+        "deleteSuccess": "Registry deleted successfully",
+        "createSuccess": "Registry created successfully",
+        "updateSuccess": "Registry updated successfully",
+        "testConnection": "Test",
+        "testSuccess": "Connection successful",
+        "testFailed": "Connection failed",
+        "colName": "Name",
+        "colType": "Type",
+        "colUrl": "URL",
+        "colStatus": "Status",
+        "colLastChecked": "Last Checked",
+        "stats": {
+          "total": "Total Registries",
+          "connected": "Connected",
+          "error": "Error"
+        },
+        "form": {
+          "name": "Registry Name",
+          "namePlaceholder": "Enter registry name",
+          "type": "Registry Type",
+          "url": "Registry URL",
+          "urlPlaceholder": "e.g., https://registry.example.com",
+          "username": "Username",
+          "usernamePlaceholder": "Enter username (optional)",
+          "password": "Password / Token",
+          "passwordPlaceholder": "Enter password or access token",
+          "passwordPlaceholderEdit": "Leave empty to keep existing",
+          "passwordHint": "Leave empty to keep the current password",
+          "setAsDefault": "Set as default registry"
+        }
+      },
+      "smtp": {
+        "title": "SMTP Configuration",
+        "description": "Configure outgoing email server settings",
+        "serverSettings": "Server Settings",
+        "host": "SMTP Host",
+        "port": "Port",
+        "username": "Username",
+        "password": "Password",
+        "passwordRequired": "Password is required for new configurations",
+        "passwordPlaceholder": "Enter SMTP password",
+        "passwordHint": "Leave empty to keep current password",
+        "fromEmail": "From Email",
+        "fromName": "From Name",
+        "useTls": "Use TLS",
+        "saveSuccess": "SMTP configuration saved successfully",
+        "saveError": "Failed to save SMTP configuration",
+        "deleteSuccess": "SMTP configuration deleted",
+        "deleteError": "Failed to delete SMTP configuration",
+        "testTitle": "Test Email",
+        "testDescription": "Send a test email to verify your SMTP settings",
+        "recipientRequired": "Recipient email is required",
+        "recipientEmail": "Recipient Email",
+        "testSuccess": "Test email sent successfully",
+        "testError": "Failed to send test email",
+        "sendTest": "Send Test"
+      },
+      "genes": {
+        "title": "Gene Policies",
+        "description": "Manage organizational gene policies for agent behavior configuration",
+        "addPolicy": "Add Policy",
+        "addTitle": "Add Gene Policy",
+        "editTitle": "Edit Gene Policy",
+        "policyKey": "Policy Key",
+        "policyValue": "Policy Value (JSON)",
+        "policyDescription": "Description",
+        "descriptionPlaceholder": "Brief description of this policy",
+        "empty": "No gene policies configured",
+        "emptyHint": "Add a policy to configure agent behavior for your organization.",
+        "updatedAt": "Updated",
+        "keyRequired": "Policy key is required",
+        "invalidJson": "Policy value must be valid JSON",
+        "saveSuccess": "Gene policy saved successfully",
+        "saveError": "Failed to save gene policy",
+        "deleteSuccess": "Gene policy deleted",
+        "deleteError": "Failed to delete gene policy",
+        "fetchError": "Failed to load gene policies"
+      }
+    },
+    "pluginHub": {
+      "title": "Plugin Hub",
+      "subtitle": "Discover, install, and manage plugins for your workspace",
+      "selectProject": "Select Project",
+      "selectProjectPlaceholder": "Choose a project",
+      "tabs": {
+        "plugins": "Plugins",
+        "channels": "Channels"
+      },
+      "pluginsLoading": "Loading plugins...",
+      "channelsLoading": "Loading channels...",
+      "pluginsList": {
+        "installedPlugins": "Installed Plugins",
+        "available": "Available",
+        "noPluginsAvailable": "No plugins available",
+        "searchPlaceholder": "Search plugins...",
+        "installRequirement": "Install from PyPI",
+        "installPlaceholder": "e.g., memstack-plugin-template==0.1.0",
+        "install": "Install",
+        "enable": "Enable",
+        "disable": "Disable",
+        "uninstall": "Uninstall",
+        "reload": "Reload",
+        "confirmUninstall": "Are you sure you want to uninstall this plugin?",
+        "noPluginsInstalled": "No plugins installed yet"
+      },
+      "channelsList": {
+        "configuredChannels": "Configured Channels",
+        "addChannel": "Add Channel",
+        "channels": "Channels",
+        "channelType": "Channel Type",
+        "accountId": "Account ID",
+        "peerId": "Peer ID",
+        "status": "Status",
+        "actions": "Actions",
+        "edit": "Edit",
+        "delete": "Delete",
+        "deleteConfirm": "Are you sure you want to delete this channel?",
+        "deleteSuccess": "Channel deleted successfully",
+        "deleteFailed": "Failed to delete channel",
+        "noChannelsConfigured": "No channels configured yet",
+        "selectChannelType": "Select Channel Type"
+      },
+      "configModal": {
+        "title": "Channel Configuration",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saving": "Saving...",
+        "saveSuccess": "Channel configuration saved successfully",
+        "saveFailed": "Failed to save channel configuration"
+      },
+      "error": "Error",
+      "errorMessage": "An error occurred. Please try again."
+    },
+    "workspaceList": {
+      "title": "Workspaces",
+      "subtitle": "Manage your workspaces and their resources",
+      "createButton": "Create Workspace",
+      "searchPlaceholder": "Search workspaces...",
+      "empty": "No workspaces found"
+    },
+    "workflowPatterns": {
+      "title": "Workflow Patterns",
+      "subtitle": "Manage workflow patterns for your workspace",
+      "createButton": "Create Pattern",
+      "searchPlaceholder": "Search patterns...",
+      "deleteButton": "Delete",
+      "editButton": "Edit",
+      "empty": "No patterns found",
+      "loading": "Loading patterns...",
+      "deleteConfirm": "Are you sure you want to delete this pattern?",
+      "deleteSuccess": "Pattern deleted successfully",
+      "createSuccess": "Pattern created successfully"
     }
   },
   "project": {
@@ -627,59 +1369,48 @@
     },
     "settings": {
       "title": "Project Settings",
-      "no_project": "Please select a project first",
-      "basic": {
-        "title": "Basic Settings",
-        "name": "Project Name",
-        "description": "Project Description",
-        "public": "Public Project (Anyone can view)",
-        "save": "Save Basic Settings",
-        "saving": "Saving..."
-      },
-      "memory": {
-        "title": "Memory Rules",
-        "max_episodes": "Max Episodes",
-        "retention": "Retention Days",
-        "auto_refresh": "Auto Refresh",
-        "interval": "Refresh Interval (Hours)",
-        "save": "Save Memory Rules"
-      },
-      "graph": {
-        "title": "Graph Configuration",
-        "max_nodes": "Max Nodes",
-        "max_edges": "Max Edges",
-        "threshold": "Similarity Threshold: {{value}}",
-        "community": "Enable Community Detection",
-        "save": "Save Graph Config"
-      },
-      "advanced": {
-        "title": "Advanced Operations",
-        "export": "Export Project Data",
-        "clear_cache": "Clear Graph Cache",
-        "rebuild": "Rebuild Communities",
-        "confirm_clear": "Are you sure you want to clear the graph cache? This will rebuild community detection.",
-        "confirm_rebuild": "Are you sure you want to rebuild communities? This may take some time."
-      },
-      "danger": {
-        "title": "Danger Zone",
-        "desc": "Delete this project and all its data, including memories, graph, and settings.",
-        "warning": "This action cannot be undone!",
-        "delete": "Delete Project",
-        "confirm_prompt": "This action cannot be recovered! Please enter the project name to confirm deletion:",
-        "name_mismatch": "Project name does not match, deletion cancelled.",
-        "success": "Project deleted",
-        "fail": "Delete failed, please try again later."
-      },
-      "messages": {
-        "saved": "Settings saved!",
-        "failed": "Failed to save: {{error}}",
-        "export_success": "Data exported successfully!",
-        "export_fail": "Failed to export data, please try again.",
-        "cache_cleared": "Graph cache clear task submitted!",
-        "cache_fail": "Failed to clear cache, please try again.",
-        "rebuild_submitted": "Community rebuild task submitted!",
-        "rebuild_fail": "Failed to rebuild communities, please try again."
-      }
+      "noProject": "No project selected",
+      "saved": "Settings saved successfully",
+      "failed": "Failed to save settings",
+      "basicTitle": "Basic Settings",
+      "basicName": "Project Name",
+      "basicDescription": "Description",
+      "basicPublic": "Make project public",
+      "basicSave": "Save",
+      "basicSaving": "Saving...",
+      "memoryTitle": "Memory Rules",
+      "memoryMaxEpisodes": "Max Episodes",
+      "memoryRetention": "Retention Days",
+      "memoryAutoRefresh": "Auto Refresh",
+      "memoryInterval": "Refresh Interval (hours)",
+      "memorySave": "Save",
+      "graphTitle": "Graph Configuration",
+      "graphMaxNodes": "Max Nodes",
+      "graphMaxEdges": "Max Edges",
+      "graphThreshold": "Similarity Threshold",
+      "graphSave": "Save",
+      "advancedTitle": "Advanced",
+      "advancedExport": "Export Data",
+      "advancedClearCache": "Clear Cache",
+      "advancedRebuild": "Rebuild Communities",
+      "advancedConfirmClear": "Are you sure you want to clear the cache?",
+      "advancedConfirmRebuild": "Are you sure you want to rebuild communities?",
+      "dangerTitle": "Danger Zone",
+      "dangerDesc": "Once you delete a project, there is no going back. Please be certain.",
+      "dangerWarning": "This action cannot be undone.",
+      "dangerDelete": "Delete Project",
+      "dangerConfirmPrompt": "Type project name to confirm:",
+      "dangerNameMismatch": "Project name does not match.",
+      "dangerSuccess": "Project deleted successfully.",
+      "dangerFail": "Failed to delete project.",
+      "sandboxTitle": "Sandbox Configuration",
+      "sandboxDesc": "Configure the sandbox environment for this project",
+      "sandboxProvider": "Sandbox Provider",
+      "sandboxTimeout": "Timeout (seconds)",
+      "sandboxResourceLimit": "Resource Limit",
+      "sandboxMemory": "Memory (MB)",
+      "sandboxCPU": "CPU Cores",
+      "sandboxSave": "Save"
     },
     "search": {
       "options": {
@@ -1260,6 +1991,50 @@
         "delete_confirm": "Are you sure? This will delete the edge type definition.",
         "save_error": "Failed to save. Check if name is unique."
       },
+      "edgeTypeList": {
+        "title": "Edge Types",
+        "subtitle": "Define the structure of relationships in your knowledge graph",
+        "createButton": "Create Edge Type",
+        "searchPlaceholder": "Search edge types...",
+        "systemActive": "System Active",
+        "masterActive": "ACTIVE",
+        "masterNoDescription": "No description provided",
+        "masterAttributesCount": "{{count}} attributes",
+        "masterEmpty": "No edge types defined yet. Create your first one to get started.",
+        "detailSelectPrompt": "Select an edge type from the list to view its details",
+        "detailNoDescription": "No description provided",
+        "detailDelete": "Delete",
+        "detailEdit": "Edit",
+        "detailAttributesTitle": "Edge Attributes",
+        "detailAddAttribute": "Add Attribute",
+        "detailTableName": "Name",
+        "detailTableType": "Type",
+        "detailTableDescription": "Description",
+        "detailTableEmpty": "No attributes defined for this edge type.",
+        "modalTitleNew": "New Edge Type",
+        "modalTitleEdit": "Edit {{name}}",
+        "modalNameLabel": "Name",
+        "modalNamePlaceholder": "e.g. KNOWS, WORKS_FOR, LOCATED_IN",
+        "modalDescLabel": "Description",
+        "modalDescPlaceholder": "What does this relationship represent?",
+        "modalTabAttributes": "Attributes",
+        "modalBasicInfo": "Basic Information",
+        "modalDefinedAttributes": "Defined Attributes",
+        "modalAddAttribute": "Add Attribute",
+        "modalAttributeTitle": "Attribute #{{index}}",
+        "modalDeleteField": "Remove",
+        "modalAttrNameLabel": "Attribute Name",
+        "modalAttrNamePlaceholder": "e.g. since, strength, context",
+        "modalDataTypeLabel": "Data Type",
+        "modalDocstringLabel": "Documentation",
+        "modalDocstringPlaceholder": "Describe what this attribute represents",
+        "modalLastSaved": "Last saved: {{time}}",
+        "modalNeverSaved": "Never",
+        "modalDiscard": "Discard",
+        "modalSave": "Save",
+        "deleteConfirm": "Are you sure you want to delete this edge type?",
+        "loading": "Loading..."
+      },
       "mappings": {
         "title": "Edge Type Mapping",
         "subtitle": "Configure the valid relationship types allowed between source and target entity types. Define the \"physics\" of your knowledge graph.",
@@ -1387,6 +2162,198 @@
           }
         }
       }
+    },
+    "entityTypeList": {
+      "title": "Entity Types",
+      "subtitle": "Define the structure of entities in your knowledge graph",
+      "create": "Create Entity Type",
+      "searchPlaceholder": "Search entity types...",
+      "filterProject": "Filter Project",
+      "listView": "List View",
+      "gridView": "Grid View",
+      "entityType": "Entity Type",
+      "internalId": "Internal ID",
+      "schemaDefinition": "Schema Definition",
+      "status": "Status",
+      "source": "Source",
+      "lastModified": "Last Modified",
+      "actions": "Actions",
+      "moreAttributes": "+{{count}} more",
+      "noAttributes": "No attributes",
+      "empty": "No entity types defined yet. Create your first one to get started.",
+      "newTitle": "New Entity Type",
+      "editTitle": "Edit {{name}}",
+      "basicInfo": "Basic Information",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Person, Organization, Location",
+      "descLabel": "Description",
+      "descPlaceholder": "What does this entity type represent?",
+      "infoTitle": "Attributes define the structure of your entity data.",
+      "infoDesc": "Each attribute has a name, data type, and optional validation rules.",
+      "definedAttributes": "Defined Attributes",
+      "addAttribute": "Add Attribute",
+      "attributeTitle": "Attribute #{{index}}",
+      "deleteField": "Remove",
+      "attrNameLabel": "Attribute Name",
+      "attrNamePlaceholder": "e.g. email, phone, age",
+      "dataTypeLabel": "Data Type",
+      "docstringLabel": "Documentation",
+      "docstringPlaceholder": "Describe what this attribute represents",
+      "lastSaved": "Last saved: {{time}}",
+      "neverSaved": "Never",
+      "discard": "Discard",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteConfirm": "Are you sure you want to delete this entity type?",
+      "loading": "Loading...",
+      "generalSettings": "General Settings",
+      "attributesSchema": "Attributes & Schema",
+      "relationships": "Relationships",
+      "relationshipsComingSoon": "Define how this entity type connects to others. This feature is coming in the next update.",
+      "relationshipMapping": "Relationship Mapping",
+      "validationRules": "Validation Rules ({{type}})",
+      "minVal": "min_val (ge)",
+      "maxVal": "max_val (le)",
+      "minLen": "min_len",
+      "maxLen": "max_len",
+      "regex": "regex",
+      "regexPlaceholder": "e.g. ^[a-z]+$"
+    },
+    "communities": {
+      "title": "Communities",
+      "subtitle": "Automatically detected groups of related entities in the knowledge graph",
+      "rebuild": "Rebuild Communities",
+      "rebuilding": "Rebuilding...",
+      "refresh": "Refresh",
+      "confirmRebuild": "This will rebuild all communities from scratch. Continue?",
+      "cancel": "Cancel",
+      "dismiss": "Dismiss",
+      "progress": "Progress",
+      "communitiesCount": "Communities",
+      "connectionsCount": "Connections",
+      "error": "Error",
+      "taskError": "Error",
+      "showing": "Showing {{count}} of {{total}} communities",
+      "page": "Page {{current}} of {{total}}",
+      "loading": "Loading communities...",
+      "emptyTitle": "No communities found",
+      "emptyDesc": "Add more episodes to enable community detection",
+      "communityDetails": "Community Details",
+      "name": "Name",
+      "members": "Members",
+      "summary": "Summary",
+      "uuid": "UUID",
+      "created": "Created",
+      "tasks": "Tasks",
+      "communityMembers": "Community Members",
+      "noMembers": "No members loaded",
+      "selectPrompt": "Select a community to view details",
+      "clickPrompt": "Click on any community card to see its members",
+      "infoTitle": "About Communities",
+      "infoDesc": "Communities are automatically detected groups of related entities."
+    },
+    "cronJobs": {
+      "updateSuccess": "Scheduled task updated successfully",
+      "createSuccess": "Scheduled task created successfully",
+      "saveFailed": "Failed to save task",
+      "toggleSuccessEnabled": "Task enabled",
+      "toggleSuccessDisabled": "Task disabled",
+      "toggleFailed": "Failed to toggle task",
+      "triggerSuccess": "Task execution triggered",
+      "deleteFailed": "Failed to delete task",
+      "deleteConfirm": "Are you sure you want to delete this task?",
+      "deleteSuccess": "Task deleted successfully",
+      "triggerFailed": "Failed to trigger task"
+    },
+    "channelConfig": {
+      "title": "Channel Configuration",
+      "addChannelConfig": "Add Channel Configuration",
+      "editChannelConfig": "Edit Channel Configuration",
+      "channelConfigurations": "Channel Configurations",
+      "selectChannelType": "Please select a channel type",
+      "configNamePlaceholder": "Channel configuration name",
+      "pleaseEnterName": "Please enter configuration name",
+      "channelDescription": "Channel Description",
+      "optionalDescription": "Optional description for this channel",
+      "pluginHub": "Plugin Hub",
+      "pluginHubDescription": "Install and manage plugins for your channels",
+      "pluginRequirementPlaceholder": "Enter plugin requirement (e.g., plugin-name==1.0.0)",
+      "pluginType": {
+        "toolOnly": "Tool Only"
+      },
+      "pluginSource": {
+        "local": "Local"
+      },
+      "connectionMode": "Connection Mode",
+      "domain": {
+        "feishuChina": "Feishu (China)",
+        "larkIntl": "Lark International"
+      },
+      "appId": "App ID",
+      "pleaseEnterAppId": "Please enter App ID",
+      "appSecret": "App Secret",
+      "pleaseEnterAppSecret": "Please enter App Secret",
+      "enterAppSecret": "Enter App Secret",
+      "leaveUnchanged": "Leave unchanged to keep existing secret (__MEMSTACK_SECRET_UNCHANGED__)",
+      "encryptKey": "Encryption Key",
+      "forWebhookVerification": "For webhook verification",
+      "verificationToken": "Verification Token",
+      "webhookUrl": "Webhook URL",
+      "dmPolicy": "DM Policy",
+      "dmAllowlist": "DM Allowlist (User IDs)",
+      "dmAllowlistTooltip": "Comma-separated list of user IDs allowed to send DMs",
+      "enterUserIds": "Enter user IDs, comma-separated",
+      "groupPolicy": "Group Policy",
+      "groupAllowlist": "Group Allowlist (Chat IDs)",
+      "groupAllowlistTooltip": "Comma-separated list of group chat IDs allowed",
+      "enterGroupChatIds": "Enter group chat IDs, comma-separated",
+      "rateLimit": "Rate Limit",
+      "rateLimitTooltip": "Maximum requests per minute",
+      "accessControl": "Access Control",
+      "diagnostics": "Diagnostics",
+      "loadingSchema": "Loading schema...",
+      "columns": {
+        "channels": "Channels",
+        "plugin": "Plugin",
+        "source": "Source",
+        "connection": "Connection",
+        "created": "Created",
+        "lastError": "Last Error"
+      },
+      "actions": {
+        "addChannel": "Add Channel",
+        "testConnection": "Test Connection",
+        "enable": "Enable",
+        "disable": "Disable",
+        "install": "Install",
+        "reload": "Reload"
+      },
+      "status": {
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "circuitOpen": "Circuit Open"
+      },
+      "messages": {
+        "configCreated": "Configuration created successfully",
+        "configUpdated": "Configuration updated successfully",
+        "configDeleted": "Configuration deleted successfully",
+        "failedToDelete": "Failed to delete configuration",
+        "failedToSave": "Failed to save configuration",
+        "testFailed": "Connection test failed",
+        "projectIdRequired": "Project ID is required",
+        "enterPluginRequirement": "Please enter plugin requirement",
+        "pluginInstallFailed": "Failed to install plugin",
+        "pluginReloadFailed": "Failed to reload plugins",
+        "pluginActionFailed": "Plugin action failed",
+        "pluginEnabled": "Plugin {{name}} enabled",
+        "pluginDisabled": "Plugin {{name}} disabled"
+      },
+      "errors": {
+        "failedToLoadPlugins": "Failed to load plugins",
+        "failedToLoadSchema": "Failed to load schema"
+      },
+      "pleaseEnter": "Please enter {{field}}"
     }
   },
   "dashboard": {
@@ -1533,6 +2500,69 @@
         "error": "Error",
         "sandbox": "Sandbox",
         "planMode": "Plan Mode"
+      },
+      "pool": {
+        "title": "Agent Pool Management",
+        "tier": "Tier",
+        "status": "Status",
+        "health": "Health",
+        "activeRequests": "Active Requests",
+        "totalRequests": "Total Requests",
+        "memory": "Memory",
+        "noInstance": "No instance created yet - auto-assigned on first request",
+        "pending": "Pending",
+        "tiers": {
+          "hot": "High-frequency project - dedicated resource pool, priority response",
+          "warm": "Medium-frequency project - shared resource pool, LRU cache",
+          "cold": "Low-frequency project - created on demand, resource-efficient"
+        }
+      },
+      "stats": {
+        "toolStats": "Tool Statistics",
+        "totalTools": "Total Tools",
+        "builtinTools": "Built-in Tools",
+        "mcpTools": "MCP Tools",
+        "skillStats": "Skill Statistics",
+        "totalSkills": "Total Skills",
+        "loaded": "Loaded",
+        "messageCount": "Message Count",
+        "taskProgress": "Task Progress",
+        "completed": "Completed",
+        "inProgress": "In Progress",
+        "pending": "Pending"
+      },
+      "controls": {
+        "pause": "Pause Agent (stop accepting new requests)",
+        "resume": "Resume Agent",
+        "stop": "Stop",
+        "stopAgent": "Stop Agent",
+        "terminateInstance": "Terminate Instance",
+        "restart": "Restart",
+        "restartAgent": "Restart Agent (refresh tools and configuration)",
+        "confirmTerminate": "Are you sure you want to terminate the Agent instance? The instance will be released.",
+        "confirmStop": "Are you sure you want to stop the Agent? In-progress tasks will be interrupted.",
+        "confirmRestart": "Restart will refresh tools and configuration. Are you sure you want to restart?",
+        "cancel": "Cancel"
+      },
+      "messages": {
+        "terminating": "Terminating Agent instance...",
+        "stopping": "Stopping Agent...",
+        "stopFailed": "Failed to stop Agent",
+        "restarting": "Restarting Agent instance...",
+        "restartingAgent": "Restarting Agent...",
+        "restartFailed": "Failed to restart Agent",
+        "pausing": "Pausing Agent instance...",
+        "pauseFailed": "Failed to pause Agent",
+        "resuming": "Resuming Agent instance...",
+        "resumeFailed": "Failed to resume Agent"
+      },
+      "error": {
+        "label": "Error",
+        "prefix": "Error"
+      },
+      "planMode": {
+        "tooltip": "{{mode}} Mode - Agent is creating a detailed plan",
+        "label": "Plan"
       }
     },
     "chat": {
@@ -2156,5 +3186,399 @@
     "noResults": "No conversations found",
     "exitCompare": "Exit comparison",
     "compare": "Compare"
+  },
+  "inviteAccept": {
+    "roles": {
+      "admin": "Admin",
+      "member": "Member",
+      "viewer": "Viewer"
+    },
+    "errors": {
+      "missingToken": "Invitation token is missing",
+      "invalidToken": "This invitation is invalid",
+      "verifyFailed": "Failed to verify invitation",
+      "acceptFailed": "Failed to accept invitation"
+    },
+    "expired": {
+      "title": "Invitation Expired",
+      "description": "This invitation has expired. Please contact the workspace admin for a new invitation."
+    },
+    "invalid": {
+      "title": "Invalid Invitation",
+      "description": "This invitation link is invalid or has already been used."
+    },
+    "error": {
+      "title": "Error",
+      "description": "An error occurred while processing your invitation."
+    },
+    "accepted": {
+      "title": "Welcome!",
+      "description": "You have successfully joined the workspace."
+    },
+    "login": {
+      "title": "Accept Your Invitation",
+      "prompt": "Please log in to accept this invitation"
+    },
+    "authenticated": {
+      "title": "Workspace Invitation"
+    },
+    "emailMismatch": {
+      "title": "Email Mismatch",
+      "description": "This invitation was sent to {{invitedEmail}}, but you are logged in as {{currentEmail}}. You can still accept the invitation."
+    },
+    "fields": {
+      "invitedEmail": "Invited email",
+      "workspaceId": "Workspace ID",
+      "role": "Role",
+      "expiresAt": "Expires"
+    },
+    "actions": {
+      "accept": "Accept Invitation",
+      "decline": "Decline",
+      "goHome": "Go to Home",
+      "goToWorkspace": "Go to Workspace"
+    },
+    "accepting": "Accepting invitation..."
+  },
+  "workspaceSettings": {
+    "title": "Workspace Settings",
+    "description": "Manage workspace configuration and members.",
+    "generalSettings": "General Settings",
+    "nameLabel": "Workspace Name",
+    "namePlaceholder": "Enter workspace name",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Enter workspace description",
+    "updateSuccess": "Workspace updated successfully.",
+    "updateFailed": "Failed to update workspace.",
+    "members": {
+      "title": "Members",
+      "description": "Manage who has access to this workspace.",
+      "email": "Email",
+      "role": "Role",
+      "actions": "Actions",
+      "addMember": "Add Member",
+      "addMemberPlaceholder": "Enter user email or ID",
+      "addSuccess": "Member added successfully.",
+      "addFailed": "Failed to add member.",
+      "removeConfirm": "Are you sure you want to remove this member?",
+      "removeSuccess": "Member removed successfully.",
+      "removeFailed": "Failed to remove member.",
+      "roleUpdateSuccess": "Member role updated successfully.",
+      "roleUpdateFailed": "Failed to update member role.",
+      "noMembers": "No members yet.",
+      "owner": "Owner",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "dangerZone": {
+      "title": "Danger Zone",
+      "description": "Irreversible and destructive actions.",
+      "deleteWorkspace": "Delete this workspace",
+      "deleteDescription": "Once deleted, all data in this workspace will be permanently removed.",
+      "deleteConfirm": "Are you sure you want to delete this workspace? This action cannot be undone.",
+      "deleteSuccess": "Workspace deleted successfully.",
+      "deleteFailed": "Failed to delete workspace."
+    }
+  },
+  "workspaceDetail": {
+    "title": "Workspace",
+    "missingContext": "Missing workspace context.",
+    "openInAgentWorkspace": "Open in Agent Workspace",
+    "loadingSurface": "Loading workspace surface...",
+    "loading3DView": "Loading 3D View...",
+    "errorLoadingWorkspace": "Failed to load workspace. Please try again.",
+    "tabs": {
+      "overview": "Overview",
+      "board": "Board",
+      "objectives": "Objectives",
+      "genes": "Genes",
+      "members": "Members",
+      "chat": "Chat",
+      "settings": "Settings"
+    },
+    "blackboard": {
+      "title": "Blackboard",
+      "postTitle": "Post title",
+      "postContent": "Post content",
+      "addPost": "Add post",
+      "reply": "Reply",
+      "replyPlaceholder": "Reply",
+      "status": "status",
+      "createPostFailed": "Failed to create post",
+      "createReplyFailed": "Failed to create reply"
+    },
+    "members": {
+      "title": "Members & Agents",
+      "membersLabel": "Members",
+      "agentsLabel": "Agents",
+      "add": "Add",
+      "removeAgentConfirm": "Remove this agent?",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "agentRemoved": "Agent removed",
+      "removeAgentFailed": "Failed to remove agent"
+    },
+    "taskBoard": {
+      "title": "Task Board",
+      "taskTitlePlaceholder": "Task title...",
+      "priority": "Priority",
+      "effort": "Effort",
+      "add": "Add",
+      "unassigned": "Unassigned",
+      "statusTodo": "To Do",
+      "statusInProgress": "In Progress",
+      "statusBlocked": "Blocked",
+      "statusDone": "Done",
+      "taskIsBlocked": "Task is blocked",
+      "createFailed": "Failed to create task",
+      "updateStatusFailed": "Failed to update task status",
+      "assignFailed": "Failed to assign agent"
+    },
+    "chat": {
+      "noMessages": "No messages yet. Start the conversation!"
+    },
+    "objectives": {
+      "title": "Objectives & Key Results",
+      "addObjective": "Add Objective",
+      "noObjectives": "No objectives found",
+      "createFirst": "Create Your First Objective"
+    },
+    "genes": {
+      "title": "Cyber Genes",
+      "createGene": "Create Gene",
+      "all": "All",
+      "skill": "Skill",
+      "knowledge": "Knowledge",
+      "tool": "Tool",
+      "workflow": "Workflow",
+      "noGenes": "No genes found",
+      "createFirst": "Create Your First Gene"
+    },
+    "presence": {
+      "online": "Online"
+    }
+  },
+  "forceChangePassword": {
+    "title": "Change Your Password",
+    "subtitle": "Your administrator requires you to change your password before continuing.",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter your current password",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Enter your new password",
+    "confirmPassword": "Confirm New Password",
+    "confirmPasswordPlaceholder": "Re-enter your new password",
+    "submit": "Change Password",
+    "loading": "Changing password...",
+    "success": "Password changed successfully.",
+    "failed": "Failed to change password.",
+    "passwordMismatch": "Passwords do not match.",
+    "passwordRequired": "Password is required.",
+    "passwordMinLength": "Password must be at least 8 characters."
+  },
+  "admin": {
+    "poolDashboard": {
+      "title": "Agent Pool Dashboard",
+      "autoRefresh": "Auto-refresh",
+      "activeInstances": "Active Instances",
+      "filterByTier": "Filter by tier",
+      "tierDistribution": "Tier Distribution",
+      "resourceUsage": "Resource Usage",
+      "prewarmPool": "Prewarm Pool",
+      "errors": {
+        "failedToLoadPoolStatus": "Failed to load pool status"
+      },
+      "status": {
+        "totalInstances": "Total Instances",
+        "ready": "Ready",
+        "executing": "Executing",
+        "unhealthy": "Unhealthy"
+      },
+      "tiers": {
+        "hot": "HOT",
+        "warm": "WARM",
+        "cold": "COLD"
+      },
+      "columns": {
+        "instanceKey": "Instance Key",
+        "tier": "Tier",
+        "status": "Status",
+        "health": "Health",
+        "requests": "Requests",
+        "active": "Active",
+        "total": "Total",
+        "memory": "Memory",
+        "lastRequest": "Last Request",
+        "actions": "Actions"
+      },
+      "actions": {
+        "pause": "Pause",
+        "resume": "Resume",
+        "terminate": "Terminate"
+      },
+      "confirm": {
+        "terminateInstance": "Terminate this instance?"
+      },
+      "messages": {
+        "instancePaused": "Instance paused",
+        "failedToPause": "Failed to pause instance",
+        "instanceResumed": "Instance resumed",
+        "failedToResume": "Failed to resume instance",
+        "instanceTerminated": "Instance terminated",
+        "failedToTerminate": "Failed to terminate instance"
+      },
+      "resources": {
+        "memory": "Memory",
+        "cpu": "CPU"
+      },
+      "prewarm": {
+        "l1": "L1 (Hot)",
+        "l2": "L2 (Warm)",
+        "l3": "L3 (Cold)",
+        "instances": "instances"
+      },
+      "pagination": {
+        "total": "Total {{count}} instances"
+      }
+    },
+    "deadLetterQueue": {
+      "title": "Dead Letter Queue",
+      "description": "Manage failed messages and handle exceptions",
+      "errors": {
+        "failedToLoadStats": "Failed to load statistics",
+        "failedToLoadMessages": "Failed to load messages",
+        "failedToRetryMessage": "Failed to retry message",
+        "failedToRetryMessages": "Failed to retry selected messages",
+        "failedToDiscardMessages": "Failed to discard selected messages",
+        "failedToCleanupExpired": "Failed to cleanup expired messages",
+        "failedToCleanupResolved": "Failed to cleanup resolved messages",
+        "reasonRequired": "Please provide a reason for discarding"
+      },
+      "messages": {
+        "retryInitiated": "Retry initiated",
+        "messageDiscarded": "Message discarded",
+        "retryBatchResult": "{{count}} message(s) retried",
+        "discardBatchResult": "{{count}} message(s) discarded",
+        "cleanupExpiredResult": "{{count}} expired message(s) cleaned up",
+        "cleanupResolvedResult": "{{count}} resolved message(s) cleaned up"
+      },
+      "columns": {
+        "id": "ID",
+        "eventType": "Event Type",
+        "errorType": "Error Type",
+        "error": "Error",
+        "status": "Status",
+        "retries": "Retries",
+        "age": "Age",
+        "actions": "Actions"
+      },
+      "actions": {
+        "viewDetails": "View Details",
+        "retry": "Retry",
+        "discard": "Discard",
+        "cleanupExpired": "Clean Up Expired",
+        "cleanupResolved": "Clean Up Resolved",
+        "retrySelected": "Retry Selected",
+        "discardSelected": "Discard Selected"
+      },
+      "stats": {
+        "totalMessages": "Total Messages",
+        "pending": "Pending",
+        "retrying": "Retrying",
+        "resolved": "Resolved",
+        "discarded": "Discarded",
+        "oldestAge": "Oldest Age"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "retrying": "Retrying",
+        "discarded": "Discarded",
+        "expired": "Expired",
+        "resolved": "Resolved"
+      },
+      "filters": {
+        "label": "Filter by Status",
+        "status": "Status",
+        "eventType": "Event Type",
+        "errorType": "Error Type",
+        "selected": "Selected"
+      },
+      "errorTypeDistribution": "Error Type Distribution",
+      "confirm": {
+        "cleanupExpired": "Clean Up Expired Messages",
+        "cleanupExpiredDesc": "This will permanently delete all expired messages. This action cannot be undone.",
+        "cleanupResolved": "Clean Up Resolved Messages",
+        "cleanupResolvedDesc": "This will permanently delete all resolved messages. This action cannot be undone."
+      },
+      "detail": {
+        "title": "Message Details",
+        "eventId": "Event ID",
+        "routingKey": "Routing Key",
+        "retryCount": "Retry Count",
+        "firstFailed": "First Failed",
+        "lastFailed": "Last Failed",
+        "nextRetry": "Next Retry",
+        "eventData": "Event Data",
+        "stackTrace": "Stack Trace"
+      },
+      "discard": {
+        "title": "Discard Message(s)",
+        "confirmMessage": "You are about to discard {{count}} message(s). This action cannot be undone.",
+        "reasonLabel": "Please provide a reason for discarding:",
+        "reasonPlaceholder": "e.g., Duplicate event, Stale data, Manual fix applied..."
+      }
+    }
+  },
+  "system": {
+    "featureDisabled": "This feature is not available in your current edition",
+    "edition": "Edition",
+    "features": "Features"
+  },
+  "org": {
+    "setupRequired": "Please complete your organization setup",
+    "setupRequiredDescription": "You need to configure your organization before accessing other features"
+  },
+  "gene": {
+    "reviews": "Reviews",
+    "reviewsCount": "{{count}} Reviews",
+    "writeReview": "Write a Review",
+    "editReview": "Edit Review",
+    "deleteReview": "Delete Review",
+    "deleteReviewConfirm": "Are you sure you want to delete this review?",
+    "reviewPlaceholder": "Share your thoughts about this gene...",
+    "reviewSubmitSuccess": "Review submitted successfully",
+    "reviewDeleteSuccess": "Review deleted successfully",
+    "noReviews": "No reviews yet. Be the first to review!",
+    "yourRating": "Your Rating",
+    "reviewContent": "Review Content"
+  },
+  "webhooks": {
+    "name": "Name",
+    "nameRequired": "Please enter a name",
+    "url": "URL",
+    "urlRequired": "Please enter a URL",
+    "urlInvalid": "Please enter a valid URL",
+    "events": "Events",
+    "eventsRequired": "Please select at least one event",
+    "selectEvents": "Select events",
+    "active": "Active",
+    "inactive": "Inactive",
+    "secret": "Secret",
+    "create": "Create Webhook",
+    "edit": "Edit Webhook",
+    "fetchError": "Failed to fetch webhooks",
+    "createSuccess": "Webhook created successfully",
+    "updateSuccess": "Webhook updated successfully",
+    "deleteConfirm": "Are you sure you want to delete this webhook?",
+    "deleteSuccess": "Webhook deleted successfully",
+    "deleteError": "Failed to delete webhook"
+  },
+  "events": {
+    "title": "Events",
+    "type": "Type",
+    "message": "Message",
+    "source": "Source",
+    "date": "Date",
+    "filterByType": "Filter by type",
+    "noEvents": "No events found"
   }
 }

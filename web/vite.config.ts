@@ -60,7 +60,7 @@ export default defineConfig({
               return "vendor-antd";
             }
             // Icons
-            if (id.includes("lucide-react") || id.includes("@ant-design/icons")) {
+            if (id.includes("lucide-react")) {
               return "vendor-icons";
             }
             // React ecosystem

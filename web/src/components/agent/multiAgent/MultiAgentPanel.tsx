@@ -85,7 +85,7 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth })
               {node.name ?? node.agentId.slice(0, 8)}
             </span>
             <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px]
+              className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs
                   font-medium ${style.color} ${style.bg}`}
             >
               {style.label}

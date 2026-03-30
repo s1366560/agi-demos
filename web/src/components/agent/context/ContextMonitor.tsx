@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import type { FC } from 'react';
 
-import { CompressOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { Tooltip, Progress } from 'antd';
+import { Minimize2, Database } from 'lucide-react';
 
 import { useThemeColors, resolveThemeColor } from '@/hooks/useThemeColor';
 
@@ -104,7 +104,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
             e.currentTarget.style.background = 'transparent';
           }}
         >
-          <DatabaseOutlined style={{ fontSize: 13, color: progressColor }} />
+          <Database size={13} style={{ color: progressColor }} />
           <Progress
             percent={Math.min(occupancy, 100)}
             size={[80, 6]}
@@ -129,7 +129,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
                 fontWeight: 500,
               }}
             >
-              <CompressOutlined style={{ fontSize: 10 }} />
+              <Minimize2 size={10} />
               {levelLabel}
             </span>
           )}

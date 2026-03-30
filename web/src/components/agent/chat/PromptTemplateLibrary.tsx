@@ -386,11 +386,11 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           >
             <User size={12} className="inline mr-1" />
             {t('agent.templates.myTemplates', 'My Templates')}
-            {customTemplates.length > 0 && (
-              <span className="ml-1 text-[10px] bg-slate-200 dark:bg-slate-600 rounded-full px-1.5">
-                {customTemplates.length}
-              </span>
-            )}
+           {customTemplates.length > 0 && (
+               <span className="ml-1 text-2xs bg-slate-200 dark:bg-slate-600 rounded-full px-1.5">
+                 {customTemplates.length}
+               </span>
+             )}
           </button>
         </div>
 

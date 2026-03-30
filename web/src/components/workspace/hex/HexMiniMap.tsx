@@ -53,7 +53,7 @@ export const HexMiniMap: FC<HexMiniMapProps> = ({
       mapWidth: max_x - min_x,
       mapHeight: max_y - min_y,
     };
-  }, [cells, hexToPixel, hexSize]);
+  }, [cells, hexToPixel]);
 
   const handleMapClick = (e: ReactMouseEvent<SVGSVGElement>) => {
     const svg = e.currentTarget;
@@ -71,28 +71,21 @@ export const HexMiniMap: FC<HexMiniMapProps> = ({
   };
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 12,
-        right: 12,
-        width: 160,
-        height: 120,
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        border: '1px solid rgba(255,255,255,0.2)',
-        borderRadius: 8,
-        overflow: 'hidden',
-        zIndex: 50,
-      }}
-    >
+    <div className="absolute bottom-3 right-3 w-40 h-[120px] bg-slate-900/70 border border-white/20 rounded-lg overflow-hidden z-50">
       <svg
         width="100%"
         height="100%"
         viewBox={`${minX} ${minY} ${mapWidth} ${mapHeight}`}
         preserveAspectRatio="xMidYMid meet"
         onClick={handleMapClick}
-        style={{ cursor: 'pointer' }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleMapClick(e as any);
+        }}
+        className="cursor-pointer"
+        role="img"
+        aria-label="Hex Mini Map"
       >
+        <title>Hex Mini Map</title>
         {cells.map((cell) => {
           const { x, y } = hexToPixel(cell.q, cell.r);
           const corners = getHexCorners(x, y).map((p) => `${p.x},${p.y}`).join(' ');

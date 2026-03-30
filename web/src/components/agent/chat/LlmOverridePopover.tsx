@@ -98,9 +98,9 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           <div className="flex flex-col">
             <span className="font-bold text-slate-800 dark:text-slate-100">LLM Parameters</span>
             {modelName && (
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[200px]">
-                {modelName}
-              </span>
+             <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-50">
+                 {modelName}
+               </span>
             )}
           </div>
           {isActive && (

@@ -27,20 +27,20 @@
 
 import { useState, useCallback, Children } from 'react';
 
-import {
-  FileImageOutlined,
-  VideoCameraOutlined,
-  SoundOutlined,
-  FileTextOutlined,
-  CodeOutlined,
-  DatabaseOutlined,
-  FolderOutlined,
-  FileUnknownOutlined,
-  DownloadOutlined,
-  ExpandOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
 import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from 'antd';
+import {
+  Image as ImageIcon,
+  Video,
+  Volume2,
+  FileText,
+  Code,
+  Database,
+  Folder,
+  FileQuestion,
+  Download,
+  Maximize2,
+  Loader2,
+} from 'lucide-react';
 
 import { AudioPlayer } from './AudioPlayer';
 import { CodeViewer } from './CodeViewer';
@@ -87,14 +87,14 @@ const ACTIONS_SYMBOL = Symbol('ArtifactRendererActions');
 // ========================================
 
 const CATEGORY_ICONS: Record<ArtifactCategory, React.ReactNode> = {
-  image: <FileImageOutlined />,
-  video: <VideoCameraOutlined />,
-  audio: <SoundOutlined />,
-  document: <FileTextOutlined />,
-  code: <CodeOutlined />,
-  data: <DatabaseOutlined />,
-  archive: <FolderOutlined />,
-  other: <FileUnknownOutlined />,
+  image: <ImageIcon size={16} />,
+  video: <Video size={16} />,
+  audio: <Volume2 size={16} />,
+  document: <FileText size={16} />,
+  code: <Code size={16} />,
+  data: <Database size={16} />,
+  archive: <Folder size={16} />,
+  other: <FileQuestion size={16} />,
 };
 
 const CATEGORY_COLORS: Record<ArtifactCategory, string> = {
@@ -316,7 +316,7 @@ function LoadingContent({ artifact }: { artifact: Artifact }) {
   return (
     <div className="flex items-center justify-center p-8">
       <Space orientation="vertical">
-        <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+        <Spin indicator={<Loader2 className="animate-spin" size={24} />} />
         <Text type="secondary">
           {artifact.status === 'pending' ? 'Preparing...' : 'Uploading...'}
         </Text>
@@ -562,7 +562,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
                 <Button
                   type="text"
                   size="small"
-                  icon={<DownloadOutlined />}
+                  icon={<Download size={14} />}
                   href={artifact.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -574,7 +574,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
                 <Button
                   type="text"
                   size="small"
-                  icon={<ExpandOutlined />}
+                  icon={<Maximize2 size={14} />}
                   onClick={() => {
                     onExpand(artifact);
                   }}

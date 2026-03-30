@@ -67,6 +67,7 @@ import type {
   AgentSpawnedEventData,
   AgentCompletedEventData,
   AgentStoppedEventData,
+  ArtifactsBatchEventData,
 } from '../types/agent';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
@@ -146,6 +147,51 @@ function hasStableOrderingMetadata(data: unknown): boolean {
  * @param event - The SSE event to convert
  * @returns A TimelineEvent or null if event type is not supported
  */
+/**
+ * MCP-style result with content array
+ */
+interface McpResultContent {
+  text?: string | undefined;
+}
+
+interface McpResult {
+  content?: McpResultContent[] | undefined;
+}
+
+/**
+ * Check if a value is an MCP-style result object
+ */
+function isMcpResult(value: unknown): value is McpResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'content' in value &&
+    Array.isArray((value as McpResult).content)
+  );
+}
+
+/**
+ * MCP UI metadata structure (raw from backend)
+ */
+interface McpUiMetadataRaw {
+  resource_uri?: string | undefined;
+  resourceUri?: string | undefined;
+  server_name?: string | undefined;
+  serverName?: string | undefined;
+  app_id?: string | undefined;
+  appId?: string | undefined;
+  title?: string | undefined;
+  project_id?: string | undefined;
+  projectId?: string | undefined;
+}
+
+/**
+ * Observe event data with optional ui_metadata field
+ */
+interface ObserveEventDataWithMeta extends ObserveEventData {
+  ui_metadata?: McpUiMetadataRaw | undefined;
+}
+
 export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | null {
   const { eventTimeUs, eventCounter, timestamp } = extractEventOrdering(event.data);
 
@@ -216,15 +262,16 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
       // Get observation value - support both 'observation' (legacy) and 'result' (new) fields
       // Also handle case where result is an object (e.g., from export_artifact)
       let observationValue: string | undefined;
-      const rawResult = (data as any).result ?? data.observation;
+      const dataWithResult = data as ObserveEventData & { result?: unknown };
+      const rawResult = dataWithResult.result ?? data.observation;
       if (typeof rawResult === 'string') {
         observationValue = rawResult;
       } else if (rawResult !== null && rawResult !== undefined) {
         // If result is an object, try to extract meaningful text or stringify it
-        if (typeof rawResult === 'object' && 'content' in rawResult) {
+        if (isMcpResult(rawResult)) {
           // MCP-style result with content array
           const content = rawResult.content;
-          if (Array.isArray(content) && content.length > 0) {
+          if (content && content.length > 0) {
             observationValue = content[0]?.text ?? JSON.stringify(rawResult);
           } else {
             observationValue = JSON.stringify(rawResult);
@@ -242,7 +289,8 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
       // Extract MCP App UI metadata if present (for timeline "Open App")
       // Support both snake_case (Python) and camelCase (TypeScript) field names
-      const rawUiMeta = (data as any).ui_metadata;
+      const dataWithMeta = data as ObserveEventDataWithMeta;
+      const rawUiMeta = dataWithMeta.ui_metadata;
       const mcpUiMetadata =
         rawUiMeta && typeof rawUiMeta === 'object'
           ? {
@@ -599,7 +647,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'artifacts_batch': {
-      const data = event.data as any;
+      const data = event.data as ArtifactsBatchEventData;
       return {
         id: generateTimelineEventId('artifacts_batch'),
         type: 'artifacts_batch',
@@ -827,9 +875,9 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventTimeUs,
         eventCounter,
         timestamp,
-        memories: data.memories ?? [],
-        count: data.count ?? 0,
-        searchMs: data.search_ms ?? 0,
+        memories: data.memories || [],
+        count: data.count || 0,
+        searchMs: data.search_ms || 0,
       };
     }
 
@@ -841,8 +889,8 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventTimeUs,
         eventCounter,
         timestamp,
-        capturedCount: data.captured_count ?? 0,
-        categories: data.categories ?? [],
+        capturedCount: data.captured_count || 0,
+        categories: data.categories || [],
       };
     }
 
@@ -866,11 +914,11 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventTimeUs,
         eventCounter,
         timestamp,
-        agentId: data.agent_id ?? '',
+        agentId: data.agent_id || '',
         agentName: data.agent_name ?? null,
         parentAgentId: data.parent_agent_id ?? null,
         childSessionId: data.child_session_id ?? null,
-        mode: data.mode ?? 'autonomous',
+        mode: data.mode || 'autonomous',
         taskSummary: data.task_summary ?? null,
       };
     }
@@ -883,13 +931,13 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventTimeUs,
         eventCounter,
         timestamp,
-        agentId: data.agent_id ?? '',
+        agentId: data.agent_id || '',
         agentName: data.agent_name ?? null,
         parentAgentId: data.parent_agent_id ?? null,
         sessionId: data.session_id ?? null,
         result: data.result ?? null,
-        success: data.success ?? false,
-        artifacts: data.artifacts ?? [],
+        success: data.success || false,
+        artifacts: data.artifacts || [],
       };
     }
 
@@ -901,7 +949,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         eventTimeUs,
         eventCounter,
         timestamp,
-        agentId: data.agent_id ?? '',
+        agentId: data.agent_id || '',
         agentName: data.agent_name ?? null,
         reason: data.reason ?? null,
         stoppedBy: data.stopped_by ?? null,
@@ -1111,7 +1159,7 @@ export function parseAndConvertEvent(rawData: unknown): TimelineEventWithCorrela
   }
 
   // Check if it's legacy format
-  const legacy = data as { type?: string | undefined; data?: unknown | undefined };
+  const legacy = data as { type?: string | undefined; data?: unknown };
   if (typeof legacy.type === 'string' && legacy.data !== undefined) {
     const event: AgentEvent<unknown> = {
       type: legacy.type as AgentEventType,

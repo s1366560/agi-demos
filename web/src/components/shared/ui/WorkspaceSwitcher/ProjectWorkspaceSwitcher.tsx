@@ -8,6 +8,8 @@ import { useEffect } from 'react';
 
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { Database, ChevronsUpDown } from 'lucide-react';
+
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -83,19 +85,17 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
     <WorkspaceSwitcherRoot mode="project">
       <WorkspaceSwitcherTrigger className={triggerClassName}>
         <div className="bg-primary/10 rounded-md p-1.5 flex items-center justify-center text-primary shrink-0">
-          <span className="material-symbols-outlined text-[20px]">dataset</span>
+          <Database size={20} />
         </div>
         <div className="flex flex-col overflow-hidden">
           <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none truncate">
             {displayProject?.name || 'Select Project'}
           </h1>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate leading-tight opacity-80 mt-0.5">
+          <p className="text-2xs text-slate-500 dark:text-slate-400 font-medium truncate leading-tight opacity-80 mt-0.5">
             {currentTenant?.name}
           </p>
         </div>
-        <span className="material-symbols-outlined text-slate-400 ml-auto text-[18px]">
-          unfold_more
-        </span>
+        <ChevronsUpDown size={18} className="text-slate-400 ml-auto" />
       </WorkspaceSwitcherTrigger>
 
       <WorkspaceSwitcherMenu label="Switch Project" className={menuClassName}>

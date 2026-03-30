@@ -311,25 +311,25 @@ export const AgentDefinitions: React.FC = () => {
                 </p>
 
                 <div className="flex flex-wrap gap-1">
-                  {def.model && <Tag className="text-[10px]">{def.model}</Tag>}
+                  {def.model && <Tag className="text-2xs">{def.model}</Tag>}
                   {def.can_spawn && (
-                    <Tag color="blue" className="text-[10px]">
+                    <Tag color="blue" className="text-2xs">
                       Spawn
                     </Tag>
                   )}
                   {def.agent_to_agent_enabled && (
-                    <Tag color="green" className="text-[10px]">
+                    <Tag color="green" className="text-2xs">
                       A2A
                     </Tag>
                   )}
                   {def.source === 'filesystem' && (
-                    <Tag color="orange" className="text-[10px]">
+                    <Tag color="orange" className="text-2xs">
                       FS
                     </Tag>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between text-xs-plus text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700">
                   <span>{def.total_invocations} invocations</span>
                   {def.success_rate !== null && (
                     <span>{Math.round(def.success_rate * 100)}% success</span>

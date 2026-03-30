@@ -9,6 +9,8 @@ export interface HexCorridorProps {
   node: TopologyNode;
 }
 
+// Extracted as a separate component to allow for future interactivity,
+// capacity visualizations, or animation effects on corridors without bloating HexGrid.
 export const HexCorridor: FC<HexCorridorProps> = ({ cx, cy, size }) => {
   const diamondSize = size * 0.3;
   const points = [

@@ -19,8 +19,11 @@
 
 import React, { useEffect, useState, useCallback, memo } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
+
+import { Brain } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
@@ -204,7 +207,7 @@ export const TenantLayout: React.FC = memo(() => {
         <div className="mx-auto flex w-full max-w-md flex-col items-center space-y-6 p-6 text-center">
           <div className="flex items-center gap-3">
             <div className="bg-primary/10 p-3 rounded-xl">
-              <span className="material-symbols-outlined text-primary text-4xl">memory</span>
+              <Brain size={36} className="text-primary" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               MemStack<span className="text-primary">.ai</span>

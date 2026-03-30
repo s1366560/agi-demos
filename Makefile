@@ -325,9 +325,9 @@ dev-stop: ## Stop all background services
 		PID=$$(lsof -ti :$$port 2>/dev/null); \
 		[ -n "$$PID" ] && kill -9 $$PID 2>/dev/null || true; \
 	done
-	@# Fallback: kill remaining processes by pattern
+	@# Fallback: kill remaining processes by pattern (scoped to current project)
 	@pkill -9 -f "uvicorn src.infrastructure" 2>/dev/null || true
-	@pkill -9 -f "vite" 2>/dev/null || true
+	@# Note: vite is already covered by port 3000 above, avoid killing other projects
 	@echo " All services stopped"
 
 dev-logs: ## Show all service logs (follow mode)

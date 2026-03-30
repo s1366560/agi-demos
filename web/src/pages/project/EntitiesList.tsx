@@ -29,9 +29,11 @@
 
 import React, { useState, useEffect, useCallback, memo, Children } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
+import { AlertCircle, Filter, LayoutGrid, Loader2, Network, Pointer, RefreshCw, Search, Unlink, X } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { formatDateTime } from '@/utils/date';
@@ -303,13 +305,12 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={handleRefresh}
                 disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
               >
-                <span className="material-symbols-outlined">
-                  {loading ? 'progress_activity' : 'refresh'}
-                </span>
+                {loading ? <Loader2 size={16} className="animate-spin motion-reduce:animate-none" /> : <RefreshCw size={16} />}
                 {t('project.graph.entities.refresh')}
               </button>
             </div>
@@ -358,7 +359,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
               {/* Search */}
               <div className="md:col-span-2 flex items-center gap-2">
-                <span className="material-symbols-outlined text-slate-400">search</span>
+                <Search size={16} className="text-slate-400" />
                 <input
                   type="text"
                   placeholder={t('project.graph.entities.filter.search_placeholder')}
@@ -409,7 +410,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   </span>
                   {entityTypeFilter && (
                     <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-base">filter_alt</span>
+                      <Filter size={16} />
                       {t('project.graph.entities.filter.filtered_by')}{' '}
                       <strong>{entityTypeFilter}</strong>
                     </span>
@@ -417,6 +418,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                 </div>
                 {(entityTypeFilter || searchQuery) && (
                   <button
+                    type="button"
                     onClick={handleClearFilters}
                     className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
                   >
@@ -434,16 +436,15 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
             <div className="lg:col-span-2 space-y-4">
               {loading ? (
                 <div className="text-center py-12">
-                  <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin motion-reduce:animate-none">
-                    progress_activity
-                  </span>
+                  <Loader2 size={32} className="text-slate-400 animate-spin motion-reduce:animate-none" />
                   <p className="text-slate-500 mt-2">{t('project.graph.entities.loading')}</p>
                 </div>
               ) : error ? (
                 <div className="text-center py-12">
-                  <span className="material-symbols-outlined text-4xl text-red-500">error</span>
+                  <AlertCircle size={32} className="text-red-500" />
                   <p className="text-slate-500 mt-2">{error}</p>
                   <button
+                    type="button"
                     onClick={handleRefresh}
                     className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500"
                   >
@@ -468,9 +469,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                     columns="responsive"
                     emptyComponent={
                       <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <span className="material-symbols-outlined text-4xl text-slate-400">
-                          category
-                        </span>
+                        <LayoutGrid size={32} className="text-slate-400" />
                         <p className="text-slate-500 mt-2">
                           {searchQuery || entityTypeFilter
                             ? t('project.graph.entities.empty_filter')
@@ -478,6 +477,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                         </p>
                         {(searchQuery || entityTypeFilter) && (
                           <button
+                            type="button"
                             onClick={handleClearFilters}
                             className="mt-4 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600"
                           >
@@ -495,6 +495,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                       data-testid="entities-pagination"
                     >
                       <button
+                        type="button"
                         onClick={() => {
                           setPage((p) => Math.max(0, p - 1));
                         }}
@@ -511,6 +512,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                         })}
                       </span>
                       <button
+                        type="button"
                         onClick={() => {
                           setPage((p) => p + 1);
                         }}
@@ -539,30 +541,31 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                       {t('project.graph.entities.detail.title')}
                     </h2>
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedEntity(null);
                         setRelationships([]);
                       }}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
-                      <span className="material-symbols-outlined">close</span>
+                      <X size={16} />
                     </button>
                   </div>
 
                   <div className="space-y-4">
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase">
+                      <span className="text-xs font-semibold text-slate-500 uppercase block mb-1">
                         {t('project.graph.entities.detail.name')}
-                      </label>
+                      </span>
                       <p className="text-slate-900 dark:text-white font-medium">
                         {selectedEntity.name}
                       </p>
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase">
+                      <span className="text-xs font-semibold text-slate-500 uppercase block mb-1">
                         {t('project.graph.entities.detail.type')}
-                      </label>
+                      </span>
                       <span
                         className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${getEntityTypeColor(
                           selectedEntity.entity_type || 'Unknown'
@@ -574,9 +577,9 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
                     {selectedEntity.summary && (
                       <div>
-                        <label className="text-xs font-semibold text-slate-500 uppercase">
+                        <span className="text-xs font-semibold text-slate-500 uppercase block mb-1">
                           {t('project.graph.entities.detail.summary')}
-                        </label>
+                        </span>
                         <p className="text-sm text-slate-600 dark:text-slate-400">
                           {selectedEntity.summary}
                         </p>
@@ -584,18 +587,18 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                     )}
 
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase">
+                      <span className="text-xs font-semibold text-slate-500 uppercase block mb-1">
                         {t('project.graph.entities.detail.uuid')}
-                      </label>
+                      </span>
                       <p className="text-xs text-slate-500 dark:text-slate-400 font-mono break-all">
                         {selectedEntity.uuid}
                       </p>
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase">
+                      <span className="text-xs font-semibold text-slate-500 uppercase block mb-1">
                         {t('project.graph.entities.detail.created')}
-                      </label>
+                      </span>
                       <p className="text-sm text-slate-600 dark:text-slate-400">
                         {selectedEntity.created_at
                           ? formatDateTime(selectedEntity.created_at)
@@ -606,7 +609,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                     {/* Relationships */}
                     <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                       <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-base">hub</span>
+                        <Network size={16} />
                         {t('project.graph.entities.detail.relationships', {
                           count: relationships.length,
                         })}
@@ -644,7 +647,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                                     {rel.related_entity.name}
                                   </span>
                                   <span
-                                    className={`ml-1 px-1 py-0.5 rounded text-[10px] ${getEntityTypeColor(
+                                    className={`ml-1 px-1 py-0.5 rounded text-2xs ${getEntityTypeColor(
                                       rel.related_entity.entity_type || 'Unknown'
                                     )}`}
                                   >
@@ -657,7 +660,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                         </div>
                       ) : (
                         <p className="text-sm text-slate-500 flex items-center gap-2">
-                          <span className="material-symbols-outlined text-base">link_off</span>
+                          <Unlink size={16} />
                           {t('project.graph.entities.detail.no_relationships')}
                         </p>
                       )}
@@ -669,9 +672,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-12 text-center sticky top-6"
                   data-testid="entities-detail"
                 >
-                  <span className="material-symbols-outlined text-4xl text-slate-400">
-                    touch_app
-                  </span>
+                  <Pointer size={32} className="text-slate-400 mx-auto" />
                   <p className="text-slate-500 mt-2">
                     {t('project.graph.entities.detail.select_prompt')}
                   </p>
@@ -693,16 +694,16 @@ const EntitiesListMemo = memo(EntitiesListInner);
 EntitiesListMemo.displayName = 'EntitiesList';
 
 // Create compound component object
-const EntitiesListCompound = EntitiesListMemo as unknown as EntitiesListCompound;
-EntitiesListCompound.Header = HeaderMarker;
-EntitiesListCompound.Filters = FiltersMarker;
-EntitiesListCompound.Stats = StatsMarker;
-EntitiesListCompound.List = ListMarker;
-EntitiesListCompound.Pagination = PaginationMarker;
-EntitiesListCompound.Detail = DetailMarker;
-EntitiesListCompound.Root = EntitiesListMemo;
+const EntitiesListCompoundObj = EntitiesListMemo as unknown as EntitiesListCompound;
+EntitiesListCompoundObj.Header = HeaderMarker;
+EntitiesListCompoundObj.Filters = FiltersMarker;
+EntitiesListCompoundObj.Stats = StatsMarker;
+EntitiesListCompoundObj.List = ListMarker;
+EntitiesListCompoundObj.Pagination = PaginationMarker;
+EntitiesListCompoundObj.Detail = DetailMarker;
+EntitiesListCompoundObj.Root = EntitiesListMemo;
 
 // Export compound component
-export const EntitiesList = EntitiesListCompound;
+export const EntitiesList = EntitiesListCompoundObj;
 
 export default EntitiesList;

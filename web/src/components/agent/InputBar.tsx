@@ -469,7 +469,7 @@ export const InputBar = memo<InputBarProps>(
                 <button
                   type="button"
                   onClick={handleRemoveSkill}
-                  className="ml-0.5 p-0.5 hover:bg-primary/10 rounded-full transition-colors"
+                  className="ml-0.5 p-0.5 hover:bg-primary/10 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={10} />
                 </button>
@@ -486,7 +486,7 @@ export const InputBar = memo<InputBarProps>(
                 <button
                   type="button"
                   onClick={handleRemoveSubAgent}
-                  className="ml-0.5 p-0.5 hover:bg-purple-500/10 rounded-full transition-colors"
+                  className="ml-0.5 p-0.5 hover:bg-purple-500/10 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={10} />
                 </button>
@@ -640,7 +640,7 @@ const AttachmentChip = memo<{
           onClick={() => {
             onRetry(file.id);
           }}
-          className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+          className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <RotateCw size={12} className="text-red-500" />
         </button>
@@ -652,7 +652,7 @@ const AttachmentChip = memo<{
         onRemove(file.id);
       }}
       disabled={file.status === 'uploading'}
-      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors ml-0.5 disabled:opacity-30"
+      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ml-0.5 disabled:opacity-30"
     >
       <X size={12} className="text-slate-400 hover:text-slate-600" />
     </button>

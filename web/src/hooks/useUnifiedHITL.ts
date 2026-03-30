@@ -26,7 +26,20 @@ import { useEffect, useMemo } from 'react';
 import { useAgentV3Store } from '../stores/agentV3';
 import { useUnifiedHITLStore, usePendingRequests } from '../stores/hitlStore.unified';
 
-import type { UnifiedHITLRequest, HITLType } from '../types/hitl.unified';
+import type {
+  ClarificationAskedEventData,
+  DecisionAskedEventData,
+  EnvVarRequestedEventData,
+  PermissionAskedEventData,
+  EnvVarField as LegacyEnvVarField,
+} from '../types/agent/events';
+import type {
+  UnifiedHITLRequest,
+  HITLType,
+  ClarificationOption,
+  DecisionOption,
+  EnvVarField as UnifiedEnvVarField,
+} from '../types/hitl.unified';
 
 interface UseUnifiedHITLReturn {
   /** All pending HITL requests for this conversation */
@@ -49,6 +62,22 @@ interface UseUnifiedHITLReturn {
 }
 
 /**
+ * Convert legacy EnvVarField to unified format
+ */
+function convertEnvVarFields(fields: LegacyEnvVarField[]): UnifiedEnvVarField[] {
+  return fields.map((field) => ({
+    name: field.name,
+    label: field.label,
+    description: field.description,
+    required: field.required,
+    secret: false, // Legacy format doesn't have this field, default to false
+    inputType: field.input_type,
+    defaultValue: field.default_value,
+    placeholder: field.placeholder,
+  }));
+}
+
+/**
  * Bridge hook connecting agentV3Store to unifiedHITLStore
  */
 export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLReturn {
@@ -65,107 +94,104 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
 
   // Bridge: Forward SSE events to unified store when they change
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !pendingClarification?.request_id) return;
 
-    if (pendingClarification && pendingClarification.request_id) {
-      // Construct SSE-like data from old format
-      handleSSEEvent(
-        'clarification_asked',
-        {
-          request_id: pendingClarification.request_id,
-          message: pendingClarification.message || pendingClarification.question,
-          question: pendingClarification.question || pendingClarification.message,
-          options: pendingClarification.options,
-          allow_custom: pendingClarification.allow_custom ?? true,
-          timeout_seconds: pendingClarification.timeout_seconds || 300,
-          context: pendingClarification.context || {},
-          clarification_type: pendingClarification.clarification_type || 'custom',
-        },
-        conversationId
-      );
-    }
+    // Map ClarificationAskedEventData to unified format
+    const data: ClarificationAskedEventData = pendingClarification;
+    handleSSEEvent(
+      'clarification_asked',
+      {
+        request_id: data.request_id,
+        message: data.question,
+        question: data.question,
+        options: data.options as ClarificationOption[],
+        allow_custom: data.allow_custom,
+        timeout_seconds: 300,
+        context: data.context,
+        clarification_type: data.clarification_type,
+      },
+      conversationId
+    );
   }, [conversationId, pendingClarification, handleSSEEvent]);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !pendingDecision?.request_id) return;
 
-    if (pendingDecision && pendingDecision.request_id) {
-      handleSSEEvent(
-        'decision_asked',
-        {
-          request_id: pendingDecision.request_id,
-          title: pendingDecision.title,
-          description: pendingDecision.description,
-          options: pendingDecision.options,
-          default_option: pendingDecision.default_option,
-          timeout_seconds: pendingDecision.timeout_seconds || 300,
-          context: pendingDecision.context || {},
-          decision_type: pendingDecision.decision_type || 'custom',
-        },
-        conversationId
-      );
-    }
+    // Map DecisionAskedEventData to unified format
+    const data: DecisionAskedEventData = pendingDecision;
+    handleSSEEvent(
+      'decision_asked',
+      {
+        request_id: data.request_id,
+        title: data.question,
+        description: data.question,
+        options: data.options as DecisionOption[],
+        default_option: data.default_option,
+        timeout_seconds: 300,
+        context: data.context,
+        decision_type: data.decision_type,
+      },
+      conversationId
+    );
   }, [conversationId, pendingDecision, handleSSEEvent]);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !pendingEnvVarRequest?.request_id) return;
 
-    if (pendingEnvVarRequest && pendingEnvVarRequest.request_id) {
-      handleSSEEvent(
-        'env_var_requested',
-        {
-          request_id: pendingEnvVarRequest.request_id,
-          tool_name: pendingEnvVarRequest.tool_name,
-          message: pendingEnvVarRequest.message,
-          fields: pendingEnvVarRequest.fields,
-          allow_save: pendingEnvVarRequest.allow_save ?? true,
-          timeout_seconds: pendingEnvVarRequest.timeout_seconds || 300,
-          context: pendingEnvVarRequest.context || {},
-        },
-        conversationId
-      );
-    }
+    // Map EnvVarRequestedEventData to unified format
+    const data: EnvVarRequestedEventData = pendingEnvVarRequest;
+    handleSSEEvent(
+      'env_var_requested',
+      {
+        request_id: data.request_id,
+        tool_name: data.tool_name,
+        message: data.message || '',
+        fields: convertEnvVarFields(data.fields),
+        allow_save: true,
+        timeout_seconds: 300,
+        context: data.context || {},
+      },
+      conversationId
+    );
   }, [conversationId, pendingEnvVarRequest, handleSSEEvent]);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !pendingPermission?.request_id) return;
 
-    if (pendingPermission && pendingPermission.request_id) {
-      // Map from PermissionAskedEventData to unified format
-      // Note: Some fields may not exist in the old format
-      handleSSEEvent(
-        'permission_asked',
-        {
-          request_id: pendingPermission.request_id,
-          tool_name: pendingPermission.tool_name,
-          // 'action' maps to 'permission_type' in old format
-          action: pendingPermission.permission_type || 'ask',
-          risk_level: pendingPermission.risk_level || 'medium',
-          description: pendingPermission.description,
-          // These may not exist in old format
-          details: pendingPermission.context || {},
-          allow_remember: true,
-          default_action: undefined,
-          timeout_seconds: 300,
-          context: pendingPermission.context || {},
-        },
-        conversationId
-      );
-    }
+    // Map PermissionAskedEventData to unified format
+    const data: PermissionAskedEventData = pendingPermission;
+    handleSSEEvent(
+      'permission_asked',
+      {
+        request_id: data.request_id,
+        tool_name: data.tool_name,
+        action: data.permission_type,
+        risk_level: data.risk_level ?? 'medium',
+        description: data.description,
+        details: data.context ?? {},
+        allow_remember: true,
+        default_action: undefined,
+        timeout_seconds: 300,
+        context: data.context ?? {},
+      },
+      conversationId
+    );
   }, [conversationId, pendingPermission, handleSSEEvent]);
 
   // Computed values
   const currentRequest = useMemo(() => {
     if (pendingRequests.length === 0) return null;
 
-    // 按 createdAt 排序（最早的在前）
+    // 按 createdAt 排序（最早的在前)
     const sorted = [...pendingRequests].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
     // 返回第一个 pending 状态的请求
     // 在多次 HITL 场景下，这确保用户按顺序处理每个请求
-    return sorted.find((r) => r.status === 'pending') || sorted[0];
+    const pending = sorted.find((r) => r.status === 'pending');
+    // If no pending request, return the first one
+    return pending ?? sorted[0] ?? null;
   }, [pendingRequests]);
 
   // 获取下一个待处理请求的函数（用于处理多个 HITL）
@@ -178,7 +204,9 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
       );
 
       const currentIndex = sorted.findIndex((r) => r.requestId === currentRequestId);
-      return sorted[currentIndex + 1] || null;
+      // If not found or last item, return null
+      if (currentIndex === -1 || currentIndex >= sorted.length - 1) return null;
+      return sorted[currentIndex + 1] ?? null;
     };
   }, [pendingRequests]);
 
@@ -188,7 +216,7 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
 
   return {
     pendingRequests,
-    currentRequest: currentRequest ?? null,
+    currentRequest,
     pendingCount: pendingRequests.length,
     hasPending: pendingRequests.length > 0,
     getByType,

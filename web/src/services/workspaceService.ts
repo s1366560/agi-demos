@@ -95,6 +95,44 @@ export const workspaceService = {
     return normalizeListResponse<WorkspaceMember>(payload, ['items', 'members']);
   },
 
+  addMember: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    data: { user_id: string; role: string }
+  ): Promise<WorkspaceMember> => {
+    const response = await apiFetch.post(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members`,
+      data
+    );
+    return response.json() as Promise<WorkspaceMember>;
+  },
+
+  removeMember: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    memberId: string
+  ): Promise<void> => {
+    await apiFetch.delete(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members/${memberId}`
+    );
+  },
+
+  updateMemberRole: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    memberId: string,
+    role: string
+  ): Promise<WorkspaceMember> => {
+    const response = await apiFetch.patch(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members/${memberId}`,
+      { role }
+    );
+    return response.json() as Promise<WorkspaceMember>;
+  },
+
   listAgents: async (
     tenantId: string,
     projectId: string,

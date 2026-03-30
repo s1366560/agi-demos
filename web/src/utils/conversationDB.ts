@@ -9,8 +9,22 @@
  * @packageDocumentation
  */
 
-import type { TimelineEvent } from '../types/agent';
-import type { ConversationState } from '../types/conversationState';
+import type {
+  TimelineEvent,
+  AgentTask,
+  ClarificationAskedEventData,
+  DecisionAskedEventData,
+  EnvVarRequestedEventData,
+  PermissionAskedEventData,
+  DoomLoopDetectedEventData,
+  MemoryRecalledEventData,
+  ExecutionPathDecidedEventData,
+  SelectionTraceEventData,
+  PolicyFilteredEventData,
+  ExecutionNarrativeEntry,
+  ToolsetChangedEventData,
+} from '../types/agent';
+import type { ConversationState, CostTrackingState, HITLSummary } from '../types/conversationState';
 
 const DB_NAME = 'memstack-agent';
 const DB_VERSION = 1;
@@ -35,18 +49,23 @@ interface SerializedConversationState {
   isThinkingStreaming: boolean;
   activeToolCalls: Array<[string, unknown]>;
   pendingToolsStack: string[];
-  pendingClarification: unknown;
-  pendingDecision: unknown;
-  pendingEnvVarRequest: unknown;
-  pendingPermission: unknown;
-  doomLoopDetected: unknown;
-  pendingHITLSummary: unknown;
-  costTracking: unknown;
-  executionPathDecision?: unknown | undefined;
-  selectionTrace?: unknown | undefined;
-  policyFiltered?: unknown | undefined;
-  executionNarrative?: unknown | undefined;
-  latestToolsetChange?: unknown | undefined;
+  isPlanMode: boolean;
+  tasks: AgentTask[];
+  pendingClarification: ClarificationAskedEventData | null;
+  pendingDecision: DecisionAskedEventData | null;
+  pendingEnvVarRequest: EnvVarRequestedEventData | null;
+  pendingPermission: PermissionAskedEventData | null;
+  doomLoopDetected: DoomLoopDetectedEventData | null;
+  pendingHITLSummary: HITLSummary | null;
+  costTracking: CostTrackingState | null;
+  suggestions: string[];
+  appModelContext: Record<string, unknown> | null;
+  recalledMemories: MemoryRecalledEventData['memories'] | null;
+  executionPathDecision: ExecutionPathDecidedEventData | null;
+  selectionTrace: SelectionTraceEventData | null;
+  policyFiltered: PolicyFilteredEventData | null;
+  executionNarrative: ExecutionNarrativeEntry[];
+  latestToolsetChange: ToolsetChangedEventData | null;
   // Metadata
   lastUpdated: number;
   conversationId: string;
@@ -65,7 +84,7 @@ async function getDB(): Promise<IDBDatabase> {
 
     request.onerror = () => {
       console.error('[ConversationDB] Failed to open database:', request.error);
-      reject(request.error);
+      reject(new Error(`Failed to open database: ${request.error?.message ?? 'Unknown error'}`));
     };
 
     request.onsuccess = () => {
@@ -108,6 +127,8 @@ function serializeState(
     isThinkingStreaming: false,
     activeToolCalls: state.activeToolCalls ? Array.from(state.activeToolCalls.entries()) : [],
     pendingToolsStack: [],
+    isPlanMode: state.isPlanMode ?? false,
+    tasks: state.tasks || [],
     pendingClarification: state.pendingClarification || null,
     pendingDecision: state.pendingDecision || null,
     pendingEnvVarRequest: state.pendingEnvVarRequest || null,
@@ -115,6 +136,9 @@ function serializeState(
     doomLoopDetected: state.doomLoopDetected || null,
     pendingHITLSummary: state.pendingHITLSummary || null,
     costTracking: state.costTracking || null,
+    suggestions: state.suggestions || [],
+    appModelContext: state.appModelContext || null,
+    recalledMemories: state.recalledMemories || null,
     executionPathDecision: state.executionPathDecision || null,
     selectionTrace: state.selectionTrace || null,
     policyFiltered: state.policyFiltered || null,
@@ -141,28 +165,25 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     currentThought: stored.currentThought,
     streamingThought: stored.streamingThought,
     isThinkingStreaming: stored.isThinkingStreaming,
-    activeToolCalls: new Map(stored.activeToolCalls || []) as ConversationState['activeToolCalls'],
+    activeToolCalls: new Map(stored.activeToolCalls) as ConversationState['activeToolCalls'],
     pendingToolsStack: stored.pendingToolsStack,
-    isPlanMode: (stored as any).isPlanMode ?? false,
-    pendingClarification: stored.pendingClarification as ConversationState['pendingClarification'],
-    pendingDecision: stored.pendingDecision as ConversationState['pendingDecision'],
-    pendingEnvVarRequest: stored.pendingEnvVarRequest as ConversationState['pendingEnvVarRequest'],
-    pendingPermission: stored.pendingPermission as ConversationState['pendingPermission'],
-    doomLoopDetected: stored.doomLoopDetected as ConversationState['doomLoopDetected'],
-    pendingHITLSummary: stored.pendingHITLSummary as ConversationState['pendingHITLSummary'],
-    costTracking: stored.costTracking as ConversationState['costTracking'],
-    executionPathDecision:
-      (stored.executionPathDecision as ConversationState['executionPathDecision']) ?? null,
-    selectionTrace: (stored.selectionTrace as ConversationState['selectionTrace']) ?? null,
-    policyFiltered: (stored.policyFiltered as ConversationState['policyFiltered']) ?? null,
-    executionNarrative:
-      (stored.executionNarrative as ConversationState['executionNarrative']) ?? [],
-    latestToolsetChange:
-      (stored.latestToolsetChange as ConversationState['latestToolsetChange']) ?? null,
-    suggestions: (stored as any).suggestions ?? [],
-    tasks: (stored as any).tasks ?? [],
-    appModelContext: (stored as any).appModelContext ?? null,
-    recalledMemories: (stored as any).recalledMemories ?? null,
+    isPlanMode: stored.isPlanMode,
+    pendingClarification: stored.pendingClarification,
+    pendingDecision: stored.pendingDecision,
+    pendingEnvVarRequest: stored.pendingEnvVarRequest,
+    pendingPermission: stored.pendingPermission,
+    doomLoopDetected: stored.doomLoopDetected,
+    pendingHITLSummary: stored.pendingHITLSummary,
+    costTracking: stored.costTracking,
+    suggestions: stored.suggestions,
+    tasks: stored.tasks,
+    executionPathDecision: stored.executionPathDecision,
+    selectionTrace: stored.selectionTrace,
+    policyFiltered: stored.policyFiltered,
+    executionNarrative: stored.executionNarrative,
+    latestToolsetChange: stored.latestToolsetChange,
+    appModelContext: stored.appModelContext,
+    recalledMemories: stored.recalledMemories,
     agentNodes: new Map(),
     subagentPreviews: new Map(),
   };
@@ -179,14 +200,14 @@ export async function saveConversationState(
     const db = await getDB();
     const serialized = serializeState(conversationId, state);
 
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.put(serialized);
 
       request.onerror = () => {
         console.error('[ConversationDB] Failed to save state:', request.error);
-        reject(request.error);
+        reject(new Error(`Failed to save state: ${request.error?.message ?? 'Unknown error'}`));
       };
 
       request.onsuccess = () => {
@@ -208,19 +229,19 @@ export async function loadConversationState(
   try {
     const db = await getDB();
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.get(conversationId);
 
       request.onerror = () => {
         console.error('[ConversationDB] Failed to load state:', request.error);
-        reject(request.error);
+        reject(new Error(`Failed to load state: ${request.error?.message ?? 'Unknown error'}`));
       };
 
       request.onsuccess = () => {
         if (request.result) {
-          resolve(deserializeState(request.result));
+          resolve(deserializeState(request.result as SerializedConversationState));
         } else {
           resolve(null);
         }
@@ -239,14 +260,14 @@ export async function deleteConversationState(conversationId: string): Promise<v
   try {
     const db = await getDB();
 
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.delete(conversationId);
 
       request.onerror = () => {
         console.error('[ConversationDB] Failed to delete state:', request.error);
-        reject(request.error);
+        reject(new Error(`Failed to delete state: ${request.error?.message ?? 'Unknown error'}`));
       };
 
       request.onsuccess = () => {
@@ -265,14 +286,14 @@ export async function clearAllConversationStates(): Promise<void> {
   try {
     const db = await getDB();
 
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.clear();
 
       request.onerror = () => {
         console.error('[ConversationDB] Failed to clear states:', request.error);
-        reject(request.error);
+        reject(new Error(`Failed to clear states: ${request.error?.message ?? 'Unknown error'}`));
       };
 
       request.onsuccess = () => {
@@ -292,13 +313,15 @@ export async function getConversationsWithPendingHITL(): Promise<string[]> {
   try {
     const db = await getDB();
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.getAll();
 
       request.onerror = () => {
-        reject(request.error);
+        reject(
+          new Error(`Failed to get conversations: ${request.error?.message ?? 'Unknown error'}`)
+        );
       };
 
       request.onsuccess = () => {
@@ -324,7 +347,7 @@ export async function cleanupOldStates(daysOld: number = 30): Promise<number> {
     const cutoffTime = Date.now() - daysOld * 24 * 60 * 60 * 1000;
     let deletedCount = 0;
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const index = store.index('lastUpdated');
@@ -332,11 +355,11 @@ export async function cleanupOldStates(daysOld: number = 30): Promise<number> {
       const request = index.openCursor(range);
 
       request.onerror = () => {
-        reject(request.error);
+        reject(new Error(`Failed to cleanup states: ${request.error?.message ?? 'Unknown error'}`));
       };
 
       request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result;
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
         if (cursor) {
           cursor.delete();
           deletedCount++;

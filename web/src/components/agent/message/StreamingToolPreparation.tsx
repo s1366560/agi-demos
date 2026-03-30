@@ -57,15 +57,15 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">
                 {toolName}
               </span>
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-                Preparing
-              </div>
+               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
+                 Preparing
+               </div>
             </div>
             {partialArguments && (
               <div
                 ref={argsRef}
-                className="mt-1.5 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-200/50 dark:border-blue-500/20 rounded text-[11px] font-mono text-slate-600 dark:text-slate-400 overflow-x-auto max-h-24 overflow-y-auto"
+                className="mt-1.5 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-200/50 dark:border-blue-500/20 rounded text-xs-plus font-mono text-slate-600 dark:text-slate-400 overflow-x-auto max-h-24 overflow-y-auto"
               >
                 <pre className="whitespace-pre-wrap break-words">
                   {partialArguments}

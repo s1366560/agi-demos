@@ -73,13 +73,13 @@ const SkillCard: FC<SkillCardProps> = memo(({ skill }) => {
           {skill.trigger_patterns.slice(0, 3).map((pattern, idx) => (
             <span
               key={idx}
-              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] rounded"
+              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-2xs rounded"
             >
               {pattern.pattern}
             </span>
           ))}
           {skill.trigger_patterns.length > 3 && (
-            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-400 text-[10px] rounded">
+            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-400 text-2xs rounded">
               +{skill.trigger_patterns.length - 3} more
             </span>
           )}
@@ -93,13 +93,13 @@ const SkillCard: FC<SkillCardProps> = memo(({ skill }) => {
           {skill.tools.slice(0, 4).map((tool, idx) => (
             <span
               key={idx}
-              className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[10px] rounded"
+              className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-2xs rounded"
             >
               {tool}
             </span>
           ))}
           {skill.tools.length > 4 && (
-            <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-400 text-[10px] rounded">
+            <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-400 text-2xs rounded">
               +{skill.tools.length - 4}
             </span>
           )}

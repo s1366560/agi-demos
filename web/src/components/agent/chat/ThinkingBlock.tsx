@@ -112,7 +112,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
               aria-expanded={expanded}
               aria-controls="thinking-content"
               aria-label={expanded ? 'Collapse thinking' : 'Expand thinking'}
-              className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors text-left focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-inset"
+              className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             >
               {expanded ? (
                 <ChevronDown size={14} className="text-slate-400 flex-shrink-0" />
@@ -120,7 +120,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                 <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
               )}
 
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0">
+              <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-shrink-0">
                 {t('agent.thinking.title', 'Thinking')}
               </span>
 
@@ -198,7 +198,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                         }`}
                       >
                         <span
-                          className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
+                          className={`w-4 h-4 rounded-full flex items-center justify-center text-2xs ${
                             idx === currentStep
                               ? 'bg-primary/20 text-primary'
                               : idx < currentStep

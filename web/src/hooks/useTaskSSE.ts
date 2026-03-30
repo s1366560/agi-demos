@@ -7,8 +7,8 @@ export interface TaskStatus {
   status: 'pending' | 'running' | 'completed' | 'failed';
   progress: number;
   message: string;
-  result?: unknown | undefined;
-  error?: string | undefined;
+  result?: unknown;
+  error?: string;
 }
 
 interface UseTaskSSEOptions {
@@ -16,6 +16,49 @@ interface UseTaskSSEOptions {
   onCompleted?: ((task: TaskStatus) => void) | undefined;
   onFailed?: ((task: TaskStatus) => void) | undefined;
   onError?: ((error: Error) => void) | undefined;
+}
+
+/**
+ * Type guard to check if a value is a string primitive (not an object)
+ */
+function isStringPrimitive(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+/**
+ * Safely convert unknown value to string, handling objects safely.
+ * Returns empty string for objects to avoid '[object Object]' issues.
+ */
+function safeStringify(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (isStringPrimitive(value)) {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  // For objects, try JSON.stringify, otherwise return empty string
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Safely extract number from unknown value
+ */
+function safeNumber(value: unknown): number {
+  if (typeof value === 'number' && !isNaN(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
 }
 
 /**
@@ -29,16 +72,24 @@ function normalizeStatus(status: string): TaskStatus['status'] {
     completed: 'completed',
     failed: 'failed',
   };
-  return statusMap[status?.toLowerCase()] || 'pending';
+  const lowerStatus = status.toLowerCase();
+  return statusMap[lowerStatus] ?? 'pending';
 }
 
 /**
  * Safely parse JSON data from SSE events.
  * Returns null if parsing fails.
  */
-function safeParseJSON(data: string): Record<string, unknown> | null {
+function safeParseJSON(data: unknown): Record<string, unknown> | null {
+  if (typeof data !== 'string') {
+    return null;
+  }
   try {
-    return JSON.parse(data);
+    const parsed: unknown = JSON.parse(data);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
   } catch (error) {
     console.error('Failed to parse SSE event data:', error, 'Raw data:', data);
     return null;
@@ -102,10 +153,10 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
         if (!data) return;
 
         const task: TaskStatus = {
-          task_id: String(data.id || ''),
-          status: normalizeStatus(String(data.status || '')),
-          progress: Number(data.progress) || 0,
-          message: String(data.message || 'Processing...'),
+          task_id: safeStringify(data.id),
+          status: normalizeStatus(safeStringify(data.status)),
+          progress: safeNumber(data.progress),
+          message: safeStringify(data.message) || 'Processing...',
         };
 
         optionsRef.current.onProgress?.(task);
@@ -117,10 +168,10 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
         if (!data) return;
 
         const task: TaskStatus = {
-          task_id: String(data.id || ''),
+          task_id: safeStringify(data.id),
           status: 'completed',
           progress: 100,
-          message: String(data.message || 'Completed'),
+          message: safeStringify(data.message) || 'Completed',
           result: data.result,
         };
 
@@ -140,11 +191,11 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
         console.error('❌ Failed event:', data);
 
         const task: TaskStatus = {
-          task_id: String(data.id || ''),
+          task_id: safeStringify(data.id),
           status: 'failed',
-          progress: Number(data.progress) || 0,
-          message: String(data.message || 'Failed'),
-          error: String(data.error || data.message || 'Unknown error'),
+          progress: safeNumber(data.progress),
+          message: safeStringify(data.message) || 'Failed',
+          error: safeStringify(data.error || data.message) || 'Unknown error',
         };
 
         optionsRef.current.onFailed?.(task);
@@ -199,10 +250,10 @@ export function subscribeToTask(taskId: string, callbacks: UseTaskSSEOptions): (
     if (!data) return;
 
     callbacks.onProgress?.({
-      task_id: String(data.id || ''),
-      status: normalizeStatus(String(data.status || '')),
-      progress: Number(data.progress) || 0,
-      message: String(data.message || 'Processing...'),
+      task_id: safeStringify(data.id),
+      status: normalizeStatus(safeStringify(data.status)),
+      progress: safeNumber(data.progress),
+      message: safeStringify(data.message) || 'Processing...',
     });
   });
 
@@ -211,10 +262,10 @@ export function subscribeToTask(taskId: string, callbacks: UseTaskSSEOptions): (
     if (!data) return;
 
     callbacks.onCompleted?.({
-      task_id: String(data.id || ''),
+      task_id: safeStringify(data.id),
       status: 'completed',
       progress: 100,
-      message: String(data.message || 'Completed'),
+      message: safeStringify(data.message) || 'Completed',
       result: data.result,
     });
     eventSource.close();
@@ -225,11 +276,11 @@ export function subscribeToTask(taskId: string, callbacks: UseTaskSSEOptions): (
     if (!data) return;
 
     callbacks.onFailed?.({
-      task_id: String(data.id || ''),
+      task_id: safeStringify(data.id),
       status: 'failed',
-      progress: Number(data.progress) || 0,
-      message: String(data.message || 'Failed'),
-      error: String(data.error || data.message || 'Unknown error'),
+      progress: safeNumber(data.progress),
+      message: safeStringify(data.message) || 'Failed',
+      error: safeStringify(data.error || data.message) || 'Unknown error',
     });
     eventSource.close();
   });

@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 
+import { AlertCircle, ArrowRight, Brain, Building2, Loader2 } from 'lucide-react';
+
 import { useTenantStore } from '../../stores/tenant';
 
 export const NewTenant: React.FC = () => {
@@ -37,7 +39,7 @@ export const NewTenant: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
           <Link to="/tenant" className="flex items-center gap-3">
             <div className="size-8 text-primary flex items-center justify-center bg-primary/10 rounded-lg">
-              <span className="material-symbols-outlined text-2xl">memory</span>
+              <Brain size={24} />
             </div>
             <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
               MemStack<span className="text-primary">.ai</span>
@@ -75,7 +77,7 @@ export const NewTenant: React.FC = () => {
 
             {error && (
               <div className="mx-8 mb-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm border border-red-200 dark:border-red-800 flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg">error</span>
+                <AlertCircle size={16} />
                 {error}
               </div>
             )}
@@ -92,7 +94,7 @@ export const NewTenant: React.FC = () => {
                   </span>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <span className="material-symbols-outlined text-[20px]">domain</span>
+                      <Building2 size={20} />
                     </div>
                     <input
                       required
@@ -148,13 +150,11 @@ export const NewTenant: React.FC = () => {
                   className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-[color,background-color,border-color,box-shadow,opacity,transform] transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
-                    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none">
-                      progress_activity
-                    </span>
+                    <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
                   ) : (
                     <>
                       {t('tenant.create_page.submit')}
-                      <span className="material-symbols-outlined ml-2 text-lg">arrow_forward</span>
+                      <ArrowRight size={16} className="ml-2" />
                     </>
                   )}
                 </button>

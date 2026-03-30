@@ -559,7 +559,7 @@ interface SourceBadgeProps {
 
 const SourceBadgeInternal: React.FC<SourceBadgeProps> = React.memo(({ source }) => (
   <span
-    className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold ${
+    className={`px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold ${
       source === 'generated'
         ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20'
         : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
@@ -609,7 +609,7 @@ const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(
                 {edge.source === 'generated' && <EdgeTypeList.SourceBadge source={edge.source} />}
               </div>
               {selectedEdgeId === edge.id && (
-                <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-primary font-bold bg-blue-100 dark:bg-primary/20 px-1.5 py-0.5 rounded">
+                <span className="text-2xs uppercase tracking-wider text-blue-600 dark:text-primary font-bold bg-blue-100 dark:bg-primary/20 px-1.5 py-0.5 rounded">
                   {TEXTS.master.active}
                 </span>
               )}
@@ -927,7 +927,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 </h4>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                    <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                       {TEXTS.modal.nameLabel}
                     </label>
                     <input
@@ -942,7 +942,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                    <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                       {TEXTS.modal.descLabel}
                     </label>
                     <input
@@ -996,7 +996,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       <div className="p-5 flex flex-col gap-6">
                         <div className="grid grid-cols-12 gap-4">
                           <div className="col-span-5">
-                            <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                            <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                               {TEXTS.modal.attrNameLabel}
                             </label>
                             <input
@@ -1010,7 +1010,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                             />
                           </div>
                           <div className="col-span-4">
-                            <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                            <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                               {TEXTS.modal.dataTypeLabel}
                             </label>
                             <div className="relative">
@@ -1034,7 +1034,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                           </div>
                         </div>
                         <div>
-                          <label className="text-[10px] uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
+                          <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
                             {TEXTS.modal.docstringLabel}
                           </label>
                           <input

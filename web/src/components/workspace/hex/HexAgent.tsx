@@ -58,7 +58,7 @@ export const HexAgent: FC<HexAgentProps> = ({ agent, cx, cy, size }) => {
         y={cy + size * 0.65}
         textAnchor="middle"
         fontSize={size * 0.25}
-        fill="#334155"
+        className="fill-slate-700"
         pointerEvents="none"
       >
         {displayName.length > 10 ? `${displayName.substring(0, 8)}...` : displayName}

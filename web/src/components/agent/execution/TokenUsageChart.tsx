@@ -8,10 +8,11 @@
  * - Dark mode support
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import type React from 'react';
 
-import { InfoCircleOutlined, DownOutlined, RightOutlined, DollarOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
+import { Info, ChevronDown, ChevronRight, DollarSign } from 'lucide-react';
 
 import { resolveThemeColor } from '@/hooks/useThemeColor';
 
@@ -157,7 +158,7 @@ const StackedBar: React.FC<StackedBarProps> = ({
 
       {/* Labels */}
       {showLabels && (
-        <div className="flex justify-between mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+        <div className="flex justify-between mt-1 text-2xs text-slate-500 dark:text-slate-400">
           <span>0</span>
           {maxTokens && <span className="font-medium">{Math.round(totalPercent)}% used</span>}
           <span>{formatNumber(effectiveMax)}</span>
@@ -185,7 +186,7 @@ const LegendItem: React.FC<LegendItemProps> = ({ color, label, value, percentage
       <span className="text-xs font-mono text-slate-700 dark:text-slate-200 ml-auto">
         {formatNumber(value)}
       </span>
-      <span className="text-[10px] text-slate-400 dark:text-slate-500 w-10 text-right">
+      <span className="text-2xs text-slate-400 dark:text-slate-500 w-10 text-right">
         ({percentage.toFixed(0)}%)
       </span>
     </div>
@@ -228,15 +229,16 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
     return (
       <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
         <button
+          type="button"
           onClick={() => {
             setIsExpanded(!isExpanded);
           }}
           className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         >
           {isExpanded ? (
-            <DownOutlined className="text-[10px]" />
+            <ChevronDown size={14} className="text-2xs" />
           ) : (
-            <RightOutlined className="text-[10px]" />
+            <ChevronRight size={14} className="text-2xs" />
           )}
           <span className={isOverThreshold ? 'text-amber-600 dark:text-amber-400' : ''}>
             {formatNumber(tokenData.total)} tokens
@@ -250,7 +252,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
         </button>
 
         {isExpanded && (
-          <div className="flex-1 max-w-[200px]">
+          <div className="flex-1 max-w-50">
             <StackedBar {...tokenData} maxTokens={maxTokens} />
           </div>
         )}
@@ -265,13 +267,13 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-            <InfoCircleOutlined className="text-blue-500" />
+            <Info size={16} className="text-blue-500" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Token Usage</h3>
             {costData && (
               <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <DollarOutlined />
+                <DollarSign size={14} />
                 {formatCost(costData.total)}
               </p>
             )}

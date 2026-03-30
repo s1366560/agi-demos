@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 
 import { useTranslation } from 'react-i18next';
 
-import { Bot, ChevronDown, Check } from 'lucide-react';
+import { Bot, ChevronDown, Check, Loader2 } from 'lucide-react';
 
 import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
 
@@ -22,6 +22,8 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoadingDefinitions, setIsLoadingDefinitions] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -30,9 +32,17 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
 
   useEffect(() => {
     if (definitions.length === 0) {
-      listDefinitions().catch((err: unknown) => {
-        console.error('Failed to load agent definitions', err);
-      });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsLoadingDefinitions(true);
+      listDefinitions()
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : 'Failed to load agent definitions';
+          setLoadError(msg);
+          console.error('AgentSwitcher: load failed', err);
+        })
+        .finally(() => {
+          setIsLoadingDefinitions(false);
+        });
     }
   }, [definitions.length, listDefinitions]);
 
@@ -175,7 +185,11 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
           >
             {enabledDefinitions.length === 0 ? (
               <div className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 italic text-center">
-                {t('agent.noAgentsAvailable', 'No agents available')}
+                {isLoadingDefinitions ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-400 mx-auto my-2" />
+                ) : (
+                  loadError || t('agent.noAgentsAvailable', 'No agents available')
+                )}
               </div>
             ) : (
               enabledDefinitions.map((agent, index) => {
@@ -193,7 +207,7 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
                     onMouseEnter={() => {
                       setSelectedIndex(index);
                     }}
-                    className={`w-full text-left px-3 py-2 flex items-center justify-between rounded-md text-sm transition-colors cursor-pointer ${
+                    className={`w-full text-left px-3 py-2 flex items-center justify-between rounded-md text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 cursor-pointer ${
                       isFocused || isSelected
                         ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                         : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -203,21 +217,21 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
                       <span className="font-medium truncate max-w-full">
                         {agent.display_name || agent.name}
                       </span>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span
-                          className={`text-[10px] leading-none px-1.5 py-0.5 rounded-sm border ${
-                            agent.source === 'database'
-                              ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/50'
-                              : 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50'
-                          }`}
-                        >
-                          {agent.source === 'database' ? 'DB' : 'System'}
-                        </span>
-                        <span className="text-[10px] leading-none text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {t('agent.enabled', 'Enabled')}
-                        </span>
-                      </div>
+                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                         <span
+                           className={`text-2xs leading-none px-1.5 py-0.5 rounded-sm border ${
+                             agent.source === 'database'
+                               ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/50'
+                               : 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50'
+                           }`}
+                         >
+                           {agent.source === 'database' ? 'DB' : 'System'}
+                         </span>
+                         <span className="text-2xs leading-none text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                           {t('agent.enabled', 'Enabled')}
+                         </span>
+                       </div>
                     </div>
                     {isSelected && (
                       <Check size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />

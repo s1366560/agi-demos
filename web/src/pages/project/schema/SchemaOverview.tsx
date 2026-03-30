@@ -38,7 +38,7 @@ const EntityCard = memo(({ entity, t }: EntityCardProps) => (
               {entity.name}
             </h4>
             {entity.source === 'generated' && (
-              <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
+              <span className="text-2xs uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
                 {String(t('project.schema.overview.auto'))}
               </span>
             )}
@@ -106,7 +106,7 @@ const EdgeCard = memo(({ edge, mappings, t }: EdgeCardProps) => (
               {edge.name}
             </h4>
             {edge.source === 'generated' && (
-              <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
+              <span className="text-2xs uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
                 {String(t('project.schema.overview.auto'))}
               </span>
             )}

@@ -6,6 +6,7 @@
 import React from 'react';
 
 import { Drawer, Empty } from 'antd';
+import { Wrench } from 'lucide-react';
 
 import type { MCPServerResponse, MCPToolInfo } from '@/types/agent';
 
@@ -36,7 +37,7 @@ export const McpToolsDrawer: React.FC<McpToolsDrawerProps> = ({ open, server, on
               className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-base text-primary-500">build</span>
+                <Wrench size={16} className="text-primary-500" />
                 <span className="font-medium text-slate-900 dark:text-white">{tool.name}</span>
               </div>
               {tool.description && (

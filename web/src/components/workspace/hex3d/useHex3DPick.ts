@@ -31,11 +31,15 @@ export function pickBestHexId(
       .map((a) => String(a.hex_q) + ',' + String(a.hex_r))
   );
 
-  let bestCandidate = candidates[0];
+  const first = candidates[0];
+  if (!first) return null;
+
+  let bestCandidate = first;
   let bestHasAgent = agentHexes.has(String(bestCandidate.q) + ',' + String(bestCandidate.r));
 
   for (let i = 1; i < candidates.length; i++) {
     const candidate = candidates[i];
+    if (!candidate) continue;
     const hasAgent = agentHexes.has(String(candidate.q) + ',' + String(candidate.r));
 
     if (hasAgent && !bestHasAgent) {

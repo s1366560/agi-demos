@@ -18,19 +18,34 @@ interface RecentSkillsProps {
 export const RecentSkills = memo<RecentSkillsProps>(({ projectId, onSkillClick }) => {
   const { t } = useTranslation();
   const [skills, setSkills] = useState<RecentSkill[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setError(null);
     projectStatsService
       .getRecentSkills(projectId)
       .then((data) => {
         if (!cancelled) setSkills(data);
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Failed to load recent skills';
+          setError(msg);
+          console.error('RecentSkills: fetch failed', err);
+        }
+      });
     return () => {
       cancelled = true;
     };
   }, [projectId]);
+
+  if (error) {
+    return (
+      <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{error}</div>
+    );
+  }
 
   if (skills.length === 0) return null;
 

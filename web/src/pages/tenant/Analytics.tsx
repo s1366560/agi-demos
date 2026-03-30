@@ -2,6 +2,8 @@ import { useEffect, useState, lazy, Suspense, memo, useCallback, useMemo, type F
 
 import { useTranslation } from 'react-i18next';
 
+import { Database, Loader2, TrendingUp } from 'lucide-react';
+
 import { analyticsService } from '../../services/analyticsService';
 import { projectAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
@@ -17,7 +19,7 @@ interface KPICardProps {
   label: string;
   value: string | number;
   subtext?: string | undefined;
-  subtextIcon?: string | undefined;
+  subtextIcon?: React.ComponentType<{ size?: number }> | undefined;
   subtextColorClass?: string | undefined;
 }
 
@@ -31,7 +33,7 @@ const KPICard = memo<KPICardProps>(({ label, value, subtext, subtextIcon, subtex
           className={`flex items-center gap-1 mt-2 text-sm font-medium ${subtextColorClass || 'text-slate-500'}`}
         >
           {subtextIcon && (
-            <span className="material-symbols-outlined text-[16px]">{subtextIcon}</span>
+            (() => { const SubtextIcon = subtextIcon; return <SubtextIcon size={16} />; })()
           )}
           <span>{subtext}</span>
         </div>
@@ -44,9 +46,7 @@ KPICard.displayName = 'KPICard';
 // Loading state component
 const LoadingState = memo<{ message: string }>(({ message }) => (
   <div className="p-8 text-center text-slate-500">
-    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none mr-2">
-      progress_activity
-    </span>
+    <Loader2 size={16} className="animate-spin motion-reduce:animate-none mr-2" />
     {message}
   </div>
 ));
@@ -75,7 +75,7 @@ const AnalyticsHeader = memo<AnalyticsHeaderProps>(
           <span className="text-sm font-bold text-slate-900 dark:text-white">{storageValue}</span>
         </div>
         <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
-          <span className="material-symbols-outlined text-[20px]">database</span>
+          <Database size={20} />
         </div>
       </div>
     </div>
@@ -233,7 +233,7 @@ export const Analytics: FC = memo(() => {
           label={t('tenant.analytics.total_memories')}
           value={totalMemoriesDisplay}
           subtext={t('tenant.analytics.growing')}
-          subtextIcon="trending_up"
+          subtextIcon={TrendingUp}
           subtextColorClass="text-green-600"
         />
         <KPICard

@@ -8,6 +8,8 @@ import { memo, useState, useId } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { CircleHelp, ListChecks, Key } from 'lucide-react';
+
 import { useAgentV3Store } from '../../../stores/agentV3';
 
 import { OptionButton, TimeBadge } from './shared';
@@ -62,9 +64,7 @@ export const ClarificationAskedItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3">
           <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
-              help_outline
-            </span>
+            <CircleHelp size={18} className="text-slate-500 dark:text-slate-400" />
           </div>
           <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -224,9 +224,7 @@ export const DecisionAskedItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3">
           <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-lg">
-              rule
-            </span>
+            <ListChecks size={18} className="text-blue-600 dark:text-blue-400" />
           </div>
           <div className="flex-1 min-w-0 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -394,9 +392,7 @@ export const EnvVarRequestedItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-3 my-3">
           <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
-              key
-            </span>
+            <Key size={18} className="text-slate-500 dark:text-slate-400" />
           </div>
           <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">

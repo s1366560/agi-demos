@@ -19,6 +19,7 @@ import {
   useUpdateDefinition,
   useDefinitionSubmitting,
 } from '../../stores/agentDefinitions';
+import { StateDisplay } from '../shared/ui/StateDisplay';
 
 import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
 import type {
@@ -670,7 +671,11 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
       destroyOnHidden
     >
       <Form form={form} layout="vertical" className="mt-4">
-        <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+        {loadingResources ? (
+          <StateDisplay.Loading message="Loading resources..." card={false} />
+        ) : (
+          <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+        )}
       </Form>
     </Modal>
   );

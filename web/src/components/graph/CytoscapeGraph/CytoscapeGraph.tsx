@@ -9,7 +9,11 @@
 
 import React, { useState, createContext, useContext, useCallback } from 'react';
 
+import { Share2 } from 'lucide-react';
+
 import { useThemeStore } from '@/stores/theme';
+
+import { StateDisplay } from '@/components/shared/ui/StateDisplay';
 
 import { createGraphConfig, legacyPropsToConfig, THEME_COLORS } from './Config';
 import { CytoscapeGraphControls as ControlsComponent } from './Controls';
@@ -277,6 +281,16 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
               setCyInstance={setCyInstance}
             />
           )}
+          {!loading && nodeCount === 0 && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
+              <StateDisplay.Empty
+                icon={Share2}
+                title="No nodes to display"
+                description="The knowledge graph is empty"
+                card={false}
+              />
+            </div>
+          )}
           {nodeInfoPanelChild && (
             <NodeInfoPanelComponent
               node={nodeInfoPanelProps.node ?? selectedNode}
@@ -302,7 +316,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   // Default render - all sub-components included
   return (
     <GraphContext.Provider value={contextValue}>
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full relative">
         {config.features?.showToolbar !== false && (
           <ControlsComponent setCyInstance={setCyInstance} />
         )}
@@ -317,6 +331,16 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
           }}
           setCyInstance={setCyInstance}
         />
+        {!loading && nodeCount === 0 && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
+            <StateDisplay.Empty
+              icon={Share2}
+              title="No nodes to display"
+              description="The knowledge graph is empty"
+              card={false}
+            />
+          </div>
+        )}
         {config.features?.showLegend !== false && (
           <GraphLegend includeCommunities={config.data.includeCommunities} />
         )}

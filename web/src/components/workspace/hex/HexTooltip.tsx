@@ -29,6 +29,8 @@ export const HexTooltip: FC<HexTooltipProps> = ({ x, y, visible, title, details 
 
   return (
     <div
+      role="tooltip"
+      id="hex-tooltip"
       style={{
         position: 'absolute',
         left: x,

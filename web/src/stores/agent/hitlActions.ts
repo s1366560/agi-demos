@@ -14,11 +14,13 @@ import {
   flushTimelineBufferSync as flushTimelineBufferSyncRaw,
   bindTimelineBufferDeps,
 } from './deltaBuffers';
-import { createStreamEventHandlers } from './streamEventHandlers';
+import { createStreamEventHandlers, type StreamHandlerDeps } from './streamEventHandlers';
 
 import type { DeltaBufferState } from './deltaBuffers';
-import type { AgentStreamHandler, TimelineEvent } from '../../types/agent';
+import type { AgentV3State } from './types';
+import type { AgentStreamHandler, TimelineEvent, Message } from '../../types/agent';
 import type { ConversationState } from '../../types/conversationState';
+import type { StoreApi } from 'zustand';
 
 /**
  * Store setter/getter interface needed by HITL actions
@@ -29,8 +31,8 @@ export interface HITLActionDeps {
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
   };
-  set: (updater: any) => void;
-  timelineToMessages: (timeline: TimelineEvent[]) => any[];
+  set: StoreApi<AgentV3State>['setState'];
+  timelineToMessages: (timeline: TimelineEvent[]) => Message[];
   clearAllDeltaBuffers: () => void;
   getDeltaBuffer: (conversationId: string) => DeltaBufferState;
   clearDeltaBuffers: (conversationId: string) => void;
@@ -70,8 +72,8 @@ async function ensureConnectedAndSubscribe(
   });
 
   const handler: AgentStreamHandler = createStreamEventHandlers(conversationId, undefined, {
-    get: deps.get as any,
-    set: deps.set as any,
+    get: deps.get,
+    set: deps.set as StreamHandlerDeps['set'],
     getDeltaBuffer: deps.getDeltaBuffer,
     clearDeltaBuffers: deps.clearDeltaBuffers,
     clearAllDeltaBuffers: deps.clearAllDeltaBuffers,
@@ -94,7 +96,6 @@ async function ensureConnectedAndSubscribe(
  */
 export function createHITLActions(deps: HITLActionDeps) {
   const { get, set, clearAllDeltaBuffers, updateHITLEventInTimeline } = deps;
-  const setState = set as any;
 
   return {
     respondToClarification: async (requestId: string, answer: string): Promise<void> => {
@@ -106,7 +107,7 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToClarification(requestId, answer);
         clearAllDeltaBuffers();
-        setState((state: any) => ({
+        set((state) => ({
           timeline: updateHITLEventInTimeline(state.timeline, requestId, 'clarification_asked', {
             answered: true,
             answer,
@@ -123,7 +124,7 @@ export function createHITLActions(deps: HITLActionDeps) {
         }
       } catch (error) {
         console.error('Failed to respond to clarification:', error);
-        setState({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
       }
     },
 
@@ -136,7 +137,7 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToDecision(requestId, decision);
         clearAllDeltaBuffers();
-        setState((state: any) => ({
+        set((state) => ({
           timeline: updateHITLEventInTimeline(state.timeline, requestId, 'decision_asked', {
             answered: true,
             decision: Array.isArray(decision) ? decision.join(', ') : decision,
@@ -153,7 +154,7 @@ export function createHITLActions(deps: HITLActionDeps) {
         }
       } catch (error) {
         console.error('Failed to respond to decision:', error);
-        setState({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
       }
     },
 
@@ -166,7 +167,7 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToEnvVar(requestId, values);
         clearAllDeltaBuffers();
-        setState((state: any) => ({
+        set((state) => ({
           timeline: updateHITLEventInTimeline(state.timeline, requestId, 'env_var_requested', {
             answered: true,
             values,
@@ -183,7 +184,7 @@ export function createHITLActions(deps: HITLActionDeps) {
         }
       } catch (error) {
         console.error('Failed to respond to env var request:', error);
-        setState({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
       }
     },
 
@@ -196,7 +197,7 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToPermission(requestId, granted);
         clearAllDeltaBuffers();
-        setState((state: any) => ({
+        set((state) => ({
           timeline: updateHITLEventInTimeline(state.timeline, requestId, 'permission_asked', {
             answered: true,
             granted,
@@ -213,7 +214,7 @@ export function createHITLActions(deps: HITLActionDeps) {
         }
       } catch (error) {
         console.error('Failed to respond to permission request:', error);
-        setState({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
       }
     },
   };

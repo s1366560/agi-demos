@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
-import { Network, MousePointer2, Move, Focus, Plus, Minus, X } from 'lucide-react';
+import { Network, MousePointer2, Move, Focus, Plus, Minus, X, Share2 } from 'lucide-react';
+
+import { StateDisplay } from '@/components/shared/ui/StateDisplay';
 
 import { resolveThemeColor } from '../../hooks/useThemeColor';
 import { useMemoryStore } from '../../stores/memory';
@@ -78,6 +80,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
   const [filterTypes, setFilterTypes] = useState<string[]>([]);
   const [showLabels, _setShowLabels] = useState(true);
   const [interactionMode, setInteractionMode] = useState<'select' | 'pan'>('select');
+  const [graphError, setGraphError] = useState<string | null>(null);
 
   // Auto-resize support
   const [dimensions, setDimensions] = useState({ width, height });
@@ -121,16 +124,19 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
   const loadGraphData = useCallback(async () => {
     if (!currentProject) return;
-
+    setGraphError(null);
     try {
       await getGraphData(currentProject.id, { limit: 100 });
     } catch (error) {
-      console.error('Failed to load graph data:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to load graph data';
+      setGraphError(msg);
+      console.error('GraphVisualization: load failed', error);
     }
   }, [currentProject, getGraphData]);
 
   useEffect(() => {
     if (currentProject) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadGraphData();
     }
   }, [currentProject, loadGraphData]);
@@ -319,6 +325,31 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
     );
   }
 
+  if (graphError) {
+    return (
+      <div className="bg-background-dark rounded-lg shadow-sm border border-slate-800 h-full flex items-center justify-center">
+        <StateDisplay.Error
+          error={graphError}
+          title="Graph load failed"
+          onRetry={() => { void loadGraphData(); }}
+        />
+      </div>
+    );
+  }
+
+  if (!_isLoading && nodes.length === 0) {
+    return (
+      <div className="bg-background-dark rounded-lg shadow-sm border border-slate-800 h-full flex items-center justify-center">
+        <StateDisplay.Empty
+          icon={Share2}
+          title="No graph data"
+          description="Add memories or entities to see the knowledge graph"
+          card={false}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="bg-background-dark rounded-lg shadow-sm border border-slate-800 relative h-full flex flex-col overflow-hidden"
@@ -340,7 +371,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             onClick={() => {
               setInteractionMode('select');
             }}
-            className={`p-2.5 hover:bg-slate-700 border-b border-slate-700 transition-colors ${interactionMode === 'select' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
+            className={`p-2.5 hover:bg-slate-700 border-b border-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${interactionMode === 'select' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
             title="Select Tool"
           >
             <MousePointer2 className="w-5 h-5" />
@@ -349,7 +380,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             onClick={() => {
               setInteractionMode('pan');
             }}
-            className={`p-2.5 hover:bg-slate-700 transition-colors ${interactionMode === 'pan' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
+            className={`p-2.5 hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${interactionMode === 'pan' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
             title="Pan Tool"
           >
             <Move className="w-5 h-5" />
@@ -358,20 +389,20 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         <div className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col mt-2">
           <button
             onClick={handleZoomIn}
-            className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 transition-colors"
+            className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <Plus className="w-5 h-5" />
           </button>
           <button
             onClick={handleZoomOut}
-            className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+            className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
           >
             <Minus className="w-5 h-5" />
           </button>
         </div>
         <button
           onClick={handleResetView}
-          className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 mt-2 transition-colors"
+          className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 mt-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           <Focus className="w-5 h-5" />
         </button>
@@ -429,14 +460,14 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         <div className="absolute top-6 right-6 bottom-6 w-80 bg-surface-dark border border-slate-700 shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
           <div className="p-5 border-b border-slate-700 bg-gradient-to-r from-blue-900/20 to-transparent">
             <div className="flex justify-between items-start mb-2">
-              <div className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-blue-500/30">
+              <div className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border border-blue-500/30">
                 {selectedNode.type}
               </div>
               <button
                 onClick={() => {
                   setSelectedNode(null);
                 }}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -490,10 +521,10 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             </div>
           </div>
           <div className="p-4 border-t border-slate-700 bg-background-dark flex gap-2">
-            <button className="flex-1 py-2 rounded-lg border border-slate-600 bg-surface-dark text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors">
+            <button className="flex-1 py-2 rounded-lg border border-slate-600 bg-surface-dark text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1">
               Expand
             </button>
-            <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-colors">
+            <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1">
               Edit Node
             </button>
           </div>

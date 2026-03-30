@@ -65,7 +65,7 @@ export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
           </div>
         }
       >
-        <div className="flex items-center gap-1 opacity-70 cursor-help text-xs max-w-[200px] truncate">
+        <div className="flex items-center gap-1 opacity-70 cursor-help text-xs max-w-50 truncate">
           <Bot size={12} />
           <span className="truncate">{messagePreview}</span>
         </div>

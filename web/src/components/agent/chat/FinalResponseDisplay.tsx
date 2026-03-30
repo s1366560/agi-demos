@@ -137,11 +137,11 @@ export function FinalResponseDisplay({
         {/* Header */}
         <div className="flex items-center justify-between mb-8 border-b border-slate-100 dark:border-border-dark pb-4 -mt-4">
           <h2 className="m-0 text-2xl">Final Synthesis Report</h2>
-          {version && (
-            <span className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded font-bold uppercase">
-              {version}
-            </span>
-          )}
+           {version && (
+             <span className="text-2xs px-2 py-1 bg-primary/10 text-primary rounded font-bold uppercase">
+               {version}
+             </span>
+           )}
         </div>
 
         {/* Content with ReactMarkdown */}
@@ -157,7 +157,7 @@ export function FinalResponseDisplay({
       {/* Action Sidebar */}
       <div className="w-72 shrink-0 space-y-4 data-[html2canvas-ignore]:hidden">
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 shadow-sm sticky top-6">
-          <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-4">
+          <h4 className="text-2xs font-bold text-text-muted uppercase tracking-wider mb-4">
             Actions
           </h4>
           <div className="space-y-2">
@@ -194,12 +194,12 @@ export function FinalResponseDisplay({
           </div>
 
           {generatedAt && (
-            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-border-dark">
-              <div className="flex items-center gap-2 text-text-muted">
-                <Clock className="w-4 h-4" />
-                <span className="text-[10px]">Generated {formatTimeAgo(generatedAt)}</span>
-              </div>
-            </div>
+         <div className="mt-4 pt-4 border-t border-slate-100 dark:border-border-dark">
+               <div className="flex items-center gap-2 text-text-muted">
+                 <Clock className="w-4 h-4" />
+                 <span className="text-2xs">Generated {formatTimeAgo(generatedAt)}</span>
+               </div>
+             </div>
           )}
         </div>
       </div>

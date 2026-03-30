@@ -14,7 +14,9 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-import { authAPI } from '../services/api';
+import { authAPI, tenantAPI } from '../services/api';
+import { httpClient } from '../services/client/httpClient';
+import { setFeatures } from '../utils/featureCheck';
 
 import type { User } from '../types/memory';
 
@@ -24,6 +26,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   isAuthenticated: boolean;
+  orgSetupComplete: boolean;
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
@@ -31,6 +34,7 @@ interface AuthState {
   checkAuth: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User | null) => void;
+  _loadPostAuthData: () => Promise<void>;
 }
 
 interface ApiError {
@@ -54,6 +58,7 @@ export const useAuthStore = create<AuthState>()(
         isLoading: false,
         error: null,
         isAuthenticated: false,
+        orgSetupComplete: true,
 
         /**
          * User login
@@ -81,6 +86,7 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               error: null,
             });
+            await get()._loadPostAuthData();
           } catch (error: unknown) {
             const apiError = error as ApiError;
             const detail = apiError.response?.data?.detail;
@@ -147,6 +153,7 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               error: null,
             });
+            await get()._loadPostAuthData();
           } catch (_error) {
             // Token is invalid, clear it
             set({
@@ -155,6 +162,30 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: false,
               isLoading: false,
             });
+          }
+        },
+
+        async _loadPostAuthData() {
+          try {
+            // Load features
+            const featuresResp =
+              await httpClient.get<Array<{ id: string; enabled: boolean }>>('/system/features');
+            setFeatures(featuresResp);
+
+            // Check org setup
+            const tenantResp = await tenantAPI.list();
+            if (tenantResp && tenantResp.tenants && tenantResp.tenants.length > 0) {
+              const firstTenant = tenantResp.tenants[0];
+              const isSetup =
+                !!firstTenant?.name &&
+                firstTenant?.name !== 'New Tenant' &&
+                firstTenant?.name.trim() !== '';
+              set({ orgSetupComplete: isSetup });
+            } else {
+              set({ orgSetupComplete: false });
+            }
+          } catch (e) {
+            console.error('Failed to load post-auth data', e);
           }
         },
 

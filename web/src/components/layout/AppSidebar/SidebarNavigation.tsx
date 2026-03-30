@@ -57,7 +57,7 @@ function NavGroupSection({
     return (
       <div className="space-y-1">
         {group.title && !isCollapsed && (
-          <p className="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <p className="px-3 text-2xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
             {t(group.title)}
           </p>
         )}
@@ -83,7 +83,7 @@ function NavGroupSection({
       {group.title && !isCollapsed && (
         <button
           onClick={onToggle}
-          className="flex items-center justify-between w-full px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          className="flex items-center justify-between w-full px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           type="button"
         >
           <span>{t(group.title)}</span>

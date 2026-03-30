@@ -18,11 +18,57 @@ import {
   Globe,
   Clock,
   FileText,
+
+  CheckCircle,
+  Square,
+  StopCircle,
+  Terminal,
+  Cloud,
+  Zap,
+  Ban,
+  Search,
+  Sparkles,
+  AlertTriangle,
+  Activity,
+  FlaskConical,
+  RefreshCcw,
+  Settings,
+  Brain,
+  Info
 } from 'lucide-react';
 
 import { SOURCE_STYLES, CARD_STYLES, ANIMATION_CLASSES, APP_STATUS_STYLES } from './styles';
 
 import type { MCPApp } from '@/types/mcpApp';
+
+
+const renderDynamicIcon = (name: string, size: number, className: string = '') => {
+  switch (name) {
+    case 'check_circle': return <CheckCircle size={size} className={className} />;
+    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop': return <Square size={size} className={className} />;
+    case 'stop_circle': return <StopCircle size={size} className={className} />;
+    case 'error': return <AlertCircle size={size} className={className} />;
+    case 'warning': return <AlertTriangle size={size} className={className} />;
+    case 'terminal': return <Terminal size={size} className={className} />;
+    case 'http': return <Globe size={size} className={className} />;
+    case 'cloud': return <Cloud size={size} className={className} />;
+    case 'globe': return <Globe size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'block': return <Ban size={size} className={className} />;
+    case 'search': return <Search size={size} className={className} />;
+    case 'person': return <User size={size} className={className} />;
+    case 'auto_awesome': return <Sparkles size={size} className={className} />;
+    case 'monitor_heart': return <Activity size={size} className={className} />;
+    case 'refresh': return <RefreshCcw size={size} className={className} />;
+    case 'sync': return <RefreshCcw size={size} className={className} />;
+    case 'science': return <FlaskConical size={size} className={className} />;
+    case 'settings': return <Settings size={size} className={className} />;
+    case 'psychology': return <Brain size={size} className={className} />;
+    case 'info': return <Info size={size} className={className} />;
+    default: return <AlertCircle size={size} className={className} />;
+  }
+};
 
 const LOADING_TIMEOUT_MS = 30_000;
 
@@ -137,7 +183,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
               className="text-xs flex-shrink-0 m-0 px-2 py-0.5 rounded-full"
             >
               <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">{statusCfg.icon}</span>
+                {renderDynamicIcon(statusCfg.icon, 12, "")}
                 {statusCfg.label}
               </span>
             </Tag>
@@ -152,7 +198,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
                         ? 'red'
                         : 'default'
                 }
-                className="text-[10px] flex-shrink-0 m-0 px-1.5 py-0.5 rounded-full"
+                className="text-2xs flex-shrink-0 m-0 px-1.5 py-0.5 rounded-full"
               >
                 运行：{serverRuntime}
               </Tag>
@@ -164,7 +210,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
         <div className="mb-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-1.5 mb-1">
             <Globe size={10} className="text-slate-400" />
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+            <span className="text-2xs text-slate-500 dark:text-slate-400 font-medium">
               资源地址
             </span>
           </div>
@@ -172,7 +218,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             {app.ui_metadata?.resourceUri || '无资源地址'}
           </code>
           {refreshStatus && (
-            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-1 mt-1.5 text-2xs text-slate-500 dark:text-slate-400">
               <Clock size={10} />
               <span>
                 刷新 {refreshStatus}

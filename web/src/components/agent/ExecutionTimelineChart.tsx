@@ -4,13 +4,14 @@
  * Displays execution activity over time with count, success, and failure metrics.
  */
 
+import { LineChart } from 'lucide-react';
+
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import { formatDateTime } from '@/utils/date';
 
 import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
 
-import { MaterialIcon } from './shared';
 
 import type { ExecutionStatsResponse } from '../../types/agent';
 
@@ -42,7 +43,7 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
     <LazyCard className="mb-6">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <MaterialIcon name="show_chart" size={20} className="text-purple-600" />
+          <LineChart size={20} className="text-purple-600" />
           Execution Timeline
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -53,14 +54,14 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
       {/* Timeline Chart */}
       <div className="relative overflow-x-auto">
         <div className="flex items-end gap-2 min-w-max pb-8">
-          {timeline_data.map((item: any, index: number) => {
+          {timeline_data.map((item: any) => {
             const barHeightPx = (item.count / maxCount) * barHeight;
             const completedHeight = (item.completed / item.count) * barHeightPx;
             const failedHeight = (item.failed / item.count) * barHeightPx;
             const otherHeight = barHeightPx - completedHeight - failedHeight;
 
             return (
-              <div key={index} className="flex flex-col items-center gap-2">
+              <div key={item.time} className="flex flex-col items-center gap-2">
                 {/* Bar */}
                 <div
                   className="relative w-16 bg-slate-100 dark:bg-slate-800 rounded-t-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow cursor-pointer group"

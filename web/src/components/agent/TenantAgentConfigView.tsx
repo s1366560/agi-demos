@@ -18,9 +18,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { Typography } from 'antd';
 import { Edit, RefreshCw } from 'lucide-react';
 
-import { Typography } from 'antd';
 
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
 

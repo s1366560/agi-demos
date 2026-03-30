@@ -6,10 +6,24 @@
  */
 
 import { ReactNode, memo, useState, useMemo, useRef, useEffect } from 'react';
+import type { ComponentType } from 'react';
+
+import { Brain, Wrench, Sparkles, Bot, ChevronRight, AlertCircle, ChevronUp, ChevronDown, TerminalSquare, Loader2, Check, X, FileEdit, FileInput, Image as ImageIcon, Film, AudioLines, FileText, Table as TableIcon, Presentation, FileArchive, Code as CodeIcon, File as FileIcon } from 'lucide-react';
 
 import { foldTextWithMetadata } from '../../../utils/toolResultUtils';
 
 import { MarkdownContent } from './MarkdownContent';
+
+
+const getAgentIcon = (icon: string): ComponentType<{ size?: number; className?: string }> => {
+  switch (icon) {
+    case 'psychology': return Brain;
+    case 'construction': return Wrench;
+    case 'auto_awesome': return Sparkles;
+    case 'smart_toy': return Bot;
+    default: return Brain;
+  }
+};
 
 export interface MessageStreamProps {
   /** Messages to display */
@@ -66,15 +80,16 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getFileIcon(mimeType: string): string {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'movie';
-  if (mimeType.startsWith('audio/')) return 'audio_file';
-  if (mimeType === 'application/pdf') return 'picture_as_pdf';
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'table_chart';
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'slideshow';
+
+const getFileIconComponent = (mimeType: string) => {
+  if (mimeType.startsWith('image/')) return ImageIcon;
+  if (mimeType.startsWith('video/')) return Film;
+  if (mimeType.startsWith('audio/')) return AudioLines;
+  if (mimeType === 'application/pdf') return FileText;
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return TableIcon;
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return Presentation;
   if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compress'))
-    return 'folder_zip';
+    return FileArchive;
   if (
     mimeType.startsWith('text/') ||
     mimeType.includes('json') ||
@@ -82,9 +97,10 @@ function getFileIcon(mimeType: string): string {
     mimeType.includes('javascript') ||
     mimeType.includes('typescript')
   )
-    return 'code';
-  return 'description';
-}
+    return CodeIcon;
+  return FileIcon;
+};
+
 
 export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMessageProps) {
   return (
@@ -99,7 +115,7 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
         >
           {forcedSkillName && (
             <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-primary/90 flex items-center justify-center ring-2 ring-white dark:ring-slate-900 z-10">
-              <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 16 16" fill="currentColor">
+              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
               </svg>
             </div>
@@ -107,8 +123,8 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
           <div
             className={
               forcedSkillName
-                ? 'bg-white dark:bg-slate-900 rounded-2xl rounded-tr-none px-5 py-[18px]'
-                : 'bg-primary text-white rounded-2xl rounded-tr-none px-5 py-[18px] shadow-md'
+                ? 'bg-white dark:bg-slate-900 rounded-2xl rounded-tr-none px-5 py-4.5'
+                : 'bg-primary text-white rounded-2xl rounded-tr-none px-5 py-4.5 shadow-md'
             }
           >
             <p
@@ -122,7 +138,7 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
             </p>
           </div>
           {forcedSkillName && (
-            <div className="absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-900 text-[10px] text-primary/70 font-medium leading-none tracking-wide">
+            <div className="absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-900 text-2xs text-primary/70 font-medium leading-none tracking-wide">
               {forcedSkillName}
             </div>
           )}
@@ -134,13 +150,11 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
                 key={idx}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg"
               >
-                <span className="material-symbols-outlined text-[16px] text-slate-500 dark:text-slate-400">
-                  {getFileIcon(file.mime_type)}
-                </span>
-                <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                {(() => { const Icon = getFileIconComponent(file.mime_type); return <Icon size={16} className="text-slate-500 dark:text-slate-400" />; })()}
+                <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-50">
                   {file.filename}
                 </span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                <span className="text-2xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
                   {formatFileSize(file.size_bytes)}
                 </span>
               </div>
@@ -177,7 +191,8 @@ export function AgentSection({
   return (
     <div className={`flex items-start gap-4 ${opacity ? 'opacity-70' : ''}`}>
       <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center shrink-0`}>
-        <span className={`material-symbols-outlined text-lg ${iconColor}`}>{icon}</span>
+        {/* eslint-disable-next-line react-hooks/static-components */}
+        {(() => { const Icon = getAgentIcon(icon); return <Icon size={18} className={iconColor} />; })()}
       </div>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
@@ -209,13 +224,11 @@ export function ReasoningLogCard({
       <details className="group/reasoning" open={expanded}>
         <summary className="text-sm text-slate-600 dark:text-slate-300 cursor-pointer list-none flex items-center justify-between select-none">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm group-open/reasoning:rotate-90 transition-transform">
-              chevron_right
-            </span>
-            <span className="font-semibold uppercase text-[10px] text-primary">Reasoning Log</span>
+            <ChevronRight size={14} className="group-open/reasoning:rotate-90 transition-transform" />
+            <span className="font-semibold uppercase text-2xs text-primary">Reasoning Log</span>
             <span className="text-xs">{summary}</span>
           </div>
-          {completed && <span className="text-[10px] font-bold text-emerald-500">COMPLETE</span>}
+            {completed && <span className="text-2xs font-bold text-emerald-500">COMPLETE</span>}
         </summary>
         <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed space-y-2">
           {steps.map((step, index) => (
@@ -275,21 +288,19 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <label className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1">
-            <span className="material-symbols-outlined text-[12px]">error</span>
-            Error
-          </label>
-          {isFolded && (
-            <button
-              type="button"
-              onClick={() => {
-                setIsExpanded(!isExpanded);
-              }}
-              className="text-[10px] text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[12px]">
-                {isExpanded ? 'unfold_less' : 'unfold_more'}
-              </span>
+         <label className="text-2xs uppercase font-bold text-red-600 flex items-center gap-1">
+             <AlertCircle size={12} />
+             Error
+           </label>
+           {isFolded && (
+             <button
+               type="button"
+               onClick={() => {
+                 setIsExpanded(!isExpanded);
+               }}
+               className="text-2xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+             >
+              {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               {isExpanded ? 'Show Less' : `Show Full (${totalLines} lines)`}
             </button>
           )}
@@ -304,21 +315,19 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] uppercase font-bold text-emerald-600 flex items-center gap-1">
-          <span className="material-symbols-outlined text-[12px]">output</span>
-          Output
-        </label>
-        {isFolded && (
-          <button
-            type="button"
-            onClick={() => {
-              setIsExpanded(!isExpanded);
-            }}
-            className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-[12px]">
-              {isExpanded ? 'unfold_less' : 'unfold_more'}
-            </span>
+       <label className="text-2xs uppercase font-bold text-emerald-600 flex items-center gap-1">
+           <TerminalSquare size={12} />
+           Output
+         </label>
+         {isFolded && (
+           <button
+             type="button"
+             onClick={() => {
+               setIsExpanded(!isExpanded);
+             }}
+             className="text-2xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+           >
+            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             {isExpanded ? 'Show Less' : `Show Full (${totalLines} lines)`}
           </button>
         )}
@@ -379,11 +388,6 @@ export function ToolExecutionCardDisplay({
       streamingArgsRef.current.scrollTop = streamingArgsRef.current.scrollHeight;
     }
   }, [partialArguments, status]);
-  // Use a generic tool icon instead of hardcoded category-based icons
-  // This avoids maintenance burden when new tools are added
-  const getIcon = () => {
-    return 'construction';
-  };
 
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
@@ -398,32 +402,32 @@ export function ToolExecutionCardDisplay({
     switch (status) {
       case 'preparing':
         return (
-          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-            Preparing
-          </div>
-        );
-      case 'running':
-        return (
-          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
-            <span className="material-symbols-outlined text-[12px] spinner">autorenew</span>
-            Running
-          </div>
-        );
-      case 'success':
-        return (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
-            <span className="material-symbols-outlined text-[12px]">check</span>
-            Success
-            {duration !== undefined && (
-              <span className="ml-1 text-emerald-500/70">({formatDuration(duration)})</span>
-            )}
-          </div>
-        );
-      case 'error':
-        return (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 text-[10px] font-bold uppercase tracking-wider">
-            <span className="material-symbols-outlined text-[12px]">close</span>
+           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
+             Preparing
+           </div>
+         );
+       case 'running':
+         return (
+           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+             <Loader2 size={12} className="animate-spin" />
+             Running
+           </div>
+         );
+       case 'success':
+         return (
+           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-2xs font-bold uppercase tracking-wider">
+             <Check size={12} />
+             Success
+             {duration !== undefined && (
+               <span className="ml-1 text-emerald-500/70">({formatDuration(duration)})</span>
+             )}
+           </div>
+         );
+       case 'error':
+         return (
+           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 text-2xs font-bold uppercase tracking-wider">
+            <X size={12} />
             Failed
             {duration !== undefined && (
               <span className="ml-1 text-red-500/70">({formatDuration(duration)})</span>
@@ -439,7 +443,7 @@ export function ToolExecutionCardDisplay({
     <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm overflow-hidden">
       <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-border-dark flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-[20px]">{getIcon()}</span>
+          <Wrench size={20} className="text-primary" />
           <span className="text-sm font-semibold">{toolName}</span>
         </div>
         {getStatusBadge()}
@@ -451,19 +455,17 @@ export function ToolExecutionCardDisplay({
           open={defaultExpanded || status === 'running' || status === 'preparing'}
         >
           <summary className="px-4 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-1 select-none">
-            <span className="material-symbols-outlined text-sm group-open:rotate-90 transition-transform">
-              chevron_right
-            </span>
+            <ChevronRight size={14} className="group-open:rotate-90 transition-transform" />
             <span>Details</span>
           </summary>
           <div className="p-4 pt-0 space-y-4">
             {/* Preparing State - streaming arguments */}
             {status === 'preparing' && partialArguments && (
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-muted flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">edit_note</span>
-                  Building Arguments
-                </label>
+                 <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                   <FileEdit size={12} />
+                   Building Arguments
+                 </label>
                 <div
                   ref={streamingArgsRef}
                   className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto"
@@ -490,11 +492,11 @@ export function ToolExecutionCardDisplay({
 
             {/* Input Parameters */}
             {parameters && status !== 'preparing' && (
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-muted flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">input</span>
-                  Input
-                </label>
+             <div className="space-y-1">
+                 <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                   <FileInput size={12} />
+                   Input
+                 </label>
                 <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto">
                   <pre className="whitespace-pre-wrap break-words">
                     {JSON.stringify(parameters, null, 2)}
@@ -503,28 +505,26 @@ export function ToolExecutionCardDisplay({
               </div>
             )}
 
-            {/* Execution Mode */}
-            {executionMode && (
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-muted">
-                  Execution Mode
-                </label>
+             {/* Execution Mode */}
+             {executionMode && (
+               <div className="space-y-1">
+                 <label className="text-2xs uppercase font-bold text-text-muted">
+                   Execution Mode
+                 </label>
                 <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted">
                   {executionMode}
                 </div>
               </div>
             )}
 
-            {/* Running State */}
-            {status === 'running' && (
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-text-muted">
-                  Live Results
-                </label>
+             {/* Running State */}
+             {status === 'running' && (
+               <div className="space-y-2">
+                 <label className="text-2xs uppercase font-bold text-text-muted">
+                   Live Results
+                 </label>
                 <div className="border border-dashed border-slate-200 dark:border-border-dark rounded-lg p-6 flex flex-col items-center justify-center gap-2 text-center bg-slate-50/50 dark:bg-background-dark/20">
-                  <span className="material-symbols-outlined text-slate-300 dark:text-border-dark text-3xl spinner">
-                    autorenew
-                  </span>
+                  <Loader2 size={30} className="text-slate-300 dark:text-border-dark animate-spin" />
                   <p className="text-xs text-text-muted italic">Executing...</p>
                 </div>
               </div>

@@ -118,3 +118,18 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    must_change_password: bool = False
+
+
+class ForceChangePasswordRequest(BaseModel):
+    """Request model for forced password change."""
+
+    old_password: str
+    new_password: str
+
+
+class ForceChangePasswordResponse(BaseModel):
+    """Response model for forced password change."""
+
+    success: bool
+    message: str

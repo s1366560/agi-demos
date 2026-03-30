@@ -6,6 +6,8 @@
 
 import { useEffect, type KeyboardEvent } from 'react';
 
+import { Folder, Check, ArrowLeft } from 'lucide-react';
+
 import { useWorkspaceContext } from './WorkspaceContext';
 
 import type { ProjectListProps } from './types';
@@ -81,6 +83,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
         return (
           <button
+            type="button"
             key={project.id}
             ref={(el) => {
               registerMenuItemRef(index, el);
@@ -100,16 +103,17 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
             }`}
           >
-            <span className="material-symbols-outlined text-[18px] opacity-70">folder</span>
+            <Folder size={18} className="opacity-70" />
             <span className="truncate text-sm font-medium">{project.name}</span>
             {isSelected && (
-              <span className="material-symbols-outlined text-[16px] ml-auto">check</span>
+              <Check size={16} className="ml-auto" />
             )}
           </button>
         );
       })}
       <div className="h-px bg-slate-100 dark:bg-slate-700 my-2" />
       <button
+        type="button"
         ref={(el) => {
           registerMenuItemRef(projects.length, el);
         }}
@@ -121,7 +125,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         tabIndex={focusedIndex === projects.length ? 0 : -1}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
       >
-        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+        <ArrowLeft size={18} />
         <span className="text-sm font-medium">{backToTenantLabel}</span>
       </button>
     </>

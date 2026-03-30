@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 
 import { Modal, Checkbox, Tag, Typography } from 'antd';
 
+import { getCategoryColor } from './utils';
+
 import type { CyberGene } from '@/types/workspace';
 
 import type { CheckboxOptionType } from 'antd';
@@ -39,21 +41,6 @@ export const GeneAssignModal: React.FC<GeneAssignModalProps> = ({
 
   const onChange = (checkedValues: string[]) => {
     setSelectedIds(checkedValues);
-  };
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'skill':
-        return 'blue';
-      case 'knowledge':
-        return 'green';
-      case 'tool':
-        return 'orange';
-      case 'workflow':
-        return 'purple';
-      default:
-        return 'default';
-    }
   };
 
   const options: CheckboxOptionType[] = availableGenes.map((gene) => ({

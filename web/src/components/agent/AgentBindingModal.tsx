@@ -101,8 +101,11 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
         .then(() => {
           setDefinitionsLoaded(true);
         })
-        .catch(() => {
-          // Error handled by store
+        .catch((err: unknown) => {
+          void message.error(
+            err instanceof Error ? err.message : 'Failed to load agent definitions'
+          );
+          console.error('AgentBindingModal: listDefinitions failed', err);
         });
     }
   }, [isOpen, definitionsLoaded, listDefinitions]);

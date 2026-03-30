@@ -241,6 +241,7 @@ export interface User {
   roles: string[];
   is_active: boolean;
   created_at: string;
+  must_change_password?: boolean | undefined;
   tenant_id?: string | undefined; // Keep for compatibility if needed, but backend removed it from response? No, backend removed it.
   profile?: UserProfile | undefined;
 }
@@ -252,6 +253,10 @@ export interface UserTenant {
   role: 'owner' | 'admin' | 'member' | 'guest';
   permissions: Record<string, unknown>;
   created_at: string;
+  // User info joined from users table
+  user_email?: string;
+  user_name?: string;
+  joined_at?: string;
 }
 
 export interface UserProject {
@@ -564,8 +569,9 @@ export interface SchemaEdgeType {
 
 export interface EdgeMapping {
   id: string;
-  name: string;
-  source_entity_type_id: string;
-  target_entity_type_id: string;
+  source_type: string;
+  target_type: string;
+  edge_type: string;
+  source?: string;
   project_id: string;
 }

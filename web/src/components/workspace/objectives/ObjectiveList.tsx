@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
 
-import { PlusOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+
 import { Button, Empty, Skeleton, Typography } from 'antd';
+import { Plus } from 'lucide-react';
 
 import { ObjectiveCard } from './ObjectiveCard';
 
@@ -22,6 +24,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
   onCreate,
   loading = false,
 }) => {
+  const { t } = useTranslation();
   const { topLevel, childrenMap } = useMemo(() => {
     const topLevel: CyberObjective[] = [];
     const childrenMap = new Map<string, CyberObjective[]>();
@@ -54,19 +57,19 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
     <div className="flex flex-col h-full w-full">
       <div className="flex items-center justify-between mb-4">
         <Typography.Title level={4} className="m-0">
-          Objectives & Key Results
+          {t('workspaceDetail.objectives.title')}
         </Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-          Add Objective
+        <Button type="primary" icon={<Plus size={16} />} onClick={onCreate}>
+          {t('workspaceDetail.objectives.addObjective')}
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-6">
         {topLevel.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <Empty description="No objectives found" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+            <Empty description={t('workspaceDetail.objectives.noObjectives')} image={Empty.PRESENTED_IMAGE_SIMPLE}>
               <Button type="primary" onClick={onCreate}>
-                Create Your First Objective
+                {t('workspaceDetail.objectives.createFirst')}
               </Button>
             </Empty>
           </div>
@@ -76,7 +79,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
               <ObjectiveCard objective={parent} onEdit={onEdit} onDelete={onDelete} />
 
               {childrenMap.has(parent.id) && (
-                <div className="pl-6 md:pl-8 border-l-2 border-slate-100 ml-4 space-y-2 mt-2">
+                <div className="pl-6 md:pl-8 border-l-2 border-slate-100 dark:border-slate-700/50 transition-colors duration-200 ml-4 space-y-2 mt-2">
                   {childrenMap.get(parent.id)?.map((child) => (
                     <ObjectiveCard
                       key={child.id}

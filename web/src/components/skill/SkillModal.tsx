@@ -6,9 +6,11 @@
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 
 import { Modal, Form, Input, Select, Tabs, Tag, message, InputNumber } from 'antd';
+import { X, Info } from 'lucide-react';
 
 import { useSkillStore, useSkillSubmitting } from '../../stores/skill';
 
@@ -366,7 +368,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                   type="button"
                   onClick={handleAddPattern}
                   disabled={!patternInput.trim()}
-                  className="w-full px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
                   {t('tenant.skills.modal.addPatternButton')}
                 </button>
@@ -389,15 +391,15 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                         {t('tenant.skills.modal.weight')}: {pattern.weight.toFixed(1)}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRemovePattern(idx);
-                      }}
-                      className="text-slate-400 hover:text-red-500 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-lg">close</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRemovePattern(idx);
+                        }}
+                        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-red-500 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      >
+                        <X size={18} />
+                      </button>
                   </div>
                   {pattern.examples && pattern.examples.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
@@ -442,7 +444,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
               <button
                 type="button"
                 onClick={handleAddTool}
-                className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors whitespace-nowrap"
+                className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap"
               >
                 {t('common.add')}
               </button>
@@ -470,9 +472,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
 
           <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <div className="flex items-start gap-2">
-              <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-lg mt-0.5">
-                info
-              </span>
+              <Info size={18} className="text-blue-600 dark:text-blue-400 mt-0.5" />
               <div className="text-sm text-blue-700 dark:text-blue-300">
                 {t('tenant.skills.modal.toolsHint')}
               </div>

@@ -4,15 +4,14 @@
 
 import React from 'react';
 
-import {
-  DownloadOutlined,
-  FileOutlined,
-  FileZipOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
-  FileExcelOutlined,
-} from '@ant-design/icons';
 import { Button, Space, Typography, Card } from 'antd';
+import {
+  Download,
+  File,
+  FileArchive,
+  FileText,
+  FileSpreadsheet,
+} from 'lucide-react';
 
 const { Text } = Typography;
 
@@ -40,7 +39,7 @@ function formatFileSize(bytes?: number): string {
 
 // Get icon based on mime type
 function getFileIcon(mimeType?: string, filename?: string): React.ReactNode {
-  if (!mimeType && !filename) return <FileOutlined />;
+  if (!mimeType && !filename) return <File size={36} />;
 
   // Check extension
   const ext = filename?.split('.').pop()?.toLowerCase();
@@ -55,15 +54,15 @@ function getFileIcon(mimeType?: string, filename?: string): React.ReactNode {
     ext === 'rar' ||
     ext === '7z'
   ) {
-    return <FileZipOutlined />;
+    return <FileArchive size={36} />;
   }
 
   if (mimeType?.includes('pdf') || ext === 'pdf') {
-    return <FilePdfOutlined />;
+    return <FileText size={36} />;
   }
 
   if (mimeType?.includes('word') || ext === 'doc' || ext === 'docx') {
-    return <FileWordOutlined />;
+    return <FileText size={36} />;
   }
 
   if (
@@ -73,10 +72,10 @@ function getFileIcon(mimeType?: string, filename?: string): React.ReactNode {
     ext === 'xlsx' ||
     ext === 'csv'
   ) {
-    return <FileExcelOutlined />;
+    return <FileSpreadsheet size={36} />;
   }
 
-  return <FileOutlined />;
+  return <File size={36} />;
 }
 
 export const FileDownloader: React.FC<FileDownloaderProps> = ({
@@ -93,7 +92,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
     return (
       <Button
         type="primary"
-        icon={<DownloadOutlined />}
+        icon={<Download size={14} />}
         href={url}
         target="_blank"
         rel="noopener noreferrer"
@@ -107,7 +106,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
   return (
     <Card className="file-downloader" size="small">
       <Space direction="vertical" align="center" className="w-full py-4">
-        <div className="text-4xl text-gray-400">{icon}</div>
+        <div className="text-gray-400">{icon}</div>
         <Text ellipsis style={{ maxWidth: 200 }}>
           {filename}
         </Text>
@@ -118,7 +117,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
         )}
         <Button
           type="primary"
-          icon={<DownloadOutlined />}
+          icon={<Download size={16} />}
           href={url}
           target="_blank"
           rel="noopener noreferrer"

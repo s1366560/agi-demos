@@ -228,6 +228,33 @@ export interface HttpServiceActionResponse {
 }
 
 /**
+ * Desktop API response from backend
+ */
+interface DesktopApiResponse {
+  success?: boolean | undefined;
+  running?: boolean | undefined;
+  display?: string | undefined;
+  resolution?: string | undefined;
+  port?: number | undefined;
+  audio_enabled?: boolean | undefined;
+  dynamic_resize?: boolean | undefined;
+  encoding?: string | undefined;
+}
+
+/**
+ * Terminal API response from backend
+ */
+interface TerminalApiResponse {
+  success?: boolean | undefined;
+  running?: boolean | undefined;
+  url?: string | undefined;
+  port?: number | undefined;
+  session_id?: string | undefined;
+  sandbox_id?: string | undefined;
+  pid?: number | undefined;
+}
+
+/**
  * Project sandbox service interface
  */
 export interface ProjectSandboxService {
@@ -462,10 +489,11 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
           releaseConsumer();
           resolve(value);
         },
-        (error) => {
+        (error: unknown) => {
           cleanupAbortListener();
           releaseConsumer();
-          reject(error);
+          // Ensure we reject with an Error object
+          reject(error instanceof Error ? error : new Error(String(error)));
         }
       );
     });
@@ -609,7 +637,7 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
 
   async startDesktop(projectId: string, resolution = '1920x1080'): Promise<DesktopStatus> {
     logger.debug(`[ProjectSandboxService] Starting desktop for project: ${projectId}`);
-    const response = await this.api.post<any>(
+    const response = await this.api.post<DesktopApiResponse>(
       `/projects/${projectId}/sandbox/desktop?resolution=${encodeURIComponent(resolution)}`,
       undefined,
       { timeout: 30000 } // 30 seconds for desktop service startup
@@ -625,7 +653,7 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     const wsUrl = isRunning ? buildDesktopWebSocketUrl(projectId, token || undefined) : null;
 
     return {
-      running: response.success ?? response.running,
+      running: response.success ?? response.running ?? false,
       url: proxyUrl,
       wsUrl,
       display: response.display || ':1',
@@ -644,7 +672,7 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
 
   async startTerminal(projectId: string): Promise<TerminalStatus> {
     logger.debug(`[ProjectSandboxService] Starting terminal for project: ${projectId}`);
-    const response = await this.api.post<any>(
+    const response = await this.api.post<TerminalApiResponse>(
       `/projects/${projectId}/sandbox/terminal`,
       undefined,
       { timeout: 30000 } // 30 seconds for terminal service startup
@@ -653,11 +681,11 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     // Build WebSocket URL if session_id is provided
     let wsUrl = response.url;
     if (response.session_id && !wsUrl) {
-      wsUrl = buildTerminalWebSocketUrl(response.sandbox_id, response.session_id);
+      wsUrl = buildTerminalWebSocketUrl(response.sandbox_id ?? '', response.session_id);
     }
 
     return {
-      running: response.success ?? response.running,
+      running: response.success ?? response.running ?? false,
       url: wsUrl || null,
       port: response.port || 7681,
       sessionId: response.session_id || null,

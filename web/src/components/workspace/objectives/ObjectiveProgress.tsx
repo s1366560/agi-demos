@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { Target, CheckCircle2 } from 'lucide-react';
+
 export interface ObjectiveProgressProps {
   progress: number;
   size?: number | undefined;
@@ -11,11 +13,12 @@ export const ObjectiveProgress: React.FC<ObjectiveProgressProps> = ({
   progress,
   size = 48,
   strokeWidth = 4,
-  color = '#1890ff',
+  color = '#1e3fae',
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (progress / 100) * circumference;
+  const isComplete = progress >= 100;
 
   return (
     <div
@@ -26,9 +29,9 @@ export const ObjectiveProgress: React.FC<ObjectiveProgressProps> = ({
         className="w-full h-full -rotate-90 transform"
         width={size}
         height={size}
-        aria-label={`Progress: ${Math.round(progress)}%`}
+        aria-label={`Progress: ${String(Math.round(progress))}%`}
       >
-        <title>{`Progress: ${Math.round(progress)}%`}</title>
+        <title>{`Progress: ${String(Math.round(progress))}%`}</title>
         <circle
           className="text-slate-100"
           strokeWidth={strokeWidth}
@@ -55,9 +58,10 @@ export const ObjectiveProgress: React.FC<ObjectiveProgressProps> = ({
         />
       </svg>
       <div
-        className="absolute flex items-center justify-center text-xs font-semibold"
+        className="absolute flex flex-col items-center justify-center text-xs font-semibold gap-0.5"
         style={{ color }}
       >
+        {isComplete ? <CheckCircle2 size={14} /> : <Target size={14} />}
         {Math.round(progress)}%
       </div>
     </div>

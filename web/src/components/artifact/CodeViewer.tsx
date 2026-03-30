@@ -4,8 +4,8 @@
 
 import React, { useState, useEffect } from 'react';
 
-import { CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import { Typography, Spin, Alert, Button, Tooltip, message } from 'antd';
+import { Copy, Check } from 'lucide-react';
 
 const { Text } = Typography;
 
@@ -170,7 +170,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
             <Button
               type="text"
               size="small"
-              icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+              icon={copied ? <Check size={14} /> : <Copy size={14} />}
               onClick={handleCopy}
             />
           </Tooltip>

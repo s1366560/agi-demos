@@ -104,7 +104,7 @@ const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
 
         <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">{run.task}</p>
 
-        <div className="flex items-center gap-4 text-[10px] text-slate-400 dark:text-slate-500">
+        <div className="flex items-center gap-4 text-2xs text-slate-400 dark:text-slate-500">
           <span className="flex items-center gap-1">
             <Clock size={10} />
             {formatTimestamp(run.started_at)}
@@ -128,19 +128,19 @@ const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
         </div>
 
         {run.error && (
-          <p className="mt-2 text-[10px] text-red-500 dark:text-red-400 line-clamp-2 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">
+          <p className="mt-2 text-2xs text-red-500 dark:text-red-400 line-clamp-2 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">
             {run.error}
           </p>
         )}
 
         {run.summary && run.status === 'completed' && (
-          <p className="mt-2 text-[10px] text-green-600 dark:text-green-400 line-clamp-2 bg-green-50 dark:bg-green-900/20 rounded px-2 py-1">
+          <p className="mt-2 text-2xs text-green-600 dark:text-green-400 line-clamp-2 bg-green-50 dark:bg-green-900/20 rounded px-2 py-1">
             {run.summary}
           </p>
         )}
 
         {run.trace_id && (
-          <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-400">
+          <div className="mt-2 flex items-center gap-1 text-2xs text-slate-400">
             <GitBranch size={10} />
             <span className="font-mono">{run.trace_id.slice(0, 12)}</span>
             {run.parent_span_id && (
@@ -236,7 +236,7 @@ export const TraceChainView: FC<TraceChainViewProps> = memo(
               {sortedRuns.length} {sortedRuns.length === 1 ? 'run' : 'runs'}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-[10px] text-slate-400">
+          <div className="flex items-center gap-3 text-2xs text-slate-400">
             <span className="flex items-center gap-1">
               <Timer size={10} />
               {formatDuration(totalDuration)}

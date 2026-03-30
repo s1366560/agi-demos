@@ -10,8 +10,8 @@
 
 import { lazy, Suspense, useState, useCallback } from 'react';
 
-import { ReloadOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons';
 import { Spin, Alert, Button } from 'antd';
+import { RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 
 // Lazy load terminal dependencies
 import '@xterm/xterm/css/xterm.css';
@@ -122,7 +122,7 @@ export function SandboxTerminal({
             <Button
               type="text"
               size="small"
-              icon={<ReloadOutlined />}
+              icon={<RefreshCw size={16} />}
               onClick={reconnect}
               className="text-gray-400 hover:text-white"
               title="Reconnect"
@@ -130,7 +130,7 @@ export function SandboxTerminal({
             <Button
               type="text"
               size="small"
-              icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
+              icon={isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               onClick={toggleFullscreen}
               className="text-gray-400 hover:text-white"
               title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}

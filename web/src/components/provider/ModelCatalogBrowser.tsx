@@ -1,8 +1,8 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 
-import { SearchOutlined } from '@ant-design/icons';
 import { Button, Input, Space, Table, Tag, Typography } from 'antd';
+import { Search } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useProviderStore } from '@/stores/provider';
@@ -203,7 +203,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
     <div className="flex flex-col gap-4">
       <Input
         placeholder="Search models by name, provider, or capability..."
-        prefix={<SearchOutlined className="text-gray-400" />}
+        prefix={<Search size={16} className="text-gray-400" />}
         value={localSearch}
         onChange={handleSearch}
         allowClear

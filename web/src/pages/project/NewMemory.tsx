@@ -1,7 +1,10 @@
 import React, { useState, useCallback } from 'react';
 
+
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+
+import { AlertCircle, Bold, CheckCircle, ChevronDown, Code, Italic, Link as LinkIcon, List, Loader2, Save, Sparkles, Type, X } from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
@@ -205,20 +208,19 @@ export const NewMemory: React.FC = () => {
           </span>
         </div>
         <div className="flex gap-3">
-          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <button type="button" className="rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             {t('project.memories.new.save_draft')}
           </button>
           <button
+            type="button"
             onClick={handleSave}
             disabled={isSaving || !content}
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSaving ? (
-              <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[20px]">
-                progress_activity
-              </span>
+              <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
             ) : (
-              <span className="material-symbols-outlined text-[20px]">save</span>
+              <Save size={20} />
             )}
             {t('project.memories.new.save_memory')}
           </button>
@@ -245,13 +247,9 @@ export const NewMemory: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-2">
                     {currentTask.status === 'completed' ? (
-                      <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[24px]">
-                        check_circle
-                      </span>
+                      <CheckCircle size={24} className="text-indigo-600 dark:text-indigo-400" />
                     ) : (
-                      <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[24px] animate-spin motion-reduce:animate-none">
-                        progress_activity
-                      </span>
+                      <Loader2 size={24} className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none" />
                     )}
                   </div>
                   <div>
@@ -295,9 +293,7 @@ export const NewMemory: React.FC = () => {
           {error && (
             <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-red-600 dark:text-red-400 text-[24px]">
-                  error
-                </span>
+                <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
                 <div className="flex-1">
                   <h4 className="font-semibold text-red-900 dark:text-red-100">
                     {t('project.memories.new.error.processing')}
@@ -305,13 +301,14 @@ export const NewMemory: React.FC = () => {
                   <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     setError(null);
                     setCurrentTask(null);
                   }}
                   className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
                 >
-                  <span className="material-symbols-outlined">close</span>
+                  <X size={16} />
                 </button>
               </div>
             </div>
@@ -323,11 +320,12 @@ export const NewMemory: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 border-b border-slate-100 dark:border-slate-800">
               {/* Title */}
               <div className="md:col-span-8">
-                <label className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
+                <label htmlFor="memory-title" className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
                   {t('project.memories.new.form.title')}{' '}
                   <span className="text-slate-400 font-normal">({t('common.optional')})</span>
                 </label>
                 <input
+                  id="memory-title"
                   type="text"
                   value={title}
                   onChange={(e) => {
@@ -339,23 +337,23 @@ export const NewMemory: React.FC = () => {
               </div>
               {/* Context */}
               <div className="md:col-span-4">
-                <label className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
+                <label htmlFor="memory-context" className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
                   {t('project.memories.new.form.context')}
                 </label>
                 <div className="relative">
-                  <select className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]">
+                  <select id="memory-context" className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]">
                     <option>{t('project.memories.new.placeholders.context_option_1')}</option>
                     <option>{t('project.memories.new.placeholders.context_option_2')}</option>
                     <option>{t('project.memories.new.placeholders.context_option_3')}</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                    <span className="material-symbols-outlined text-[20px]">expand_more</span>
+                    <ChevronDown size={20} />
                   </div>
                 </div>
               </div>
               {/* Tags */}
               <div className="md:col-span-12">
-                <label className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
+                <label htmlFor="memory-tags" className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
                   {t('project.memories.new.form.tags')}
                 </label>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-2 min-h-[46px]">
@@ -366,23 +364,25 @@ export const NewMemory: React.FC = () => {
                     >
                       #{tag}
                       <button
+                        type="button"
                         onClick={() => {
                           removeTag(tag);
                         }}
                         className="ml-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                       >
-                        <span className="material-symbols-outlined text-[14px]">close</span>
+                        <X size={14} />
                       </button>
                     </span>
                   ))}
                   <input
+                    id="memory-tags"
                     type="text"
                     value={newTag}
                     onChange={(e) => {
                       setNewTag(e.target.value);
                     }}
                     onKeyDown={handleAddTag}
-                    className="bg-transparent text-sm outline-none placeholder:text-slate-500 text-slate-900 dark:text-white min-w-[100px]"
+                    className="bg-transparent text-sm outline-none placeholder:text-slate-500 text-slate-900 dark:text-white min-w-25"
                     placeholder={t('project.memories.new.form.add_tag')}
                   />
                 </div>
@@ -394,92 +394,95 @@ export const NewMemory: React.FC = () => {
               <div className="flex items-center gap-1">
                 <div className="flex items-center rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shadow-sm">
                   <button
+                    type="button"
                     onClick={() => {
                       insertMarkdown('**', '**');
                     }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Bold"
                   >
-                    <span className="material-symbols-outlined text-[20px]">format_bold</span>
+                    <Bold size={20} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       insertMarkdown('*', '*');
                     }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Italic"
                   >
-                    <span className="material-symbols-outlined text-[20px]">format_italic</span>
+                    <Italic size={20} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       insertMarkdown('### ');
                     }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Heading"
                   >
-                    <span className="material-symbols-outlined text-[20px]">title</span>
+                    <Type size={20} />
                   </button>
                 </div>
                 <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-2"></div>
                 <div className="flex items-center rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shadow-sm">
                   <button
+                    type="button"
                     onClick={() => {
                       insertMarkdown('- ');
                     }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="List"
                   >
-                    <span className="material-symbols-outlined text-[20px]">
-                      format_list_bulleted
-                    </span>
+                    <List size={20} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       insertMarkdown('[', '](url)');
                     }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Link"
                   >
-                    <span className="material-symbols-outlined text-[20px]">link</span>
+                    <LinkIcon size={20} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       insertMarkdown('```\n', '\n```');
                     }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Code Block"
                   >
-                    <span className="material-symbols-outlined text-[20px]">code</span>
+                    <Code size={20} />
                   </button>
                 </div>
               </div>
               {/* AI Features */}
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleAIAssist}
                   disabled={isOptimizing || !content}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-100 dark:border-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isOptimizing ? (
-                    <span className="material-symbols-outlined animate-spin motion-reduce:animate-none text-[16px]">
-                      progress_activity
-                    </span>
+                    <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
                   ) : (
-                    <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                    <Sparkles size={16} />
                   )}
                   {isOptimizing
                     ? t('project.memories.new.ai.optimizing')
                     : t('project.memories.new.ai.assist')}
                 </button>
                 <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800">
-                  <button className="rounded px-3 py-1 text-xs font-medium bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white">
+                  <button type="button" className="rounded px-3 py-1 text-xs font-medium bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white">
                     {t('project.memories.new.actions.split')}
                   </button>
-                  <button className="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                  <button type="button" className="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
                     {t('project.memories.new.actions.edit')}
                   </button>
-                  <button className="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                  <button type="button" className="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
                     {t('project.memories.new.actions.preview')}
                   </button>
                 </div>
