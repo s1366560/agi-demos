@@ -273,6 +273,9 @@ const ProjectSettings = lazy(() =>
   }))
 );
 const Support = lazy(() => import('./pages/project/Support').then((m) => ({ default: m.Support })));
+const Blackboard = lazy(() =>
+  import('./pages/project/Blackboard').then((m) => ({ default: m.Blackboard }))
+);
 
 // Schema pages
 const SchemaOverview = lazy(() => import('./pages/project/schema/SchemaOverview'));
@@ -995,6 +998,14 @@ function App() {
                   }
                 />
                 <Route
+                  path="blackboard"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Blackboard />
+                    </Suspense>
+                  }
+                />
+                <Route
                   path="workspaces"
                   element={
                     <Suspense fallback={<PageLoader />}>
@@ -1612,6 +1623,14 @@ function App() {
                   element={
                     <Suspense fallback={<PageLoader />}>
                       <Support />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="blackboard"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Blackboard />
                     </Suspense>
                   }
                 />

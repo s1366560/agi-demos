@@ -214,7 +214,41 @@
     "genes": "Gene Market",
     "instanceTemplates": "Instance Templates",
     "auditLogs": "Audit Logs",
-    "orgSettings": "Organization Settings"
+    "orgSettings": "Organization Settings",
+    "blackboard": "Blackboard"
+  },
+  "blackboard": {
+    "title": "Blackboard",
+    "newPost": "New Post",
+    "postTitle": "Title",
+    "postContent": "Content",
+    "createPost": "Create Post",
+    "cancel": "Cancel",
+    "pinned": "Pinned",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "reply": "Reply",
+    "replies": "Replies",
+    "noReplies": "No replies yet",
+    "writeReply": "Write a reply...",
+    "sendReply": "Send",
+    "noPosts": "No posts yet",
+    "noPostsDescription": "Create the first post to start the discussion.",
+    "deleteConfirm": "Are you sure you want to delete this post?",
+    "deleteReplyConfirm": "Are you sure you want to delete this reply?",
+    "postCreated": "Post created",
+    "postUpdated": "Post updated",
+    "postDeleted": "Post deleted",
+    "replyCreated": "Reply sent",
+    "replyDeleted": "Reply deleted",
+    "selectPost": "Select a post to view details",
+    "open": "Open",
+    "archived": "Archived",
+    "allPosts": "All Posts",
+    "pinnedOnly": "Pinned Only"
   },
   "user": {
     "profile": "Profile",
@@ -3393,7 +3427,8 @@
       "replyPlaceholder": "Reply",
       "status": "status",
       "createPostFailed": "Failed to create post",
-      "createReplyFailed": "Failed to create reply"
+      "createReplyFailed": "Failed to create reply",
+      "required": "Required"
     },
     "members": {
       "title": "Members & Agents",

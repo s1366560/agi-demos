@@ -214,7 +214,41 @@
     "genes": "基因市场",
     "instanceTemplates": "实例模板",
     "auditLogs": "审计日志",
-    "orgSettings": "组织设置"
+    "orgSettings": "组织设置",
+    "blackboard": "中央黑板"
+  },
+  "blackboard": {
+    "title": "中央黑板",
+    "newPost": "新建帖子",
+    "postTitle": "标题",
+    "postContent": "内容",
+    "createPost": "创建帖子",
+    "cancel": "取消",
+    "pinned": "已置顶",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "delete": "删除",
+    "edit": "编辑",
+    "save": "保存",
+    "reply": "回复",
+    "replies": "回复列表",
+    "noReplies": "暂无回复",
+    "writeReply": "写一条回复...",
+    "sendReply": "发送",
+    "noPosts": "暂无帖子",
+    "noPostsDescription": "创建第一篇帖子来开始讨论。",
+    "deleteConfirm": "确定要删除这篇帖子吗？",
+    "deleteReplyConfirm": "确定要删除这条回复吗？",
+    "postCreated": "帖子已创建",
+    "postUpdated": "帖子已更新",
+    "postDeleted": "帖子已删除",
+    "replyCreated": "回复已发送",
+    "replyDeleted": "回复已删除",
+    "selectPost": "选择一篇帖子查看详情",
+    "open": "开放",
+    "archived": "已归档",
+    "allPosts": "所有帖子",
+    "pinnedOnly": "仅看置顶"
   },
   "user": {
     "profile": "个人资料",
@@ -3589,7 +3623,8 @@
       "replyPlaceholder": "回复",
       "status": "状态",
       "createPostFailed": "创建帖子失败",
-      "createReplyFailed": "创建回复失败"
+      "createReplyFailed": "创建回复失败",
+      "required": "必填"
     },
     "members": {
       "title": "成员与 Agent",

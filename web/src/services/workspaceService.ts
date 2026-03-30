@@ -238,6 +238,94 @@ export const workspaceBlackboardService = {
     );
     return response.json() as Promise<BlackboardReply>;
   },
+
+  getPost: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string
+  ): Promise<BlackboardPost> => {
+    const response = await apiFetch.get(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`
+    );
+    return response.json() as Promise<BlackboardPost>;
+  },
+
+  updatePost: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string,
+    data: Partial<Pick<BlackboardPost, 'title' | 'content' | 'status' | 'is_pinned'>>
+  ): Promise<BlackboardPost> => {
+    const response = await apiFetch.patch(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`,
+      data
+    );
+    return response.json() as Promise<BlackboardPost>;
+  },
+
+  deletePost: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string
+  ): Promise<void> => {
+    await apiFetch.delete(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`
+    );
+  },
+
+  pinPost: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string
+  ): Promise<BlackboardPost> => {
+    const response = await apiFetch.post(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/pin`
+    );
+    return response.json() as Promise<BlackboardPost>;
+  },
+
+  unpinPost: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string
+  ): Promise<BlackboardPost> => {
+    const response = await apiFetch.post(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/unpin`
+    );
+    return response.json() as Promise<BlackboardPost>;
+  },
+
+  updateReply: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string,
+    replyId: string,
+    data: Pick<BlackboardReply, 'content'>
+  ): Promise<BlackboardReply> => {
+    const response = await apiFetch.patch(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies/${replyId}`,
+      data
+    );
+    return response.json() as Promise<BlackboardReply>;
+  },
+
+  deleteReply: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string,
+    replyId: string
+  ): Promise<void> => {
+    await apiFetch.delete(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies/${replyId}`
+    );
+  },
 };
 
 export const workspaceTaskService = {

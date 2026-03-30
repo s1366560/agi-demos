@@ -260,6 +260,7 @@ const PROJECT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'entities', icon: 'category', label: 'nav.entities', path: '/entities' },
         { id: 'communities', icon: 'groups', label: 'nav.communities', path: '/communities' },
         { id: 'graph', icon: 'hub', label: 'nav.knowledgeGraph', path: '/graph' },
+        { id: 'blackboard', icon: 'forum', label: 'nav.blackboard', path: '/blackboard' },
       ],
     },
     {
@@ -357,6 +358,7 @@ const PROJECT_HEADER_TABS: TabItem[] = [
   { id: 'communities', label: 'nav.communities', path: 'communities' },
   { id: 'graph', label: 'nav.knowledgeGraph', path: 'graph' },
   { id: 'search', label: 'nav.deepSearch', path: 'advanced-search' },
+  { id: 'blackboard', label: 'nav.blackboard', path: 'blackboard' },
   { id: 'schema', label: 'nav.schema', path: 'schema' },
   { id: 'channels', label: 'nav.channels', path: 'channels' },
   { id: 'maintenance', label: 'nav.maintenance', path: 'maintenance' },
