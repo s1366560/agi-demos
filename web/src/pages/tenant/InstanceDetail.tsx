@@ -4,7 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { Table, Tag, Button, Space, Popconfirm, message, Card, Modal, InputNumber } from 'antd';
-import { ArrowLeft } from 'lucide-react';
+import {
+  ArrowLeft,
+  FileText,
+  Network,
+  Users,
+  Dna,
+  Settings,
+  LayoutDashboard,
+} from 'lucide-react';
 
 import {
   useCurrentInstance,
@@ -19,7 +27,7 @@ import type { InstanceMemberResponse } from '../../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
 export const InstanceDetail: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { instanceId: id } = useParams<{ instanceId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -183,6 +191,65 @@ export const InstanceDetail: React.FC = () => {
             <Button danger>{t('tenant.instances.actions.delete')}</Button>
           </Popconfirm>
         </Space>
+      </div>
+
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700 -mb-2">
+        {[
+          {
+            key: 'overview',
+            label: t('tenant.instances.tabs.overview'),
+            icon: <LayoutDashboard size={14} />,
+            path: '',
+          },
+          {
+            key: 'files',
+            label: t('tenant.instances.tabs.files'),
+            icon: <FileText size={14} />,
+            path: '/files',
+          },
+          {
+            key: 'channels',
+            label: t('tenant.instances.tabs.channels'),
+            icon: <Network size={14} />,
+            path: '/channels',
+          },
+          {
+            key: 'members',
+            label: t('tenant.instances.tabs.members'),
+            icon: <Users size={14} />,
+            path: '/members',
+          },
+          {
+            key: 'genes',
+            label: t('tenant.instances.tabs.genes'),
+            icon: <Dna size={14} />,
+            path: '/genes',
+          },
+          {
+            key: 'settings',
+            label: t('tenant.instances.tabs.settings'),
+            icon: <Settings size={14} />,
+            path: '/settings',
+          },
+        ].map((tab) => (
+          <button
+            type="button"
+            key={tab.key}
+            onClick={() => {
+              if (tab.path) {
+                navigate(`.${tab.path}`);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              tab.key === 'overview'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:border-slate-300'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

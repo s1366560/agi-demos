@@ -190,7 +190,7 @@ export const geneMarketService = {
   updateGene: (id: string, data: GeneUpdate) =>
     httpClient.put<GeneResponse>(`${BASE_URL}/${id}`, data),
 
-  deleteGene: (id: string) => httpClient.delete<unknown>(`${BASE_URL}/${id}`),
+  deleteGene: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
 
   listGenomes: (params?: { page?: number; page_size?: number }) =>
     httpClient.get<GenomeListResponse>(`${BASE_URL}/genomes`, { params }),
@@ -203,7 +203,7 @@ export const geneMarketService = {
   updateGenome: (id: string, data: GenomeUpdate) =>
     httpClient.put<GenomeResponse>(`${BASE_URL}/genomes/${id}`, data),
 
-  deleteGenome: (id: string) => httpClient.delete<unknown>(`${BASE_URL}/genomes/${id}`),
+  deleteGenome: (id: string) => httpClient.delete(`${BASE_URL}/genomes/${id}`),
 
   installGene: (instanceId: string, data: GeneInstallRequest) =>
     httpClient.post<InstanceGeneResponse>(`${BASE_URL}/instances/${instanceId}/install`, data),
@@ -245,5 +245,5 @@ export const geneMarketService = {
     httpClient.post<GeneReview>(`${BASE_URL}/${geneId}/reviews`, data),
 
   deleteGeneReview: (geneId: string, reviewId: string) =>
-    httpClient.delete<unknown>(`${BASE_URL}/${geneId}/reviews/${reviewId}`),
+    httpClient.delete(`${BASE_URL}/${geneId}/reviews/${reviewId}`),
 };

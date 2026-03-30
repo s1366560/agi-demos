@@ -49,6 +49,8 @@ from src.infrastructure.adapters.primary.web.routers import (
     events,
     genes,
     graph,
+    instance_channels,
+    instance_files,
     instance_templates,
     instances,
     invitations,
@@ -443,6 +445,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Instance / Deploy / Cluster / Gene Marketplace / Template Marketplace
     app.include_router(instances.router)
+    app.include_router(instance_files.router)
+    app.include_router(instance_channels.router)
     app.include_router(deploy.router)
     app.include_router(clusters.router)
     app.include_router(genes.router)

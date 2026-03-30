@@ -40,6 +40,7 @@ import {
   ArrowLeft,
   ChevronRight,
   LayoutGrid,
+  Server,
 } from 'lucide-react';
 
 import { useAuthActions, useUser } from '@/stores/auth';
@@ -147,6 +148,12 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         label: t('nav.providers', 'Model Services'),
         path: `${basePath}/providers`,
         icon: <Cpu size={16} />,
+      },
+      {
+        id: 'instances',
+        label: t('nav.instances', 'Instances'),
+        path: `${basePath}/instances`,
+        icon: <Server size={16} />,
       },
     ],
     [basePath, effectiveProjectId, t]

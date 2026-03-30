@@ -65,7 +65,7 @@ export const instanceTemplateService = {
   update: (id: string, data: InstanceTemplateUpdate) =>
     httpClient.put<InstanceTemplateResponse>(`${BASE_URL}/${id}`, data),
 
-  delete: (id: string) => httpClient.delete<unknown>(`${BASE_URL}/${id}`),
+  delete: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
 
   publish: (id: string) => httpClient.post<InstanceTemplateResponse>(`${BASE_URL}/${id}/publish`),
 
@@ -77,5 +77,5 @@ export const instanceTemplateService = {
     httpClient.post<TemplateItemResponse>(`${BASE_URL}/${id}/items`, data),
 
   removeItem: (id: string, itemId: string) =>
-    httpClient.delete<unknown>(`${BASE_URL}/${id}/items/${itemId}`),
+    httpClient.delete(`${BASE_URL}/${id}/items/${itemId}`),
 };

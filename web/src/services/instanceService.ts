@@ -164,9 +164,9 @@ export interface InstanceLlmConfigUpdate {
 
 export const instanceService = {
   list: (params?: { page?: number; page_size?: number; status?: string; search?: string }) =>
-    httpClient.get<InstanceListResponse>(BASE_URL, { params }),
+    httpClient.get<InstanceListResponse>(`${BASE_URL}/`, { params }),
 
-  create: (data: InstanceCreate) => httpClient.post<InstanceResponse>(BASE_URL, data),
+  create: (data: InstanceCreate) => httpClient.post<InstanceResponse>(`${BASE_URL}/`, data),
 
   getById: (id: string) => httpClient.get<InstanceResponse>(`${BASE_URL}/${id}`),
 

@@ -35,7 +35,7 @@ declare module '@/vendor/kasmvnc/core/rfb.js' {
   }
 
   export interface CredentialsRequiredEvent extends RFBEventDetail {
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+     
     detail: Record<string, never>;
   }
 

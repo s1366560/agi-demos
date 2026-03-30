@@ -61,7 +61,7 @@ export const clusterService = {
   update: (id: string, data: ClusterUpdate) =>
     httpClient.put<ClusterResponse>(`${BASE_URL}/${id}`, data),
 
-  delete: (id: string) => httpClient.delete<unknown>(`${BASE_URL}/${id}`),
+  delete: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
 
   getHealth: (id: string) => httpClient.get<ClusterHealthResponse>(`${BASE_URL}/${id}/health`),
 };

@@ -129,7 +129,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
     },
   }[execution.status];
 
-  // eslint-disable-next-line react-hooks/static-components
+   
   const ToolIcon = getToolIcon(execution.toolName);
 
   if (compact) {

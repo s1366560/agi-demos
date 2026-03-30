@@ -6,6 +6,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Input, Tag, Button as AntButton, Select, InputNumber } from 'antd';
 import { AlertCircle, ArrowLeft, Link, Network, Plus, Unlink, Webhook, Plug, MessageCircle, MessageSquare, Mail } from 'lucide-react';
 
+import { instanceChannelService } from '@/services/instanceChannelService';
+
 import {
   useLazyMessage,
   LazyPopconfirm,
@@ -49,32 +51,6 @@ const STATUS_COLORS: Record<ChannelStatus, string> = {
   pending: 'blue',
 };
 
-// Mock data for demonstration - in production this would come from API
-const mockChannels: ChannelConfig[] = [
-  {
-    id: '1',
-    instance_id: 'inst-1',
-    channel_type: 'mcp',
-    name: 'Default MCP Server',
-    config: { server_url: 'ws://localhost:8080', timeout: 30 },
-    status: 'connected',
-    last_connected_at: new Date().toISOString(),
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    updated_at: null,
-  },
-  {
-    id: '2',
-    instance_id: 'inst-1',
-    channel_type: 'webhook',
-    name: 'CI/CD Webhook',
-    config: { url: 'https://example.com/webhook', secret: '***' },
-    status: 'connected',
-    last_connected_at: new Date(Date.now() - 3600000).toISOString(),
-    created_at: new Date(Date.now() - 172800000).toISOString(),
-    updated_at: null,
-  },
-];
-
 export const InstanceChannels: React.FC = () => {
   const { t } = useTranslation();
   const { instanceId } = useParams<{ instanceId: string }>();
@@ -98,17 +74,8 @@ export const InstanceChannels: React.FC = () => {
     if (!instanceId) return;
     setIsLoading(true);
     try {
-      // TODO: Replace with actual API call when backend endpoint is available
-      // const response = await httpClient.get<{ items: ChannelConfig[] }>(
-      //   `/instances/${instanceId}/channels`
-      // );
-      // setChannels(response.items);
-
-      // Using mock data for now
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setChannels(
-        mockChannels.filter((c) => c.instance_id === instanceId || instanceId === 'inst-1')
-      );
+      const response = await instanceChannelService.listChannels(instanceId);
+      setChannels(response.items);
     } catch (error) {
       console.error('Failed to fetch channels:', error);
       message?.error(t('tenant.instances.channels.fetchError'));
@@ -156,21 +123,19 @@ export const InstanceChannels: React.FC = () => {
     if (!instanceId || !formName.trim()) return;
     setIsSubmitting(true);
     try {
-      // TODO: Replace with actual API call
-      // if (editingChannel) {
-      //   await httpClient.put(`/instances/${instanceId}/channels/${editingChannel.id}`, {
-      //     name: formName,
-      //     config: formConfig,
-      //   });
-      // } else {
-      //   await httpClient.post(`/instances/${instanceId}/channels`, {
-      //     channel_type: formChannelType,
-      //     name: formName,
-      //     config: formConfig,
-      //   });
-      // }
+      if (editingChannel) {
+        await instanceChannelService.updateChannel(instanceId, editingChannel.id, {
+          name: formName,
+          config: formConfig,
+        });
+      } else {
+        await instanceChannelService.createChannel(instanceId, {
+          channel_type: formChannelType,
+          name: formName,
+          config: formConfig,
+        });
+      }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
       message?.success(
         editingChannel
           ? t('tenant.instances.channels.updateSuccess')
@@ -201,12 +166,9 @@ export const InstanceChannels: React.FC = () => {
       if (!instanceId) return;
       setIsSubmitting(true);
       try {
-        // TODO: Replace with actual API call
-        // await httpClient.delete(`/instances/${instanceId}/channels/${channelId}`);
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        setChannels((prev) => prev.filter((c) => c.id !== channelId));
+        await instanceChannelService.deleteChannel(instanceId, channelId);
         message?.success(t('tenant.instances.channels.deleteSuccess'));
+        fetchChannels();
       } catch (error) {
         console.error('Failed to delete channel:', error);
         message?.error(t('tenant.instances.channels.deleteError'));
@@ -214,7 +176,7 @@ export const InstanceChannels: React.FC = () => {
         setIsSubmitting(false);
       }
     },
-    [instanceId, message, t]
+    [instanceId, message, t, fetchChannels]
   );
 
   const handleTestConnection = useCallback(
@@ -222,11 +184,9 @@ export const InstanceChannels: React.FC = () => {
       if (!instanceId) return;
       setTestingChannelId(channelId);
       try {
-        // TODO: Replace with actual API call
-        // await httpClient.post(`/instances/${instanceId}/channels/${channelId}/test`);
-
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        message?.success(t('tenant.instances.channels.testSuccess'));
+        const result = await instanceChannelService.testConnection(instanceId, channelId);
+        message?.success(result.message || t('tenant.instances.channels.testSuccess'));
+        fetchChannels();
       } catch (error) {
         console.error('Channel test failed:', error);
         message?.error(t('tenant.instances.channels.testError'));
@@ -234,7 +194,7 @@ export const InstanceChannels: React.FC = () => {
         setTestingChannelId(null);
       }
     },
-    [instanceId, message, t]
+    [instanceId, message, t, fetchChannels]
   );
 
   const handleGoBack = useCallback(() => {
@@ -420,7 +380,7 @@ export const InstanceChannels: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                {channels.filter((c) => c.status === 'disconnected').length}
+                {channels.filter((c) => c.status === 'disconnected' || c.status === 'pending').length}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('tenant.instances.channels.disconnected')}
@@ -485,7 +445,7 @@ export const InstanceChannels: React.FC = () => {
                   {t('tenant.instances.channels.colLastConnected')}
                 </th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('common.actions')}
+                  {t('tenant.instances.channels.colActions')}
                 </th>
               </tr>
             </thead>

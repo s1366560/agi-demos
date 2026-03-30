@@ -106,7 +106,7 @@ export function ToolExecutionLive({
     return Puzzle;
   };
 
-  // eslint-disable-next-line react-hooks/static-components
+   
   const ToolIcon = getToolIcon(toolName);
 
   return (

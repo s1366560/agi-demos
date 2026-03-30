@@ -6,6 +6,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Input, Tag, Dropdown, Button as AntButton, Breadcrumb, Tree, Modal } from 'antd';
 import { ArrowLeft, Download, Eye, FilePlus, FileText, Folder, FolderOpen, FolderPlus, HardDrive, MoreVertical, Trash2, Upload, Image as ImageIcon, FileBox, Terminal, Code, Braces, File } from 'lucide-react';
 
+import { instanceFileService } from '@/services/instanceFileService';
+
 import { useLazyMessage, LazyEmpty, LazySpin, LazyModal } from '@/components/ui/lazyAntd';
 
 import type { MenuProps, TreeDataNode } from 'antd';
@@ -22,106 +24,6 @@ interface FileNode {
   modified_at: string;
   children?: FileNode[];
 }
-
-// Mock data for demonstration
-const mockFileTree: FileNode[] = [
-  {
-    key: 'workspace',
-    name: 'workspace',
-    type: 'folder',
-    size: null,
-    mime_type: null,
-    modified_at: new Date(Date.now() - 86400000).toISOString(),
-    children: [
-      {
-        key: 'workspace/src',
-        name: 'src',
-        type: 'folder',
-        size: null,
-        mime_type: null,
-        modified_at: new Date(Date.now() - 86400000).toISOString(),
-        children: [
-          {
-            key: 'workspace/src/main.py',
-            name: 'main.py',
-            type: 'file',
-            size: 2048,
-            mime_type: 'text/x-python',
-            modified_at: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            key: 'workspace/src/utils.py',
-            name: 'utils.py',
-            type: 'file',
-            size: 1024,
-            mime_type: 'text/x-python',
-            modified_at: new Date(Date.now() - 7200000).toISOString(),
-          },
-          {
-            key: 'workspace/src/config',
-            name: 'config',
-            type: 'folder',
-            size: null,
-            mime_type: null,
-            modified_at: new Date(Date.now() - 86400000).toISOString(),
-            children: [
-              {
-                key: 'workspace/src/config/settings.yaml',
-                name: 'settings.yaml',
-                type: 'file',
-                size: 512,
-                mime_type: 'application/x-yaml',
-                modified_at: new Date(Date.now() - 172800000).toISOString(),
-              },
-            ],
-          },
-        ],
-      },
-      {
-        key: 'workspace/data',
-        name: 'data',
-        type: 'folder',
-        size: null,
-        mime_type: null,
-        modified_at: new Date(Date.now() - 86400000).toISOString(),
-        children: [
-          {
-            key: 'workspace/data/input.json',
-            name: 'input.json',
-            type: 'file',
-            size: 4096,
-            mime_type: 'application/json',
-            modified_at: new Date(Date.now() - 259200000).toISOString(),
-          },
-          {
-            key: 'workspace/data/output.csv',
-            name: 'output.csv',
-            type: 'file',
-            size: 8192,
-            mime_type: 'text/csv',
-            modified_at: new Date(Date.now() - 345600000).toISOString(),
-          },
-        ],
-      },
-      {
-        key: 'workspace/README.md',
-        name: 'README.md',
-        type: 'file',
-        size: 256,
-        mime_type: 'text/markdown',
-        modified_at: new Date(Date.now() - 604800000).toISOString(),
-      },
-      {
-        key: 'workspace/requirements.txt',
-        name: 'requirements.txt',
-        type: 'file',
-        size: 128,
-        mime_type: 'text/plain',
-        modified_at: new Date(Date.now() - 604800000).toISOString(),
-      },
-    ],
-  },
-];
 
 const getFileIcon = (node: FileNode): React.ComponentType<{ size?: number; className?: string }> => {
   if (node.type === 'folder') return Folder;
@@ -173,14 +75,8 @@ export const InstanceFiles: React.FC = () => {
     if (!instanceId) return;
     setIsLoading(true);
     try {
-      // TODO: Replace with actual API call when backend endpoint is available
-      // const response = await httpClient.get<{ tree: FileNode[] }>(
-      //   `/instances/${instanceId}/files`
-      // );
-      // setFileTree(response.tree);
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setFileTree(mockFileTree);
+      const response = await instanceFileService.listFiles(instanceId);
+      setFileTree(response.tree);
     } catch (error) {
       console.error('Failed to fetch file tree:', error);
       message?.error(t('tenant.instances.files.fetchError'));
@@ -192,6 +88,47 @@ export const InstanceFiles: React.FC = () => {
   useEffect(() => {
     fetchFileTree();
   }, [fetchFileTree]);
+
+  // Recursively filter tree nodes by search term, keeping parent folders if any descendant matches
+  const filterTree = useCallback(
+    (nodes: FileNode[], term: string): FileNode[] => {
+      if (!term) return nodes;
+      const lowerTerm = term.toLowerCase();
+      return nodes.reduce<FileNode[]>((acc, node) => {
+        const nameMatches = node.name.toLowerCase().includes(lowerTerm);
+        const filteredChildren = node.children ? filterTree(node.children, term) : [];
+        if (nameMatches || filteredChildren.length > 0) {
+          acc.push({
+            ...node,
+            children: node.children ? filteredChildren : undefined,
+          });
+        }
+        return acc;
+      }, []);
+    },
+    []
+  );
+
+  const filteredFileTree = useMemo(
+    () => filterTree(fileTree, search),
+    [fileTree, search, filterTree]
+  );
+
+  // Auto-expand all folders when searching so matched results are visible
+  const effectiveExpandedKeys = useMemo(() => {
+    if (!search) return expandedKeys;
+    const keys: string[] = [];
+    const collectFolderKeys = (nodes: FileNode[]) => {
+      for (const node of nodes) {
+        if (node.type === 'folder') {
+          keys.push(node.key);
+          if (node.children) collectFolderKeys(node.children);
+        }
+      }
+    };
+    collectFolderKeys(filteredFileTree);
+    return keys;
+  }, [search, expandedKeys, filteredFileTree]);
 
   const convertToTreeData = useCallback(
     (nodes: FileNode[]): TreeDataNode[] => {
@@ -250,29 +187,8 @@ export const InstanceFiles: React.FC = () => {
       setIsPreviewModalOpen(true);
 
       try {
-        // TODO: Replace with actual API call
-        // const response = await httpClient.get<FileContent>(
-        //   `/instances/${instanceId}/files/${encodeURIComponent(node.key)}/content`
-        // );
-        // setPreviewContent(response.content);
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // Mock content based on file type
-        const ext = node.name.split('.').pop()?.toLowerCase();
-        if (ext === 'py') {
-          setPreviewContent(
-            `# ${node.name}\n\ndef main():\n    print("Hello, World!")\n\nif __name__ == "__main__":\n    main()`
-          );
-        } else if (ext === 'json') {
-          setPreviewContent('{\n  "name": "example",\n  "version": "1.0.0"\n}');
-        } else if (ext === 'md') {
-          setPreviewContent(`# Project Title\n\nThis is a sample README file.`);
-        } else if (ext === 'yaml' || ext === 'yml') {
-          setPreviewContent('app:\n  name: myapp\n  version: 1.0.0\ndebug: false');
-        } else {
-          setPreviewContent(`Content of ${node.name}`);
-        }
+        const response = await instanceFileService.previewFile(instanceId!, node.key);
+        setPreviewContent(response.content);
       } catch (error) {
         console.error('Failed to fetch file content:', error);
         message?.error(t('tenant.instances.files.previewError'));
@@ -280,7 +196,7 @@ export const InstanceFiles: React.FC = () => {
         setIsPreviewLoading(false);
       }
     },
-    [message, t]
+    [instanceId, message, t]
   );
 
   const handleDownload = useCallback(
@@ -288,38 +204,31 @@ export const InstanceFiles: React.FC = () => {
       if (node.type !== 'file') return;
 
       try {
-        // TODO: Replace with actual API call
-        // const blob = await httpClient.get(
-        //   `/instances/${instanceId}/files/${encodeURIComponent(node.key)}/download`,
-        //   { responseType: 'blob' }
-        // );
-        // const url = URL.createObjectURL(blob);
-        // const a = document.createElement('a');
-        // a.href = url;
-        // a.download = node.name;
-        // a.click();
-
+        const blob = await instanceFileService.downloadFile(instanceId!, node.key);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = node.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
         message?.success(t('tenant.instances.files.downloadSuccess'));
       } catch (error) {
         console.error('Failed to download file:', error);
         message?.error(t('tenant.instances.files.downloadError'));
       }
     },
-    [message, t]
+    [instanceId, message, t]
   );
 
   const handleDelete = useCallback(
     async (node: FileNode) => {
       if (!instanceId) return;
-      // Log for debugging (node is used in actual API call)
-      console.debug('Deleting node:', node.key);
 
       setIsSubmitting(true);
       try {
-        // TODO: Replace with actual API call
-        // await httpClient.delete(`/instances/${instanceId}/files/${encodeURIComponent(node.key)}`);
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await instanceFileService.deleteFile(instanceId, node.key);
         message?.success(t('tenant.instances.files.deleteSuccess'));
         setSelectedNode(null);
         fetchFileTree();
@@ -338,13 +247,11 @@ export const InstanceFiles: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      // TODO: Replace with actual API call
-      // await httpClient.post(`/instances/${instanceId}/files`, {
-      //   path: createParentPath ? `${createParentPath}/${createName}` : createName,
-      //   type: createType,
-      // });
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await instanceFileService.createFile(
+        instanceId,
+        createParentPath ? `${createParentPath}/${createName}` : createName,
+        createType
+      );
       message?.success(
         createType === 'folder'
           ? t('tenant.instances.files.createFolderSuccess')
@@ -363,9 +270,24 @@ export const InstanceFiles: React.FC = () => {
   }, [instanceId, createName, createType, createParentPath, message, t, fetchFileTree]);
 
   const handleUpload = useCallback(() => {
-    // TODO: Implement file upload
-    message?.info(t('tenant.instances.files.uploadInfo'));
-  }, [message, t]);
+    if (!instanceId) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const directory = selectedNode?.type === 'folder' ? selectedNode.key : '';
+        await instanceFileService.uploadFile(instanceId, file, directory);
+        message?.success(t('tenant.instances.files.uploadSuccess'));
+        fetchFileTree();
+      } catch (error) {
+        console.error('Failed to upload file:', error);
+        message?.error(t('tenant.instances.files.uploadError'));
+      }
+    };
+    input.click();
+  }, [instanceId, selectedNode, message, t, fetchFileTree]);
 
   const handleGoBack = useCallback(() => {
     navigate(-1);
@@ -595,15 +517,15 @@ export const InstanceFiles: React.FC = () => {
                 <div className="flex justify-center py-8">
                   <LazySpin />
                 </div>
-              ) : fileTree.length === 0 ? (
+              ) : filteredFileTree.length === 0 ? (
                 <div className="py-8">
-                  <LazyEmpty description={t('tenant.instances.files.noFiles')} />
+                  <LazyEmpty description={search ? t('tenant.instances.files.noSearchResults') : t('tenant.instances.files.noFiles')} />
                 </div>
               ) : (
                 <Tree
-                  treeData={convertToTreeData(fileTree)}
+                  treeData={convertToTreeData(filteredFileTree)}
                   selectedKeys={selectedNode ? [selectedNode.key] : []}
-                  expandedKeys={expandedKeys}
+                  expandedKeys={effectiveExpandedKeys}
                   onSelect={handleSelect}
                   onExpand={handleExpand}
                   showIcon={false}
