@@ -25,6 +25,8 @@ def make_workspace_agent(
     workspace_id: str = "workspace-1",
     agent_id: str = "agent-1",
     is_active: bool = True,
+    hex_q: int | None = None,
+    hex_r: int | None = None,
 ) -> WorkspaceAgent:
     return WorkspaceAgent(
         id=relation_id,
@@ -34,6 +36,8 @@ def make_workspace_agent(
         description="Agent relation",
         config={"mode": "assist"},
         is_active=is_active,
+        hex_q=hex_q,
+        hex_r=hex_r,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -43,7 +47,9 @@ class TestSqlWorkspaceAgentRepository:
     """Tests for workspace-agent repository behavior."""
 
     @pytest.mark.asyncio
-    async def test_save_and_find_by_id(self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository) -> None:
+    async def test_save_and_find_by_id(
+        self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository
+    ) -> None:
         relation = make_workspace_agent("wa-1")
         await v2_workspace_agent_repo.save(relation)
 
@@ -58,16 +64,24 @@ class TestSqlWorkspaceAgentRepository:
         self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository
     ) -> None:
         await v2_workspace_agent_repo.save(
-            make_workspace_agent("wa-a", workspace_id="workspace-a", agent_id="agent-a", is_active=True)
+            make_workspace_agent(
+                "wa-a", workspace_id="workspace-a", agent_id="agent-a", is_active=True
+            )
         )
         await v2_workspace_agent_repo.save(
-            make_workspace_agent("wa-b", workspace_id="workspace-a", agent_id="agent-b", is_active=False)
+            make_workspace_agent(
+                "wa-b", workspace_id="workspace-a", agent_id="agent-b", is_active=False
+            )
         )
 
-        all_items = await v2_workspace_agent_repo.find_by_workspace("workspace-a", active_only=False)
+        all_items = await v2_workspace_agent_repo.find_by_workspace(
+            "workspace-a", active_only=False
+        )
         assert len(all_items) == 2
 
-        active_items = await v2_workspace_agent_repo.find_by_workspace("workspace-a", active_only=True)
+        active_items = await v2_workspace_agent_repo.find_by_workspace(
+            "workspace-a", active_only=True
+        )
         assert len(active_items) == 1
         assert active_items[0].agent_id == "agent-a"
 
@@ -86,7 +100,33 @@ class TestSqlWorkspaceAgentRepository:
         assert found.display_name == "Updated Name"
 
     @pytest.mark.asyncio
-    async def test_delete_relation(self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository) -> None:
+    async def test_find_by_workspace_and_agent_id_and_hex(
+        self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository
+    ) -> None:
+        await v2_workspace_agent_repo.save(
+            make_workspace_agent(
+                "wa-find",
+                workspace_id="workspace-find",
+                agent_id="agent-find",
+                hex_q=3,
+                hex_r=-1,
+            )
+        )
+
+        found = await v2_workspace_agent_repo.find_by_workspace_and_agent_id(
+            "workspace-find",
+            "agent-find",
+        )
+        occupied = await v2_workspace_agent_repo.find_by_workspace_and_hex("workspace-find", 3, -1)
+
+        assert found is not None
+        assert found.id == "wa-find"
+        assert [agent.id for agent in occupied] == ["wa-find"]
+
+    @pytest.mark.asyncio
+    async def test_delete_relation(
+        self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository
+    ) -> None:
         await v2_workspace_agent_repo.save(make_workspace_agent("wa-del"))
 
         deleted = await v2_workspace_agent_repo.delete("wa-del")

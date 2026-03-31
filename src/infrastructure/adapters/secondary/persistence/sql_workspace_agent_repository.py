@@ -36,6 +36,42 @@ class SqlWorkspaceAgentRepository(
         rows = result.scalars().all()
         return [a for row in rows if (a := self._to_domain(row)) is not None]
 
+    async def find_by_workspace_and_agent_id(
+        self,
+        workspace_id: str,
+        agent_id: str,
+    ) -> WorkspaceAgent | None:
+        query = (
+            select(WorkspaceAgentModel)
+            .where(
+                WorkspaceAgentModel.workspace_id == workspace_id,
+                WorkspaceAgentModel.agent_id == agent_id,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(query)
+        row = result.scalar_one_or_none()
+        return self._to_domain(row)
+
+    async def find_by_workspace_and_hex(
+        self,
+        workspace_id: str,
+        hex_q: int,
+        hex_r: int,
+    ) -> list[WorkspaceAgent]:
+        query = (
+            select(WorkspaceAgentModel)
+            .where(
+                WorkspaceAgentModel.workspace_id == workspace_id,
+                WorkspaceAgentModel.hex_q == hex_q,
+                WorkspaceAgentModel.hex_r == hex_r,
+            )
+            .order_by(WorkspaceAgentModel.created_at.asc())
+        )
+        result = await self._session.execute(query)
+        rows = result.scalars().all()
+        return [a for row in rows if (a := self._to_domain(row)) is not None]
+
     def _to_domain(self, db_agent: WorkspaceAgentModel | None) -> WorkspaceAgent | None:
         if db_agent is None:
             return None

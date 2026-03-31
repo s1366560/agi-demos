@@ -50,10 +50,14 @@ async def test_topology_nodes_happy_path(
     create_resp = await authenticated_async_client.post(
         f"/api/v1/workspaces/{workspace.id}/topology/nodes",
         json={
-            "node_type": "note",
+            "node_type": "corridor",
             "title": "My Topology Node",
             "position_x": 10.5,
             "position_y": 20.25,
+            "hex_q": 2,
+            "hex_r": -1,
+            "status": "ready",
+            "tags": ["route", "alpha"],
             "data": {"color": "blue"},
         },
     )
@@ -61,7 +65,11 @@ async def test_topology_nodes_happy_path(
     created = create_resp.json()
     assert created["workspace_id"] == workspace.id
     assert created["title"] == "My Topology Node"
-    assert created["node_type"] == "note"
+    assert created["node_type"] == "corridor"
+    assert created["hex_q"] == 2
+    assert created["hex_r"] == -1
+    assert created["status"] == "ready"
+    assert created["tags"] == ["route", "alpha"]
 
     list_resp = await authenticated_async_client.get(
         f"/api/v1/workspaces/{workspace.id}/topology/nodes"

@@ -18,6 +18,9 @@ vi.mock('@/services/workspaceService', () => ({
     getById: vi.fn(),
     listMembers: vi.fn(),
     listAgents: vi.fn(),
+    bindAgent: vi.fn(),
+    updateAgentBinding: vi.fn(),
+    unbindAgent: vi.fn(),
   },
   workspaceBlackboardService: {
     listPosts: vi.fn(),
@@ -29,6 +32,12 @@ vi.mock('@/services/workspaceService', () => ({
   workspaceTopologyService: {
     listNodes: vi.fn(),
     listEdges: vi.fn(),
+    createNode: vi.fn(),
+    updateNode: vi.fn(),
+    deleteNode: vi.fn(),
+    createEdge: vi.fn(),
+    updateEdge: vi.fn(),
+    deleteEdge: vi.fn(),
   },
   workspaceObjectiveService: {
     list: vi.fn(),
@@ -470,5 +479,211 @@ describe('workspace store', () => {
 
     expect(result.current).toBe(firstValue);
     expect(result.current).toEqual([]);
+  });
+
+  it('moveAgent uses workspace binding id and upserts the updated agent payload', async () => {
+    useWorkspaceStore.setState({
+      agents: [
+        {
+          id: 'binding-1',
+          agent_id: 'agent-alpha',
+          hex_q: 0,
+          hex_r: 0,
+          is_active: true,
+        },
+      ] as any,
+    });
+    vi.mocked(workspaceService.updateAgentBinding).mockResolvedValueOnce({
+      id: 'binding-1',
+      agent_id: 'agent-alpha',
+      hex_q: 2,
+      hex_r: -1,
+      is_active: true,
+    } as any);
+
+    await useWorkspaceStore.getState().moveAgent(
+      'tenant-1',
+      'project-1',
+      'ws-1',
+      'binding-1',
+      2,
+      -1
+    );
+
+    expect(workspaceService.updateAgentBinding).toHaveBeenCalledWith(
+      'tenant-1',
+      'project-1',
+      'ws-1',
+      'binding-1',
+      { hex_q: 2, hex_r: -1 }
+    );
+    expect(useWorkspaceStore.getState().agents).toEqual([
+      expect.objectContaining({ id: 'binding-1', hex_q: 2, hex_r: -1 }),
+    ]);
+  });
+
+  it('updateTopologyNode keeps connected edge coordinates in sync locally', async () => {
+    useWorkspaceStore.setState({
+      topologyNodes: [
+        { id: 'node-1', node_type: 'corridor', title: 'Lane', hex_q: 1, hex_r: 0, position_x: 0, position_y: 0 },
+      ] as any,
+      topologyEdges: [
+        {
+          id: 'edge-1',
+          source_node_id: 'node-1',
+          target_node_id: 'node-2',
+          source_hex_q: 1,
+          source_hex_r: 0,
+          target_hex_q: 2,
+          target_hex_r: 0,
+        },
+      ] as any,
+    });
+    vi.mocked(workspaceTopologyService.updateNode).mockResolvedValueOnce({
+      id: 'node-1',
+      node_type: 'corridor',
+      title: 'Lane',
+      hex_q: 3,
+      hex_r: -1,
+      position_x: 0,
+      position_y: 0,
+    } as any);
+
+    await useWorkspaceStore.getState().updateTopologyNode('ws-1', 'node-1', { hex_q: 3, hex_r: -1 });
+
+    expect(useWorkspaceStore.getState().topologyEdges).toEqual([
+      expect.objectContaining({
+        id: 'edge-1',
+        source_hex_q: 3,
+        source_hex_r: -1,
+        target_hex_q: 2,
+        target_hex_r: 0,
+      }),
+    ]);
+  });
+
+  it('handleAgentBindingEvent upserts existing agents from event payloads', () => {
+    useWorkspaceStore.setState({
+      agents: [
+        {
+          id: 'binding-1',
+          agent_id: 'agent-alpha',
+          display_name: 'Old name',
+          config: { retained: true },
+          is_active: true,
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleAgentBindingEvent({
+      type: 'workspace_agent_bound',
+      data: {
+        agent: {
+          id: 'binding-1',
+          agent_id: 'agent-alpha',
+          display_name: 'Updated name',
+          hex_q: 4,
+          hex_r: -2,
+          is_active: true,
+        },
+      },
+    });
+
+    expect(useWorkspaceStore.getState().agents).toEqual([
+      expect.objectContaining({
+        id: 'binding-1',
+        display_name: 'Updated name',
+        config: { retained: true },
+        hex_q: 4,
+        hex_r: -2,
+      }),
+    ]);
+  });
+
+  it('handleAgentBindingEvent removes agents on workspace_agent_unbound payloads', () => {
+    useWorkspaceStore.setState({
+      agents: [
+        {
+          id: 'binding-1',
+          agent_id: 'agent-alpha',
+          is_active: true,
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleAgentBindingEvent({
+      type: 'workspace_agent_unbound',
+      data: {
+        workspace_agent_id: 'binding-1',
+      },
+    });
+
+    expect(useWorkspaceStore.getState().agents).toEqual([]);
+  });
+
+  it('handleTopologyEvent applies node update deltas with connected edge sync', () => {
+    useWorkspaceStore.setState({
+      topologyNodes: [{ id: 'node-1', node_type: 'corridor', hex_q: 1, hex_r: 0 }] as any,
+      topologyEdges: [
+        {
+          id: 'edge-1',
+          source_node_id: 'node-1',
+          target_node_id: 'node-2',
+          source_hex_q: 1,
+          source_hex_r: 0,
+          target_hex_q: 2,
+          target_hex_r: 0,
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleTopologyEvent({
+      type: 'topology_updated',
+      data: {
+        operation: 'node_updated',
+        node_id: 'node-1',
+        node: { id: 'node-1', node_type: 'corridor', hex_q: 4, hex_r: -2, position_x: 0, position_y: 0 },
+        updated_edges: [
+          {
+            id: 'edge-1',
+            source_node_id: 'node-1',
+            target_node_id: 'node-2',
+            source_hex_q: 4,
+            source_hex_r: -2,
+            target_hex_q: 2,
+            target_hex_r: 0,
+          },
+        ],
+      },
+    });
+
+    expect(useWorkspaceStore.getState().topologyNodes).toEqual([
+      expect.objectContaining({ id: 'node-1', hex_q: 4, hex_r: -2 }),
+    ]);
+    expect(useWorkspaceStore.getState().topologyEdges).toEqual([
+      expect.objectContaining({ id: 'edge-1', source_hex_q: 4, source_hex_r: -2 }),
+    ]);
+  });
+
+  it('handleTopologyEvent still replaces topology state from snapshot payloads', () => {
+    useWorkspaceStore.setState({
+      topologyNodes: [{ id: 'old-node' }] as any,
+      topologyEdges: [{ id: 'old-edge' }] as any,
+    });
+
+    useWorkspaceStore.getState().handleTopologyEvent({
+      type: 'topology_updated',
+      data: {
+        nodes: [{ id: 'node-1', node_type: 'corridor', hex_q: 1, hex_r: 0 }],
+        edges: [{ id: 'edge-1', source_node_id: 'node-1', target_node_id: 'node-1' }],
+      },
+    });
+
+    expect(useWorkspaceStore.getState().topologyNodes).toEqual([
+      expect.objectContaining({ id: 'node-1' }),
+    ]);
+    expect(useWorkspaceStore.getState().topologyEdges).toEqual([
+      expect.objectContaining({ id: 'edge-1' }),
+    ]);
   });
 });

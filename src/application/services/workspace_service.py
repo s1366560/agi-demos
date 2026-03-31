@@ -6,10 +6,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from src.application.services.workspace_layout_limits import validate_hex_target
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_role import WorkspaceRole
+from src.domain.ports.repositories.workspace.topology_repository import TopologyRepository
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
 )
@@ -17,6 +19,72 @@ from src.domain.ports.repositories.workspace.workspace_member_repository import 
     WorkspaceMemberRepository,
 )
 from src.domain.ports.repositories.workspace.workspace_repository import WorkspaceRepository
+
+RESERVED_BLACKBOARD_HEX = (0, 0)
+
+
+def _serialize_workspace_agent_event(agent: WorkspaceAgent) -> dict[str, Any]:
+    return {
+        "id": agent.id,
+        "workspace_id": agent.workspace_id,
+        "agent_id": agent.agent_id,
+        "display_name": agent.display_name,
+        "is_active": agent.is_active,
+        "hex_q": agent.hex_q,
+        "hex_r": agent.hex_r,
+        "theme_color": agent.theme_color,
+        "label": agent.label,
+        "status": agent.status,
+        "created_at": agent.created_at.isoformat(),
+        "updated_at": agent.updated_at.isoformat() if agent.updated_at else None,
+    }
+
+
+def _resolve_hex_target(hex_q: int | None, hex_r: int | None) -> tuple[int, int] | None:
+    if hex_q is None and hex_r is None:
+        return None
+    if hex_q is None or hex_r is None:
+        raise ValueError("Both hex_q and hex_r must be provided together")
+    validate_hex_target(hex_q, hex_r)
+    if (hex_q, hex_r) == RESERVED_BLACKBOARD_HEX:
+        raise ValueError("Center hex is reserved for the blackboard")
+    return hex_q, hex_r
+
+
+def _apply_agent_binding_updates(
+    relation: WorkspaceAgent,
+    *,
+    display_name: str | None = None,
+    description: str | None = None,
+    config: Mapping[str, object] | None = None,
+    is_active: bool | None = None,
+    hex_q: int | None = None,
+    hex_r: int | None = None,
+    theme_color: str | None = None,
+    label: str | None = None,
+    status: str | None = None,
+    clear_nullable_text: bool = False,
+) -> None:
+    if config is not None:
+        relation.config = dict(config)
+    if is_active is not None:
+        relation.is_active = is_active
+
+    if clear_nullable_text or display_name is not None:
+        relation.display_name = display_name
+    if clear_nullable_text or description is not None:
+        relation.description = description
+
+    updates = (
+        ("hex_q", hex_q),
+        ("hex_r", hex_r),
+        ("theme_color", theme_color),
+        ("label", label),
+        ("status", status),
+    )
+    for field_name, value in updates:
+        if value is not None:
+            setattr(relation, field_name, value)
 
 
 class WorkspaceService:
@@ -27,13 +95,39 @@ class WorkspaceService:
         workspace_repo: WorkspaceRepository,
         workspace_member_repo: WorkspaceMemberRepository,
         workspace_agent_repo: WorkspaceAgentRepository,
+        topology_repo: TopologyRepository,
         workspace_event_publisher: Callable[[str, str, dict[str, Any]], Awaitable[None]]
         | None = None,
     ) -> None:
         self._workspace_repo = workspace_repo
         self._workspace_member_repo = workspace_member_repo
         self._workspace_agent_repo = workspace_agent_repo
+        self._topology_repo = topology_repo
         self._workspace_event_publisher = workspace_event_publisher
+        self._pending_events: list[tuple[str, str, dict[str, Any]]] = []
+
+    def consume_pending_events(self) -> list[tuple[str, str, dict[str, Any]]]:
+        """Return and clear queued workspace events."""
+        pending_events = list(self._pending_events)
+        self._pending_events.clear()
+        return pending_events
+
+    async def publish_pending_events(self) -> None:
+        """Publish queued workspace events after the request transaction commits."""
+        if self._workspace_event_publisher is None:
+            self._pending_events.clear()
+            return
+        for workspace_id, event_name, payload in self._pending_events:
+            await self._workspace_event_publisher(workspace_id, event_name, payload)
+        self._pending_events.clear()
+
+    def _queue_workspace_event(
+        self,
+        workspace_id: str,
+        event_name: str,
+        payload: dict[str, Any],
+    ) -> None:
+        self._pending_events.append((workspace_id, event_name, payload))
 
     async def create_workspace(
         self,
@@ -303,6 +397,10 @@ class WorkspaceService:
         description: str | None = None,
         config: Mapping[str, object] | None = None,
         is_active: bool = True,
+        hex_q: int | None = None,
+        hex_r: int | None = None,
+        theme_color: str | None = None,
+        label: str | None = None,
     ) -> WorkspaceAgent:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -316,27 +414,48 @@ class WorkspaceService:
             workspace_id=workspace.id,
             agent_id=agent_id,
         )
+        if hex_q is not None or hex_r is not None:
+            target = _resolve_hex_target(
+                hex_q if hex_q is not None else existing.hex_q if existing is not None else None,
+                hex_r if hex_r is not None else existing.hex_r if existing is not None else None,
+            )
+            if target is not None:
+                await self._topology_repo.acquire_hex_lock(workspace.id, target[0], target[1])
+                await self._ensure_hex_available(
+                    workspace.id,
+                    target[0],
+                    target[1],
+                    exclude_agent_id=existing.id if existing is not None else None,
+                )
         now = datetime.now(UTC)
 
         if existing is not None:
-            existing.display_name = display_name
-            existing.description = description
-            existing.config = dict(config or existing.config)
-            existing.is_active = is_active
+            _apply_agent_binding_updates(
+                existing,
+                display_name=display_name,
+                description=description,
+                config=config,
+                is_active=is_active,
+                hex_q=hex_q,
+                hex_r=hex_r,
+                theme_color=theme_color,
+                label=label,
+                clear_nullable_text=True,
+            )
             existing.updated_at = now
             saved = await self._workspace_agent_repo.save(existing)
-            if self._workspace_event_publisher is not None:
-                await self._workspace_event_publisher(
-                    workspace.id,
-                    "workspace_agent_bound",
-                    {
-                        "workspace_id": workspace.id,
-                        "workspace_agent_id": saved.id,
-                        "agent_id": saved.agent_id,
-                        "is_update": True,
-                        "bound_by": actor_user_id,
-                    },
-                )
+            self._queue_workspace_event(
+                workspace.id,
+                "workspace_agent_bound",
+                {
+                    "workspace_id": workspace.id,
+                    "workspace_agent_id": saved.id,
+                    "agent_id": saved.agent_id,
+                    "agent": _serialize_workspace_agent_event(saved),
+                    "is_update": True,
+                    "bound_by": actor_user_id,
+                },
+            )
             return saved
 
         relation = WorkspaceAgent(
@@ -347,22 +466,26 @@ class WorkspaceService:
             description=description,
             config=dict(config or {}),
             is_active=is_active,
+            hex_q=hex_q,
+            hex_r=hex_r,
+            theme_color=theme_color,
+            label=label,
             created_at=now,
             updated_at=now,
         )
         saved = await self._workspace_agent_repo.save(relation)
-        if self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
-                workspace.id,
-                "workspace_agent_bound",
-                {
-                    "workspace_id": workspace.id,
-                    "workspace_agent_id": saved.id,
-                    "agent_id": saved.agent_id,
-                    "is_update": False,
-                    "bound_by": actor_user_id,
-                },
-            )
+        self._queue_workspace_event(
+            workspace.id,
+            "workspace_agent_bound",
+            {
+                "workspace_id": workspace.id,
+                "workspace_agent_id": saved.id,
+                "agent_id": saved.agent_id,
+                "agent": _serialize_workspace_agent_event(saved),
+                "is_update": False,
+                "bound_by": actor_user_id,
+            },
+        )
         return saved
 
     async def list_workspace_agents(
@@ -391,6 +514,11 @@ class WorkspaceService:
         description: str | None = None,
         config: Mapping[str, object] | None = None,
         is_active: bool | None = None,
+        hex_q: int | None = None,
+        hex_r: int | None = None,
+        theme_color: str | None = None,
+        label: str | None = None,
+        status: str | None = None,
     ) -> WorkspaceAgent:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -406,16 +534,47 @@ class WorkspaceService:
         if relation.workspace_id != workspace.id:
             raise ValueError("Workspace agent binding does not belong to workspace")
 
-        if display_name is not None:
-            relation.display_name = display_name
-        if description is not None:
-            relation.description = description
-        if config is not None:
-            relation.config = dict(config)
-        if is_active is not None:
-            relation.is_active = is_active
+        if hex_q is not None or hex_r is not None:
+            target = _resolve_hex_target(
+                hex_q if hex_q is not None else relation.hex_q,
+                hex_r if hex_r is not None else relation.hex_r,
+            )
+            if target is not None:
+                await self._topology_repo.acquire_hex_lock(workspace.id, target[0], target[1])
+                await self._ensure_hex_available(
+                    workspace.id,
+                    target[0],
+                    target[1],
+                    exclude_agent_id=relation.id,
+                )
+
+        _apply_agent_binding_updates(
+            relation,
+            display_name=display_name,
+            description=description,
+            config=config,
+            is_active=is_active,
+            hex_q=hex_q,
+            hex_r=hex_r,
+            theme_color=theme_color,
+            label=label,
+            status=status,
+        )
         relation.updated_at = datetime.now(UTC)
-        return await self._workspace_agent_repo.save(relation)
+        saved = await self._workspace_agent_repo.save(relation)
+        self._queue_workspace_event(
+            workspace.id,
+            "workspace_agent_bound",
+            {
+                "workspace_id": workspace.id,
+                "workspace_agent_id": saved.id,
+                "agent_id": saved.agent_id,
+                "agent": _serialize_workspace_agent_event(saved),
+                "is_update": True,
+                "bound_by": actor_user_id,
+            },
+        )
+        return saved
 
     async def unbind_agent(
         self,
@@ -437,8 +596,8 @@ class WorkspaceService:
         if relation.workspace_id != workspace.id:
             raise ValueError("Workspace agent binding does not belong to workspace")
         deleted = await self._workspace_agent_repo.delete(workspace_agent_id)
-        if deleted and self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
+        if deleted:
+            self._queue_workspace_event(
                 workspace.id,
                 "workspace_agent_unbound",
                 {
@@ -490,13 +649,31 @@ class WorkspaceService:
         workspace_id: str,
         agent_id: str,
     ) -> WorkspaceAgent | None:
-        candidates = await self._workspace_agent_repo.find_by_workspace(
+        return await self._workspace_agent_repo.find_by_workspace_and_agent_id(
             workspace_id=workspace_id,
-            active_only=False,
-            limit=500,
-            offset=0,
+            agent_id=agent_id,
         )
-        for candidate in candidates:
-            if candidate.agent_id == agent_id:
-                return candidate
-        return None
+
+    async def _ensure_hex_available(
+        self,
+        workspace_id: str,
+        hex_q: int,
+        hex_r: int,
+        *,
+        exclude_agent_id: str | None = None,
+    ) -> None:
+        occupying_agents = await self._workspace_agent_repo.find_by_workspace_and_hex(
+            workspace_id=workspace_id,
+            hex_q=hex_q,
+            hex_r=hex_r,
+        )
+        if any(agent.id != exclude_agent_id for agent in occupying_agents):
+            raise ValueError("Hex is already occupied")
+
+        occupying_nodes = await self._topology_repo.list_nodes_by_hex(
+            workspace_id=workspace_id,
+            hex_q=hex_q,
+            hex_r=hex_r,
+        )
+        if occupying_nodes:
+            raise ValueError("Hex is already occupied")

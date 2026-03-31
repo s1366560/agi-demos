@@ -17,7 +17,7 @@ import {
 } from '@/pages/project/blackboardRouteUtils';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
-import { CentralBlackboardCanvas } from '@/components/blackboard/CentralBlackboardCanvas';
+import { WorkstationArrangementBoard } from '@/components/blackboard/WorkstationArrangementBoard';
 import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import type { Workspace } from '@/types/workspace';
@@ -561,13 +561,16 @@ export function Blackboard() {
       {surfaceLoading ? (
         <LoadingShell />
       ) : (
-        <CentralBlackboardCanvas
+        <WorkstationArrangementBoard
+          tenantId={tenantId ?? ''}
+          projectId={projectId ?? ''}
+          workspaceId={selectedWorkspaceId ?? currentWorkspace?.id ?? ''}
           workspaceName={selectedWorkspace?.name ?? t('blackboard.title', 'Blackboard')}
-          tasks={tasks}
-          posts={posts}
+          agentWorkspacePath={agentWorkspacePath}
           agents={agents}
-          topologyNodes={topologyNodes}
-          topologyEdges={topologyEdges}
+          nodes={topologyNodes}
+          edges={topologyEdges}
+          tasks={tasks}
           onOpenBlackboard={() => {
             setBoardOpen(true);
           }}

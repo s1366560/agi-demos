@@ -25,6 +25,28 @@ class TopologyRepository(ABC):
         """List topology nodes in a workspace."""
 
     @abstractmethod
+    async def list_all_nodes_by_workspace(self, workspace_id: str) -> list[TopologyNode]:
+        """List all topology nodes in a workspace."""
+
+    @abstractmethod
+    async def list_nodes_by_hex(
+        self,
+        workspace_id: str,
+        hex_q: int,
+        hex_r: int,
+    ) -> list[TopologyNode]:
+        """List topology nodes occupying a specific hex."""
+
+    @abstractmethod
+    async def acquire_hex_lock(
+        self,
+        workspace_id: str,
+        hex_q: int,
+        hex_r: int,
+    ) -> None:
+        """Serialize competing occupancy claims for a single workspace hex."""
+
+    @abstractmethod
     async def save_edge(self, edge: TopologyEdge) -> TopologyEdge:
         """Save a topology edge (create or update)."""
 
@@ -40,6 +62,28 @@ class TopologyRepository(ABC):
         offset: int = 0,
     ) -> list[TopologyEdge]:
         """List topology edges in a workspace."""
+
+    @abstractmethod
+    async def list_all_edges_by_workspace(self, workspace_id: str) -> list[TopologyEdge]:
+        """List all topology edges in a workspace."""
+
+    @abstractmethod
+    async def list_edges_for_node(
+        self,
+        workspace_id: str,
+        node_id: str,
+    ) -> list[TopologyEdge]:
+        """List topology edges connected to a node within a workspace."""
+
+    @abstractmethod
+    async def sync_edge_coordinates_for_node(
+        self,
+        workspace_id: str,
+        node_id: str,
+        hex_q: int | None,
+        hex_r: int | None,
+    ) -> None:
+        """Update only the endpoint coordinates connected to a moved node."""
 
     @abstractmethod
     async def delete_node(self, node_id: str) -> bool:

@@ -13,6 +13,40 @@ import type {
   WorkspaceUpdateRequest,
 } from '@/types/workspace';
 
+type WorkspaceAgentUpdateRequest = Partial<
+  Pick<
+    WorkspaceAgent,
+    'display_name' | 'description' | 'config' | 'is_active' | 'hex_q' | 'hex_r' | 'theme_color'
+  >
+> & { label?: string };
+
+type TopologyNodeCreateRequest = Pick<TopologyNode, 'node_type'> &
+  Partial<
+    Pick<
+      TopologyNode,
+      'ref_id' | 'title' | 'position_x' | 'position_y' | 'hex_q' | 'hex_r' | 'status' | 'tags'
+    >
+  > & { data?: Record<string, unknown> };
+
+type TopologyNodeUpdateRequest = Partial<
+  Pick<
+    TopologyNode,
+    'node_type' | 'ref_id' | 'title' | 'position_x' | 'position_y' | 'hex_q' | 'hex_r' | 'status'
+  >
+> & {
+  tags?: string[];
+  data?: Record<string, unknown>;
+};
+
+type TopologyEdgeCreateRequest = Pick<TopologyEdge, 'source_node_id' | 'target_node_id'> &
+  Partial<Pick<TopologyEdge, 'label' | 'direction' | 'auto_created'>> & {
+    data?: Record<string, unknown>;
+  };
+
+type TopologyEdgeUpdateRequest = Partial<
+  Pick<TopologyEdge, 'source_node_id' | 'target_node_id' | 'label' | 'direction' | 'auto_created'>
+> & { data?: Record<string, unknown> };
+
 const workspaceBase = (tenantId: string, projectId: string) =>
   `/tenants/${tenantId}/projects/${projectId}/workspaces`;
 
@@ -163,6 +197,20 @@ export const workspaceService = {
   ): Promise<WorkspaceAgent> => {
     const response = await apiFetch.post(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents`,
+      data
+    );
+    return response.json() as Promise<WorkspaceAgent>;
+  },
+
+  updateAgentBinding: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string,
+    data: WorkspaceAgentUpdateRequest
+  ): Promise<WorkspaceAgent> => {
+    const response = await apiFetch.patch(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents/${workspaceAgentId}`,
       data
     );
     return response.json() as Promise<WorkspaceAgent>;
@@ -404,16 +452,46 @@ export const workspaceTopologyService = {
     return response.json() as Promise<TopologyEdge[]>;
   },
 
-  moveAgentPosition: async (
+  createNode: async (
     workspaceId: string,
-    agentId: string,
-    hexQ: number,
-    hexR: number
-  ): Promise<void> => {
-    await apiFetch.patch(`/workspaces/${workspaceId}/agents/${agentId}`, {
-      hex_q: hexQ,
-      hex_r: hexR,
-    });
+    data: TopologyNodeCreateRequest
+  ): Promise<TopologyNode> => {
+    const response = await apiFetch.post(`${topologyBase(workspaceId)}/nodes`, data);
+    return response.json() as Promise<TopologyNode>;
+  },
+
+  updateNode: async (
+    workspaceId: string,
+    nodeId: string,
+    data: TopologyNodeUpdateRequest
+  ): Promise<TopologyNode> => {
+    const response = await apiFetch.patch(`${topologyBase(workspaceId)}/nodes/${nodeId}`, data);
+    return response.json() as Promise<TopologyNode>;
+  },
+
+  deleteNode: async (workspaceId: string, nodeId: string): Promise<void> => {
+    await apiFetch.delete(`${topologyBase(workspaceId)}/nodes/${nodeId}`);
+  },
+
+  createEdge: async (
+    workspaceId: string,
+    data: TopologyEdgeCreateRequest
+  ): Promise<TopologyEdge> => {
+    const response = await apiFetch.post(`${topologyBase(workspaceId)}/edges`, data);
+    return response.json() as Promise<TopologyEdge>;
+  },
+
+  updateEdge: async (
+    workspaceId: string,
+    edgeId: string,
+    data: TopologyEdgeUpdateRequest
+  ): Promise<TopologyEdge> => {
+    const response = await apiFetch.patch(`${topologyBase(workspaceId)}/edges/${edgeId}`, data);
+    return response.json() as Promise<TopologyEdge>;
+  },
+
+  deleteEdge: async (workspaceId: string, edgeId: string): Promise<void> => {
+    await apiFetch.delete(`${topologyBase(workspaceId)}/edges/${edgeId}`);
   },
 };
 

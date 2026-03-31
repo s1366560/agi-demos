@@ -343,6 +343,88 @@
       "deleteObjective": "删除目标失败",
       "deleteGene": "删除基因失败",
       "updateGene": "更新基因失败"
+    },
+    "arrangement": {
+      "eyebrow": "工位编排",
+      "syncState": "拓扑实时同步中",
+      "moveMode": "移动模式：点击一个空闲六边形",
+      "description": "把 AI 员工、人工席位和走廊节点放到同一张指挥网格上；需要深入协同时，再一键进入中央黑板。",
+      "canvasTitle": "指挥网格",
+      "canvasSubtitle": "选择一个六边形来放置新席位、更新 Agent，或直接进入中央黑板。",
+      "ariaLabel": "交互式工位编排网格",
+      "emptySelectionHint": "先选择一个空闲六边形、一个 AI 员工，或中心黑板位。",
+      "shortcutTitle": "键盘速查",
+      "shortcutTitleMobile": "快捷操作",
+      "moveHint": "移动模式已开启。请选择一个空闲六边形，或按 Esc 取消。",
+      "staticHint": "中心六边形始终用于打开共享黑板，工位调整会留在当前编排面板内完成。",
+      "centerTitle": "中央黑板",
+      "centerSubtitle": "打开讨论、目标与执行总览",
+      "emptySlot": "空闲工位",
+      "drawerTitle": "动作抽屉",
+      "drawerSubtitle": "这里会根据当前选择展示对应动作，让画布保持专注和清爽。",
+      "coordinates": "六边形 {{q}}, {{r}}",
+      "openWorkspace": "打开工作区",
+      "resetView": "重置视角",
+      "modes": {
+        "twoD": "2D 布局",
+        "threeD": "3D 视图"
+      },
+      "metrics": {
+        "agents": "{{count}} 个 Agents",
+        "seats": "{{count}} 个人工席位",
+        "corridors": "{{count}} 条走廊",
+        "tasks": "{{done}} / {{total}} 个任务已完成"
+      },
+      "defaults": {
+        "humanSeat": "人工席位",
+        "corridor": "走廊",
+        "objective": "目标节点"
+      },
+      "actions": {
+        "move": "移动",
+        "remove": "移除",
+        "addAgent": "添加 AI 员工",
+        "addAgentHint": "把一个 Agent 定义直接绑定到这个六边形上。",
+        "addCorridor": "放置走廊",
+        "addCorridorHint": "把这里标记为协作通路或结构节点。",
+        "addHumanSeat": "放置人工席位",
+        "addHumanSeatHint": "把这里标记为人工协作或人工复核工位。"
+      },
+      "fields": {
+        "agentLabel": "显示名称",
+        "nodeLabel": "席位名称",
+        "accentColor": "强调色",
+        "labelPlaceholder": "为这个工位命名",
+        "pickColor": "选择颜色",
+        "status": "状态"
+      },
+      "drawerEmpty": "使用网格来编排工位。动作抽屉会根据当前工位自适应变化，同时把破坏性操作收纳到画布之外。",
+      "contextTitle": "上下文说明",
+      "context": {
+        "blackboard": "中心六边形会打开完整中央黑板，讨论、笔记和执行状态都会在那里汇合。",
+        "empty": "这个六边形目前空闲。你可以在这里放置新 Agent、预留人工席位，或插入走廊节点。",
+        "agent": "Agent 保留独立的 workspace binding id，因此布局移动会和工作区名册、实时事件一起保持同步。",
+        "node": "拓扑节点和 Agent 绑定是分开持久化的，这样人工席位与走廊结构就能独立调整，而不会干扰执行绑定。",
+        "none": "还没有选中任何六边形。先点选一个工位查看可用动作。",
+        "move": "已经进入移动状态。选择中心位之外的空闲六边形即可完成放置。",
+        "sync": "拓扑更新也会通过实时事件回流。如果其他协作者修改了这个工作区，网格会按最新快照自动对齐。"
+      },
+      "messages": {
+        "slotUnavailable": "这个工位已经被占用了。",
+        "agentPlaced": "Agent 已放置到工位上。",
+        "agentUpdated": "Agent 样式已更新。",
+        "nodeUpdated": "席位信息已更新。",
+        "agentRemoved": "Agent 已从工位中移除。",
+        "nodeRemoved": "席位已移除。"
+      },
+      "shortcuts": {
+        "pan": "平移网格",
+        "zoom": "缩放网格",
+        "reset": "重置平移和缩放",
+        "place": "在空位上放置内容",
+        "edit": "移动或移除当前选择",
+        "mode": "切换视图或清空选择"
+      }
     }
   },
   "user": {

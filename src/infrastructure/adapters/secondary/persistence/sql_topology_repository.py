@@ -1,6 +1,9 @@
 """SQLAlchemy repository for workspace topology persistence."""
 
-from sqlalchemy import select
+import hashlib
+from datetime import UTC, datetime
+
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.topology_edge import TopologyEdge
@@ -44,6 +47,50 @@ class SqlTopologyRepository(BaseRepository[TopologyNode, TopologyNodeModel], Top
         result = await self._session.execute(query)
         rows = result.scalars().all()
         return [n for row in rows if (n := self._to_domain(row)) is not None]
+
+    async def list_all_nodes_by_workspace(self, workspace_id: str) -> list[TopologyNode]:
+        query = (
+            select(TopologyNodeModel)
+            .where(TopologyNodeModel.workspace_id == workspace_id)
+            .order_by(TopologyNodeModel.created_at.asc())
+        )
+        result = await self._session.execute(query)
+        rows = result.scalars().all()
+        return [n for row in rows if (n := self._to_domain(row)) is not None]
+
+    async def list_nodes_by_hex(
+        self,
+        workspace_id: str,
+        hex_q: int,
+        hex_r: int,
+    ) -> list[TopologyNode]:
+        query = (
+            select(TopologyNodeModel)
+            .where(
+                TopologyNodeModel.workspace_id == workspace_id,
+                TopologyNodeModel.hex_q == hex_q,
+                TopologyNodeModel.hex_r == hex_r,
+            )
+            .order_by(TopologyNodeModel.created_at.asc())
+        )
+        result = await self._session.execute(query)
+        rows = result.scalars().all()
+        return [n for row in rows if (n := self._to_domain(row)) is not None]
+
+    async def acquire_hex_lock(
+        self,
+        workspace_id: str,
+        hex_q: int,
+        hex_r: int,
+    ) -> None:
+        bind = self._session.bind
+        if bind.dialect.name != "postgresql":
+            return
+        lock_id = self._workspace_hex_lock_id(workspace_id, hex_q, hex_r)
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)"),
+            {"lock_id": lock_id},
+        )
 
     async def save_edge(self, edge: TopologyEdge) -> TopologyEdge:
         existing = await self._session.get(TopologyEdgeModel, edge.id)
@@ -102,6 +149,62 @@ class SqlTopologyRepository(BaseRepository[TopologyNode, TopologyNodeModel], Top
         rows = result.scalars().all()
         return [self._edge_to_domain(row) for row in rows]
 
+    async def list_all_edges_by_workspace(self, workspace_id: str) -> list[TopologyEdge]:
+        query = (
+            select(TopologyEdgeModel)
+            .where(TopologyEdgeModel.workspace_id == workspace_id)
+            .order_by(TopologyEdgeModel.created_at.asc())
+        )
+        result = await self._session.execute(query)
+        rows = result.scalars().all()
+        return [self._edge_to_domain(row) for row in rows]
+
+    async def list_edges_for_node(
+        self,
+        workspace_id: str,
+        node_id: str,
+    ) -> list[TopologyEdge]:
+        query = (
+            select(TopologyEdgeModel)
+            .where(
+                TopologyEdgeModel.workspace_id == workspace_id,
+                or_(
+                    TopologyEdgeModel.source_node_id == node_id,
+                    TopologyEdgeModel.target_node_id == node_id,
+                ),
+            )
+            .order_by(TopologyEdgeModel.created_at.asc())
+        )
+        result = await self._session.execute(query)
+        rows = result.scalars().all()
+        return [self._edge_to_domain(row) for row in rows]
+
+    async def sync_edge_coordinates_for_node(
+        self,
+        workspace_id: str,
+        node_id: str,
+        hex_q: int | None,
+        hex_r: int | None,
+    ) -> None:
+        now = datetime.now(UTC)
+        await self._session.execute(
+            update(TopologyEdgeModel)
+            .where(
+                TopologyEdgeModel.workspace_id == workspace_id,
+                TopologyEdgeModel.source_node_id == node_id,
+            )
+            .values(source_hex_q=hex_q, source_hex_r=hex_r, updated_at=now)
+        )
+        await self._session.execute(
+            update(TopologyEdgeModel)
+            .where(
+                TopologyEdgeModel.workspace_id == workspace_id,
+                TopologyEdgeModel.target_node_id == node_id,
+            )
+            .values(target_hex_q=hex_q, target_hex_r=hex_r, updated_at=now)
+        )
+        await self._session.flush()
+
     async def delete_node(self, node_id: str) -> bool:
         return await self.delete(node_id)
 
@@ -112,6 +215,11 @@ class SqlTopologyRepository(BaseRepository[TopologyNode, TopologyNodeModel], Top
         await self._session.delete(existing)
         await self._session.flush()
         return True
+
+    @staticmethod
+    def _workspace_hex_lock_id(workspace_id: str, hex_q: int, hex_r: int) -> int:
+        digest = hashlib.md5(f"workspace_hex:{workspace_id}:{hex_q}:{hex_r}".encode()).digest()
+        return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
     def _to_domain(self, db_node: TopologyNodeModel | None) -> TopologyNode | None:
         if db_node is None:

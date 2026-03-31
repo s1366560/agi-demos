@@ -84,6 +84,25 @@ class TestSqlTopologyRepository:
         assert {node.id for node in nodes} == {"node-a", "node-b"}
 
     @pytest.mark.asyncio
+    async def test_list_all_nodes_and_nodes_by_hex(
+        self, v2_topology_repo: SqlTopologyRepository
+    ) -> None:
+        node_a = make_node("node-a", workspace_id="workspace-a")
+        node_a.hex_q = 2
+        node_a.hex_r = -1
+        node_b = make_node("node-b", workspace_id="workspace-a")
+        node_b.hex_q = 3
+        node_b.hex_r = -1
+        await v2_topology_repo.save_node(node_a)
+        await v2_topology_repo.save_node(node_b)
+
+        all_nodes = await v2_topology_repo.list_all_nodes_by_workspace("workspace-a")
+        occupied = await v2_topology_repo.list_nodes_by_hex("workspace-a", 2, -1)
+
+        assert {node.id for node in all_nodes} == {"node-a", "node-b"}
+        assert [node.id for node in occupied] == ["node-a"]
+
+    @pytest.mark.asyncio
     async def test_save_and_find_edge(self, v2_topology_repo: SqlTopologyRepository) -> None:
         await v2_topology_repo.save_node(make_node("node-src"))
         await v2_topology_repo.save_node(make_node("node-dst", node_type=TopologyNodeType.AGENT))
@@ -104,10 +123,20 @@ class TestSqlTopologyRepository:
         await v2_topology_repo.save_node(make_node("node-3", workspace_id="workspace-other"))
 
         await v2_topology_repo.save_edge(
-            make_edge("edge-a", source_node_id="node-1", target_node_id="node-2", workspace_id="workspace-list")
+            make_edge(
+                "edge-a",
+                source_node_id="node-1",
+                target_node_id="node-2",
+                workspace_id="workspace-list",
+            )
         )
         await v2_topology_repo.save_edge(
-            make_edge("edge-b", source_node_id="node-3", target_node_id="node-3", workspace_id="workspace-other")
+            make_edge(
+                "edge-b",
+                source_node_id="node-3",
+                target_node_id="node-3",
+                workspace_id="workspace-other",
+            )
         )
 
         edges = await v2_topology_repo.list_edges_by_workspace("workspace-list")
@@ -115,10 +144,43 @@ class TestSqlTopologyRepository:
         assert edges[0].id == "edge-a"
 
     @pytest.mark.asyncio
+    async def test_list_all_edges_and_edges_for_node(
+        self, v2_topology_repo: SqlTopologyRepository
+    ) -> None:
+        await v2_topology_repo.save_node(make_node("node-1", workspace_id="workspace-list"))
+        await v2_topology_repo.save_node(make_node("node-2", workspace_id="workspace-list"))
+        await v2_topology_repo.save_node(make_node("node-3", workspace_id="workspace-list"))
+
+        await v2_topology_repo.save_edge(
+            make_edge(
+                "edge-a",
+                source_node_id="node-1",
+                target_node_id="node-2",
+                workspace_id="workspace-list",
+            )
+        )
+        await v2_topology_repo.save_edge(
+            make_edge(
+                "edge-b",
+                source_node_id="node-3",
+                target_node_id="node-1",
+                workspace_id="workspace-list",
+            )
+        )
+
+        all_edges = await v2_topology_repo.list_all_edges_by_workspace("workspace-list")
+        node_edges = await v2_topology_repo.list_edges_for_node("workspace-list", "node-1")
+
+        assert {edge.id for edge in all_edges} == {"edge-a", "edge-b"}
+        assert {edge.id for edge in node_edges} == {"edge-a", "edge-b"}
+
+    @pytest.mark.asyncio
     async def test_delete_node_and_edge(self, v2_topology_repo: SqlTopologyRepository) -> None:
         await v2_topology_repo.save_node(make_node("node-x"))
         await v2_topology_repo.save_node(make_node("node-y"))
-        await v2_topology_repo.save_edge(make_edge("edge-x", source_node_id="node-x", target_node_id="node-y"))
+        await v2_topology_repo.save_edge(
+            make_edge("edge-x", source_node_id="node-x", target_node_id="node-y")
+        )
 
         assert await v2_topology_repo.delete_edge("edge-x") is True
         assert await v2_topology_repo.find_edge_by_id("edge-x") is None

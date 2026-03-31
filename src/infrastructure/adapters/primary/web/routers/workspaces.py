@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.workspace_layout_limits import MAX_WORKSPACE_HEX_COORDINATE
 from src.application.services.workspace_service import WorkspaceService
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
@@ -22,6 +24,7 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
     tags=["workspaces"],
 )
+logger = logging.getLogger(__name__)
 
 
 def get_workspace_service(request: Request, db: AsyncSession = Depends(get_db)) -> WorkspaceService:
@@ -32,11 +35,11 @@ def get_workspace_service(request: Request, db: AsyncSession = Depends(get_db)) 
     async def _publish_event(workspace_id: str, event_name: str, payload: dict[str, Any]) -> None:
         from src.domain.events.types import AgentEventType
         from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-            publish_workspace_event,
+            publish_workspace_event_with_retry,
         )
 
         event_type = AgentEventType(event_name)
-        await publish_workspace_event(
+        await publish_workspace_event_with_retry(
             redis_client,
             workspace_id=workspace_id,
             event_type=event_type,
@@ -47,6 +50,7 @@ def get_workspace_service(request: Request, db: AsyncSession = Depends(get_db)) 
         workspace_repo=container.workspace_repository(),
         workspace_member_repo=container.workspace_member_repository(),
         workspace_agent_repo=container.workspace_agent_repository(),
+        topology_repo=container.topology_repository(),
         workspace_event_publisher=_publish_event if redis_client is not None else None,
     )
 
@@ -116,27 +120,46 @@ class WorkspaceMemberResponse(BaseModel):
 
 
 class WorkspaceAgentCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     agent_id: str = Field(..., min_length=1)
-    display_name: str | None = None
-    description: str | None = None
+    display_name: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
     config: dict[str, Any] = Field(default_factory=dict)
     is_active: bool = True
-    hex_q: int | None = None
-    hex_r: int | None = None
-    theme_color: str | None = None
-    label: str | None = None
+    hex_q: int | None = Field(
+        default=None,
+        ge=-MAX_WORKSPACE_HEX_COORDINATE,
+        le=MAX_WORKSPACE_HEX_COORDINATE,
+    )
+    hex_r: int | None = Field(
+        default=None,
+        ge=-MAX_WORKSPACE_HEX_COORDINATE,
+        le=MAX_WORKSPACE_HEX_COORDINATE,
+    )
+    theme_color: str | None = Field(default=None, max_length=32)
+    label: str | None = Field(default=None, max_length=64)
 
 
 class WorkspaceAgentUpdateRequest(BaseModel):
-    display_name: str | None = None
-    description: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
     config: dict[str, Any] | None = None
     is_active: bool | None = None
-    hex_q: int | None = None
-    hex_r: int | None = None
-    theme_color: str | None = None
-    label: str | None = None
-    status: str | None = None
+    hex_q: int | None = Field(
+        default=None,
+        ge=-MAX_WORKSPACE_HEX_COORDINATE,
+        le=MAX_WORKSPACE_HEX_COORDINATE,
+    )
+    hex_r: int | None = Field(
+        default=None,
+        ge=-MAX_WORKSPACE_HEX_COORDINATE,
+        le=MAX_WORKSPACE_HEX_COORDINATE,
+    )
+    theme_color: str | None = Field(default=None, max_length=32)
+    label: str | None = Field(default=None, max_length=64)
 
 
 class WorkspaceAgentResponse(BaseModel):
@@ -518,12 +541,20 @@ async def bind_workspace_agent(
             description=payload.description,
             config=payload.config,
             is_active=payload.is_active,
+            hex_q=payload.hex_q,
+            hex_r=payload.hex_r,
+            theme_color=payload.theme_color,
+            label=payload.label,
         )
         await db.commit()
-        return _to_agent_response(binding)
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    try:
+        await workspace_service.publish_pending_events()
+    except Exception:
+        logger.exception("Failed to publish workspace agent bind event", extra={"workspace_id": workspace_id})
+    return _to_agent_response(binding)
 
 
 @router.patch("/{workspace_id}/agents/{workspace_agent_id}", response_model=WorkspaceAgentResponse)
@@ -551,12 +582,23 @@ async def update_workspace_agent(
             description=payload.description,
             config=payload.config,
             is_active=payload.is_active,
+            hex_q=payload.hex_q,
+            hex_r=payload.hex_r,
+            theme_color=payload.theme_color,
+            label=payload.label,
         )
         await db.commit()
-        return _to_agent_response(binding)
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    try:
+        await workspace_service.publish_pending_events()
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace agent update event",
+            extra={"workspace_id": workspace_id, "workspace_agent_id": workspace_agent_id},
+        )
+    return _to_agent_response(binding)
 
 
 @router.delete(
@@ -586,3 +628,10 @@ async def delete_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    try:
+        await workspace_service.publish_pending_events()
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace agent unbind event",
+            extra={"workspace_id": workspace_id, "workspace_agent_id": workspace_agent_id},
+        )

@@ -156,6 +156,7 @@ class ProjectContainer:
             workspace_repo=self.workspace_repository(),
             workspace_member_repo=self.workspace_member_repository(),
             topology_repo=self.topology_repository(),
+            workspace_agent_repo=self.workspace_agent_repository(),
         )
 
     def cyber_objective_repository(self) -> CyberObjectiveRepository:

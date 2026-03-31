@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.domain.model.workspace.topology_node import TopologyNode, TopologyNodeType
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
@@ -56,6 +57,32 @@ def _make_agent_binding(
         display_name="Agent One",
         description="helper agent",
         config={"mode": "assist"},
+        hex_q=0,
+        hex_r=1,
+        theme_color="#1e3fae",
+        label="primary",
+        status="idle",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+
+def _make_topology_node(
+    node_id: str = "node-1",
+    workspace_id: str = "ws-1",
+    hex_q: int = 2,
+    hex_r: int = -1,
+) -> TopologyNode:
+    return TopologyNode(
+        id=node_id,
+        workspace_id=workspace_id,
+        node_type=TopologyNodeType.CORRIDOR,
+        title="Corridor",
+        position_x=10.0,
+        position_y=20.0,
+        hex_q=hex_q,
+        hex_r=hex_r,
+        data={},
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -88,13 +115,26 @@ def mock_agent_repo() -> MagicMock:
     repo.save = AsyncMock()
     repo.find_by_id = AsyncMock(return_value=None)
     repo.find_by_workspace = AsyncMock(return_value=[])
+    repo.find_by_workspace_and_agent_id = AsyncMock(return_value=None)
+    repo.find_by_workspace_and_hex = AsyncMock(return_value=[])
     repo.delete = AsyncMock(return_value=True)
     return repo
 
 
 @pytest.fixture
+def mock_topology_repo() -> MagicMock:
+    repo = MagicMock()
+    repo.acquire_hex_lock = AsyncMock(return_value=None)
+    repo.list_nodes_by_hex = AsyncMock(return_value=[])
+    return repo
+
+
+@pytest.fixture
 def workspace_service(
-    mock_workspace_repo: MagicMock, mock_member_repo: MagicMock, mock_agent_repo: MagicMock
+    mock_workspace_repo: MagicMock,
+    mock_member_repo: MagicMock,
+    mock_agent_repo: MagicMock,
+    mock_topology_repo: MagicMock,
 ):
     from src.application.services.workspace_service import WorkspaceService
 
@@ -102,6 +142,7 @@ def workspace_service(
         workspace_repo=mock_workspace_repo,
         workspace_member_repo=mock_member_repo,
         workspace_agent_repo=mock_agent_repo,
+        topology_repo=mock_topology_repo,
     )
 
 
@@ -115,6 +156,7 @@ def workspace_service_with_events(
     mock_workspace_repo: MagicMock,
     mock_member_repo: MagicMock,
     mock_agent_repo: MagicMock,
+    mock_topology_repo: MagicMock,
     workspace_event_publisher: AsyncMock,
 ):
     from src.application.services.workspace_service import WorkspaceService
@@ -123,6 +165,7 @@ def workspace_service_with_events(
         workspace_repo=mock_workspace_repo,
         workspace_member_repo=mock_member_repo,
         workspace_agent_repo=mock_agent_repo,
+        topology_repo=mock_topology_repo,
         workspace_event_publisher=workspace_event_publisher,
     )
 
@@ -331,7 +374,7 @@ class TestWorkspaceAgentBinding:
             "editor-1",
             WorkspaceRole.EDITOR,
         )
-        mock_agent_repo.find_by_workspace.return_value = [existing]
+        mock_agent_repo.find_by_workspace_and_agent_id.return_value = existing
         mock_agent_repo.save.side_effect = lambda relation: relation
 
         updated = await workspace_service.bind_agent(
@@ -340,11 +383,68 @@ class TestWorkspaceAgentBinding:
             agent_id="agent-1",
             display_name="Renamed Agent",
             is_active=False,
+            hex_q=2,
+            hex_r=-1,
+            theme_color="#52d685",
+            label="ops",
         )
 
         assert updated.id == "wa-existing"
         assert updated.display_name == "Renamed Agent"
         assert updated.is_active is False
+        assert updated.hex_q == 2
+        assert updated.hex_r == -1
+        assert updated.theme_color == "#52d685"
+        assert updated.label == "ops"
+
+    @pytest.mark.unit
+    async def test_bind_agent_rejects_reserved_center_hex(
+        self,
+        workspace_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1",
+            WorkspaceRole.EDITOR,
+        )
+
+        with pytest.raises(ValueError, match="reserved"):
+            await workspace_service.bind_agent(
+                workspace_id="ws-1",
+                actor_user_id="editor-1",
+                agent_id="agent-1",
+                hex_q=0,
+                hex_r=0,
+            )
+
+    @pytest.mark.unit
+    async def test_update_agent_binding_rejects_occupied_hex(
+        self,
+        workspace_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_agent_repo: MagicMock,
+        mock_topology_repo: MagicMock,
+    ) -> None:
+        relation = _make_agent_binding(binding_id="wa-1")
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1",
+            WorkspaceRole.EDITOR,
+        )
+        mock_agent_repo.find_by_id.return_value = relation
+        mock_topology_repo.list_nodes_by_hex.return_value = [_make_topology_node()]
+
+        with pytest.raises(ValueError, match="occupied"):
+            await workspace_service.update_agent_binding(
+                workspace_id="ws-1",
+                actor_user_id="editor-1",
+                workspace_agent_id="wa-1",
+                hex_q=2,
+                hex_r=-1,
+            )
 
     @pytest.mark.unit
     async def test_update_agent_binding_rejects_workspace_mismatch(
@@ -507,7 +607,7 @@ class TestWorkspaceEventPublishing:
         assert payload["removed_by"] == "owner-1"
 
     @pytest.mark.unit
-    async def test_bind_agent_new_publishes_agent_bound_event(
+    async def test_bind_agent_new_queues_agent_bound_event_until_publish(
         self,
         workspace_service_with_events,
         workspace_event_publisher: AsyncMock,
@@ -520,7 +620,7 @@ class TestWorkspaceEventPublishing:
             "editor-1",
             WorkspaceRole.EDITOR,
         )
-        mock_agent_repo.find_by_workspace.return_value = []
+        mock_agent_repo.find_by_workspace_and_agent_id.return_value = None
         mock_agent_repo.save.side_effect = lambda relation: relation
 
         await workspace_service_with_events.bind_agent(
@@ -530,6 +630,8 @@ class TestWorkspaceEventPublishing:
             display_name="Helper",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         call_args = workspace_event_publisher.await_args.args
         assert call_args[1] == "workspace_agent_bound"
@@ -537,9 +639,11 @@ class TestWorkspaceEventPublishing:
         assert payload["agent_id"] == "agent-1"
         assert payload["is_update"] is False
         assert payload["bound_by"] == "editor-1"
+        assert "config" not in payload["agent"]
+        assert "description" not in payload["agent"]
 
     @pytest.mark.unit
-    async def test_bind_agent_update_publishes_agent_bound_event_with_is_update(
+    async def test_bind_agent_update_queues_agent_bound_event_with_is_update(
         self,
         workspace_service_with_events,
         workspace_event_publisher: AsyncMock,
@@ -553,7 +657,7 @@ class TestWorkspaceEventPublishing:
             "editor-1",
             WorkspaceRole.EDITOR,
         )
-        mock_agent_repo.find_by_workspace.return_value = [existing]
+        mock_agent_repo.find_by_workspace_and_agent_id.return_value = existing
         mock_agent_repo.save.side_effect = lambda relation: relation
 
         await workspace_service_with_events.bind_agent(
@@ -563,12 +667,56 @@ class TestWorkspaceEventPublishing:
             display_name="Renamed Agent",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         payload = workspace_event_publisher.await_args.args[2]
         assert payload["is_update"] is True
+        assert payload["agent"]["workspace_id"] == "ws-1"
 
     @pytest.mark.unit
-    async def test_unbind_agent_publishes_agent_unbound_event(
+    async def test_update_agent_binding_updates_layout_fields_and_queues_agent_payload(
+        self,
+        workspace_service_with_events,
+        workspace_event_publisher: AsyncMock,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_agent_repo: MagicMock,
+    ) -> None:
+        relation = _make_agent_binding(binding_id="wa-1")
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1",
+            WorkspaceRole.EDITOR,
+        )
+        mock_agent_repo.find_by_id.return_value = relation
+        mock_agent_repo.save.side_effect = lambda binding: binding
+
+        updated = await workspace_service_with_events.update_agent_binding(
+            workspace_id="ws-1",
+            actor_user_id="editor-1",
+            workspace_agent_id="wa-1",
+            hex_q=4,
+            hex_r=-2,
+            theme_color="#8b5cf6",
+            label="relay",
+            status="running",
+        )
+
+        assert updated.hex_q == 4
+        assert updated.hex_r == -2
+        assert updated.theme_color == "#8b5cf6"
+        assert updated.label == "relay"
+        assert updated.status == "running"
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
+        payload = workspace_event_publisher.await_args.args[2]
+        assert payload["agent"]["hex_q"] == 4
+        assert payload["agent"]["status"] == "running"
+        assert "config" not in payload["agent"]
+
+    @pytest.mark.unit
+    async def test_unbind_agent_queues_agent_unbound_event(
         self,
         workspace_service_with_events,
         workspace_event_publisher: AsyncMock,
@@ -591,12 +739,65 @@ class TestWorkspaceEventPublishing:
             workspace_agent_id="wa-1",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         call_args = workspace_event_publisher.await_args.args
         assert call_args[1] == "workspace_agent_unbound"
         payload = call_args[2]
         assert payload["agent_id"] == "agent-1"
         assert payload["unbound_by"] == "editor-1"
+
+    @pytest.mark.unit
+    async def test_publish_pending_events_keeps_queue_when_publish_fails(
+        self,
+        workspace_service_with_events,
+        workspace_event_publisher: AsyncMock,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_agent_repo: MagicMock,
+    ) -> None:
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1",
+            WorkspaceRole.EDITOR,
+        )
+        mock_agent_repo.find_by_workspace_and_agent_id.return_value = None
+        mock_agent_repo.save.side_effect = lambda relation: relation
+        workspace_event_publisher.side_effect = RuntimeError("redis unavailable")
+
+        await workspace_service_with_events.bind_agent(
+            workspace_id="ws-1",
+            actor_user_id="editor-1",
+            agent_id="agent-1",
+        )
+
+        with pytest.raises(RuntimeError, match="redis unavailable"):
+            await workspace_service_with_events.publish_pending_events()
+
+        assert len(workspace_service_with_events.consume_pending_events()) == 1
+
+    @pytest.mark.unit
+    async def test_bind_agent_rejects_out_of_bounds_hex(
+        self,
+        workspace_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1",
+            WorkspaceRole.EDITOR,
+        )
+
+        with pytest.raises(ValueError, match="hex_q"):
+            await workspace_service.bind_agent(
+                workspace_id="ws-1",
+                actor_user_id="editor-1",
+                agent_id="agent-1",
+                hex_q=25,
+                hex_r=0,
+            )
 
     @pytest.mark.unit
     async def test_no_publisher_does_not_raise(

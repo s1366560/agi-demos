@@ -343,6 +343,88 @@
       "deleteObjective": "Failed to delete objective",
       "deleteGene": "Failed to delete gene",
       "updateGene": "Failed to update gene"
+    },
+    "arrangement": {
+      "eyebrow": "Workstation arrangement",
+      "syncState": "Live topology sync",
+      "moveMode": "Move mode: click a free hex",
+      "description": "Place AI employees, human seats, and corridor nodes on a shared command grid, then jump into the central blackboard whenever coordination needs more depth.",
+      "canvasTitle": "Command grid",
+      "canvasSubtitle": "Select a hex to stage a new seat, update an agent, or drill into the blackboard.",
+      "ariaLabel": "Interactive workstation arrangement grid",
+      "emptySelectionHint": "Start by selecting an empty hex, an AI employee, or the center board.",
+      "shortcutTitle": "Keyboard map",
+      "shortcutTitleMobile": "Key actions",
+      "moveHint": "Move mode is active. Choose a free hex or press Esc to cancel.",
+      "staticHint": "The center hex always opens the shared blackboard. Workstation edits stay on this surface.",
+      "centerTitle": "Central blackboard",
+      "centerSubtitle": "Open discussion, goals, and execution",
+      "emptySlot": "Empty workstation",
+      "drawerTitle": "Action drawer",
+      "drawerSubtitle": "Selection-aware actions appear here so the grid stays focused.",
+      "coordinates": "Hex {{q}}, {{r}}",
+      "openWorkspace": "Open workspace",
+      "resetView": "Reset view",
+      "modes": {
+        "twoD": "2D layout",
+        "threeD": "3D view"
+      },
+      "metrics": {
+        "agents": "{{count}} agents",
+        "seats": "{{count}} human seats",
+        "corridors": "{{count}} corridors",
+        "tasks": "{{done}} / {{total}} tasks done"
+      },
+      "defaults": {
+        "humanSeat": "Human seat",
+        "corridor": "Corridor",
+        "objective": "Objective"
+      },
+      "actions": {
+        "move": "Move",
+        "remove": "Remove",
+        "addAgent": "Add AI employee",
+        "addAgentHint": "Bind an agent definition directly onto this hex.",
+        "addCorridor": "Place corridor",
+        "addCorridorHint": "Reserve this slot for coordination or routing structure.",
+        "addHumanSeat": "Place human seat",
+        "addHumanSeatHint": "Mark a human-operated slot for collaboration or review."
+      },
+      "fields": {
+        "agentLabel": "Display label",
+        "nodeLabel": "Seat label",
+        "accentColor": "Accent color",
+        "labelPlaceholder": "Name this workstation",
+        "pickColor": "Pick color",
+        "status": "Status"
+      },
+      "drawerEmpty": "Use the grid to stage a layout. The action drawer adapts to the selected workstation and keeps destructive actions away from the canvas.",
+      "contextTitle": "Selection context",
+      "context": {
+        "blackboard": "The central hex opens the full blackboard modal, where discussions, notes, and delivery state stay together.",
+        "empty": "This hex is free. Use it to place a new agent, reserve a human seat, or carve a corridor into the command floor.",
+        "agent": "Agents keep their own workspace binding id, so layout moves stay synced with the workspace roster and real-time events.",
+        "node": "Topology nodes are persisted separately from agent bindings, which keeps human seats and corridor structure editable without disturbing execution bindings.",
+        "none": "No hex selected yet. Pick a slot to inspect its available actions.",
+        "move": "A move is armed. Select any free hex outside the center slot to complete it.",
+        "sync": "Topology changes also stream back in real time. If another collaborator edits this workspace, the grid will reconcile from the event snapshot."
+      },
+      "messages": {
+        "slotUnavailable": "That workstation is already occupied.",
+        "agentPlaced": "Agent placed on the workstation.",
+        "agentUpdated": "Agent styling updated.",
+        "nodeUpdated": "Seat details updated.",
+        "agentRemoved": "Agent removed from the workstation.",
+        "nodeRemoved": "Seat removed from the workstation."
+      },
+      "shortcuts": {
+        "pan": "Pan the grid",
+        "zoom": "Zoom the grid",
+        "reset": "Reset pan and zoom",
+        "place": "Place on empty slot",
+        "edit": "Move or remove selection",
+        "mode": "Switch mode or clear selection"
+      }
     }
   },
   "user": {

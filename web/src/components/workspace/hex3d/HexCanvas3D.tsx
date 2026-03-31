@@ -167,7 +167,7 @@ export const HexCanvas3D = forwardRef<HexCanvas3DRef, HexCanvas3DProps>(
     }, [hoveredHex, agents]);
 
     return (
-      <div className="h-full w-full bg-slate-50 relative overflow-hidden cursor-crosshair">
+      <div className="relative h-full w-full cursor-crosshair overflow-hidden bg-[#04070d]">
         {canvasReady ? (
           <Canvas key={canvasKey} camera={{ position: [0, 12, 12], fov: 50 }}>
             <HexScene>
@@ -221,7 +221,7 @@ export const HexCanvas3D = forwardRef<HexCanvas3DRef, HexCanvas3DProps>(
             <CameraAnimator targetPosition={zoomTarget} />
           </Canvas>
         ) : (
-          <div className="flex items-center justify-center h-full text-slate-400">
+          <div className="flex h-full items-center justify-center text-sm text-zinc-500">
             Initializing 3D view...
           </div>
         )}

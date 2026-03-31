@@ -86,6 +86,50 @@ const mergeReplies = (
   );
 };
 
+function upsertById<T extends { id: string }>(items: T[], nextItem: T): T[] {
+  const existingIndex = items.findIndex((item) => item.id === nextItem.id);
+  if (existingIndex === -1) {
+    return [...items, nextItem];
+  }
+  return items.map((item) => (item.id === nextItem.id ? nextItem : item));
+}
+
+function upsertManyById<T extends { id: string }>(items: T[], nextItems: T[]): T[] {
+  return nextItems.reduce((acc, item) => upsertById(acc, item), items);
+}
+
+function mergeWorkspaceAgentById(items: WorkspaceAgent[], nextItem: WorkspaceAgent): WorkspaceAgent[] {
+  const existingIndex = items.findIndex((item) => item.id === nextItem.id);
+  if (existingIndex === -1) {
+    return [...items, nextItem];
+  }
+  return items.map((item) => (item.id === nextItem.id ? { ...item, ...nextItem } : item));
+}
+
+function syncTopologyEdgesForNode(edges: TopologyEdge[], node: TopologyNode): TopologyEdge[] {
+  if (node.hex_q === undefined || node.hex_r === undefined) {
+    return edges;
+  }
+  return edges.map((edge) => {
+    let nextEdge = edge;
+    if (edge.source_node_id === node.id) {
+      nextEdge = {
+        ...nextEdge,
+        source_hex_q: node.hex_q,
+        source_hex_r: node.hex_r,
+      };
+    }
+    if (edge.target_node_id === node.id) {
+      nextEdge = {
+        ...nextEdge,
+        target_hex_q: node.hex_q,
+        target_hex_r: node.hex_r,
+      };
+    }
+    return nextEdge;
+  });
+}
+
 interface WorkspaceState {
   workspaces: Workspace[];
   currentWorkspace: Workspace | null;
@@ -244,14 +288,93 @@ interface WorkspaceState {
       theme_color?: string;
       label?: string;
     }
-  ) => Promise<void>;
+  ) => Promise<WorkspaceAgent>;
+  updateAgentBinding: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string,
+    data: Partial<{
+      display_name: string;
+      description: string;
+      config: Record<string, unknown>;
+      is_active: boolean;
+      hex_q: number;
+      hex_r: number;
+      theme_color: string;
+      label: string;
+    }>
+  ) => Promise<WorkspaceAgent>;
   unbindAgent: (
     tenantId: string,
     projectId: string,
     workspaceId: string,
     workspaceAgentId: string
   ) => Promise<void>;
-  moveAgent: (workspaceId: string, agentId: string, q: number, r: number) => Promise<void>;
+  moveAgent: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string,
+    q: number,
+    r: number
+  ) => Promise<WorkspaceAgent>;
+  createTopologyNode: (
+    workspaceId: string,
+    data: {
+      node_type: TopologyNode['node_type'];
+      ref_id?: string;
+      title?: string;
+      position_x?: number;
+      position_y?: number;
+      hex_q?: number;
+      hex_r?: number;
+      status?: string;
+      tags?: string[];
+      data?: Record<string, unknown>;
+    }
+  ) => Promise<TopologyNode>;
+  updateTopologyNode: (
+    workspaceId: string,
+    nodeId: string,
+    data: Partial<{
+      node_type: TopologyNode['node_type'];
+      ref_id: string;
+      title: string;
+      position_x: number;
+      position_y: number;
+      hex_q: number;
+      hex_r: number;
+      status: string;
+      tags: string[];
+      data: Record<string, unknown>;
+    }>
+  ) => Promise<TopologyNode>;
+  deleteTopologyNode: (workspaceId: string, nodeId: string) => Promise<void>;
+  createTopologyEdge: (
+    workspaceId: string,
+    data: {
+      source_node_id: string;
+      target_node_id: string;
+      label?: string;
+      direction?: string;
+      auto_created?: boolean;
+      data?: Record<string, unknown>;
+    }
+  ) => Promise<TopologyEdge>;
+  updateTopologyEdge: (
+    workspaceId: string,
+    edgeId: string,
+    data: Partial<{
+      source_node_id: string;
+      target_node_id: string;
+      label: string;
+      direction: string;
+      auto_created: boolean;
+      data: Record<string, unknown>;
+    }>
+  ) => Promise<TopologyEdge>;
+  deleteTopologyEdge: (workspaceId: string, edgeId: string) => Promise<void>;
   handleTopologyEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleTaskEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleBlackboardEvent: (event: { type: string; data: Record<string, unknown> }) => void;
@@ -616,7 +739,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       bindAgent: async (tenantId, projectId, workspaceId, data) => {
         const agent = await workspaceService.bindAgent(tenantId, projectId, workspaceId, data);
-        set({ agents: [...get().agents, agent] });
+        set((state) => ({ agents: mergeWorkspaceAgentById(state.agents, agent) }));
+        return agent;
+      },
+
+      updateAgentBinding: async (tenantId, projectId, workspaceId, workspaceAgentId, data) => {
+        const agent = await workspaceService.updateAgentBinding(
+          tenantId,
+          projectId,
+          workspaceId,
+          workspaceAgentId,
+          data
+        );
+        set((state) => ({ agents: mergeWorkspaceAgentById(state.agents, agent) }));
+        return agent;
       },
 
       unbindAgent: async (tenantId, projectId, workspaceId, workspaceAgentId) => {
@@ -624,13 +760,60 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({ agents: get().agents.filter((a) => a.id !== workspaceAgentId) });
       },
 
-      moveAgent: async (workspaceId, agentId, q, r) => {
-        await workspaceTopologyService.moveAgentPosition(workspaceId, agentId, q, r);
-        set({
-          agents: get().agents.map((a) =>
-            a.agent_id === agentId ? { ...a, hex_q: q, hex_r: r } : a
+      moveAgent: async (tenantId, projectId, workspaceId, workspaceAgentId, q, r) => {
+        const agent = await workspaceService.updateAgentBinding(
+          tenantId,
+          projectId,
+          workspaceId,
+          workspaceAgentId,
+          { hex_q: q, hex_r: r }
+        );
+        set((state) => ({ agents: mergeWorkspaceAgentById(state.agents, agent) }));
+        return agent;
+      },
+
+      createTopologyNode: async (workspaceId, data) => {
+        const node = await workspaceTopologyService.createNode(workspaceId, data);
+        set((state) => ({ topologyNodes: upsertById(state.topologyNodes, node) }));
+        return node;
+      },
+
+      updateTopologyNode: async (workspaceId, nodeId, data) => {
+        const node = await workspaceTopologyService.updateNode(workspaceId, nodeId, data);
+        set((state) => ({
+          topologyNodes: upsertById(state.topologyNodes, node),
+          topologyEdges: syncTopologyEdgesForNode(state.topologyEdges, node),
+        }));
+        return node;
+      },
+
+      deleteTopologyNode: async (workspaceId, nodeId) => {
+        await workspaceTopologyService.deleteNode(workspaceId, nodeId);
+        set((state) => ({
+          topologyNodes: state.topologyNodes.filter((node) => node.id !== nodeId),
+          topologyEdges: state.topologyEdges.filter(
+            (edge) => edge.source_node_id !== nodeId && edge.target_node_id !== nodeId
           ),
-        });
+        }));
+      },
+
+      createTopologyEdge: async (workspaceId, data) => {
+        const edge = await workspaceTopologyService.createEdge(workspaceId, data);
+        set((state) => ({ topologyEdges: upsertById(state.topologyEdges, edge) }));
+        return edge;
+      },
+
+      updateTopologyEdge: async (workspaceId, edgeId, data) => {
+        const edge = await workspaceTopologyService.updateEdge(workspaceId, edgeId, data);
+        set((state) => ({ topologyEdges: upsertById(state.topologyEdges, edge) }));
+        return edge;
+      },
+
+      deleteTopologyEdge: async (workspaceId, edgeId) => {
+        await workspaceTopologyService.deleteEdge(workspaceId, edgeId);
+        set((state) => ({
+          topologyEdges: state.topologyEdges.filter((edge) => edge.id !== edgeId),
+        }));
       },
 
       handleTopologyEvent: (event) => {
@@ -647,11 +830,49 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         } else if (type === 'topology_updated') {
           const nodes = data.nodes as TopologyNode[] | undefined;
           const edges = data.edges as TopologyEdge[] | undefined;
-          if (nodes) {
-            set({ topologyNodes: nodes });
+          if (Array.isArray(nodes) || Array.isArray(edges)) {
+            set((state) => ({
+              topologyNodes: nodes ?? state.topologyNodes,
+              topologyEdges: edges ?? state.topologyEdges,
+            }));
+            return;
           }
-          if (edges) {
-            set({ topologyEdges: edges });
+
+          const operation = data.operation as string | undefined;
+          if (operation === 'node_created' || operation === 'node_updated') {
+            const node = data.node as TopologyNode | undefined;
+            const updatedEdges = Array.isArray(data.updated_edges)
+              ? (data.updated_edges as TopologyEdge[])
+              : [];
+            if (node) {
+              set((state) => ({
+                topologyNodes: upsertById(state.topologyNodes, node),
+                topologyEdges: upsertManyById(
+                  syncTopologyEdgesForNode(state.topologyEdges, node),
+                  updatedEdges
+                ),
+              }));
+            }
+          } else if (operation === 'node_deleted') {
+            const nodeId = data.node_id as string;
+            set((state) => ({
+              topologyNodes: state.topologyNodes.filter((node) => node.id !== nodeId),
+              topologyEdges: state.topologyEdges.filter(
+                (edge) => edge.source_node_id !== nodeId && edge.target_node_id !== nodeId
+              ),
+            }));
+          } else if (operation === 'edge_created' || operation === 'edge_updated') {
+            const edge = data.edge as TopologyEdge | undefined;
+            if (edge) {
+              set((state) => ({
+                topologyEdges: upsertById(state.topologyEdges, edge),
+              }));
+            }
+          } else if (operation === 'edge_deleted') {
+            const edgeId = data.edge_id as string;
+            set((state) => ({
+              topologyEdges: state.topologyEdges.filter((edge) => edge.id !== edgeId),
+            }));
           }
         }
       },
@@ -767,11 +988,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const { type, data } = event;
         if (type === 'workspace_agent_bound') {
           const agent = data.agent as WorkspaceAgent | undefined;
-          if (agent && !get().agents.some((a) => a.id === agent.id)) {
-            set({ agents: [...get().agents, agent] });
+          if (agent) {
+            set((state) => ({
+              agents: mergeWorkspaceAgentById(state.agents, agent),
+            }));
           }
         } else if (type === 'workspace_agent_unbound') {
-          const agentBindingId = data.agent_binding_id as string;
+          const agentBindingId = data.workspace_agent_id as string;
           set({ agents: get().agents.filter((a) => a.id !== agentBindingId) });
         }
       },
@@ -907,7 +1130,14 @@ export const useWorkspaceActions = () =>
       clearSelectedHex: state.clearSelectedHex,
       moveAgent: state.moveAgent,
       bindAgent: state.bindAgent,
+      updateAgentBinding: state.updateAgentBinding,
       unbindAgent: state.unbindAgent,
+      createTopologyNode: state.createTopologyNode,
+      updateTopologyNode: state.updateTopologyNode,
+      deleteTopologyNode: state.deleteTopologyNode,
+      createTopologyEdge: state.createTopologyEdge,
+      updateTopologyEdge: state.updateTopologyEdge,
+      deleteTopologyEdge: state.deleteTopologyEdge,
       handleTopologyEvent: state.handleTopologyEvent,
       handleTaskEvent: state.handleTaskEvent,
       handleBlackboardEvent: state.handleBlackboardEvent,

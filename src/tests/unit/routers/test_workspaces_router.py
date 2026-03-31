@@ -29,7 +29,9 @@ def _make_workspace(workspace_id: str = "ws-1") -> Workspace:
     )
 
 
-def _make_member(user_id: str = "user-2", role: WorkspaceRole = WorkspaceRole.EDITOR) -> WorkspaceMember:
+def _make_member(
+    user_id: str = "user-2", role: WorkspaceRole = WorkspaceRole.EDITOR
+) -> WorkspaceMember:
     return WorkspaceMember(
         id=f"wm-{user_id}",
         workspace_id="ws-1",
@@ -50,6 +52,11 @@ def _make_workspace_agent(binding_id: str = "wa-1") -> WorkspaceAgent:
         description="Assists workspace operations",
         config={"temperature": 0.2},
         is_active=True,
+        hex_q=1,
+        hex_r=-1,
+        theme_color="#52d685",
+        label="relay",
+        status="running",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -71,6 +78,7 @@ def mock_workspace_service() -> AsyncMock:
     service.bind_agent = AsyncMock(return_value=_make_workspace_agent())
     service.update_agent_binding = AsyncMock(return_value=_make_workspace_agent())
     service.unbind_agent = AsyncMock(return_value=True)
+    service.publish_pending_events = AsyncMock(return_value=None)
     return service
 
 
@@ -142,7 +150,9 @@ class TestWorkspacesRouter:
     def test_update_workspace_maps_forbidden_and_rolls_back(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
-        mock_workspace_service.update_workspace.side_effect = PermissionError("Insufficient permission")
+        mock_workspace_service.update_workspace.side_effect = PermissionError(
+            "Insufficient permission"
+        )
 
         response = workspaces_client.patch(
             "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1",
@@ -174,3 +184,87 @@ class TestWorkspacesRouter:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.json()) == 1
         assert mock_workspace_service.list_workspace_agents.await_count == 1
+
+    def test_create_agent_forwards_layout_fields(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents",
+            json={
+                "agent_id": "agent-1",
+                "display_name": "Planner",
+                "hex_q": 3,
+                "hex_r": -2,
+                "theme_color": "#8b5cf6",
+                "label": "planner",
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["hex_q"] == 1
+        await_kwargs = mock_workspace_service.bind_agent.await_args.kwargs
+        assert await_kwargs["hex_q"] == 3
+        assert await_kwargs["hex_r"] == -2
+        assert await_kwargs["theme_color"] == "#8b5cf6"
+        assert await_kwargs["label"] == "planner"
+        assert mock_workspace_service.publish_pending_events.await_count == 1
+
+    def test_update_agent_forwards_layout_fields(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.patch(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
+            json={
+                "hex_q": 4,
+                "hex_r": 0,
+                "theme_color": "#f59e0b",
+                "label": "ops",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        await_kwargs = mock_workspace_service.update_agent_binding.await_args.kwargs
+        assert await_kwargs["hex_q"] == 4
+        assert await_kwargs["hex_r"] == 0
+        assert await_kwargs["theme_color"] == "#f59e0b"
+        assert await_kwargs["label"] == "ops"
+        assert mock_workspace_service.publish_pending_events.await_count == 1
+
+    def test_update_agent_still_succeeds_when_event_publish_fails(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        mock_workspace_service.publish_pending_events.side_effect = RuntimeError("redis unavailable")
+
+        response = workspaces_client.patch(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
+            json={"hex_q": 4, "hex_r": 0},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert workspaces_client.mock_db.commit.await_count == 1  # type: ignore[attr-defined]
+
+    def test_update_agent_rejects_user_supplied_status_field(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.patch(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
+            json={"status": "busy"},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        mock_workspace_service.update_agent_binding.assert_not_awaited()
+
+    def test_create_agent_rejects_out_of_bounds_hex(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents",
+            json={
+                "agent_id": "agent-1",
+                "hex_q": 25,
+                "hex_r": 0,
+            },
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        mock_workspace_service.bind_agent.assert_not_awaited()

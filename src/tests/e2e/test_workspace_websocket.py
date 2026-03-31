@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -54,8 +54,12 @@ def mock_redis() -> AsyncMock:
 def mock_container(mock_redis: AsyncMock) -> MagicMock:
     container = MagicMock()
     scoped = MagicMock()
+    member_repo = MagicMock()
+    member_repo.find_by_workspace_and_user = AsyncMock(return_value=Mock(id="wm-1"))
     scoped.redis.return_value = mock_redis
+    scoped.workspace_member_repository.return_value = member_repo
     container.with_db.return_value = scoped
+    container.mock_member_repo = member_repo
     return container
 
 
@@ -106,6 +110,27 @@ class TestWorkspaceWebSocket:
         assert ack_msg["type"] == "ack"
         assert ack_msg["action"] == "subscribe_workspace"
         assert ack_msg["workspace_id"] == workspace_id
+
+    async def test_subscribe_rejects_non_member(
+        self,
+        context: MessageContext,
+        topic_manager: TopicManager,
+        mock_container: MagicMock,
+    ) -> None:
+        handler = SubscribeWorkspaceHandler()
+        workspace_id = "ws-denied"
+        mock_container.mock_member_repo.find_by_workspace_and_user.return_value = None
+
+        with patch(
+            f"{_HANDLER_MODULE}.get_topic_manager",
+            return_value=topic_manager,
+        ):
+            await handler.handle(context, {"workspace_id": workspace_id})
+
+        assert not topic_manager.is_subscribed("test-session-id", f"workspace:{workspace_id}")
+        sent = context.websocket.send_json.call_args[0][0]
+        assert sent["type"] == "error"
+        assert sent["data"]["code"] == "workspace_access_denied"
 
     async def test_unsubscribe_removes_workspace(
         self,
@@ -252,3 +277,42 @@ class TestWorkspaceWebSocket:
         assert sent["data"]["status"] == "busy"
         assert sent["data"]["display_name"] == "ResearchBot"
         assert sent["event_id"] == "evt_agent001"
+
+    async def test_workspace_bridge_stops_forwarding_after_membership_revoked(
+        self,
+        context: MessageContext,
+        topic_manager: TopicManager,
+        mock_container: MagicMock,
+    ) -> None:
+        handler = SubscribeWorkspaceHandler()
+        workspace_id = "ws-006"
+        mock_container.mock_member_repo.find_by_workspace_and_user.return_value = None
+
+        chat_envelope = EventEnvelope(
+            event_type="workspace.chat.new_message",
+            payload={"content": "Should not deliver"},
+            event_id="evt_chat_revoke",
+            timestamp=datetime.now(UTC).isoformat(),
+        )
+        chat_event = EventWithMetadata(
+            envelope=chat_envelope,
+            routing_key=f"workspace:{workspace_id}:chat",
+            sequence_id="9999-0",
+        )
+
+        async def fake_subscribe(pattern: str, options: SubscriptionOptions | None = None) -> Any:
+            yield chat_event
+
+        with (
+            patch(f"{_HANDLER_MODULE}.get_topic_manager", return_value=topic_manager),
+            patch(f"{_HANDLER_MODULE}.RedisUnifiedEventBusAdapter") as mock_bus_class,
+        ):
+            mock_bus = MagicMock()
+            mock_bus.subscribe = fake_subscribe
+            mock_bus_class.return_value = mock_bus
+
+            await handler._workspace_bridge_loop(context, workspace_id, AsyncMock())
+
+        sent = context.websocket.send_json.call_args[0][0]
+        assert sent["type"] == "error"
+        assert sent["data"]["code"] == "workspace_access_denied"
