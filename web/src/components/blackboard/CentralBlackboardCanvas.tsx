@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo } from 'react';
+import { Component, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -73,6 +73,43 @@ function getNodePalette(kind: 'blackboard' | 'agent' | 'human'): {
     text: 'var(--color-text-inverse)',
     muted: 'var(--color-primary-200)',
   };
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class CanvasErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  override render(): React.ReactNode {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback ?? (
+          <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-border-light bg-surface-muted p-8 text-center dark:border-border-dark dark:bg-background-dark">
+            <div>
+              <p className="text-sm text-text-secondary dark:text-text-muted">
+                Canvas rendering failed. Please refresh the page.
+              </p>
+            </div>
+          </div>
+        )
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export interface CentralBlackboardCanvasProps {
@@ -200,6 +237,7 @@ export function CentralBlackboardCanvas({
   const boardPolygon = toPolygonPoints(0, 0, BOARD_NODE_SIZE);
 
   return (
+    <CanvasErrorBoundary>
     <div className="relative min-h-[520px] overflow-hidden rounded-3xl border border-border-light bg-surface-light shadow-lg dark:border-border-dark dark:bg-background-dark sm:min-h-[620px]">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-3 p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -249,7 +287,7 @@ export function CentralBlackboardCanvas({
                     <Icon size={14} />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted dark:text-text-muted">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted dark:text-text-muted">
                       {card.label}
                     </div>
                     <div className="truncate text-sm font-semibold text-text-primary dark:text-text-inverse">
@@ -264,7 +302,7 @@ export function CentralBlackboardCanvas({
       </div>
 
       <svg
-        className="h-full w-full"
+        className="hidden h-full w-full sm:block"
         aria-labelledby="central-blackboard-canvas-title central-blackboard-canvas-description"
         viewBox={viewBox}
       >
@@ -275,6 +313,39 @@ export function CentralBlackboardCanvas({
             'Overview of the central blackboard with the main board in the center and connected workstations around it.'
           )}
         </desc>
+
+        {/* Mobile fallback: card list on small screens */}
+        <div className="block sm:hidden space-y-3 p-4">
+          {pixelActors.map((actor) => {
+            const palette = getNodePalette(actor.kind);
+            return (
+              <div
+                key={actor.key}
+                className="flex items-center gap-3 rounded-2xl border border-border-light bg-surface-muted px-4 py-3 dark:border-border-dark dark:bg-surface-dark-alt"
+              >
+                <span
+                  className="h-3 w-3 rounded-full"
+                  style={{ backgroundColor: palette.stroke }}
+                />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-text-primary dark:text-text-inverse">
+                    {truncateLabel(actor.title, 20)}
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    {actor.statusLabel}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {pixelActors.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border-separator bg-surface-light p-4 text-center text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+              {t('blackboard.noAgents', 'No agents connected yet.')}
+            </div>
+          )}
+        </div>
+
+        {/* SVG canvas on sm+ screens */}
         <defs>
           <filter id="board-node-glow" x="-200%" y="-200%" width="400%" height="400%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blurred" />
@@ -399,7 +470,11 @@ export function CentralBlackboardCanvas({
           const topTextY = actor.y - OUTER_NODE_SIZE * 0.52;
 
           return (
-            <g key={actor.key}>
+            <g
+              key={actor.key}
+              role="img"
+              aria-label={`${actor.kind === 'agent' ? t('blackboard.agent', 'Agent') : t('blackboard.human', 'Human')}: ${actor.title} (${actor.statusLabel})`}
+            >
               <polygon
                 points={polygon}
                 fill={palette.glow}
@@ -447,5 +522,6 @@ export function CentralBlackboardCanvas({
         })}
       </svg>
     </div>
+    </CanvasErrorBoundary>
   );
 }

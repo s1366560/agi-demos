@@ -56,10 +56,10 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
 
   if (!selectedPost) {
     return (
-      <Card className="flex h-full items-center justify-center shadow-sm bg-gray-50/50">
-        <Empty 
+      <Card className="flex h-full items-center justify-center shadow-sm bg-surface-muted">
+        <Empty
           description={
-            <span className="text-gray-400">
+            <span className="text-text-muted">
               {t('blackboard.selectPost', 'Select a post to view details')}
             </span>
           }
@@ -87,12 +87,12 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
               <Title level={4} className="!mb-2">
                 {selectedPost.title}
               </Title>
-              <Space size="middle" className="text-sm text-gray-500">
+              <Space size="middle" className="text-sm text-text-secondary">
                 <span className="font-medium">{selectedPost.author_id}</span>
-                <span className="text-gray-300">•</span>
+                <span className="text-text-muted">•</span>
                 <span>{formatDateTime(selectedPost.created_at)}</span>
                 {selectedPost.status === 'archived' && (
-                  <Tag color="default" className="!ml-0 !mr-0 border-gray-200">
+                  <Tag color="default" className="!ml-0 !mr-0 border-border-light">
                     {t('blackboard.archived')}
                   </Tag>
                 )}
@@ -101,8 +101,8 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
             <Space className="shrink-0">
               <Button
                 type="text"
-                className="hover:bg-gray-100 transition-colors"
-                icon={selectedPost.is_pinned ? <PushpinFilled className="text-blue-500" /> : <PushpinOutlined className="text-gray-500 hover:text-gray-700" />}
+                className="hover:bg-surface-muted transition-colors"
+                icon={selectedPost.is_pinned ? <PushpinFilled className="text-primary" /> : <PushpinOutlined className="text-text-muted hover:text-text-primary dark:hover:text-text-inverse" />}
                 onClick={() =>
                   selectedPost.is_pinned
                     ? unpinPost(tenantId, projectId, workspaceId, selectedPost.id)
@@ -122,20 +122,20 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
                   danger 
                   icon={<DeleteOutlined />} 
                   title={t('blackboard.delete')} 
-                  className="hover:bg-red-50 transition-colors"
+                  className="hover:bg-error/10 transition-colors"
                 />
               </Popconfirm>
             </Space>
           </div>
 
-          <Paragraph className="whitespace-pre-wrap text-base text-gray-700">
+          <Paragraph className="whitespace-pre-wrap text-base text-text-secondary dark:text-text-muted">
             {selectedPost.content}
           </Paragraph>
 
           <Divider className="my-6" />
 
           <div>
-            <Title level={5} className="!mb-4 text-gray-700">
+            <Title level={5} className="!mb-4 text-text-secondary">
               {t('blackboard.replies')} ({replies.length})
             </Title>
 
@@ -146,7 +146,7 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
                 emptyText: (
                   <Empty 
                     description={
-                      <span className="text-gray-400">
+                      <span className="text-text-muted">
                         {t('blackboard.noReplies', 'No replies yet')}
                       </span>
                     } 
@@ -155,8 +155,8 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
                 ) 
               }}
               renderItem={(reply) => (
-                <List.Item
-                  className="group px-4 py-4 hover:bg-gray-50/50 rounded-lg transition-colors -mx-4"
+              <List.Item
+                  className="group px-4 py-4 hover:bg-surface-muted/80 rounded-lg transition-colors -mx-4"
                   actions={[
                     <Popconfirm
                       key="delete"
@@ -173,7 +173,7 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
                         danger 
                         size="small" 
                         icon={<DeleteOutlined />} 
-                        className="opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all"
+                        className="opacity-0 group-hover:opacity-100 hover:bg-error/10 transition-all"
                         aria-label={t('blackboard.delete', 'Delete')}
                       />
                     </Popconfirm>,
@@ -181,16 +181,16 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
                 >
                   <List.Item.Meta
                     title={
-                      <Space size="middle" className="text-sm text-gray-500">
-                        <span className="font-medium text-gray-700">
+                      <Space size="middle" className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">
                           {reply.author_id}
                         </span>
-                        <span className="text-gray-300">•</span>
+                        <span className="text-text-muted">•</span>
                         <span>{formatDateTime(reply.created_at)}</span>
                       </Space>
                     }
                     description={
-                      <div className="mt-2 whitespace-pre-wrap text-gray-700 text-base">
+                      <div className="mt-2 whitespace-pre-wrap text-text-secondary text-base">
                         {reply.content}
                       </div>
                     }
@@ -201,7 +201,7 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
           </div>
         </div>
 
-        <div className="border-t border-gray-100 bg-gray-50 p-4">
+        <div className="border-t border-border-light bg-surface-muted p-4">
           <Form form={form} onFinish={handleReply} className="flex items-start gap-2">
             <Form.Item
               name="content"

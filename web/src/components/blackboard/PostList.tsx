@@ -64,7 +64,7 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
       className="flex h-full flex-col shadow-sm"
       styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1, padding: 0, overflow: 'hidden' } }}
     >
-      <div className="border-b border-gray-100 p-4">
+      <div className="border-b border-border-light p-4 dark:border-border-dark">
         <div className="mb-4 flex items-center justify-between">
           <Tabs
             activeKey={filter}
@@ -83,7 +83,7 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
         </div>
 
         {isCreating && (
-          <Card size="small" className="mb-4 bg-gray-50">
+          <Card size="small" className="mb-4 bg-surface-muted">
             <Form form={form} layout="vertical" onFinish={handleCreate}>
               <Form.Item
                 name="title"
@@ -134,11 +134,12 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
                 <button
                   type="button"
                   key={post.id}
+                  aria-pressed={isSelected}
                   onClick={() => { selectPost(post); }}
-                  className={`w-full text-left cursor-pointer rounded-lg border p-3 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                  className={`w-full text-left cursor-pointer rounded-lg border p-3 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                     isSelected
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-transparent hover:border-gray-200 hover:bg-gray-50'
+                      ? 'border-primary/40 bg-primary/8 dark:border-primary/30 dark:bg-primary/10'
+                      : 'border-transparent hover:border-border-light hover:bg-surface-muted dark:hover:border-border-dark dark:hover:bg-surface-dark-alt'
                   }`}
                 >
                   <div className="mb-1 flex items-start justify-between">
@@ -146,13 +147,13 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
                       {post.title}
                     </Text>
                     {post.is_pinned && (
-                      <PushpinOutlined className="ml-2 mt-1 text-blue-500" />
+                      <PushpinOutlined className="ml-2 mt-1 text-primary" />
                     )}
                   </div>
-                  <Text className="line-clamp-2 text-sm text-gray-500">
+                  <Text className="line-clamp-2 text-sm text-text-secondary dark:text-text-muted">
                     {post.content}
                   </Text>
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                  <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
                     <Space size="small">
                       <MessageOutlined />
                       <span>{formatDateOnly(post.created_at)}</span>

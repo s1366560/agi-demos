@@ -64,11 +64,18 @@ type HexEdge = TopologyEdge & {
 
 const HEX_SIZE = 56;
 const RESERVED_CENTER_KEY = '0,0';
-const DEFAULT_AGENT_COLOR = '#1e3fae';
-const HUMAN_SEAT_COLOR = '#f59e0b';
+const DEFAULT_AGENT_COLOR = 'var(--color-primary-500, #1e3fae)';
+const HUMAN_SEAT_COLOR = 'var(--color-warning, #f59e0b)';
 const MAX_LAYOUT_RADIUS = 24;
 const MAX_RENDER_GRID_RADIUS = 26;
-const COLOR_SWATCHS = ['#1e3fae', '#2563eb', '#7c3aed', '#0f766e', '#d97706', '#dc2626'];
+const COLOR_SWATCHS = [
+  'var(--color-primary-500, #1e3fae)',
+  'var(--color-primary-400, #2563eb)',
+  'var(--color-secondary-400, #7c3aed)',
+  'var(--color-info, #0f766e)',
+  'var(--color-warning, #d97706)',
+  'var(--color-error, #dc2626)',
+];
 
 const KEYBOARD_HINTS = [
   { keys: 'Arrow keys', labelKey: 'blackboard.arrangement.shortcuts.navigate', defaultLabel: 'Move focus' },
