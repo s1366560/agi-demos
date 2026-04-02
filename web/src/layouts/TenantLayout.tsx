@@ -283,10 +283,11 @@ export const TenantLayout: React.FC = memo(() => {
     'org-settings',
   ];
   const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
-  const isAgentWorkspacePath =
+  const isFullHeightPath =
     pathSegments.length === 0 ||
     pathSegments[0] === 'agent-workspace' ||
-    !NON_AGENT_SUBPATHS.includes(pathSegments[0] ?? '');
+    !NON_AGENT_SUBPATHS.includes(pathSegments[0] ?? '') ||
+    (pathSegments[0] === 'project' && pathSegments.length >= 3 && pathSegments[2] === 'blackboard');
 
   return (
     <>
@@ -332,10 +333,10 @@ export const TenantLayout: React.FC = memo(() => {
           {/* Page Content */}
           <div
             className={`flex-1 relative ${
-              isAgentWorkspacePath ? 'overflow-hidden h-full' : 'overflow-y-auto p-4'
+              isFullHeightPath ? 'overflow-hidden h-full' : 'overflow-y-auto p-4'
             }`}
           >
-            <div className={isAgentWorkspacePath ? 'h-full' : 'max-w-full'}>
+            <div className={isFullHeightPath ? 'h-full' : 'max-w-full'}>
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                 <Outlet />
               </RouteErrorBoundary>

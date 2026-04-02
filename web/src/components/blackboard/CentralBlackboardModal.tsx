@@ -17,12 +17,12 @@ import {
   ObjectiveCreateModal,
   type ObjectiveFormValues,
 } from '@/components/workspace/objectives/ObjectiveCreateModal';
-import { ObjectiveList } from '@/components/workspace/objectives/ObjectiveList';
-import { TaskBoard } from '@/components/workspace/TaskBoard';
 
 import { buildBlackboardNotes, buildBlackboardStats } from './blackboardUtils';
-import { StatBadge } from './StatBadge';
 import { DiscussionTab } from './tabs/DiscussionTab';
+import { FilesPlaceholder } from './tabs/FilesPlaceholder';
+import { GoalsTab } from './tabs/GoalsTab';
+import { NotesTab } from './tabs/NotesTab';
 import { StatusTab } from './tabs/StatusTab';
 import { TopologyTab } from './tabs/TopologyTab';
 
@@ -425,8 +425,8 @@ export function CentralBlackboardModal({
         className="[&_.ant-modal-close]:text-text-muted dark:[&_.ant-modal-close]:text-text-muted [&_.ant-modal-close:hover]:text-text-primary dark:[&_.ant-modal-close:hover]:text-text-inverse [&_.ant-modal-content]:!overflow-hidden [&_.ant-modal-content]:!border [&_.ant-modal-content]:!border-border-light dark:[&_.ant-modal-content]:!border-border-dark [&_.ant-modal-content]:!bg-surface-light dark:[&_.ant-modal-content]:!bg-surface-dark [&_.ant-modal-content]:!p-0 [&_.ant-modal-content]:shadow-2xl"
         styles={{
           mask: {
-            backgroundColor: 'rgba(15, 23, 42, 0.5)',
-            backdropFilter: 'blur(8px)',
+            backgroundColor: 'var(--color-background-dark)',
+            opacity: 0.5,
           },
         }}
       >
@@ -492,56 +492,18 @@ export function CentralBlackboardModal({
               {activeTab === tab.key && (
                 <>
             {activeTab === 'goals' && (
-              <div className="space-y-5">
-                <section className="rounded-2xl border border-border-light bg-surface-muted px-4 py-4 dark:border-border-dark dark:bg-background-dark/35">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="max-w-2xl">
-                      <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
-                        {t('blackboard.goalsOverviewTitle', 'Goals and delivery')}
-                      </h3>
-                      <p className="mt-1 text-sm leading-7 text-text-secondary dark:text-text-muted">
-                        {t(
-                          'blackboard.goalsOverviewBody',
-                          'Review shared outcomes and the delivery queue together so the blackboard stays connected to execution.'
-                        )}
-                      </p>
-                    </div>
-                    <dl className="flex flex-wrap gap-2">
-                      {[
-                        {
-                          key: 'completion',
-                          label: t('blackboard.metrics.completion', 'Task completion'),
-                          value: `${String(stats.completionRatio)}%`,
-                        },
-                        {
-                          key: 'objectives',
-                          label: t('blackboard.objectivesTitle', 'Goals'),
-                          value: String(objectives.length),
-                        },
-                        {
-                          key: 'tasks',
-                          label: t('blackboard.metrics.tasks', 'Tasks'),
-                          value: String(tasks.length),
-                        },
-                      ].map((metric) => (
-                        <StatBadge key={metric.key} label={metric.label} value={metric.value} />
-                      ))}
-                    </dl>
-                  </div>
-                </section>
-
-                <ObjectiveList
-                  objectives={objectives}
-                  onDelete={(objectiveId) => {
-                    void handleDeleteObjective(objectiveId);
-                  }}
-                  onCreate={() => {
-                    setShowCreateObjective(true);
-                  }}
-                />
-
-                <TaskBoard workspaceId={workspaceId} />
-              </div>
+              <GoalsTab
+                objectives={objectives}
+                tasks={tasks}
+                completionRatio={stats.completionRatio}
+                workspaceId={workspaceId}
+                onDeleteObjective={(objectiveId) => {
+                  void handleDeleteObjective(objectiveId);
+                }}
+                onCreateObjective={() => {
+                  setShowCreateObjective(true);
+                }}
+              />
             )}
 
             {activeTab === 'discussion' && (
@@ -573,17 +535,11 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'collaboration' && (
-              <div className="rounded-3xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+              <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
                 <div className="mb-4">
                   <div className="text-lg font-semibold text-text-primary dark:text-text-inverse">
                     {t('blackboard.tabs.collaboration', 'Collaboration')}
                   </div>
-                  <p className="mt-1 text-sm text-text-secondary dark:text-text-muted">
-                    {t(
-                      'blackboard.collaborationHint',
-                      'Keep the workspace-wide collaboration stream inside the central blackboard so execution and discussion stay in one place.'
-                    )}
-                  </p>
                 </div>
                 <div className="min-h-[560px]">
                   <ChatPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
@@ -592,13 +548,13 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'members' && (
-              <div className="rounded-3xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+              <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
                 <MemberPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
               </div>
             )}
 
             {activeTab === 'genes' && (
-              <div className="rounded-3xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+              <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
                 <GeneList
                   genes={genes}
                   onDelete={(geneId) => {
@@ -612,17 +568,7 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'files' && (
-              <div className="rounded-3xl border border-dashed border-border-separator bg-surface-light p-8 text-center dark:border-border-dark dark:bg-surface-dark">
-                <div className="text-lg font-semibold text-text-primary dark:text-text-inverse">
-                  {t('blackboard.filesUnavailableTitle', 'Shared files are not wired here yet')}
-                </div>
-                <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-text-secondary dark:text-text-muted">
-                  {t(
-                    'blackboard.filesUnavailableBody',
-                    'The central blackboard already combines discussion, goals, and execution. File operations can be added later when a workspace-scoped file endpoint is available.'
-                  )}
-                </p>
-              </div>
+              <FilesPlaceholder />
             )}
 
             {activeTab === 'status' && (
@@ -636,35 +582,7 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'notes' && (
-              <div className="space-y-4">
-                {notes.map((note) => (
-                  <article
-                    key={note.id}
-                    className="rounded-3xl border border-border-light bg-surface-muted p-5 dark:border-border-dark dark:bg-surface-dark-alt"
-                  >
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="rounded-full border border-border-light bg-surface-light px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-text-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-                        {t(`blackboard.noteKinds.${note.kind}`, note.kind)}
-                      </span>
-                    </div>
-                    <h3 className="mt-4 break-words text-lg font-semibold text-text-primary dark:text-text-inverse">
-                      {note.title}
-                    </h3>
-                    <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-text-secondary dark:text-text-muted">
-                      {note.summary}
-                    </p>
-                  </article>
-                ))}
-
-                {notes.length === 0 && (
-                  <div className="rounded-3xl border border-dashed border-border-separator bg-surface-light p-8 text-center text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-                    {t(
-                      'blackboard.noNotes',
-                      'No shared notes yet. Add workspace description, objectives, or pinned discussions to make this tab more useful.'
-                    )}
-                  </div>
-                )}
-              </div>
+              <NotesTab notes={notes} />
             )}
 
             {activeTab === 'topology' && (
@@ -676,7 +594,7 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'settings' && (
-              <div className="rounded-3xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+              <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
                 <WorkspaceSettingsPanel
                   tenantId={tenantId}
                   projectId={projectId}

@@ -1146,7 +1146,7 @@ export function WorkstationArrangementBoard({
   }, [agentByCoord, keyboardCursor.q, keyboardCursor.r, nodeByCoord, t]);
 
   return (
-    <section className="rounded-3xl border border-border-light bg-surface-light p-4 shadow-lg transition-colors duration-200 dark:border-border-dark dark:bg-surface-dark sm:p-5">
+    <section className="flex flex-col h-full rounded-3xl border border-border-light bg-surface-light p-4 shadow-lg transition-colors duration-200 dark:border-border-dark dark:bg-surface-dark sm:p-5">
       <div className="flex flex-col gap-4 border-b border-border-light pb-4 dark:border-border-dark lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="text-[11px] uppercase tracking-[0.28em] text-primary/75 dark:text-primary/80">
@@ -1254,8 +1254,8 @@ export function WorkstationArrangementBoard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="overflow-hidden rounded-[24px] border border-border-light bg-surface-light dark:border-border-dark dark:bg-background-dark">
+      <div className="mt-4 flex-1 min-h-0 grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="flex flex-col h-full overflow-hidden rounded-[24px] border border-border-light bg-surface-light dark:border-border-dark dark:bg-background-dark">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light px-4 py-3 dark:border-border-dark">
             <div>
               <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
@@ -1285,7 +1285,7 @@ export function WorkstationArrangementBoard({
           </div>
 
           {!isKeyboardGridActive && (
-            <p className="text-xs text-text-secondary dark:text-text-muted">
+            <p className="text-xs text-text-secondary dark:text-text-muted px-4 py-2">
               {t(
                 'blackboard.arrangement.threeDPreviewNote',
                 '3D view is preview only. Use pointer controls here, or switch back to 2D for keyboard editing.'
@@ -1293,7 +1293,7 @@ export function WorkstationArrangementBoard({
             </p>
           )}
 
-          <div className="relative h-[min(65vh,620px)] min-h-[420px] w-full sm:h-[min(70vh,620px)]">
+          <div className="relative flex-1 min-h-[280px] w-full">
               <div id={gridHelpId} className="sr-only">
                 {isKeyboardGridActive
                   ? t(
@@ -1430,7 +1430,7 @@ export function WorkstationArrangementBoard({
         </aside>
       </div>
 
-      <div className="mt-4 rounded-[24px] border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
+      <div className="mt-4 flex-shrink-0 rounded-[24px] border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-sm font-medium text-text-primary dark:text-text-inverse">

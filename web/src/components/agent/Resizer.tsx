@@ -21,6 +21,8 @@ interface ResizerProps {
   maxSize: number;
   /** Callback when size changes */
   onResize: (newSize: number) => void;
+  /** Optional callback when drag ends (mouseup) */
+  onResizeEnd?: (finalSize: number) => void;
   /** Optional className */
   className?: string | undefined;
   /** Position: 'left' | 'right' for horizontal, 'top' | 'bottom' for vertical */
@@ -33,12 +35,14 @@ export const Resizer: React.FC<ResizerProps> = ({
   minSize,
   maxSize,
   onResize,
+  onResizeEnd,
   className = '',
   position = 'right',
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const startPosRef = useRef(0);
   const startSizeRef = useRef(currentSize);
+  const rafRef = useRef<number | null>(null);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -59,36 +63,63 @@ export const Resizer: React.FC<ResizerProps> = ({
     if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const currentPos = direction === 'horizontal' ? e.clientX : e.clientY;
-      const delta = currentPos - startPosRef.current;
-
-      // Calculate new size based on position
-      let newSize: number;
-      if (position === 'right' || position === 'bottom') {
-        newSize = startSizeRef.current + delta;
-      } else {
-        newSize = startSizeRef.current - delta;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
       }
 
-      // Clamp to min/max
-      newSize = Math.max(minSize, Math.min(maxSize, newSize));
-      onResize(newSize);
+      rafRef.current = requestAnimationFrame(() => {
+        const currentPos = direction === 'horizontal' ? e.clientX : e.clientY;
+        const delta = currentPos - startPosRef.current;
+
+        // Calculate new size based on position
+        let newSize: number;
+        if (position === 'right' || position === 'bottom') {
+          newSize = startSizeRef.current + delta;
+        } else {
+          newSize = startSizeRef.current - delta;
+        }
+
+        // Clamp to min/max
+        newSize = Math.max(minSize, Math.min(maxSize, newSize));
+        onResize(newSize);
+      });
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       setIsDragging(false);
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
+      
+      if (onResizeEnd) {
+        const currentPos = direction === 'horizontal' ? e.clientX : e.clientY;
+        const delta = currentPos - startPosRef.current;
+        let newSize: number;
+        if (position === 'right' || position === 'bottom') {
+          newSize = startSizeRef.current + delta;
+        } else {
+          newSize = startSizeRef.current - delta;
+        }
+        newSize = Math.max(minSize, Math.min(maxSize, newSize));
+        onResizeEnd(newSize);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, direction, position, minSize, maxSize, onResize]);
+  }, [isDragging, direction, position, minSize, maxSize, onResize, onResizeEnd]);
 
   // Position styles
   const positionStyles: Record<ResizeDirection, Record<string, string>> = {

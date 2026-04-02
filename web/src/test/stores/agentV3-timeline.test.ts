@@ -53,8 +53,6 @@ describe('agentV3 Store - Timeline Field', () => {
       pendingToolsStack: [],
       workPlan: null,
       isPlanMode: false,
-      showPlanPanel: true,
-      showHistorySidebar: true,
       pendingDecision: null,
       doomLoopDetected: null,
     });

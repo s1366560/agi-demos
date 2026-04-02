@@ -27,16 +27,10 @@ export function StatusTab({
     <div className="space-y-5">
       <section className="rounded-2xl border border-border-light bg-surface-muted px-4 py-4 dark:border-border-dark dark:bg-background-dark/35">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-2xl">
+          <div>
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.statusOverviewTitle', 'Status and presence')}
             </h3>
-            <p className="mt-1 text-sm leading-7 text-text-secondary dark:text-text-muted">
-              {t(
-                'blackboard.statusOverviewBody',
-                'Keep agent activity, discussion volume, and topology changes in a single operational read.'
-              )}
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {[
@@ -69,32 +63,28 @@ export function StatusTab({
 
       <PresenceBar workspaceId={workspaceId} />
 
-      <section className="rounded-3xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+      <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
         <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
           {t('blackboard.agentStatusTitle', 'Agent status')}
         </h3>
-        <p className="mt-1 text-sm leading-7 text-text-secondary dark:text-text-muted">
-          {t(
-            'blackboard.agentStatusBody',
-            'Review workspace-bound agents, their current state, and any placement metadata without leaving the modal.'
-          )}
-        </p>
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 divide-y divide-border-separator dark:divide-border-dark">
           {agents.map((agent) => (
             <div
               key={agent.id}
-              className="flex flex-col gap-3 rounded-2xl border border-border-light bg-surface-muted px-4 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-border-dark dark:bg-background-dark/45"
+              className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
                   <span
                     className={`h-2.5 w-2.5 rounded-full ${statusBadgeTone(agent.status)}`}
+                    aria-hidden="true"
                   />
+                  <span className="sr-only">{agent.status ?? 'unknown'}</span>
                   <div className="truncate text-sm font-medium text-text-primary dark:text-text-inverse">
                     {agent.display_name ?? agent.label ?? agent.agent_id}
                   </div>
                 </div>
-                <div className="mt-1 break-all font-mono text-[11px] text-text-muted dark:text-text-muted">
+                <div className="mt-1 break-all font-mono text-[11px] text-text-muted">
                   {agent.agent_id}
                   {agent.hex_q !== undefined && agent.hex_r !== undefined && (
                     <>
@@ -122,7 +112,7 @@ export function StatusTab({
           ))}
 
           {agents.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-border-separator bg-surface-light p-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+            <div className="rounded-xl border border-dashed border-border-separator bg-surface-light p-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
               {t('blackboard.noAgents', 'No agents have been bound to this workspace yet.')}
             </div>
           )}

@@ -15,6 +15,8 @@ import { useGraphStore } from '../graphStore';
 import { useUnifiedHITLStore } from '../hitlStore.unified';
 import { useLayoutModeStore } from '../layoutMode';
 
+import { useExecutionStore } from './executionStore';
+
 import { mergeA2UIMessageStream } from './a2uiMessages';
 
 import type { DeltaBufferState } from './deltaBuffers';
@@ -306,7 +308,7 @@ export function createStreamEventHandlers(
       const isPlanMode = data.mode === 'plan';
       updateConversationState(handlerConversationId, { isPlanMode });
       if (handlerConversationId === get().activeConversationId) {
-        set({ isPlanMode });
+        useExecutionStore.getState().setAgentIsPlanMode(isPlanMode);
       }
     },
 

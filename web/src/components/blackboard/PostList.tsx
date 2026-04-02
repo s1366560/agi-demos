@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PushpinOutlined, MessageOutlined } from '@ant-design/icons';
-import { Card, Button, Input, Form, Typography, Tabs, Space, Tag, Empty, Spin } from 'antd';
+import { Button, Input, Form } from 'antd';
 
 import {
   useBlackboardPosts,
@@ -15,8 +15,6 @@ import {
 
 import { formatDateOnly } from '@/utils/date';
 
-
-const { Text } = Typography;
 
 export interface PostListProps {
   tenantId: string;
@@ -41,7 +39,7 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
     if (filter === 'pinned') {
       result = result.filter((p) => p.is_pinned);
     }
-    
+
     return result.sort((a, b) => {
       if (a.is_pinned && !b.is_pinned) return -1;
       if (!a.is_pinned && b.is_pinned) return 1;
@@ -60,21 +58,33 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
   };
 
   return (
-    <Card
-      className="flex h-full flex-col shadow-sm"
-      styles={{ body: { display: 'flex', flexDirection: 'column', flex: 1, padding: 0, overflow: 'hidden' } }}
-    >
+    <div className="flex h-full flex-col rounded-xl border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark">
       <div className="border-b border-border-light p-4 dark:border-border-dark">
         <div className="mb-4 flex items-center justify-between">
-          <Tabs
-            activeKey={filter}
-            onChange={(key) => { setFilter(key as 'all' | 'pinned'); }}
-            className="!mb-0"
-            items={[
-              { key: 'all', label: t('blackboard.allPosts') },
-              { key: 'pinned', label: t('blackboard.pinnedOnly') },
-            ]}
-          />
+          <div className="flex items-center gap-1 rounded-full bg-surface-muted p-1 dark:bg-surface-dark-alt">
+            <button
+              type="button"
+              onClick={() => { setFilter('all'); }}
+              className={`rounded-full px-3 py-1.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                filter === 'all'
+                  ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
+                  : 'text-text-muted hover:text-text-primary dark:hover:text-text-inverse'
+              }`}
+            >
+              {t('blackboard.allPosts')}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFilter('pinned'); }}
+              className={`rounded-full px-3 py-1.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                filter === 'pinned'
+                  ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
+                  : 'text-text-muted hover:text-text-primary dark:hover:text-text-inverse'
+              }`}
+            >
+              {t('blackboard.pinnedOnly')}
+            </button>
+          </div>
           {!isCreating && (
             <Button type="primary" onClick={() => { setIsCreating(true); }}>
               {t('blackboard.newPost')}
@@ -83,7 +93,7 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
         </div>
 
         {isCreating && (
-          <Card size="small" className="mb-4 bg-surface-muted">
+          <div className="mb-4 rounded-xl border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
             <Form form={form} layout="vertical" onFinish={handleCreate}>
               <Form.Item
                 name="title"
@@ -105,23 +115,20 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
                 </Button>
               </div>
             </Form>
-          </Card>
+          </div>
         )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
         {loading && posts.length === 0 ? (
           <div className="flex justify-center p-8">
-            <Spin />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-light border-t-primary" />
           </div>
         ) : filteredPosts.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center p-6">
-            <Empty 
-              description={t('blackboard.noPosts', 'No posts yet')} 
-              className="mb-4"
-            />
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+            <p className="text-sm text-text-muted">{t('blackboard.noPosts', 'No posts yet')}</p>
             {!isCreating && (
-              <Button type="primary" onClick={() => { setIsCreating(true); }}>
+              <Button type="primary" className="mt-4" onClick={() => { setIsCreating(true); }}>
                 {t('blackboard.createPost', 'Create Post')}
               </Button>
             )}
@@ -136,32 +143,32 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
                   key={post.id}
                   aria-pressed={isSelected}
                   onClick={() => { selectPost(post); }}
-                  className={`w-full text-left cursor-pointer rounded-lg border p-3 transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                  className={`w-full cursor-pointer rounded-lg border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                     isSelected
                       ? 'border-primary/40 bg-primary/8 dark:border-primary/30 dark:bg-primary/10'
                       : 'border-transparent hover:border-border-light hover:bg-surface-muted dark:hover:border-border-dark dark:hover:bg-surface-dark-alt'
                   }`}
                 >
                   <div className="mb-1 flex items-start justify-between">
-                    <Text strong className="line-clamp-1 flex-1">
+                    <span className="line-clamp-1 flex-1 font-semibold text-text-primary dark:text-text-inverse">
                       {post.title}
-                    </Text>
+                    </span>
                     {post.is_pinned && (
                       <PushpinOutlined className="ml-2 mt-1 text-primary" />
                     )}
                   </div>
-                  <Text className="line-clamp-2 text-sm text-text-secondary dark:text-text-muted">
+                  <p className="line-clamp-2 text-sm text-text-secondary dark:text-text-muted">
                     {post.content}
-                  </Text>
+                  </p>
                   <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
-                    <Space size="small">
+                    <div className="flex items-center gap-1.5">
                       <MessageOutlined />
                       <span>{formatDateOnly(post.created_at)}</span>
-                    </Space>
+                    </div>
                     {post.status === 'archived' && (
-                      <Tag color="default" className="!mr-0">
+                      <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] text-text-muted dark:bg-surface-dark-alt">
                         {t('blackboard.archived')}
-                      </Tag>
+                      </span>
                     )}
                   </div>
                 </button>
@@ -170,6 +177,6 @@ export const PostList: React.FC<PostListProps> = ({ tenantId, projectId, workspa
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 };

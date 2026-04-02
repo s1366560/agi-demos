@@ -23,7 +23,7 @@
 
 import { useEffect, useMemo } from 'react';
 
-import { useAgentV3Store } from '../stores/agentV3';
+import { useAgentHITLStore } from '../stores/agent/hitlStore';
 import { useUnifiedHITLStore, usePendingRequests } from '../stores/hitlStore.unified';
 
 import type {
@@ -83,11 +83,10 @@ function convertEnvVarFields(fields: LegacyEnvVarField[]): UnifiedEnvVarField[] 
 export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLReturn {
   const { handleSSEEvent } = useUnifiedHITLStore();
 
-  // Get pending HITL states from agentV3Store
-  const pendingClarification = useAgentV3Store((state) => state.pendingClarification);
-  const pendingDecision = useAgentV3Store((state) => state.pendingDecision);
-  const pendingEnvVarRequest = useAgentV3Store((state) => state.pendingEnvVarRequest);
-  const pendingPermission = useAgentV3Store((state) => state.pendingPermission);
+  const pendingClarification = useAgentHITLStore((state) => state.pendingClarification);
+  const pendingDecision = useAgentHITLStore((state) => state.pendingDecision);
+  const pendingEnvVarRequest = useAgentHITLStore((state) => state.pendingEnvVarRequest);
+  const pendingPermission = useAgentHITLStore((state) => state.pendingPermission);
 
   // Get pending requests from unified store
   const pendingRequests = usePendingRequests(conversationId || '');

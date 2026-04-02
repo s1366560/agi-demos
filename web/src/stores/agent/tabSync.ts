@@ -9,6 +9,7 @@
 
 import { logger } from '../../utils/logger';
 import { tabSync, type TabSyncMessage } from '../../utils/tabSync';
+import { useConversationsStore } from './conversationsStore';
 
 /**
  * Initialize cross-tab synchronization.
@@ -61,14 +62,13 @@ export function initTabSync(): void {
           const msg = message as TabSyncMessage & {
             conversationId: string;
           };
-          // If this is our active conversation, reload messages to get the latest
           if (state.activeConversationId === msg.conversationId) {
-            // Trigger a refresh of messages
             logger.info(
               `[TabSync] Conversation ${msg.conversationId} completed in another tab, reloading...`
             );
-            // Find the project ID from conversations list
-            const conv = state.conversations.find((c) => c.id === msg.conversationId);
+            const conv = useConversationsStore.getState().conversations.find(
+              (c) => c.id === msg.conversationId
+            );
             if (conv) {
               state.loadMessages(msg.conversationId, conv.project_id);
             }
@@ -103,6 +103,10 @@ export function initTabSync(): void {
             conversationId: string;
           };
           // Remove from conversations list
+          useConversationsStore.setState((s) => ({
+            conversations: s.conversations.filter((c) => c.id !== msg.conversationId),
+          }));
+          // Mirror to agentV3 during strangler-fig migration (will be removed in Wave 6e)
           store.setState((s) => ({
             conversations: s.conversations.filter((c) => c.id !== msg.conversationId),
           }));
@@ -123,7 +127,11 @@ export function initTabSync(): void {
             conversationId: string;
             newTitle: string;
           };
-          // Update title in conversations list
+          useConversationsStore.setState((s) => ({
+            conversations: s.conversations.map((c) =>
+              c.id === msg.conversationId ? { ...c, title: msg.newTitle } : c
+            ),
+          }));
           store.setState((s) => ({
             conversations: s.conversations.map((c) =>
               c.id === msg.conversationId ? { ...c, title: msg.newTitle } : c

@@ -46,7 +46,12 @@ import ReactMarkdown from 'react-markdown';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
 
-import { useAgentV3Store } from '../../stores/agentV3';
+import { usePinnedEventIds, useAgentHITLStore } from '../../stores/agent/hitlStore';
+import {
+  useStreamingAssistantContent,
+  useStreamingThought,
+  useIsThinkingStreaming,
+} from '../../stores/agent/streamingStore';
 
 import { useMarkdownPlugins, safeMarkdownComponents } from './chat/markdownPlugins';
 import { SuggestionChips } from './chat/SuggestionChips';
@@ -249,9 +254,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
   }) => {
     // Subscribe to fast-changing streaming values directly from the store
     // to avoid re-rendering the parent AgentChatContent on every token.
-    const storeStreamingContent = useAgentV3Store((s) => s.streamingAssistantContent);
-    const storeStreamingThought = useAgentV3Store((s) => s.streamingThought);
-    const storeIsThinkingStreaming = useAgentV3Store((s) => s.isThinkingStreaming);
+const storeStreamingContent = useStreamingAssistantContent();
+  const storeStreamingThought = useStreamingThought();
+  const storeIsThinkingStreaming = useIsThinkingStreaming();
 
     const streamingContent = isStreaming
       ? (storeStreamingContent ?? propStreamingContent ?? '')
@@ -286,8 +291,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       return -1;
     }, [groupedItems]);
 
-    const pinnedEventIds = useAgentV3Store((s) => s.pinnedEventIds);
-    const togglePinEvent = useAgentV3Store((s) => s.togglePinEvent);
+    const pinnedEventIds = usePinnedEventIds();
+    const togglePinEvent = useAgentHITLStore((s) => s.togglePinEvent);
 
     const pinnedEvents = useMemo(
       () => timeline.filter((e) => e.id && pinnedEventIds.has(e.id)),

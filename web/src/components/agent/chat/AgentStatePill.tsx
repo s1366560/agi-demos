@@ -10,9 +10,9 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Brain, CheckCircle2, Eye, Loader2, MessageCircle, RotateCcw, Zap } from 'lucide-react';
-import { useShallow } from 'zustand/react/shallow';
 
-import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentState, usePendingToolsStack } from '@/stores/agent/executionStore';
+import { useIsStreaming } from '@/stores/agent/streamingStore';
 
 type AgentState =
   | 'idle'
@@ -101,13 +101,9 @@ interface AgentStatePillProps {
 
 export const AgentStatePill: React.FC<AgentStatePillProps> = memo(({ className = '' }) => {
   const { t } = useTranslation();
-  const { isStreaming, agentState, pendingToolsStack } = useAgentV3Store(
-    useShallow((s) => ({
-      isStreaming: s.isStreaming,
-      agentState: s.agentState,
-      pendingToolsStack: s.pendingToolsStack,
-    }))
-  );
+  const isStreaming = useIsStreaming();
+  const agentState = useAgentState();
+  const pendingToolsStack = usePendingToolsStack();
 
   const state = agentState as AgentState;
   const config = useMemo(() => getStateConfig(state, t), [state, t]);

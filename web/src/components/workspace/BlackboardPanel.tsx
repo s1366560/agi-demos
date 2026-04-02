@@ -38,8 +38,7 @@ export function BlackboardPanel({ tenantId, projectId, workspaceId }: Blackboard
       });
       setTitle('');
       setContent('');
-    } catch (err) {
-      console.error('Failed to create post', err);
+    } catch {
       message?.error(t('workspaceDetail.blackboard.createPostFailed'));
     } finally {
       setIsPostSubmitting(false);
@@ -53,8 +52,7 @@ export function BlackboardPanel({ tenantId, projectId, workspaceId }: Blackboard
     try {
       await createReply(tenantId, projectId, workspaceId, postId, { content: draft });
       setReplyDrafts((prev) => ({ ...prev, [postId]: '' }));
-    } catch (err) {
-      console.error('Failed to create reply', err);
+    } catch {
       message?.error(t('workspaceDetail.blackboard.createReplyFailed'));
     } finally {
       setReplySubmitting(null);
@@ -62,9 +60,9 @@ export function BlackboardPanel({ tenantId, projectId, workspaceId }: Blackboard
   };
 
   return (
-    <section className="rounded-lg border border-border-light p-4 bg-surface-light dark:border-border-dark dark:bg-surface-dark transition-colors duration-200">
-      <h3 className="font-semibold text-text-primary dark:text-text-inverse mb-3">{t('workspaceDetail.blackboard.title')}</h3>
-      <div className="grid gap-2 mb-3">
+    <section className="rounded-xl border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
+      <h3 className="mb-3 font-semibold text-text-primary dark:text-text-inverse">{t('workspaceDetail.blackboard.title')}</h3>
+      <div className="mb-3 grid gap-2">
         <Input
           aria-label={t('workspaceDetail.blackboard.postTitle')}
           placeholder={t('workspaceDetail.blackboard.postTitle')}
@@ -85,7 +83,7 @@ export function BlackboardPanel({ tenantId, projectId, workspaceId }: Blackboard
             setContent(e.target.value);
           }}
           autoSize={{ minRows: 3 }}
-          className="px-3 py-2 text-sm min-h-20"
+          className="min-h-20 px-3 py-2 text-sm"
         />
         <Button
           type="primary"
@@ -102,15 +100,15 @@ export function BlackboardPanel({ tenantId, projectId, workspaceId }: Blackboard
         {posts.map((post) => {
           const replies = repliesByPostId[post.id] || [];
           return (
-            <article key={post.id} className="border border-border-light dark:border-border-dark rounded p-3 transition-all duration-300">
+            <article key={post.id} className="rounded-lg border border-border-light p-3 transition dark:border-border-dark">
               <h4 className="font-medium text-text-primary dark:text-text-inverse">{post.title}</h4>
               <p className="text-sm text-text-secondary dark:text-text-muted">{post.content}</p>
-              <div className="text-xs text-text-muted mt-1">{t('workspaceDetail.blackboard.status')}: {post.status}</div>
+              <div className="mt-1 text-xs text-text-muted">{t('workspaceDetail.blackboard.status')}: {post.status}</div>
 
               {replies.length > 0 && (
-                <div className="mt-3 space-y-2 pl-2 border-l-2 border-border-subtle dark:border-border-dark">
+                <div className="mt-3 space-y-2 border-l-2 border-border-subtle pl-2 dark:border-border-dark">
                   {replies.map((reply) => (
-                    <div key={reply.id} className="text-sm text-text-secondary dark:text-text-muted bg-surface-muted dark:bg-surface-dark-alt p-2 rounded">
+                    <div key={reply.id} className="rounded bg-surface-muted p-2 text-sm text-text-secondary dark:bg-surface-dark-alt dark:text-text-muted">
                       {reply.content}
                     </div>
                   ))}
@@ -126,7 +124,7 @@ export function BlackboardPanel({ tenantId, projectId, workspaceId }: Blackboard
                   onChange={(e) => {
                     setReplyDrafts((prev) => ({ ...prev, [post.id]: e.target.value }));
                   }}
-                  className="px-2 py-1 text-sm flex-1"
+                  className="flex-1 px-2 py-1 text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       void onCreateReply(post.id);

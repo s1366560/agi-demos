@@ -25,7 +25,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import type { WorkPlan, TimelineStep, ToolExecution } from '../../types/agent';
+import type { WorkPlan, TimelineStep, ToolExecution, ToolCall } from '../../types/agent';
 
 /**
  * Step status type
@@ -53,6 +53,27 @@ export interface CurrentToolExecution {
 }
 
 /**
+ * Agent state type (migrating from agentV3)
+ */
+export type AgentStateValue =
+  | 'idle'
+  | 'thinking'
+  | 'preparing'
+  | 'acting'
+  | 'observing'
+  | 'awaiting_input'
+  | 'retrying';
+
+/**
+ * Active tool call entry type (migrating from agentV3)
+ */
+export type ActiveToolCallEntry = ToolCall & {
+  status: 'preparing' | 'running' | 'success' | 'failed';
+  startTime: number;
+  partialArguments?: string | undefined;
+};
+
+/**
  * Execution Store State
  */
 export interface ExecutionState {
@@ -71,6 +92,12 @@ export interface ExecutionState {
   // Pattern matching state (T079)
   matchedPattern: MatchedPattern | null;
 
+  // Agent execution state (migrating from agentV3, Wave 6a)
+  agentExecutionState: AgentStateValue;
+  agentActiveToolCalls: Map<string, ActiveToolCallEntry>;
+  agentPendingToolsStack: string[];
+  agentIsPlanMode: boolean;
+
   // Actions
   setWorkPlan: (workPlan: WorkPlan) => void;
   startStep: (stepNumber: number, description: string) => void;
@@ -87,11 +114,25 @@ export interface ExecutionState {
   setMatchedPattern: (pattern: MatchedPattern | null) => void;
   clearExecution: () => void;
   reset: () => void;
+
+  // Agent execution setters (Wave 6a)
+  setAgentExecutionState: (state: AgentStateValue) => void;
+  setAgentActiveToolCalls: (calls: Map<string, ActiveToolCallEntry>) => void;
+  setAgentPendingToolsStack: (stack: string[]) => void;
+  setAgentIsPlanMode: (value: boolean) => void;
+  resetAgentExecution: () => void;
 }
 
 /**
  * Initial state for Execution store
  */
+const agentExecutionInitialState = {
+  agentExecutionState: 'idle' as AgentStateValue,
+  agentActiveToolCalls: new Map<string, ActiveToolCallEntry>(),
+  agentPendingToolsStack: [] as string[],
+  agentIsPlanMode: false,
+};
+
 export const initialState = {
   currentWorkPlan: null,
   currentStepNumber: null,
@@ -100,6 +141,7 @@ export const initialState = {
   currentToolExecution: null,
   toolExecutionHistory: [],
   matchedPattern: null,
+  ...agentExecutionInitialState,
 };
 
 /**
@@ -468,6 +510,26 @@ export const useExecutionStore = create<ExecutionState>()(
         });
       },
 
+      setAgentExecutionState: (state: AgentStateValue) => {
+        set({ agentExecutionState: state });
+      },
+
+      setAgentActiveToolCalls: (calls: Map<string, ActiveToolCallEntry>) => {
+        set({ agentActiveToolCalls: calls });
+      },
+
+      setAgentPendingToolsStack: (stack: string[]) => {
+        set({ agentPendingToolsStack: stack });
+      },
+
+      setAgentIsPlanMode: (value: boolean) => {
+        set({ agentIsPlanMode: value });
+      },
+
+      resetAgentExecution: () => {
+        set(agentExecutionInitialState);
+      },
+
       /**
        * Reset store to initial state
        *
@@ -525,3 +587,10 @@ export const useMatchedPattern = () => useExecutionStore((state) => state.matche
  * Type export for store (used in tests)
  */
 export type ExecutionStore = ReturnType<typeof useExecutionStore.getState>;
+
+// Bridge selectors — read from executionStore's own agent-level fields.
+
+export const useAgentState = () => useExecutionStore((s) => s.agentExecutionState);
+export const useActiveToolCalls = () => useExecutionStore((s) => s.agentActiveToolCalls);
+export const usePendingToolsStack = () => useExecutionStore((s) => s.agentPendingToolsStack);
+export const useIsPlanMode = () => useExecutionStore((s) => s.agentIsPlanMode);

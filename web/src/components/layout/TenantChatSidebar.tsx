@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, mem
 
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 
 import { Modal } from 'antd';
 import {
@@ -36,10 +37,13 @@ import {
 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useIsLoadingHistory } from '@/stores/agent/timelineStore';
 import { useProjectStore } from '@/stores/project';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
+import { Resizer } from '@/components/agent/Resizer';
 
 import {
   LazyButton,
@@ -268,15 +272,31 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
 
   const {
-    conversations,
     activeConversationId,
-    isLoadingHistory,
     loadConversations,
     loadMoreConversations,
     createNewConversation,
     deleteConversation,
+  } = useAgentV3Store(
+    useShallow((state) => ({
+      activeConversationId: state.activeConversationId,
+      loadConversations: state.loadConversations,
+      loadMoreConversations: state.loadMoreConversations,
+      createNewConversation: state.createNewConversation,
+      deleteConversation: state.deleteConversation,
+    }))
+  );
+  const isLoadingHistory = useIsLoadingHistory();
+
+  const {
+    conversations,
     hasMoreConversations,
-  } = useAgentV3Store();
+  } = useConversationsStore(
+    useShallow((state) => ({
+      conversations: state.conversations,
+      hasMoreConversations: state.hasMoreConversations,
+    }))
+  );
 
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
 
@@ -468,7 +488,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
   const [newTitle, setNewTitle] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
-  const { renameConversation } = useAgentV3Store();
+  const renameConversation = useAgentV3Store((state) => state.renameConversation);
 
   const handleRenameClick = useCallback((conv: ConversationWithProject, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -510,70 +530,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     [projects, setCurrentProject]
   );
 
-  // Optimized drag handlers using RAF
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent) => {
-      if (collapsed) return; // Don't resize when collapsed
-
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(true);
-
-      const startX = e.clientX;
-      const startWidth = widthRef.current;
-      let rafId: number | null = null;
-      let currentWidth = startWidth;
-
-      const handleMouseMove = (e: MouseEvent) => {
-        if (rafId) return;
-
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-          const delta = e.clientX - startX;
-          currentWidth = Math.max(
-            SIDEBAR_MIN_WIDTH,
-            Math.min(SIDEBAR_MAX_WIDTH, startWidth + delta)
-          );
-
-          if (sidebarRef.current) {
-            sidebarRef.current.style.width = `${currentWidth}px`;
-          }
-        });
-      };
-
-      const handleMouseUp = () => {
-        if (rafId) {
-          cancelAnimationFrame(rafId);
-        }
-
-        if (currentWidth < COLLAPSE_THRESHOLD) {
-          setCollapsed(true);
-          setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
-          widthRef.current = SIDEBAR_DEFAULT_WIDTH;
-          if (sidebarRef.current) {
-            sidebarRef.current.style.width = `${SIDEBAR_COLLAPSED_WIDTH}px`;
-          }
-        } else {
-          setCollapsed(false);
-          setSidebarWidth(currentWidth);
-          widthRef.current = currentWidth;
-        }
-
-        setIsDragging(false);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.body.style.userSelect = '';
-        document.body.style.cursor = '';
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'ew-resize';
-    },
-    [collapsed, setCollapsed]
-  );
-
   // Get current width for render
   const currentWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
 
@@ -589,29 +545,37 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       style={{ width: mobile ? '100%' : currentWidth }}
     >
       {/* Resize Handle - only show when not collapsed */}
-      {!collapsed && (
-        <div
-          onMouseDown={handleResizeStart}
-          className={`
-            absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize z-50
-            flex items-center justify-center
-            bg-transparent
-            hover:bg-slate-200/50 dark:hover:bg-slate-700/50
-            ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
-            transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-150
-            group/handle
-          `}
-        >
-          <div
-            className={`
-            w-0.5 h-6 rounded-full
-            bg-slate-400/50 dark:bg-slate-500/50
-            opacity-0 group-hover/handle:opacity-100
-            ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
-            transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-150
-          `}
-          />
-        </div>
+      {!collapsed && !mobile && (
+        <Resizer
+          direction="horizontal"
+          currentSize={sidebarWidth}
+          minSize={SIDEBAR_MIN_WIDTH}
+          maxSize={SIDEBAR_MAX_WIDTH}
+          onResize={(newWidth) => {
+            setIsDragging(true);
+            setSidebarWidth(newWidth);
+            widthRef.current = newWidth;
+            if (sidebarRef.current) {
+              sidebarRef.current.style.width = `${newWidth}px`;
+            }
+          }}
+          onResizeEnd={(finalSize) => {
+            if (finalSize < COLLAPSE_THRESHOLD) {
+              setCollapsed(true);
+              setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+              widthRef.current = SIDEBAR_DEFAULT_WIDTH;
+              if (sidebarRef.current) {
+                sidebarRef.current.style.width = `${SIDEBAR_COLLAPSED_WIDTH}px`;
+              }
+            } else {
+              setCollapsed(false);
+              setSidebarWidth(finalSize);
+              widthRef.current = finalSize;
+            }
+            setIsDragging(false);
+          }}
+          position="right"
+        />
       )}
 
       {/* Header */}

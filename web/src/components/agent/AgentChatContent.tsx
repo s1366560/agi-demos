@@ -24,6 +24,16 @@ import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot } from 'lu
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useIsPlanMode, useExecutionStore } from '@/stores/agent/executionStore';
+import { useDoomLoopDetected, useSuggestions } from '@/stores/agent/hitlStore';
+import { useIsStreaming, useAgentError, useStreamingStore } from '@/stores/agent/streamingStore';
+import {
+  useTimeline,
+  useIsLoadingHistory,
+  useIsLoadingEarlier,
+  useHasEarlier,
+} from '@/stores/agent/timelineStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
@@ -52,6 +62,7 @@ import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { groupTimelineEvents, getSubAgentSummaries } from './message/groupTimelineEvents';
 import { Resizer } from './Resizer';
 import { RightPanel } from './RightPanel';
+import { SplitPaneLayout } from './SplitPaneLayout';
 import { SandboxSection } from './SandboxSection';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
@@ -122,14 +133,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // component on every streaming token.
     const {
       activeConversationId,
-      timeline,
-      isLoadingHistory,
-      isLoadingEarlier,
-      isStreaming,
-      // HITL state now rendered inline in timeline via InlineHITLCard
-      // pendingClarification, pendingDecision, pendingEnvVarRequest removed
-      doomLoopDetected,
-      hasEarlier,
       loadConversations,
       loadMessages,
       loadEarlierMessages,
@@ -137,22 +140,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       createNewConversation,
       sendMessage,
       abortStream,
-      // HITL response methods still available but not used directly
-      // respondToClarification, respondToDecision, respondToEnvVar
-      loadPendingHITL,
       clearError,
-      error,
-      suggestions,
-      conversations,
     } = useAgentV3Store(
       useShallow((state) => ({
         activeConversationId: state.activeConversationId,
-        timeline: state.timeline,
-        isLoadingHistory: state.isLoadingHistory,
-        isLoadingEarlier: state.isLoadingEarlier,
-        isStreaming: state.isStreaming,
-        doomLoopDetected: state.doomLoopDetected,
-        hasEarlier: state.hasEarlier,
         loadConversations: state.loadConversations,
         loadMessages: state.loadMessages,
         loadEarlierMessages: state.loadEarlierMessages,
@@ -160,13 +151,22 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         createNewConversation: state.createNewConversation,
         sendMessage: state.sendMessage,
         abortStream: state.abortStream,
-        loadPendingHITL: state.loadPendingHITL,
         clearError: state.clearError,
-        error: state.error,
-        suggestions: state.suggestions,
-        conversations: state.conversations,
       }))
     );
+
+    const timeline = useTimeline();
+    const isLoadingHistory = useIsLoadingHistory();
+    const isLoadingEarlier = useIsLoadingEarlier();
+    const hasEarlier = useHasEarlier();
+    const isStreaming = useIsStreaming();
+    const error = useAgentError();
+
+    const conversations = useConversationsStore((state) => state.conversations);
+
+    const doomLoopDetected = useDoomLoopDetected();
+    const suggestions = useSuggestions();
+    const loadPendingHITL = useAgentV3Store((s) => s.loadPendingHITL);
 
     // Derive last conversation for resume card
     const lastConversation = useMemo(() => {
@@ -317,7 +317,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           const store = useAgentV3Store.getState();
           const convId = store.activeConversationId;
           if (!convId) return;
-          const newMode = store.isPlanMode ? 'build' : 'plan';
+          const newMode = useExecutionStore.getState().agentIsPlanMode ? 'build' : 'plan';
           void import('@/services/planService').then(({ planService }) => {
             planService
               .switchMode(convId, newMode)
@@ -325,7 +325,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
                 useAgentV3Store.getState().updateConversationState(convId, {
                   isPlanMode: newMode === 'plan',
                 });
-                useAgentV3Store.setState({ isPlanMode: newMode === 'plan' });
+                useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
               })
               .catch((err: unknown) => {
                 void message.error(
@@ -369,7 +369,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         // yet so closure-captured activeConversationId/isStreaming may be stale.
         const freshState = useAgentV3Store.getState();
         const alreadyStreaming =
-          freshState.activeConversationId === conversationId && freshState.isStreaming;
+          freshState.activeConversationId === conversationId && useStreamingStore.getState().agentIsStreaming;
         if (!alreadyStreaming) {
           void loadMessages(conversationId, projectId);
         }
@@ -549,61 +549,8 @@ ${content}`;
     );
 
     // Split mode drag handler
-    const handleSplitDrag = useCallback(
-      (e: React.MouseEvent) => {
-        if (layoutMode !== 'task' && layoutMode !== 'code' && layoutMode !== 'canvas') return;
-        e.preventDefault();
-        const startX = e.clientX;
-        const startRatio = splitRatio;
-        const containerWidth =
-          (e.currentTarget as HTMLElement).parentElement?.offsetWidth || window.innerWidth;
-
-        let animationFrameId: number | null = null;
-
-        const onMove = (ev: MouseEvent) => {
-          // Use requestAnimationFrame to throttle updates for smoother dragging
-          if (animationFrameId !== null) {
-            cancelAnimationFrame(animationFrameId);
-          }
-          animationFrameId = requestAnimationFrame(() => {
-            const delta = ev.clientX - startX;
-            const newRatio = Math.max(0.2, Math.min(0.8, startRatio + delta / containerWidth));
-            setSplitRatio(newRatio);
-          });
-        };
-        const onUp = () => {
-          if (animationFrameId !== null) {
-            cancelAnimationFrame(animationFrameId);
-          }
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-        };
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      },
-      [layoutMode, splitRatio, setSplitRatio]
-    );
-
-    // Keyboard handler for split drag handles (a11y)
-    const handleSplitKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        const step = e.shiftKey ? 0.05 : 0.02;
-        let newRatio = splitRatio;
-        if (e.key === 'ArrowRight') newRatio = splitRatio + step;
-        else if (e.key === 'ArrowLeft') newRatio = splitRatio - step;
-        else return;
-        e.preventDefault();
-        setSplitRatio(Math.max(0.2, Math.min(0.8, newRatio)));
-      },
-      [splitRatio, setSplitRatio]
-    );
-
-    // Plan Mode toggle
-    const isPlanMode = useAgentV3Store((s) => s.isPlanMode);
+		// Plan Mode toggle
+		const isPlanMode = useIsPlanMode();
 
     const groupedTimeline = useMemo(() => groupTimelineEvents(timeline), [timeline]);
     const subagentSummaries = useMemo(
@@ -633,7 +580,7 @@ ${content}`;
         useAgentV3Store.getState().updateConversationState(activeConversationId, {
           isPlanMode: newMode === 'plan',
         });
-        useAgentV3Store.setState({ isPlanMode: newMode === 'plan' });
+        useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
       } catch (err) {
         void message.error(
           err instanceof Error ? err.message : 'Failed to switch plan mode'
@@ -843,177 +790,85 @@ ${content}`;
 
     // Task mode: chat + task panel split
     if (layoutMode === 'task') {
-      const leftPercent = `${String(splitRatio * 100)}%`;
-      const rightPercent = `${String((1 - splitRatio) * 100)}%`;
-
       return (
-        <div
-          className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
-        >
-          <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
-            {/* Left: Chat */}
-            <div
-              className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent }}
-            >
-              {chatColumn}
-            </div>
-
-            {/* Drag handle */}
-            <div
-              className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
-              hover:bg-purple-500/20 active:bg-purple-500/30 transition-colors z-10 mobile-hidden"
-              role="separator"
-              aria-valuenow={Math.round(splitRatio * 100)}
-              aria-valuemin={20}
-              aria-valuemax={80}
-              tabIndex={0}
-              aria-label="Resize panels"
-              onKeyDown={handleSplitKeyDown}
-              onMouseDown={handleSplitDrag}
-            >
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-purple-500/70 transition-colors" />
-            </div>
-
-            {/* Right: Task Panel */}
-            <div
-              className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
-              style={{ width: rightPercent }}
-            >
-              <RightPanel
-                tasks={tasks}
-                sandboxId={activeSandboxId}
-                executionPathDecision={executionPathDecision}
-                selectionTrace={selectionTrace}
-                policyFiltered={policyFiltered}
-                executionNarrative={executionNarrative}
-                latestToolsetChange={latestToolsetChange}
-                agentNodes={rawAgentNodes}
-                collapsed={false}
-              />
-            </div>
-          </div>
-
-          {statusBarWithLayout}
-        </div>
+        <SplitPaneLayout
+          leftContent={chatColumn}
+          rightContent={
+            <RightPanel
+              tasks={tasks}
+              sandboxId={activeSandboxId}
+              executionPathDecision={executionPathDecision}
+              selectionTrace={selectionTrace}
+              policyFiltered={policyFiltered}
+              executionNarrative={executionNarrative}
+              latestToolsetChange={latestToolsetChange}
+              agentNodes={rawAgentNodes}
+              collapsed={false}
+            />
+          }
+          splitRatio={splitRatio}
+          onSplitRatioChange={setSplitRatio}
+          handleAccentColor="purple"
+          className={className}
+          statusBar={statusBarWithLayout}
+        />
       );
     }
 
     // Code split mode
     if (layoutMode === 'code') {
-      const leftPercent = `${String(splitRatio * 100)}%`;
-      const rightPercent = `${String((1 - splitRatio) * 100)}%`;
-
       return (
-        <div
-          className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
-        >
-          <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
-            {/* Left: Chat */}
-            <div
-              className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent }}
-            >
-              {chatColumn}
-            </div>
-
-            {/* Drag handle */}
-            <div
-              className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
-              hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors z-10 mobile-hidden"
-              role="separator"
-              aria-valuenow={Math.round(splitRatio * 100)}
-              aria-valuemin={20}
-              aria-valuemax={80}
-              tabIndex={0}
-              aria-label="Resize panels"
-              onKeyDown={handleSplitKeyDown}
-              onMouseDown={handleSplitDrag}
-            >
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-blue-500/70 transition-colors" />
-            </div>
-
-            {/* Right: Sandbox Terminal */}
-            <div
-              className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900 mobile-full"
-              style={{ width: rightPercent }}
-            >
-              {sandboxContent}
-            </div>
-          </div>
-
-          {statusBarWithLayout}
-        </div>
+        <SplitPaneLayout
+          leftContent={chatColumn}
+          rightContent={sandboxContent}
+          splitRatio={splitRatio}
+          onSplitRatioChange={setSplitRatio}
+          handleAccentColor="primary"
+          rightClassName="bg-slate-900"
+          className={className}
+          statusBar={statusBarWithLayout}
+        />
       );
     }
 
     // Canvas mode: chat + artifact canvas split
     if (layoutMode === 'canvas') {
-      const leftPercent = `${String(splitRatio * 100)}%`;
-      const rightPercent = `${String((1 - splitRatio) * 100)}%`;
-
       return (
-        <div
-          className={`flex flex-col h-full w-full overflow-hidden ${LAYOUT_BG_CLASSES} ${className}`}
-        >
-          <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
-            {/* Left: Chat */}
-            <div
-              className="h-full overflow-hidden flex flex-col mobile-full"
-              style={{ width: leftPercent, minWidth: '280px' }}
-            >
-              {chatColumn}
-            </div>
-
-            {/* Drag handle */}
-            <div
-              className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
-              hover:bg-violet-500/20 active:bg-violet-500/30 transition-colors z-10 mobile-hidden"
-              role="separator"
-              aria-valuenow={Math.round(splitRatio * 100)}
-              aria-valuemin={20}
-              aria-valuemax={80}
-              tabIndex={0}
-              aria-label="Resize panels"
-              onKeyDown={handleSplitKeyDown}
-              onMouseDown={handleSplitDrag}
-            >
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-violet-500/70 transition-colors" />
-            </div>
-
-            {/* Right: Canvas Panel */}
-            <div
-              className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
-              style={{ width: rightPercent, minWidth: '320px' }}
-            >
-              <CanvasPanel
-                onSendPrompt={(prompt) => {
-                  void handleSend(prompt);
-                }}
-                onUpdateModelContext={(ctx) => {
-                  const convId = useAgentV3Store.getState().activeConversationId;
-                  if (convId) {
-                    const convState = useAgentV3Store.getState().conversationStates.get(convId);
-                    const currentCtx = convState?.appModelContext ?? {};
-                    const controlFields: Record<string, unknown> = {};
-                    if ('llm_overrides' in currentCtx) {
-                      controlFields.llm_overrides = currentCtx.llm_overrides;
-                    }
-                    if ('llm_model_override' in currentCtx) {
-                      controlFields.llm_model_override = currentCtx.llm_model_override;
-                    }
-                    const mergedCtx = { ...ctx, ...controlFields };
-                    useAgentV3Store.getState().updateConversationState(convId, {
-                      appModelContext: Object.keys(mergedCtx).length > 0 ? mergedCtx : null,
-                    });
+        <SplitPaneLayout
+          leftContent={chatColumn}
+          rightContent={
+            <CanvasPanel
+              onSendPrompt={(prompt) => {
+                void handleSend(prompt);
+              }}
+              onUpdateModelContext={(ctx) => {
+                const convId = useAgentV3Store.getState().activeConversationId;
+                if (convId) {
+                  const convState = useAgentV3Store.getState().conversationStates.get(convId);
+                  const currentCtx = convState?.appModelContext ?? {};
+                  const controlFields: Record<string, unknown> = {};
+                  if ('llm_overrides' in currentCtx) {
+                    controlFields.llm_overrides = currentCtx.llm_overrides;
                   }
-                }}
-              />
-            </div>
-          </div>
-
-          {statusBarWithLayout}
-        </div>
+                  if ('llm_model_override' in currentCtx) {
+                    controlFields.llm_model_override = currentCtx.llm_model_override;
+                  }
+                  const mergedCtx = { ...ctx, ...controlFields };
+                  useAgentV3Store.getState().updateConversationState(convId, {
+                    appModelContext: Object.keys(mergedCtx).length > 0 ? mergedCtx : null,
+                  });
+                }
+              }}
+            />
+          }
+          splitRatio={splitRatio}
+          onSplitRatioChange={setSplitRatio}
+          handleAccentColor="violet"
+          leftMinWidth="280px"
+          rightMinWidth="320px"
+          className={className}
+          statusBar={statusBarWithLayout}
+        />
       );
     }
 

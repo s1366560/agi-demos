@@ -249,6 +249,34 @@ export const useConversationsStore = create<ConversationsState>()(
         }
       },
 
+      renameConversation: async (conversationId: string, projectId: string, title: string) => {
+        try {
+          const updatedConversation = await agentService.updateConversationTitle(
+            conversationId,
+            projectId,
+            title
+          );
+          set((state) => ({
+            conversations: state.conversations.map((c) =>
+              c.id === conversationId ? updatedConversation : c
+            ),
+            currentConversation:
+              state.currentConversation?.id === conversationId
+                ? updatedConversation
+                : state.currentConversation,
+          }));
+        } catch (error: unknown) {
+          const err = error as {
+            response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+            message?: string | undefined;
+          };
+          set({
+            conversationsError: err?.response?.data?.detail || 'Failed to rename conversation',
+          });
+          throw error;
+        }
+      },
+
       /**
        * Set the current conversation
        *

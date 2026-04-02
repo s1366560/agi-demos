@@ -38,7 +38,7 @@ export const ClarificationAskedItem = memo(
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [customAnswer, setCustomAnswer] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const { respondToClarification } = useAgentV3Store();
+    const respondToClarification = useAgentV3Store((state) => state.respondToClarification);
     const isAnswered = event.answered ?? false;
     const customAnswerId = useId();
 
@@ -174,7 +174,7 @@ export const DecisionAskedItem = memo(
     const [customDecision, setCustomDecision] = useState('');
     const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const { respondToDecision } = useAgentV3Store();
+    const respondToDecision = useAgentV3Store((state) => state.respondToDecision);
     const isAnswered = event.answered ?? false;
     const hasOptions = event.options.length > 0;
     const isMultiSelect = event.selectionMode === 'multiple';
@@ -360,7 +360,7 @@ export const EnvVarRequestedItem = memo(
     const { t } = useTranslation();
     const [values, setValues] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const { respondToEnvVar } = useAgentV3Store();
+    const respondToEnvVar = useAgentV3Store((state) => state.respondToEnvVar);
     const isAnswered = event.answered || false;
     const fieldIds = useId();
 

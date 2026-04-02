@@ -88,8 +88,6 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       activeToolCalls: new Map(),
       pendingToolsStack: [],
       isPlanMode: false,
-      showPlanPanel: true,
-      showHistorySidebar: true,
       pendingDecision: null,
       doomLoopDetected: null,
       conversationStates: new Map(),

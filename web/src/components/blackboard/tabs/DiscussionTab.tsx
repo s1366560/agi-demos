@@ -74,7 +74,7 @@ export function DiscussionTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <section className="min-w-0 space-y-4">
-        <div className="rounded-3xl border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
+        <div className="rounded-xl border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
           <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('blackboard.newPost', 'New Post')}
           </h3>
@@ -141,6 +141,7 @@ export function DiscussionTab({
                   ? 'border-primary/30 bg-primary/8'
                   : 'border-border-light bg-surface-muted hover:border-border-separator hover:bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt dark:hover:border-border-dark dark:hover:bg-surface-elevated'
               }`}
+              aria-pressed={selectedPostId === post.id}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -169,7 +170,7 @@ export function DiscussionTab({
           ))}
 
           {posts.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-border-separator bg-surface-light p-6 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+            <div className="rounded-xl border border-dashed border-border-separator bg-surface-light p-6 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
               {t('blackboard.noPosts', 'No posts yet')}
             </div>
           )}
@@ -231,7 +232,7 @@ export function DiscussionTab({
               </Popconfirm>
             </div>
 
-            <article className="rounded-3xl border border-border-light bg-surface-muted p-5 text-sm leading-7 text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary">
+            <article className="rounded-xl bg-surface-muted p-5 text-sm leading-7 text-text-secondary dark:bg-surface-dark-alt dark:text-text-secondary">
               {selectedPost.content}
             </article>
 
@@ -247,13 +248,13 @@ export function DiscussionTab({
 
               <div className="space-y-3">
                 {!selectedRepliesLoaded && loadingRepliesPostId === selectedPost.id && (
-                  <div className="rounded-3xl border border-border-light bg-surface-muted px-4 py-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
+                  <div className="rounded-xl bg-surface-muted px-4 py-5 text-sm text-text-secondary dark:bg-surface-dark-alt dark:text-text-muted">
                     {t('common.loading', 'Loading...')}
                   </div>
                 )}
 
                 {!selectedRepliesLoaded && loadingRepliesPostId !== selectedPost.id && (
-                  <div className="rounded-3xl border border-dashed border-border-separator bg-surface-light p-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+                  <div className="rounded-xl border border-dashed border-border-separator bg-surface-light p-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
                     <div>
                       {t('blackboard.repliesUnavailable', 'Replies are not loaded yet.')}
                     </div>
@@ -273,7 +274,7 @@ export function DiscussionTab({
                   selectedReplies.map((reply) => (
                     <article
                       key={reply.id}
-                      className="rounded-3xl border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt"
+                      className="rounded-xl bg-surface-muted p-4 dark:bg-surface-dark-alt"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -314,14 +315,14 @@ export function DiscussionTab({
                   ))}
 
                 {selectedRepliesLoaded && selectedReplies.length === 0 && (
-                  <div className="rounded-3xl border border-dashed border-border-separator bg-surface-light p-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+                  <div className="rounded-xl border border-dashed border-border-separator bg-surface-light p-5 text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
                     {t('blackboard.noReplies', 'No replies yet')}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="rounded-3xl border border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
+            <div className="rounded-xl bg-surface-muted p-4 dark:bg-surface-dark-alt">
               <h4 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
                 {t('blackboard.reply', 'Reply')}
               </h4>

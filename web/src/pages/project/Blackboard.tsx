@@ -570,24 +570,26 @@ export function Blackboard() {
         </div>
       )}
 
-      {surfaceLoading ? (
-        <LoadingShell />
-      ) : (
-        <WorkstationArrangementBoard
-          tenantId={tenantId ?? ''}
-          projectId={projectId ?? ''}
-          workspaceId={selectedWorkspaceId ?? currentWorkspace?.id ?? ''}
-          workspaceName={selectedWorkspace?.name ?? t('blackboard.title', 'Blackboard')}
-          agentWorkspacePath={agentWorkspacePath}
-          agents={agents}
-          nodes={topologyNodes}
-          edges={topologyEdges}
-          tasks={tasks}
-          onOpenBlackboard={() => {
-            setBoardOpen(true);
-          }}
-        />
-      )}
+      <div className="flex-1 min-h-0">
+        {surfaceLoading ? (
+          <LoadingShell />
+        ) : (
+          <WorkstationArrangementBoard
+            tenantId={tenantId ?? ''}
+            projectId={projectId ?? ''}
+            workspaceId={selectedWorkspaceId ?? currentWorkspace?.id ?? ''}
+            workspaceName={selectedWorkspace?.name ?? t('blackboard.title', 'Blackboard')}
+            agentWorkspacePath={agentWorkspacePath}
+            agents={agents}
+            nodes={topologyNodes}
+            edges={topologyEdges}
+            tasks={tasks}
+            onOpenBlackboard={() => {
+              setBoardOpen(true);
+            }}
+          />
+        )}
+      </div>
 
       {tenantId &&
         projectId &&

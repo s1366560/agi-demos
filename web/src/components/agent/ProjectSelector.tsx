@@ -16,10 +16,14 @@ import React, { useState, useMemo } from 'react';
 
 import { AlertCircle, Loader2 } from 'lucide-react';
 
+import { useShallow } from 'zustand/react/shallow';
 
 import { Select, Modal, Spin, Alert } from '@/components/ui/lazyAntd';
 
 import { useAgentV3Store } from '../../stores/agentV3';
+import { useConversationsStore } from '../../stores/agent/conversationsStore';
+import { useAgentError } from '../../stores/agent/streamingStore';
+import { useIsLoadingHistory } from '../../stores/agent/timelineStore';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -60,12 +64,18 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const { projects, currentProject, isLoading: projectsLoading } = useProjectStore();
   const {
     activeConversationId,
-    conversations,
-    isLoadingHistory,
-    error,
     setActiveConversation,
     loadConversations,
-  } = useAgentV3Store();
+  } = useAgentV3Store(
+    useShallow((state) => ({
+      activeConversationId: state.activeConversationId,
+      setActiveConversation: state.setActiveConversation,
+      loadConversations: state.loadConversations,
+    }))
+  );
+  const isLoadingHistory = useIsLoadingHistory();
+  const error = useAgentError();
+  const conversations = useConversationsStore((state) => state.conversations);
   const { currentTenant } = useTenantStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);

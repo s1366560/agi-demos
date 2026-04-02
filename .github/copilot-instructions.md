@@ -143,7 +143,7 @@ web/src/
 
 ### Users
 
-Enterprise developers and technical professionals who use AI agents as collaborative partners. They work with complex multi-layer agent systems (Tool → Skill → SubAgent → Agent) and need to:
+Enterprise developers and technical professionals who use AI agents as collaborative partners. They work with complex multi-layer agent systems (Tool -> Skill -> SubAgent -> Agent) and need to:
 - Monitor agent reasoning and execution
 - Manage knowledge graphs and memories
 - Configure and orchestrate specialized subagents
@@ -151,40 +151,89 @@ Enterprise developers and technical professionals who use AI agents as collabora
 
 ### Brand Personality
 
-**Professional, Trustworthy, Intelligent**
+**Clean, Minimal, Technical**
 
-- **Confidence & Trust**: Users should feel the platform is reliable and safe for enterprise data
-- **Voice**: Direct, precise, helpful - never patronizing
-- **Tone**: Calm authority, technical depth without complexity
+Vercel-inspired aesthetic: black/white/gray palette, function-first, zero visual noise. Every pixel serves a purpose.
+
+- **Confidence & Precision**: Crisp typography, tight spacing, no decorative elements
+- **Voice**: Direct, technical, efficient - every word earns its place
+- **Tone**: Calm competence, understated authority
 
 ### Aesthetic Direction
 
-**Clean Enterprise AI** - inspired by Anthropic Claude and OpenAI ChatGPT interfaces
+**Vercel Design Language** - extracted from vercel.com
 
-- **Conversational & Clean**: AI-forward design with clear information hierarchy
-- **Deep Blue Foundation**: Primary `#1e3fae` conveys trust and intelligence
-- **Subtle Depth**: Glass morphism, soft shadows, gradient accents - never flat, never flashy
-- **Professional Polish**: Rounded corners (6-12px), consistent spacing (8px grid), refined typography
-- **NOT playful/consumer apps**: Avoid over-the-top colors, whimsical illustrations, gamification
+- **Monochrome Foundation**: Black `#000`/`#171717` text on white `#fff`/`#fafafa` backgrounds
+- **10-Level Gray Scale**: `#111` to `#fafafa` (accents-1 through accents-8 + foreground/background)
+- **Blue Accent**: `#0070f3` (success/link color), used sparingly for CTAs
+- **Geist Typography**: Tight negative letter-spacing on headings (-2.4px at 48px)
+- **NOT playful/consumer apps**: No decorative blurs, gradients, or gamification
+- **NOT cluttered enterprise**: No dense dashboards with competing widgets
 
 ### Design Principles
 
-1. **Clarity Over Cleanness**: Prioritize readable information hierarchy over minimalist aesthetics
-2. **Subtle Motion, Clear Feedback**: Use gentle animations (fade-in, slide-up) to guide attention, not distract
-3. **Progressive Disclosure**: Show essential information first. Complex details available on demand
-4. **Trust Through Transparency**: Agent reasoning and tool executions should be visible
-5. **Consistent Component Language**: Use established patterns from the design system consistently
+1. **Clarity Over Cleanness**: Information hierarchy first. Tight negative letter-spacing on headings for max legibility
+2. **Zero Visual Noise**: 1px borders, 0.08 alpha shadows, solid backgrounds. Every element must convey information
+3. **Pill-Shape CTAs**: Primary buttons use pill shape (radius: 100px, height: 48px). Secondary: white bg, dark text, same shape
+4. **Progressive Disclosure**: Essential info first. Status badges: 11px/500 pill shape. Complex details on demand
+5. **Consistent Component Language**: 6px default radius, 8px marketing radius, 4px spacing base, border-only shadows
 
-### Color Tokens
+### Component Patterns
+
+#### Primary Button (CTA)
+- bg `#171717`, text `#fff` 16px/500, radius 100px, height 48px
+
+#### Secondary Button
+- bg `#fff`, text `#171717` 16px/500, radius 100px, height 48px
+
+#### Ghost Button (Nav)
+- transparent bg, text `#4d4d4d` 14px/400, radius 9999px, height 30px
+
+#### Input Field
+- bg `#fff`, no border (container provides it), radius 6px, height 40px, font 14px
+
+#### Badge/Tag
+- bg `#ebebeb`, text `#171717` 11px/500, radius 9999px, padding 0 8px
+
+#### Card
+- bg `#fff`, radius 6px, shadow `0 0 0 1px rgba(0,0,0,0.08)` + subtle inner
+
+### Color Tokens (Light Mode)
 
 ```css
---color-primary: #1e3fae
---color-primary-dark: #152d7e
---color-primary-light: #3b5fc9
---color-background-light: #f8f9fb
---color-background-dark: #141416
+/* Gray scale */
+--accents-1: #fafafa   /* lightest bg */
+--accents-2: #eaeaea   /* borders */
+--accents-3: #999999   /* muted text */
+--accents-5: #666666   /* secondary text */
+--accents-7: #333333   /* emphasized */
+--accents-8: #111111   /* near-black */
+--foreground: #000000  /* primary text */
+--background: #ffffff  /* page bg */
+
+/* Semantic */
+--primary: #0070f3     /* links, active states */
+--error: #ee0000
+--warning: #f5a623
+```
+
+### Spacing & Radius
+
+```
+4px base: 4, 8, 12, 16, 24, 32, 40, 64, 96
+Default radius: 6px (inputs, cards)
+Marketing radius: 8px
+Pill radius: 100px (CTAs) / 9999px (badges)
+```
+
+### Shadows (Minimal)
+
+```css
+--shadow-border: 0 0 0 1px rgba(0,0,0,0.08)
+--shadow-small: 0 2px 2px rgba(0,0,0,0.04)
+--shadow-menu: border + 0 4px 8px rgba(0,0,0,0.04), 0 16px 24px rgba(0,0,0,0.06)
 ```
 
 ### Accessibility
 
-Target: WCAG 2.1 AA compliance. All animations respect `prefers-reduced-motion`.
+Target: WCAG 2.1 AA compliance. Focus ring: `0 0 0 1px gray + 0 0 0 4px rgba(0,0,0,0.16)`. All animations respect `prefers-reduced-motion`.

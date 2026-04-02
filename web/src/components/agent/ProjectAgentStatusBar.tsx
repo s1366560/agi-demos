@@ -55,6 +55,8 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useAgentState, usePendingToolsStack } from '@/stores/agent/executionStore';
+import { useIsStreaming } from '@/stores/agent/streamingStore';
 
 import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 
@@ -338,11 +340,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  // Agent execution state from store (for real-time thinking/acting/observing)
+  // Agent execution state from sub-stores (streaming/execution domain)
+  const agentState = useAgentState() as AgentExecState;
+  const storeIsStreaming = useIsStreaming();
+  const pendingToolsStack = usePendingToolsStack();
+
+  // Conversation-scoped state (stays on agentV3 — reads from conversationStates Map)
   const {
-    agentState,
-    storeIsStreaming,
-    pendingToolsStack,
     tasks,
     executionPathDecision,
     selectionTrace,
@@ -353,9 +357,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       const convState = convId ? s.conversationStates.get(convId) : null;
       const convTasks = convState?.tasks;
       return {
-        agentState: s.agentState as AgentExecState,
-        storeIsStreaming: s.isStreaming,
-        pendingToolsStack: s.pendingToolsStack,
         tasks: convTasks ?? EMPTY_TASKS,
         executionPathDecision: convState?.executionPathDecision ?? null,
         selectionTrace: convState?.selectionTrace ?? null,

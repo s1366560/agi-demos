@@ -67,8 +67,6 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       pendingToolsStack: [],
       workPlan: null,
       isPlanMode: false,
-      showPlanPanel: true,
-      showHistorySidebar: true,
       pendingDecision: null,
       doomLoopDetected: null,
     });

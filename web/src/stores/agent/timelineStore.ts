@@ -26,7 +26,7 @@ import { devtools } from 'zustand/middleware';
 
 import { agentService } from '../../services/agentService';
 
-import type { TimelineEvent, ConversationMessagesResponse } from '../../types/agent';
+import type { TimelineEvent, ConversationMessagesResponse, Message } from '../../types/agent';
 
 /**
  * Timeline Store State
@@ -35,13 +35,22 @@ interface TimelineState {
   // State
   timeline: TimelineEvent[];
   timelineLoading: boolean;
-  isLoadingEarlier: boolean; // Separate loading state for pagination
+  isLoadingEarlier: boolean;
   timelineError: string | null;
   earliestTimeUs: number | null;
   earliestCounter: number | null;
   latestTimeUs: number | null;
   latestCounter: number | null;
-  hasEarlier: boolean; // Whether there are earlier messages to load
+  hasEarlier: boolean;
+
+  // Agent-level state (migrating from agentV3, Wave 6a)
+  agentTimeline: TimelineEvent[];
+  agentMessages: Message[];
+  agentIsLoadingHistory: boolean;
+  agentIsLoadingEarlier: boolean;
+  agentHasEarlier: boolean;
+  agentEarliestTimeUs: number | null;
+  agentEarliestCounter: number | null;
 
   // Actions
   getTimeline: (conversationId: string, projectId: string) => Promise<void>;
@@ -50,6 +59,15 @@ interface TimelineState {
   prependTimelineEvents: (events: TimelineEvent[]) => void;
   loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;
   reset: () => void;
+
+  // Agent-level setters (Wave 6a)
+  setAgentTimeline: (timeline: TimelineEvent[]) => void;
+  setAgentMessages: (messages: Message[]) => void;
+  setAgentIsLoadingHistory: (value: boolean) => void;
+  setAgentIsLoadingEarlier: (value: boolean) => void;
+  setAgentHasEarlier: (value: boolean) => void;
+  setAgentEarliestPointers: (timeUs: number | null, counter: number | null) => void;
+  resetAgentTimeline: () => void;
 }
 
 /**
@@ -62,6 +80,16 @@ const MAX_TIMELINE_EVENTS = 2000;
 /**
  * Initial state for Timeline store
  */
+const agentTimelineInitialState = {
+  agentTimeline: [] as TimelineEvent[],
+  agentMessages: [] as Message[],
+  agentIsLoadingHistory: false,
+  agentIsLoadingEarlier: false,
+  agentHasEarlier: false,
+  agentEarliestTimeUs: null as number | null,
+  agentEarliestCounter: null as number | null,
+};
+
 export const initialState = {
   timeline: [],
   timelineLoading: false,
@@ -72,6 +100,7 @@ export const initialState = {
   latestTimeUs: null,
   latestCounter: null,
   hasEarlier: false,
+  ...agentTimelineInitialState,
 };
 
 /**
@@ -232,6 +261,34 @@ export const useTimelineStore = create<TimelineState>()(
         }
       },
 
+      setAgentTimeline: (timeline: TimelineEvent[]) => {
+        set({ agentTimeline: timeline });
+      },
+
+      setAgentMessages: (messages: Message[]) => {
+        set({ agentMessages: messages });
+      },
+
+      setAgentIsLoadingHistory: (value: boolean) => {
+        set({ agentIsLoadingHistory: value });
+      },
+
+      setAgentIsLoadingEarlier: (value: boolean) => {
+        set({ agentIsLoadingEarlier: value });
+      },
+
+      setAgentHasEarlier: (value: boolean) => {
+        set({ agentHasEarlier: value });
+      },
+
+      setAgentEarliestPointers: (timeUs: number | null, counter: number | null) => {
+        set({ agentEarliestTimeUs: timeUs, agentEarliestCounter: counter });
+      },
+
+      resetAgentTimeline: () => {
+        set(agentTimelineInitialState);
+      },
+
       /**
        * Reset store to initial state
        *
@@ -248,68 +305,22 @@ export const useTimelineStore = create<TimelineState>()(
   )
 );
 
-/**
- * Derived selector: Get timeline events
- *
- * @returns Array of timeline events
- */
-export const useTimeline = () => useTimelineStore((state) => state.timeline);
+// Native selectors — read from timelineStore's own state (used by tests and internal actions)
 
-/**
- * Derived selector: Get timeline loading state (for initial load)
- *
- * @returns Boolean indicating if timeline is loading
- */
 export const useTimelineLoading = () => useTimelineStore((state) => state.timelineLoading);
-
-/**
- * Derived selector: Get isLoadingEarlier state (for pagination)
- *
- * @returns Boolean indicating if earlier messages are loading
- */
-export const useIsLoadingEarlier = () => useTimelineStore((state) => state.isLoadingEarlier);
-
-/**
- * Derived selector: Get timeline error
- *
- * @returns Error message or null
- */
 export const useTimelineError = () => useTimelineStore((state) => state.timelineError);
-
-/**
- * Derived selector: Get earliest loaded time (microseconds)
- *
- * @returns Earliest time in microseconds or null
- */
 export const useEarliestTimeUs = () => useTimelineStore((state) => state.earliestTimeUs);
-
-/**
- * Derived selector: Get earliest loaded counter
- *
- * @returns Earliest counter or null
- */
 export const useEarliestCounter = () => useTimelineStore((state) => state.earliestCounter);
-
-/**
- * Derived selector: Get latest loaded time (microseconds)
- *
- * @returns Latest time in microseconds or null
- */
 export const useLatestTimeUs = () => useTimelineStore((state) => state.latestTimeUs);
-
-/**
- * Derived selector: Get latest loaded counter
- *
- * @returns Latest counter or null
- */
 export const useLatestCounter = () => useTimelineStore((state) => state.latestCounter);
 
-/**
- * Derived selector: Get hasEarlier state
- *
- * @returns Whether there are earlier messages to load
- */
-export const useHasEarlier = () => useTimelineStore((state) => state.hasEarlier);
+// Bridge selectors — read from timelineStore's own agent-level fields.
+
+export const useTimeline = () => useTimelineStore((s) => s.agentTimeline);
+export const useMessages = () => useTimelineStore((s) => s.agentMessages);
+export const useIsLoadingHistory = () => useTimelineStore((s) => s.agentIsLoadingHistory);
+export const useIsLoadingEarlier = () => useTimelineStore((s) => s.agentIsLoadingEarlier);
+export const useHasEarlier = () => useTimelineStore((s) => s.agentHasEarlier);
 
 /**
  * Type export for store (used in tests)

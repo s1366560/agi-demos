@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { useAgentV3Store } from "@/stores/agentV3";
+import { useExecutionStore } from "@/stores/agent/executionStore";
 
 interface WorkspaceKeyboardOpts {
 	inputBarRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -23,19 +24,19 @@ export function useWorkspaceKeyboard({
 			if (e.shiftKey && e.key === "Tab") {
 				e.preventDefault();
 				// Use dynamic import to avoid stale closure
-				const store = useAgentV3Store.getState();
-				const convId = store.activeConversationId;
-				if (!convId) return;
-				const newMode = store.isPlanMode ? "build" : "plan";
-				void import("@/services/planService").then(({ planService }) => {
-					planService
-						.switchMode(convId, newMode)
-						.then(() => {
-							useAgentV3Store.getState().updateConversationState(convId, {
-								isPlanMode: newMode === "plan",
-							});
-							useAgentV3Store.setState({ isPlanMode: newMode === "plan" });
-						})
+			const store = useAgentV3Store.getState();
+			const convId = store.activeConversationId;
+			if (!convId) return;
+			const newMode = useExecutionStore.getState().agentIsPlanMode ? "build" : "plan";
+			void import("@/services/planService").then(({ planService }) => {
+				planService
+					.switchMode(convId, newMode)
+					.then(() => {
+						useAgentV3Store.getState().updateConversationState(convId, {
+							isPlanMode: newMode === "plan",
+						});
+						useExecutionStore.getState().setAgentIsPlanMode(newMode === "plan");
+					})
 						.catch(console.error);
 				});
 				return;

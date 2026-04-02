@@ -14,6 +14,9 @@ import {
   flushTimelineBufferSync as flushTimelineBufferSyncRaw,
   bindTimelineBufferDeps,
 } from './deltaBuffers';
+import { useExecutionStore } from './executionStore';
+import { useStreamingStore } from './streamingStore';
+import { useTimelineStore } from './timelineStore';
 import { createStreamEventHandlers, type StreamHandlerDeps } from './streamEventHandlers';
 
 import type { DeltaBufferState } from './deltaBuffers';
@@ -95,7 +98,7 @@ async function ensureConnectedAndSubscribe(
  * Create HITL response actions for the store.
  */
 export function createHITLActions(deps: HITLActionDeps) {
-  const { get, set, clearAllDeltaBuffers, updateHITLEventInTimeline } = deps;
+  const { get, clearAllDeltaBuffers, updateHITLEventInTimeline } = deps;
 
   return {
     respondToClarification: async (requestId: string, answer: string): Promise<void> => {
@@ -107,24 +110,37 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToClarification(requestId, answer);
         clearAllDeltaBuffers();
-        set((state) => ({
-          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'clarification_asked', {
-            answered: true,
-            answer,
-          }),
+
+        // Update conversation state (timeline + HITL field)
+        const convState = get().getConversationState(activeConversationId);
+        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'clarification_asked', {
+          answered: true,
+          answer,
+        });
+        get().updateConversationState(activeConversationId, {
+          timeline: updatedTimeline,
           pendingClarification: null,
           agentState: 'thinking',
           isStreaming: true,
           streamStatus: 'streaming',
           streamingAssistantContent: '',
-        }));
+        });
+
+        // Update sub-stores
+        useTimelineStore.getState().setAgentTimeline(updatedTimeline);
+        useStreamingStore.getState().setAgentIsStreaming(true);
+        useStreamingStore.getState().setAgentStreamStatus('streaming');
+        useStreamingStore.getState().setAgentStreamingAssistantContent('');
+        useExecutionStore.getState().setAgentExecutionState('thinking');
 
         if (activeConversationId) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'clarification');
         }
       } catch (error) {
         console.error('Failed to respond to clarification:', error);
-        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        useExecutionStore.getState().setAgentExecutionState('idle');
+        useStreamingStore.getState().setAgentIsStreaming(false);
+        useStreamingStore.getState().setAgentStreamStatus('idle');
       }
     },
 
@@ -137,24 +153,35 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToDecision(requestId, decision);
         clearAllDeltaBuffers();
-        set((state) => ({
-          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'decision_asked', {
-            answered: true,
-            decision: Array.isArray(decision) ? decision.join(', ') : decision,
-          }),
+
+        const convState = get().getConversationState(activeConversationId);
+        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'decision_asked', {
+          answered: true,
+          decision: Array.isArray(decision) ? decision.join(', ') : decision,
+        });
+        get().updateConversationState(activeConversationId, {
+          timeline: updatedTimeline,
           pendingDecision: null,
           agentState: 'thinking',
           isStreaming: true,
           streamStatus: 'streaming',
           streamingAssistantContent: '',
-        }));
+        });
+
+        useTimelineStore.getState().setAgentTimeline(updatedTimeline);
+        useStreamingStore.getState().setAgentIsStreaming(true);
+        useStreamingStore.getState().setAgentStreamStatus('streaming');
+        useStreamingStore.getState().setAgentStreamingAssistantContent('');
+        useExecutionStore.getState().setAgentExecutionState('thinking');
 
         if (activeConversationId) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'decision');
         }
       } catch (error) {
         console.error('Failed to respond to decision:', error);
-        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        useExecutionStore.getState().setAgentExecutionState('idle');
+        useStreamingStore.getState().setAgentIsStreaming(false);
+        useStreamingStore.getState().setAgentStreamStatus('idle');
       }
     },
 
@@ -167,24 +194,35 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToEnvVar(requestId, values);
         clearAllDeltaBuffers();
-        set((state) => ({
-          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'env_var_requested', {
-            answered: true,
-            values,
-          }),
+
+        const convState = get().getConversationState(activeConversationId);
+        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'env_var_requested', {
+          answered: true,
+          values,
+        });
+        get().updateConversationState(activeConversationId, {
+          timeline: updatedTimeline,
           pendingEnvVarRequest: null,
           agentState: 'thinking',
           isStreaming: true,
           streamStatus: 'streaming',
           streamingAssistantContent: '',
-        }));
+        });
+
+        useTimelineStore.getState().setAgentTimeline(updatedTimeline);
+        useStreamingStore.getState().setAgentIsStreaming(true);
+        useStreamingStore.getState().setAgentStreamStatus('streaming');
+        useStreamingStore.getState().setAgentStreamingAssistantContent('');
+        useExecutionStore.getState().setAgentExecutionState('thinking');
 
         if (activeConversationId) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'env_var');
         }
       } catch (error) {
         console.error('Failed to respond to env var request:', error);
-        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        useExecutionStore.getState().setAgentExecutionState('idle');
+        useStreamingStore.getState().setAgentIsStreaming(false);
+        useStreamingStore.getState().setAgentStreamStatus('idle');
       }
     },
 
@@ -197,24 +235,35 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         await agentService.respondToPermission(requestId, granted);
         clearAllDeltaBuffers();
-        set((state) => ({
-          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'permission_asked', {
-            answered: true,
-            granted,
-          }),
+
+        const convState = get().getConversationState(activeConversationId);
+        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'permission_asked', {
+          answered: true,
+          granted,
+        });
+        get().updateConversationState(activeConversationId, {
+          timeline: updatedTimeline,
           pendingPermission: null,
           agentState: granted ? 'thinking' : 'idle',
           isStreaming: granted,
           streamStatus: granted ? 'streaming' : 'idle',
           streamingAssistantContent: '',
-        }));
+        });
+
+        useTimelineStore.getState().setAgentTimeline(updatedTimeline);
+        useStreamingStore.getState().setAgentIsStreaming(granted);
+        useStreamingStore.getState().setAgentStreamStatus(granted ? 'streaming' : 'idle');
+        useStreamingStore.getState().setAgentStreamingAssistantContent('');
+        useExecutionStore.getState().setAgentExecutionState(granted ? 'thinking' : 'idle');
 
         if (activeConversationId) {
           tabSync.broadcastHITLStateChanged(activeConversationId, false, 'permission');
         }
       } catch (error) {
         console.error('Failed to respond to permission request:', error);
-        set({ agentState: 'idle', isStreaming: false, streamStatus: 'idle' });
+        useExecutionStore.getState().setAgentExecutionState('idle');
+        useStreamingStore.getState().setAgentIsStreaming(false);
+        useStreamingStore.getState().setAgentStreamStatus('idle');
       }
     },
   };

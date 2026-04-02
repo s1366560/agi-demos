@@ -31,13 +31,25 @@ export type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'error';
  * Streaming Store State
  */
 interface StreamingState {
-  // State
+  // State — typewriter effect (store-native)
   isStreaming: boolean;
   streamStatus: StreamStatus;
   assistantDraftContent: string;
   isTextStreaming: boolean;
 
-  // Actions
+  // State — agent-level streaming (migrating from agentV3)
+  // These fields mirror the agentV3 top-level streaming state.
+  // During Wave 6b-6c, streamEventHandlers/sendMessage will write here
+  // instead of agentV3. Bridge selectors flip in Wave 6e.
+  agentIsStreaming: boolean;
+  agentStreamStatus: StreamStatus;
+  agentError: string | null;
+  agentStreamingAssistantContent: string;
+  agentStreamingThought: string;
+  agentIsThinkingStreaming: boolean;
+  agentCurrentThought: string;
+
+  // Actions — typewriter effect (store-native)
   startStreaming: (status?: StreamStatus) => void;
   stopStreaming: () => void;
   setStreamStatus: (status: StreamStatus) => void;
@@ -46,16 +58,34 @@ interface StreamingState {
   onTextEnd: (fullText?: string) => void;
   clearDraft: () => void;
   reset: () => void;
+
+  // Actions — agent-level streaming setters (Wave 6a)
+  setAgentIsStreaming: (value: boolean) => void;
+  setAgentStreamStatus: (status: StreamStatus) => void;
+  setAgentError: (error: string | null) => void;
+  setAgentStreamingAssistantContent: (content: string) => void;
+  setAgentStreamingThought: (thought: string) => void;
+  setAgentIsThinkingStreaming: (value: boolean) => void;
+  setAgentCurrentThought: (thought: string) => void;
+  resetAgentStreaming: () => void;
 }
 
-/**
- * Initial state for Streaming store
- */
+const agentStreamingInitialState = {
+  agentIsStreaming: false,
+  agentStreamStatus: 'idle' as StreamStatus,
+  agentError: null as string | null,
+  agentStreamingAssistantContent: '',
+  agentStreamingThought: '',
+  agentIsThinkingStreaming: false,
+  agentCurrentThought: '',
+};
+
 export const initialState = {
   isStreaming: false,
   streamStatus: 'idle' as StreamStatus,
   assistantDraftContent: '',
   isTextStreaming: false,
+  ...agentStreamingInitialState,
 };
 
 /**
@@ -162,6 +192,43 @@ export const useStreamingStore = create<StreamingState>()(
         });
       },
 
+      // -----------------------------------------------------------------------
+      // Agent-level streaming setters (Wave 6a)
+      // These will be called by streamEventHandlers/sendMessage in Wave 6b-6c
+      // -----------------------------------------------------------------------
+
+      setAgentIsStreaming: (value: boolean) => {
+        set({ agentIsStreaming: value });
+      },
+
+      setAgentStreamStatus: (status: StreamStatus) => {
+        set({ agentStreamStatus: status });
+      },
+
+      setAgentError: (error: string | null) => {
+        set({ agentError: error });
+      },
+
+      setAgentStreamingAssistantContent: (content: string) => {
+        set({ agentStreamingAssistantContent: content });
+      },
+
+      setAgentStreamingThought: (thought: string) => {
+        set({ agentStreamingThought: thought });
+      },
+
+      setAgentIsThinkingStreaming: (value: boolean) => {
+        set({ agentIsThinkingStreaming: value });
+      },
+
+      setAgentCurrentThought: (thought: string) => {
+        set({ agentCurrentThought: thought });
+      },
+
+      resetAgentStreaming: () => {
+        set(agentStreamingInitialState);
+      },
+
       /**
        * Reset store to initial state
        *
@@ -200,3 +267,13 @@ export const useDraftContentLength = () =>
  * Type export for store (used in tests)
  */
 export type StreamingStore = ReturnType<typeof useStreamingStore.getState>;
+
+// Bridge selectors — read from streamingStore's own agent-level fields.
+
+export const useIsStreaming = () => useStreamingStore((s) => s.agentIsStreaming);
+export const useStreamStatus = () => useStreamingStore((s) => s.agentStreamStatus);
+export const useStreamingAssistantContent = () =>
+  useStreamingStore((s) => s.agentStreamingAssistantContent);
+export const useStreamingThought = () => useStreamingStore((s) => s.agentStreamingThought);
+export const useIsThinkingStreaming = () => useStreamingStore((s) => s.agentIsThinkingStreaming);
+export const useAgentError = () => useStreamingStore((s) => s.agentError);

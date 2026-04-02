@@ -7,11 +7,11 @@ import { memo, useRef, useEffect } from 'react';
 
 import { Loader2 } from 'lucide-react';
 
-import { useAgentV3Store } from '../../../stores/agentV3';
+import { useAgentState, useActiveToolCalls } from '../../../stores/agent/executionStore';
 
 export const StreamingToolPreparation: React.FC = memo(() => {
-  const agentState = useAgentV3Store((s) => s.agentState);
-  const activeToolCalls = useAgentV3Store((s) => s.activeToolCalls);
+  const agentState = useAgentState();
+  const activeToolCalls = useActiveToolCalls();
 
   if (agentState !== 'preparing') return null;
 

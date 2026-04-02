@@ -1,11 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
 
 import { agentService } from '../services/agentService';
-import {
+import type {
   Message, AgentStreamHandler, TimelineEvent, UserMessageEvent, AgentTask, SubscribeOptions,
-  ClarificationType, DecisionType, ClarificationOption, DecisionOption, EnvVarField,
 } from '../types/agent';
 import {
   type ConversationState,
@@ -52,6 +51,11 @@ import {
   mergeHITLResponseEvents,
   timelineToMessages,
 } from './agent/timelineUtils';
+import { useConversationsStore } from './agent/conversationsStore';
+import { useExecutionStore } from './agent/executionStore';
+import { useAgentHITLStore } from './agent/hitlStore';
+import { useStreamingStore } from './agent/streamingStore';
+import { useTimelineStore } from './agent/timelineStore';
 import { useCanvasStore } from './canvasStore';
 import { useLayoutModeStore } from './layoutMode';
 
@@ -73,8 +77,7 @@ function resetCanvasForConversationScope(): void {
 
 export const useAgentV3Store = create<AgentV3State>()(
   devtools(
-    persist(
-      (set, get) => ({
+    (set, get) => ({
         conversations: [],
         activeConversationId: null,
         hasMoreConversations: false,
@@ -82,45 +85,6 @@ export const useAgentV3Store = create<AgentV3State>()(
 
         // Per-conversation state map
         conversationStates: new Map<string, ConversationState>(),
-
-        // Timeline: Primary data source (stores raw events from API and streaming)
-        timeline: [],
-
-        // Messages: Derived from timeline (for backward compatibility)
-        messages: [],
-        isLoadingHistory: false,
-        isLoadingEarlier: false,
-        hasEarlier: false,
-        earliestTimeUs: null,
-        earliestCounter: null,
-
-        isStreaming: false,
-        streamStatus: 'idle',
-        error: null,
-        streamingAssistantContent: '', // Real-time streaming content
-
-        agentState: 'idle',
-        currentThought: '',
-        streamingThought: '',
-        isThinkingStreaming: false,
-        activeToolCalls: new Map(),
-        pendingToolsStack: [],
-
-        isPlanMode: false,
-
-        showPlanPanel: false,
-        showHistorySidebar: false,
-        leftSidebarWidth: 280,
-        rightPanelWidth: 400,
-
-        pendingClarification: null,
-        pendingDecision: null,
-        pendingEnvVarRequest: null,
-        pendingPermission: null,
-        doomLoopDetected: null,
-        costTracking: null,
-        suggestions: [],
-        pinnedEventIds: new Set(),
 
         // ===== Multi-conversation state helpers =====
 
@@ -168,63 +132,6 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             newStates.set(conversationId, updatedState);
 
-            // Also update global state if this is the active conversation
-            const isActive = state.activeConversationId === conversationId;
-            if (isActive) {
-              return {
-                conversationStates: newStates,
-                // Sync to global state for backward compatibility
-                ...(updates.timeline !== undefined && { timeline: updates.timeline }),
-                ...(updates.isStreaming !== undefined && { isStreaming: updates.isStreaming }),
-                ...(updates.streamStatus !== undefined && { streamStatus: updates.streamStatus }),
-                ...(updates.streamingAssistantContent !== undefined && {
-                  streamingAssistantContent: updates.streamingAssistantContent,
-                }),
-                ...(updates.error !== undefined && { error: updates.error }),
-                ...(updates.agentState !== undefined && { agentState: updates.agentState }),
-                ...(updates.currentThought !== undefined && {
-                  currentThought: updates.currentThought,
-                }),
-                ...(updates.streamingThought !== undefined && {
-                  streamingThought: updates.streamingThought,
-                }),
-                ...(updates.isThinkingStreaming !== undefined && {
-                  isThinkingStreaming: updates.isThinkingStreaming,
-                }),
-                ...(updates.activeToolCalls !== undefined && {
-                  activeToolCalls: updates.activeToolCalls,
-                }),
-                ...(updates.pendingToolsStack !== undefined && {
-                  pendingToolsStack: updates.pendingToolsStack,
-                }),
-                ...(updates.isPlanMode !== undefined && { isPlanMode: updates.isPlanMode }),
-                ...(updates.pendingClarification !== undefined && {
-                  pendingClarification: updates.pendingClarification,
-                }),
-                ...(updates.pendingDecision !== undefined && {
-                  pendingDecision: updates.pendingDecision,
-                }),
-                ...(updates.pendingEnvVarRequest !== undefined && {
-                  pendingEnvVarRequest: updates.pendingEnvVarRequest,
-                }),
-                ...(updates.pendingPermission !== undefined && {
-                  pendingPermission: updates.pendingPermission,
-                }),
-                ...(updates.doomLoopDetected !== undefined && {
-                  doomLoopDetected: updates.doomLoopDetected,
-                }),
-                ...(updates.costTracking !== undefined && { costTracking: updates.costTracking }),
-                ...(updates.suggestions !== undefined && { suggestions: updates.suggestions }),
-                ...(updates.hasEarlier !== undefined && { hasEarlier: updates.hasEarlier }),
-                ...(updates.earliestTimeUs !== undefined && {
-                  earliestTimeUs: updates.earliestTimeUs,
-                }),
-                ...(updates.earliestCounter !== undefined && {
-                  earliestCounter: updates.earliestCounter,
-                }),
-              };
-            }
-
             return { conversationStates: newStates };
           });
 
@@ -232,6 +139,48 @@ export const useAgentV3Store = create<AgentV3State>()(
           const fullState = get().conversationStates.get(conversationId);
           if (fullState) {
             scheduleSave(conversationId, fullState);
+          }
+
+          // Bridge HITL fields to hitlStore when active conversation is updated
+          const isActiveAfter = get().activeConversationId === conversationId;
+          if (isActiveAfter) {
+            const hs = useAgentHITLStore.getState();
+            if (updates.pendingClarification !== undefined) hs.setPendingClarification(updates.pendingClarification);
+            if (updates.pendingDecision !== undefined) hs.setPendingDecision(updates.pendingDecision);
+            if (updates.pendingEnvVarRequest !== undefined) hs.setPendingEnvVarRequest(updates.pendingEnvVarRequest);
+            if (updates.pendingPermission !== undefined) hs.setPendingPermission(updates.pendingPermission);
+            if (updates.doomLoopDetected !== undefined) hs.setDoomLoopDetected(updates.doomLoopDetected);
+            if (updates.costTracking !== undefined) hs.setCostTracking(updates.costTracking);
+            if (updates.suggestions !== undefined) hs.setSuggestions(updates.suggestions);
+
+            // Bridge timeline fields to timelineStore
+            const ts = useTimelineStore.getState();
+            if (updates.timeline !== undefined) ts.setAgentTimeline(updates.timeline);
+            if (updates.hasEarlier !== undefined) ts.setAgentHasEarlier(updates.hasEarlier);
+            if (updates.earliestTimeUs !== undefined || updates.earliestCounter !== undefined) {
+              const convState = get().conversationStates.get(conversationId);
+              ts.setAgentEarliestPointers(
+                updates.earliestTimeUs !== undefined ? updates.earliestTimeUs : (convState?.earliestTimeUs ?? null),
+                updates.earliestCounter !== undefined ? updates.earliestCounter : (convState?.earliestCounter ?? null),
+              );
+            }
+
+            // Bridge streaming fields to streamingStore
+            const ss = useStreamingStore.getState();
+            if (updates.isStreaming !== undefined) ss.setAgentIsStreaming(updates.isStreaming);
+            if (updates.streamStatus !== undefined) ss.setAgentStreamStatus(updates.streamStatus);
+            if (updates.error !== undefined) ss.setAgentError(updates.error);
+            if (updates.streamingAssistantContent !== undefined) ss.setAgentStreamingAssistantContent(updates.streamingAssistantContent);
+            if (updates.streamingThought !== undefined) ss.setAgentStreamingThought(updates.streamingThought);
+            if (updates.isThinkingStreaming !== undefined) ss.setAgentIsThinkingStreaming(updates.isThinkingStreaming);
+            if (updates.currentThought !== undefined) ss.setAgentCurrentThought(updates.currentThought);
+
+            // Bridge execution fields to executionStore
+            const es = useExecutionStore.getState();
+            if (updates.agentState !== undefined) es.setAgentExecutionState(updates.agentState);
+            if (updates.activeToolCalls !== undefined) es.setAgentActiveToolCalls(updates.activeToolCalls);
+            if (updates.pendingToolsStack !== undefined) es.setAgentPendingToolsStack(updates.pendingToolsStack);
+            if (updates.isPlanMode !== undefined) es.setAgentIsPlanMode(updates.isPlanMode);
           }
         },
 
@@ -317,54 +266,44 @@ export const useAgentV3Store = create<AgentV3State>()(
           const convState = conversationStates.get(activeConversationId);
           if (!convState) return;
 
-          set({
-            timeline: convState.timeline,
-            messages: timelineToMessages(convState.timeline),
-            hasEarlier: convState.hasEarlier,
-            earliestTimeUs: convState.earliestTimeUs,
-            earliestCounter: convState.earliestCounter,
-            isStreaming: convState.isStreaming,
-            streamStatus: convState.streamStatus,
-            streamingAssistantContent: convState.streamingAssistantContent,
-            error: convState.error,
-            agentState: convState.agentState,
-            currentThought: convState.currentThought,
-            streamingThought: convState.streamingThought,
-            isThinkingStreaming: convState.isThinkingStreaming,
-            activeToolCalls: convState.activeToolCalls,
-            pendingToolsStack: convState.pendingToolsStack,
-            isPlanMode: convState.isPlanMode,
+          // Sync sub-stores from conversation state
+          const hs = useAgentHITLStore.getState();
+          hs.syncFromConversation({
             pendingClarification: convState.pendingClarification,
             pendingDecision: convState.pendingDecision,
             pendingEnvVarRequest: convState.pendingEnvVarRequest,
+            pendingPermission: null,
             doomLoopDetected: convState.doomLoopDetected,
-            suggestions: convState.suggestions,
+            costTracking: null,
+            suggestions: convState.suggestions ?? [],
+            pinnedEventIds: new Set(),
           });
+
+          const ts = useTimelineStore.getState();
+          ts.setAgentTimeline(convState.timeline);
+          ts.setAgentHasEarlier(convState.hasEarlier);
+          ts.setAgentEarliestPointers(convState.earliestTimeUs, convState.earliestCounter);
+
+          const ss = useStreamingStore.getState();
+          ss.setAgentIsStreaming(convState.isStreaming);
+          ss.setAgentStreamStatus(convState.streamStatus);
+          ss.setAgentError(convState.error);
+          ss.setAgentStreamingAssistantContent(convState.streamingAssistantContent);
+          ss.setAgentStreamingThought(convState.streamingThought);
+          ss.setAgentIsThinkingStreaming(convState.isThinkingStreaming);
+          ss.setAgentCurrentThought(convState.currentThought);
+
+          const es = useExecutionStore.getState();
+          es.setAgentExecutionState(convState.agentState);
+          es.setAgentActiveToolCalls(convState.activeToolCalls);
+          es.setAgentPendingToolsStack(convState.pendingToolsStack);
+          es.setAgentIsPlanMode(convState.isPlanMode);
         },
 
         setActiveConversation: (id) => {
           const {
             activeConversationId,
             conversationStates,
-            timeline,
-            isStreaming,
-            streamStatus,
-            streamingAssistantContent,
-            error,
-            agentState,
-            currentThought,
-            streamingThought,
-            isThinkingStreaming,
-            activeToolCalls,
-            pendingToolsStack,
-            isPlanMode,
-            pendingClarification,
-            pendingDecision,
-            pendingEnvVarRequest,
-            doomLoopDetected,
-            hasEarlier,
-            earliestTimeUs,
-            earliestCounter,
           } = get();
 
           // Skip if already on this conversation — avoids clearing delta buffers
@@ -389,32 +328,39 @@ export const useAgentV3Store = create<AgentV3State>()(
             const newStates = new Map(conversationStates);
             const currentState =
               newStates.get(activeConversationId) || createDefaultConversationState();
+
+            // Read current sub-store state to persist back into conversation Map
+            const ss = useStreamingStore.getState();
+            const es = useExecutionStore.getState();
+            const ts = useTimelineStore.getState();
+            const hs = useAgentHITLStore.getState();
+
             newStates.set(activeConversationId, {
               ...currentState,
-              timeline,
-              hasEarlier,
-              earliestTimeUs,
-              earliestCounter,
-              isStreaming,
-              streamStatus,
-              streamingAssistantContent,
-              error,
-              agentState,
-              currentThought,
-              streamingThought,
-              isThinkingStreaming,
-              activeToolCalls,
-              pendingToolsStack,
-              isPlanMode,
-              pendingClarification,
-              pendingDecision,
-              pendingEnvVarRequest,
-              doomLoopDetected,
+              timeline: ts.agentTimeline,
+              hasEarlier: ts.agentHasEarlier,
+              earliestTimeUs: ts.agentEarliestTimeUs,
+              earliestCounter: ts.agentEarliestCounter,
+              isStreaming: ss.agentIsStreaming,
+              streamStatus: ss.agentStreamStatus,
+              streamingAssistantContent: ss.agentStreamingAssistantContent,
+              error: ss.agentError,
+              agentState: es.agentExecutionState,
+              currentThought: ss.agentCurrentThought,
+              streamingThought: ss.agentStreamingThought,
+              isThinkingStreaming: ss.agentIsThinkingStreaming,
+              activeToolCalls: es.agentActiveToolCalls,
+              pendingToolsStack: es.agentPendingToolsStack,
+              isPlanMode: es.agentIsPlanMode,
+              pendingClarification: hs.pendingClarification,
+              pendingDecision: hs.pendingDecision,
+              pendingEnvVarRequest: hs.pendingEnvVarRequest,
+              doomLoopDetected: hs.doomLoopDetected,
               pendingHITLSummary: getHITLSummaryFromState({
                 ...currentState,
-                pendingClarification,
-                pendingDecision,
-                pendingEnvVarRequest,
+                pendingClarification: hs.pendingClarification,
+                pendingDecision: hs.pendingDecision,
+                pendingEnvVarRequest: hs.pendingEnvVarRequest,
               } as ConversationState),
             });
             set({ conversationStates: newStates });
@@ -450,59 +396,74 @@ export const useAgentV3Store = create<AgentV3State>()(
               });
               set({
                 activeConversationId: id,
-                timeline: sortedTimeline,
-                messages: timelineToMessages(sortedTimeline),
-                hasEarlier: newState.hasEarlier,
-                earliestTimeUs: newState.earliestTimeUs,
-                earliestCounter: newState.earliestCounter,
-                isStreaming: newState.isStreaming,
-                streamStatus: newState.streamStatus,
-                streamingAssistantContent: newState.streamingAssistantContent,
-                error: newState.error,
-                agentState: newState.agentState,
-                currentThought: newState.currentThought,
-                streamingThought: newState.streamingThought,
-                isThinkingStreaming: newState.isThinkingStreaming,
-                activeToolCalls: newState.activeToolCalls,
-                pendingToolsStack: newState.pendingToolsStack,
-                isPlanMode: newState.isPlanMode,
+              });
+
+              // Sync sub-stores from loaded conversation state
+              useTimelineStore.getState().setAgentTimeline(sortedTimeline);
+              useTimelineStore.getState().setAgentHasEarlier(newState.hasEarlier);
+              useTimelineStore.getState().setAgentEarliestPointers(newState.earliestTimeUs, newState.earliestCounter);
+
+              useStreamingStore.getState().setAgentIsStreaming(newState.isStreaming);
+              useStreamingStore.getState().setAgentStreamStatus(newState.streamStatus);
+              useStreamingStore.getState().setAgentStreamingAssistantContent(newState.streamingAssistantContent);
+              useStreamingStore.getState().setAgentError(newState.error);
+              useStreamingStore.getState().setAgentCurrentThought(newState.currentThought);
+              useStreamingStore.getState().setAgentStreamingThought(newState.streamingThought);
+              useStreamingStore.getState().setAgentIsThinkingStreaming(newState.isThinkingStreaming);
+
+              useExecutionStore.getState().setAgentExecutionState(newState.agentState);
+              useExecutionStore.getState().setAgentActiveToolCalls(newState.activeToolCalls);
+              useExecutionStore.getState().setAgentPendingToolsStack(newState.pendingToolsStack);
+              useExecutionStore.getState().setAgentIsPlanMode(newState.isPlanMode);
+
+              useAgentHITLStore.getState().syncFromConversation({
                 pendingClarification: newState.pendingClarification,
                 pendingDecision: newState.pendingDecision,
                 pendingEnvVarRequest: newState.pendingEnvVarRequest,
+                pendingPermission: null,
                 doomLoopDetected: newState.doomLoopDetected,
+                costTracking: null,
+                suggestions: newState.suggestions ?? [],
                 pinnedEventIds: new Set(),
               });
+              // Sync currentConversation to conversationsStore
+              const convForLoaded = useConversationsStore
+                .getState()
+                .conversations.find((c) => c.id === id);
+              useConversationsStore.getState().setCurrentConversation(convForLoaded ?? null);
               replayCanvasEventsFromTimeline(sortedTimeline);
               return;
             }
           }
 
           // Default state for new/unloaded conversation
-          // IMPORTANT: Reset all streaming and state flags to prevent state leakage from previous conversation
           set({
             activeConversationId: id,
-            timeline: [],
-            messages: [],
-            hasEarlier: false,
-            earliestTimeUs: null,
-            earliestCounter: null,
-            isStreaming: false,
-            streamStatus: 'idle',
-            streamingAssistantContent: '',
-            error: null,
-            agentState: 'idle',
-            currentThought: '',
-            streamingThought: '',
-            isThinkingStreaming: false,
-            activeToolCalls: new Map(),
-            pendingToolsStack: [],
-            isPlanMode: false,
+          });
+
+          // Reset all sub-stores to defaults
+          useTimelineStore.getState().setAgentTimeline([]);
+          useTimelineStore.getState().setAgentHasEarlier(false);
+          useTimelineStore.getState().setAgentEarliestPointers(null, null);
+
+          useStreamingStore.getState().resetAgentStreaming();
+
+          useExecutionStore.getState().resetAgentExecution();
+
+          useAgentHITLStore.getState().syncFromConversation({
             pendingClarification: null,
             pendingDecision: null,
             pendingEnvVarRequest: null,
+            pendingPermission: null,
             doomLoopDetected: null,
+            costTracking: null,
+            suggestions: [],
             pinnedEventIds: new Set(),
           });
+          const convForDefault = id
+            ? useConversationsStore.getState().conversations.find((c) => c.id === id) ?? null
+            : null;
+          useConversationsStore.getState().setCurrentConversation(convForDefault);
         },
 
         loadConversations: async (projectId) => {
@@ -519,13 +480,16 @@ export const useAgentV3Store = create<AgentV3State>()(
           }
 
           try {
-            const response = await agentService.listConversations(projectId);
-            logger.debug(`[agentV3] Loaded ${response.items.length} conversations`);
+            // Delegate to conversationsStore for API call + list management
+            await useConversationsStore.getState().listConversations(projectId);
+            // Sync back to agentV3 state (strangler fig dual-write)
+            const convState = useConversationsStore.getState();
             set({
-              conversations: response.items,
-              hasMoreConversations: response.has_more,
-              conversationsTotal: response.total,
+              conversations: convState.conversations,
+              hasMoreConversations: convState.hasMoreConversations,
+              conversationsTotal: convState.conversationsTotal,
             });
+            logger.debug(`[agentV3] Loaded ${String(convState.conversations.length)} conversations via conversationsStore`);
           } catch (error) {
             console.error('[agentV3] Failed to list conversations', error);
           }
@@ -536,14 +500,14 @@ export const useAgentV3Store = create<AgentV3State>()(
           if (!state.hasMoreConversations) return;
 
           try {
-            const offset = state.conversations.length;
-            const response = await agentService.listConversations(projectId, undefined, 10, offset);
-            logger.debug(`[agentV3] Loaded ${response.items.length} more conversations`);
+            await useConversationsStore.getState().loadMoreConversations(projectId);
+            const convState = useConversationsStore.getState();
             set({
-              conversations: [...state.conversations, ...response.items],
-              hasMoreConversations: response.has_more,
-              conversationsTotal: response.total,
+              conversations: convState.conversations,
+              hasMoreConversations: convState.hasMoreConversations,
+              conversationsTotal: convState.conversationsTotal,
             });
+            logger.debug(`[agentV3] Loaded more conversations via conversationsStore`);
           } catch (error) {
             console.error('[agentV3] Failed to load more conversations', error);
           }
@@ -551,111 +515,93 @@ export const useAgentV3Store = create<AgentV3State>()(
 
         deleteConversation: async (conversationId, projectId) => {
           try {
-            await agentService.deleteConversation(conversationId, projectId);
+            // Delegate API call + list filtering to conversationsStore
+            await useConversationsStore.getState().deleteConversation(conversationId, projectId);
 
-            // Unsubscribe handler to prevent memory leaks
             agentService.unsubscribe(conversationId);
-
-            // Clear delta buffers for this conversation
             clearDeltaBuffers(conversationId);
             deleteDeltaBuffer(conversationId);
-
-            // Cancel any pending save for this conversation
             cancelPendingSave(conversationId);
-
-            // Remove from LRU tracking
             removeFromAccessOrder(conversationId);
 
-            // Remove from local state and conversation states map
+            const wasActive = get().activeConversationId === conversationId;
             set((state) => {
               const newStates = new Map(state.conversationStates);
               newStates.delete(conversationId);
 
               return {
-                conversations: state.conversations.filter((c) => c.id !== conversationId),
+                conversations: useConversationsStore.getState().conversations,
                 conversationStates: newStates,
-                // Clear active conversation if it was the deleted one
                 activeConversationId:
                   state.activeConversationId === conversationId ? null : state.activeConversationId,
-                // Clear messages and timeline if the deleted conversation was active
-                messages: state.activeConversationId === conversationId ? [] : state.messages,
-                timeline: state.activeConversationId === conversationId ? [] : state.timeline,
               };
             });
 
-            // Remove from IndexedDB
-            deleteConversationState(conversationId).catch(console.error);
+            // Reset sub-stores if we deleted the active conversation
+            if (wasActive) {
+              useTimelineStore.getState().setAgentTimeline([]);
+              useTimelineStore.getState().setAgentMessages([]);
+              useStreamingStore.getState().resetAgentStreaming();
+              useExecutionStore.getState().resetAgentExecution();
+            }
 
-            // Broadcast to other tabs
+            deleteConversationState(conversationId).catch(console.error);
             tabSync.broadcastConversationDeleted(conversationId);
           } catch (error) {
             console.error('Failed to delete conversation', error);
-            set({ error: 'Failed to delete conversation' });
+            useStreamingStore.getState().setAgentError('Failed to delete conversation');
           }
         },
 
         renameConversation: async (conversationId, projectId, title) => {
           try {
-            const updatedConversation = await agentService.updateConversationTitle(
-              conversationId,
-              projectId,
-              title
-            );
-            // Update in local state
-            set((state) => ({
-              conversations: state.conversations.map((c) =>
-                c.id === conversationId ? updatedConversation : c
-              ),
-            }));
-
-            // Broadcast to other tabs
+            await useConversationsStore.getState().renameConversation(conversationId, projectId, title);
+            set({ conversations: useConversationsStore.getState().conversations });
             tabSync.broadcastConversationRenamed(conversationId, title);
           } catch (error) {
             console.error('Failed to rename conversation', error);
-            set({ error: 'Failed to rename conversation' });
+            useStreamingStore.getState().setAgentError('Failed to rename conversation');
           }
         },
 
         createNewConversation: async (projectId) => {
           try {
-            const newConv = await agentService.createConversation({
-              project_id: projectId,
-              title: 'New Conversation',
-            });
+            const newConv = await useConversationsStore.getState().createConversation(projectId, 'New Conversation');
             resetCanvasForConversationScope();
 
-            // Create fresh state for new conversation
             const newConvState = createDefaultConversationState();
 
-            // Add to conversations list and set as active
             touchConversation(newConv.id);
             set((state) => {
               const newStates = new Map(state.conversationStates);
               newStates.set(newConv.id, newConvState);
 
               return {
-                conversations: [newConv, ...state.conversations],
+                conversations: useConversationsStore.getState().conversations,
                 conversationStates: newStates,
                 activeConversationId: newConv.id,
-                // Clear messages and timeline for new conversation
-                messages: [],
-                timeline: [],
-                currentThought: '',
-                streamingThought: '',
-                isThinkingStreaming: false,
-                isPlanMode: false,
-                agentState: 'idle',
-                isStreaming: false,
-                error: null,
-                pendingClarification: null,
-                pendingDecision: null,
-                pendingEnvVarRequest: null,
               };
             });
+
+            useTimelineStore.getState().setAgentTimeline([]);
+            useTimelineStore.getState().setAgentMessages([]);
+            useStreamingStore.getState().resetAgentStreaming();
+            useExecutionStore.getState().resetAgentExecution();
+            useAgentHITLStore.getState().syncFromConversation({
+              pendingClarification: null,
+              pendingDecision: null,
+              pendingEnvVarRequest: null,
+              pendingPermission: null,
+              doomLoopDetected: null,
+              costTracking: null,
+              suggestions: [],
+              pinnedEventIds: new Set(),
+            });
+
             return newConv.id;
           } catch (error) {
             console.error('Failed to create conversation', error);
-            set({ error: 'Failed to create conversation' });
+            useStreamingStore.getState().setAgentError('Failed to create conversation');
             return null;
           }
         },
@@ -678,35 +624,38 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Only replace timeline/messages if current state is empty —
           // setActiveConversation already restores from in-memory cache,
           // so overwriting with IndexedDB data causes a visible flash.
-          const currentTimeline = get().timeline;
+          const currentTimeline = useTimelineStore.getState().agentTimeline;
           const hasExistingData = currentTimeline.length > 0;
 
-          const stateUpdate: Partial<AgentV3State> = {
-            // Only show loading state when there's no cached data to display —
-            // when data exists, keep UI interactive during background refresh.
-            isLoadingHistory: !hasExistingData,
-            currentThought: cachedState?.currentThought || '',
-            streamingThought: '',
-            isThinkingStreaming: false,
-            isPlanMode: cachedState?.isPlanMode || false,
-            agentState: cachedState?.agentState || 'idle',
-            hasEarlier: cachedState?.hasEarlier || false,
-            earliestTimeUs: cachedState?.earliestTimeUs || null,
-            earliestCounter: cachedState?.earliestCounter || null,
-            // Restore HITL state if any
-            pendingClarification: cachedState?.pendingClarification || null,
-            pendingDecision: cachedState?.pendingDecision || null,
-            pendingEnvVarRequest: cachedState?.pendingEnvVarRequest || null,
-          };
+          {
+            const tls = useTimelineStore.getState();
+            tls.setAgentIsLoadingHistory(!hasExistingData);
+            tls.setAgentHasEarlier(cachedState?.hasEarlier || false);
+            tls.setAgentEarliestPointers(
+              cachedState?.earliestTimeUs || null,
+              cachedState?.earliestCounter || null,
+            );
+            if (!hasExistingData) {
+              tls.setAgentTimeline(cachedState?.timeline || []);
+              tls.setAgentMessages(
+                cachedState?.timeline ? timelineToMessages(cachedState.timeline) : [],
+              );
+            }
 
-          if (!hasExistingData) {
-            stateUpdate.timeline = cachedState?.timeline || [];
-            stateUpdate.messages = cachedState?.timeline
-              ? timelineToMessages(cachedState.timeline)
-              : [];
+            const ss = useStreamingStore.getState();
+            ss.setAgentCurrentThought(cachedState?.currentThought || '');
+            ss.setAgentStreamingThought('');
+            ss.setAgentIsThinkingStreaming(false);
+
+            const es = useExecutionStore.getState();
+            es.setAgentIsPlanMode(cachedState?.isPlanMode || false);
+            es.setAgentExecutionState(cachedState?.agentState || 'idle');
+
+            const hs = useAgentHITLStore.getState();
+            hs.setPendingClarification(cachedState?.pendingClarification || null);
+            hs.setPendingDecision(cachedState?.pendingDecision || null);
+            hs.setPendingEnvVarRequest(cachedState?.pendingEnvVarRequest || null);
           }
-
-          set(stateUpdate);
 
           try {
             // Parallelize independent API calls (async-parallel)
@@ -754,7 +703,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             // Update plan mode from API response
             if (planModeResult && planModeResult.mode) {
               const isPlan = planModeResult.mode === 'plan';
-              set({ isPlanMode: isPlan });
+              useExecutionStore.getState().setAgentIsPlanMode(isPlan);
               get().updateConversationState(conversationId, { isPlanMode: isPlan });
             }
 
@@ -861,6 +810,35 @@ export const useAgentV3Store = create<AgentV3State>()(
               earliestCounter: firstCounter,
             };
 
+            const isCurrentlyStreaming = useStreamingStore.getState().agentIsStreaming;
+            const isActiveConversation = get().activeConversationId === conversationId;
+            const currentAgentTimeline = useTimelineStore.getState().agentTimeline;
+
+            let finalTimeline: TimelineEvent[];
+            let finalMessages: Message[];
+
+            if (isCurrentlyStreaming && isActiveConversation && currentAgentTimeline.length > 0) {
+              const eventMap = new Map<string, TimelineEvent>();
+              for (const event of mergedTimeline) {
+                eventMap.set(event.id, event);
+              }
+              for (const event of currentAgentTimeline) {
+                const existing = eventMap.get(event.id);
+                if (!existing || (event.eventTimeUs ?? 0) >= (existing.eventTimeUs ?? 0)) {
+                  eventMap.set(event.id, event);
+                }
+              }
+              finalTimeline = Array.from(eventMap.values()).sort((a, b) => {
+                const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
+                if (timeDiff !== 0) return timeDiff;
+                return a.eventCounter - b.eventCounter;
+              });
+              finalMessages = timelineToMessages(finalTimeline);
+            } else {
+              finalTimeline = mergedTimeline;
+              finalMessages = messages;
+            }
+
             set((state) => {
               const newStates = new Map(state.conversationStates);
               const currentConvState =
@@ -870,68 +848,17 @@ export const useAgentV3Store = create<AgentV3State>()(
                 ...newConvState,
               } as ConversationState);
 
-              // FIX: Use incremental merge during streaming to preserve local events
-              // while still incorporating server events.
-              // Previously, we completely skipped timeline updates when streaming,
-              // which caused events to be invisible.
-              // IMPORTANT: Only merge when loading the SAME conversation that's active and streaming.
-              // If loading a different conversation, use the API response directly.
-              const isCurrentlyStreaming = state.isStreaming;
-              const isActiveConversation = state.activeConversationId === conversationId;
-
-              let finalTimeline: TimelineEvent[];
-              let finalMessages: Message[];
-
-              if (isCurrentlyStreaming && isActiveConversation && state.timeline.length > 0) {
-                // During streaming of active conversation: merge API events with local events
-                // Use a Map keyed by event ID for deduplication
-                const eventMap = new Map<string, TimelineEvent>();
-
-                // First, add all API events
-                for (const event of mergedTimeline) {
-                  eventMap.set(event.id, event);
-                }
-
-                // Then, add local events (they may override API events with same ID,
-                // or add new events that haven't been persisted yet)
-                for (const event of state.timeline) {
-                  // Only add local event if it's newer than what's in the map
-                  // or if it's not in the map at all
-                  const existing = eventMap.get(event.id);
-                  if (!existing || (event.eventTimeUs ?? 0) >= (existing.eventTimeUs ?? 0)) {
-                    eventMap.set(event.id, event);
-                  }
-                }
-
-                // Convert back to array and sort by eventTimeUs + eventCounter
-                finalTimeline = Array.from(eventMap.values()).sort((a, b) => {
-                  const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
-                  if (timeDiff !== 0) return timeDiff;
-                  return a.eventCounter - b.eventCounter;
-                });
-                finalMessages = timelineToMessages(finalTimeline);
-              } else {
-                // Not streaming, different conversation, or empty local timeline: use API response directly
-                finalTimeline = mergedTimeline;
-                finalMessages = messages;
-              }
-
-              // Check if timeline actually changed to avoid unnecessary re-renders
-              const timelineChanged =
-                state.timeline.length !== finalTimeline.length ||
-                (finalTimeline.length > 0 &&
-                  state.timeline[state.timeline.length - 1]?.id !==
-                    finalTimeline[finalTimeline.length - 1]?.id);
-
-              return {
-                conversationStates: newStates,
-                ...(timelineChanged ? { timeline: finalTimeline, messages: finalMessages } : {}),
-                isLoadingHistory: false,
-                hasEarlier: response.has_more ?? false,
-                earliestTimeUs: firstTimeUs,
-                earliestCounter: firstCounter,
-              };
+              return { conversationStates: newStates };
             });
+
+            {
+              const tls = useTimelineStore.getState();
+              tls.setAgentTimeline(finalTimeline);
+              tls.setAgentMessages(finalMessages);
+              tls.setAgentIsLoadingHistory(false);
+              tls.setAgentHasEarlier(response.has_more ?? false);
+              tls.setAgentEarliestPointers(firstTimeUs, firstCounter);
+            }
 
             // Persist to IndexedDB
             saveConversationState(conversationId, newConvState).catch(console.error);
@@ -960,7 +887,14 @@ export const useAgentV3Store = create<AgentV3State>()(
               // This prevents duplicate content from previous page loads
               clearAllDeltaBuffers();
 
-              set({ isStreaming: true, agentState: 'thinking' });
+              useStreamingStore.getState().setAgentIsStreaming(true);
+              useStreamingStore.getState().setAgentStreamStatus('streaming');
+              useExecutionStore.getState().setAgentExecutionState('thinking');
+              get().updateConversationState(conversationId, {
+                isStreaming: true,
+                streamStatus: 'streaming',
+                agentState: 'thinking',
+              });
             }
 
             // Always subscribe active conversation to WebSocket so externally-triggered
@@ -1019,18 +953,17 @@ export const useAgentV3Store = create<AgentV3State>()(
           } catch (error) {
             if (get().activeConversationId !== conversationId) return;
             console.error('Failed to load messages', error);
-            set({ isLoadingHistory: false });
+            useTimelineStore.getState().setAgentIsLoadingHistory(false);
           }
         },
 
         loadEarlierMessages: async (conversationId, projectId) => {
-          const {
-            earliestTimeUs,
-            earliestCounter,
-            timeline,
-            isLoadingEarlier,
-            activeConversationId,
-          } = get();
+          const { activeConversationId } = get();
+          const tls = useTimelineStore.getState();
+          const earliestTimeUs = tls.agentEarliestTimeUs;
+          const earliestCounter = tls.agentEarliestCounter;
+          const timeline = tls.agentTimeline;
+          const isLoadingEarlier = tls.agentIsLoadingEarlier;
 
           // Guard: Don't load if already loading or no pagination point exists
           if (activeConversationId !== conversationId) return false;
@@ -1047,7 +980,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             'counter:',
             earliestCounter
           );
-          set({ isLoadingEarlier: true });
+          useTimelineStore.getState().setAgentIsLoadingEarlier(true);
 
           try {
             const response = await agentService.getConversationMessages(
@@ -1081,14 +1014,15 @@ export const useAgentV3Store = create<AgentV3State>()(
             const newFirstTimeUs = response.first_time_us ?? null;
             const newFirstCounter = response.first_counter ?? null;
 
-            set({
-              timeline: mergedTimeline,
-              messages: newMessages,
-              isLoadingEarlier: false,
-              hasEarlier: response.has_more ?? false,
-              earliestTimeUs: newFirstTimeUs,
-              earliestCounter: newFirstCounter,
-            });
+            // Write to sub-store (sole owner of timeline state)
+            {
+              const tlsWrite = useTimelineStore.getState();
+              tlsWrite.setAgentTimeline(mergedTimeline);
+              tlsWrite.setAgentMessages(newMessages);
+              tlsWrite.setAgentIsLoadingEarlier(false);
+              tlsWrite.setAgentHasEarlier(response.has_more ?? false);
+              tlsWrite.setAgentEarliestPointers(newFirstTimeUs, newFirstCounter);
+            }
 
             logger.debug(
               '[AgentV3] Loaded earlier messages, total timeline length:',
@@ -1097,25 +1031,25 @@ export const useAgentV3Store = create<AgentV3State>()(
             return true;
           } catch (error) {
             console.error('[AgentV3] Failed to load earlier messages:', error);
-            set({ isLoadingEarlier: false });
+            useTimelineStore.getState().setAgentIsLoadingEarlier(false);
             return false;
           }
         },
 
         sendMessage: async (content, projectId, additionalHandlers) => {
-          const { activeConversationId, messages, timeline, getStreamingConversationCount } = get();
+          const { activeConversationId, getStreamingConversationCount } = get();
+          const messages = useTimelineStore.getState().agentMessages;
+          const timeline = useTimelineStore.getState().agentTimeline;
 
           // CRITICAL: Clear any stale delta buffers before starting new stream
-          // This prevents duplicate content from previous sessions being flushed
           clearAllDeltaBuffers();
           clearAllTimelineBuffers();
 
           // Check concurrent streaming limit
           const streamingCount = getStreamingConversationCount();
           if (streamingCount >= MAX_CONCURRENT_STREAMING_CONVERSATIONS) {
-            set({
-              error: `Maximum ${String(MAX_CONCURRENT_STREAMING_CONVERSATIONS)} concurrent conversations reached. Please wait for one to complete.`,
-            });
+            const concurrentErr = `Maximum ${String(MAX_CONCURRENT_STREAMING_CONVERSATIONS)} concurrent conversations reached. Please wait for one to complete.`;
+            useStreamingStore.getState().setAgentError(concurrentErr);
             return null;
           }
 
@@ -1124,15 +1058,14 @@ export const useAgentV3Store = create<AgentV3State>()(
 
           if (!conversationId) {
             try {
-              const newConv = await agentService.createConversation({
-                project_id: projectId,
-                title: content.slice(0, 30) + '...',
-              });
+              const newConv = await useConversationsStore.getState().createConversation(
+                projectId,
+                content.slice(0, 30) + '...'
+              );
               conversationId = newConv.id;
               isNewConversation = true;
               resetCanvasForConversationScope();
 
-              // Create fresh state for new conversation
               const newConvState = createDefaultConversationState();
               const newConvId = conversationId;
 
@@ -1141,13 +1074,14 @@ export const useAgentV3Store = create<AgentV3State>()(
                 newStates.set(newConvId, newConvState);
                 return {
                   activeConversationId: newConvId,
-                  conversations: [newConv, ...state.conversations],
+                  conversations: useConversationsStore.getState().conversations,
                   conversationStates: newStates,
                 };
               });
             } catch (error) {
               const msg = error instanceof Error ? error.message : String(error);
-              set({ error: `Failed to create conversation: ${msg}` });
+              const createErr = `Failed to create conversation: ${msg}`;
+              useStreamingStore.getState().setAgentError(createErr);
               return null;
             }
           }
@@ -1202,23 +1136,18 @@ export const useAgentV3Store = create<AgentV3State>()(
               suggestions: [],
             });
 
-            return {
-              conversationStates: newStates,
-              messages: [...messages, userMsg],
-              timeline: newTimeline,
-              isStreaming: true,
-              streamStatus: 'connecting',
-              streamingAssistantContent: '', // Reset streaming content
-              error: null,
-              currentThought: '',
-              streamingThought: '',
-              isThinkingStreaming: false,
-              activeToolCalls: new Map(),
-              pendingToolsStack: [],
-              agentState: 'thinking',
-              suggestions: [],
-            };
+            return { conversationStates: newStates };
           });
+
+          // Bridge sendMessage reset to sub-stores
+          useTimelineStore.getState().setAgentTimeline(newTimeline);
+          useTimelineStore.getState().setAgentMessages([...messages, userMsg]);
+          useStreamingStore.getState().resetAgentStreaming();
+          useStreamingStore.getState().setAgentIsStreaming(true);
+          useStreamingStore.getState().setAgentStreamStatus('connecting');
+          useExecutionStore.getState().resetAgentExecution();
+          useExecutionStore.getState().setAgentExecutionState('thinking');
+          useAgentHITLStore.getState().setSuggestions([]);
 
           // Capture conversationId in closure for event handler isolation
           // This is critical for multi-conversation support - events must only update
@@ -1279,11 +1208,6 @@ export const useAgentV3Store = create<AgentV3State>()(
                   isStreaming: false,
                   streamStatus: 'error',
                 });
-                set({
-                  error: 'Failed to connect to chat stream',
-                  isStreaming: false,
-                  streamStatus: 'error',
-                });
               });
             return conversationId;
           }
@@ -1315,11 +1239,6 @@ export const useAgentV3Store = create<AgentV3State>()(
               isStreaming: false,
               streamStatus: 'error',
             });
-            set({
-              error: 'Failed to connect to chat stream',
-              isStreaming: false,
-              streamStatus: 'error',
-            });
             return null;
           }
         },
@@ -1330,27 +1249,19 @@ export const useAgentV3Store = create<AgentV3State>()(
             const stopSent = agentService.stopChat(targetConvId);
 
             if (!stopSent) {
-              const { updateConversationState, activeConversationId } = get();
+              const { updateConversationState } = get();
               updateConversationState(targetConvId, {
                 error: 'Failed to send stop request',
                 isStreaming: false,
                 streamStatus: 'error',
               });
-              if (targetConvId === activeConversationId) {
-                set({
-                  error: 'Failed to send stop request',
-                  isStreaming: false,
-                  streamStatus: 'error',
-                });
-              }
               return;
             }
 
             // Clean up delta buffers to prevent stale timers from firing
             clearDeltaBuffers(targetConvId);
 
-            // Update conversation-specific state
-            const { updateConversationState, activeConversationId } = get();
+            const { updateConversationState } = get();
             updateConversationState(targetConvId, {
               isStreaming: false,
               streamStatus: 'idle',
@@ -1360,19 +1271,6 @@ export const useAgentV3Store = create<AgentV3State>()(
               streamingAssistantContent: '',
               pendingToolsStack: [],
             });
-
-            // Also update global state if this is active conversation
-            if (targetConvId === activeConversationId) {
-              set({
-                isStreaming: false,
-                streamStatus: 'idle',
-                agentState: 'idle',
-                streamingThought: '',
-                isThinkingStreaming: false,
-                streamingAssistantContent: '',
-                pendingToolsStack: [],
-              });
-            }
           }
         },
 
@@ -1394,119 +1292,21 @@ export const useAgentV3Store = create<AgentV3State>()(
          * the recovery service will handle it when Worker restarts.
          */
         loadPendingHITL: async (conversationId) => {
-          logger.debug('[agentV3] Loading pending HITL requests for conversation:', conversationId);
-          try {
-            const response = await agentService.getPendingHITLRequests(conversationId);
-            logger.debug('[agentV3] Pending HITL response:', response);
-
-            if (response.requests.length === 0) {
-              logger.debug('[agentV3] No pending HITL requests');
-              return;
-            }
-
-            // Process each pending request and restore dialog state
-            for (const request of response.requests) {
-              logger.debug(
-                '[agentV3] Restoring pending HITL request:',
-                request.request_type,
-                request.id
-              );
-
-              switch (request.request_type) {
-                case 'clarification':
-                  set({
-                    pendingClarification: {
-                      request_id: request.id,
-                      question: request.question,
-                      clarification_type:
-                        (request.metadata?.clarification_type as ClarificationType) || 'custom',
-                      options: (request.options as ClarificationOption[] | undefined) || [],
-                      allow_custom: (request.metadata?.allow_custom as boolean) ?? true,
-                      context: request.context || {},
-                    },
-                    agentState: 'awaiting_input',
-                  });
-                  break;
-
-                case 'decision':
-                  set({
-                    pendingDecision: {
-                      request_id: request.id,
-                      question: request.question,
-                      decision_type:
-                        (request.metadata?.decision_type as DecisionType) || 'custom',
-                      options: (request.options as DecisionOption[] | undefined) || [],
-                      allow_custom: (request.metadata?.allow_custom as boolean) ?? true,
-                      context: request.context || {},
-                    },
-                    agentState: 'awaiting_input',
-                  });
-                  break;
-
-                case 'env_var': {
-                  // Use new format directly: name, label, required
-                  // Data comes from request.options (stored in DB)
-                  const fields = (request.options as EnvVarField[] | undefined) || [];
-
-                  set({
-                    pendingEnvVarRequest: {
-                      request_id: request.id,
-                      tool_name: (request.metadata?.tool_name as string) || 'unknown',
-                      fields: fields,
-                      message: request.question,
-                      context: request.context || {},
-                    },
-                    agentState: 'awaiting_input',
-                  });
-                  break;
-                }
-              }
-
-              // Only restore the first pending request
-              // (user should answer one at a time)
-              break;
-            }
-          } catch (error) {
-            console.error('[agentV3] Failed to load pending HITL requests:', error);
-            // Don't throw - this is a recovery mechanism, not critical
+          await useAgentHITLStore.getState().loadPendingHITL(conversationId);
+          const hs = useAgentHITLStore.getState();
+          if (hs.pendingClarification || hs.pendingDecision || hs.pendingEnvVarRequest) {
+            useExecutionStore.getState().setAgentExecutionState('awaiting_input');
           }
         },
 
-        togglePlanPanel: () => set((state) => ({ showPlanPanel: !state.showPlanPanel })),
-        toggleHistorySidebar: () =>
-          set((state) => ({ showHistorySidebar: !state.showHistorySidebar })),
-
-        setLeftSidebarWidth: (width: number) => set({ leftSidebarWidth: width }),
-        setRightPanelWidth: (width: number) => set({ rightPanelWidth: width }),
-
-        clearError: () => set({ error: null }),
+        clearError: () => useStreamingStore.getState().setAgentError(null),
 
         togglePinEvent: (eventId: string) => {
-          const { pinnedEventIds } = get();
-          const next = new Set(pinnedEventIds);
-          if (next.has(eventId)) {
-            next.delete(eventId);
-          } else {
-            next.add(eventId);
-          }
-          set({ pinnedEventIds: next });
+          useAgentHITLStore.getState().togglePinEvent(eventId);
         },
-      }),
-      {
-        name: 'agent-v3-storage',
-        partialize: (state) => ({
-          // Only persist UI preferences, not conversation/message data
-          showHistorySidebar: state.showHistorySidebar,
-          leftSidebarWidth: state.leftSidebarWidth,
-          rightPanelWidth: state.rightPanelWidth,
-        }),
-      }
-    )
+    })
   )
 );
 
 // Initialize tab sync on module load
 initTabSync();
-
-// Selector for messages (backward compatible with timeline-based rendering)
-export const useMessages = () => useAgentV3Store((state) => state.messages);

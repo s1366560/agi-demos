@@ -15,7 +15,9 @@
 
 import { useMemo } from 'react';
 
-import { useAgentV3Store } from '../stores/agentV3';
+import { useAgentState, useActiveToolCalls } from '../stores/agent/executionStore';
+import { useIsStreaming } from '../stores/agent/streamingStore';
+import { useTimeline } from '../stores/agent/timelineStore';
 import { useSandboxStore } from '../stores/sandbox';
 
 import { useAgentLifecycleState } from './useAgentLifecycleState';
@@ -273,10 +275,10 @@ export function useUnifiedAgentStatus({
   enabled = true,
 }: UseUnifiedAgentStatusOptions): UseUnifiedAgentStatusReturn {
   // Store selectors
-  const agentState = useAgentV3Store((s) => s.agentState);
-  const isStreamingAgent = useAgentV3Store((s) => s.isStreaming);
-  const activeToolCalls = useAgentV3Store((s) => s.activeToolCalls);
-  const timeline = useAgentV3Store((s) => s.timeline);
+  const agentState = useAgentState();
+  const isStreamingAgent = useIsStreaming();
+  const activeToolCalls = useActiveToolCalls();
+  const timeline = useTimeline();
 
   const activeSandboxId = useSandboxStore((s) => s.activeSandboxId);
 

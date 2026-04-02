@@ -5,17 +5,10 @@ import { useTranslation } from 'react-i18next';
 
 import { PushpinOutlined, PushpinFilled, DeleteOutlined } from '@ant-design/icons';
 import {
-  Card,
   Button,
   Input,
   Form,
-  Typography,
-  Empty,
   Popconfirm,
-  Space,
-  Divider,
-  Tag,
-  List,
 } from 'antd';
 
 import {
@@ -27,8 +20,6 @@ import {
 
 import { formatDateTime } from '@/utils/date';
 
-
-const { Title, Paragraph } = Typography;
 
 export interface PostDetailProps {
   tenantId: string;
@@ -56,16 +47,13 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
 
   if (!selectedPost) {
     return (
-      <Card className="flex h-full items-center justify-center shadow-sm bg-surface-muted">
-        <Empty
-          description={
-            <span className="text-text-muted">
-              {t('blackboard.selectPost', 'Select a post to view details')}
-            </span>
-          }
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </Card>
+      <div className="flex h-full items-center justify-center rounded-xl border border-border-light bg-surface-muted dark:border-border-dark dark:bg-surface-dark">
+        <div className="flex flex-col items-center justify-center p-8 text-center">
+          <p className="text-sm text-text-muted">
+            {t('blackboard.selectPost', 'Select a post to view details')}
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -79,29 +67,29 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
   };
 
   return (
-    <Card className="flex h-full flex-col shadow-sm" styles={{ body: { padding: 0 } }}>
-      <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col rounded-xl border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark">
+      <div className="flex h-full flex-col">
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div className="flex-1">
-              <Title level={4} className="!mb-2">
+              <h4 className="mb-2 text-lg font-semibold text-text-primary dark:text-text-inverse">
                 {selectedPost.title}
-              </Title>
-              <Space size="middle" className="text-sm text-text-secondary">
+              </h4>
+              <div className="flex items-center gap-3 text-sm text-text-secondary">
                 <span className="font-medium">{selectedPost.author_id}</span>
-                <span className="text-text-muted">•</span>
+                <span className="text-text-muted">&bull;</span>
                 <span>{formatDateTime(selectedPost.created_at)}</span>
                 {selectedPost.status === 'archived' && (
-                  <Tag color="default" className="!ml-0 !mr-0 border-border-light">
+                  <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] text-text-muted dark:bg-surface-dark-alt">
                     {t('blackboard.archived')}
-                  </Tag>
+                  </span>
                 )}
-              </Space>
+              </div>
             </div>
-            <Space className="shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               <Button
                 type="text"
-                className="hover:bg-surface-muted transition-colors"
+                className="transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 icon={selectedPost.is_pinned ? <PushpinFilled className="text-primary" /> : <PushpinOutlined className="text-text-muted hover:text-text-primary dark:hover:text-text-inverse" />}
                 onClick={() =>
                   selectedPost.is_pinned
@@ -117,91 +105,85 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
                 cancelText={t('common.no')}
                 okButtonProps={{ danger: true }}
               >
-                <Button 
-                  type="text" 
-                  danger 
-                  icon={<DeleteOutlined />} 
-                  title={t('blackboard.delete')} 
-                  className="hover:bg-error/10 transition-colors"
+                <Button
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                  title={t('blackboard.delete')}
+                  className="transition-colors hover:bg-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 />
               </Popconfirm>
-            </Space>
+            </div>
           </div>
 
-          <Paragraph className="whitespace-pre-wrap text-base text-text-secondary dark:text-text-muted">
+          <p className="whitespace-pre-wrap text-sm leading-7 text-text-secondary dark:text-text-muted">
             {selectedPost.content}
-          </Paragraph>
+          </p>
 
-          <Divider className="my-6" />
+          <hr className="my-6 border-border-light dark:border-border-dark" />
 
           <div>
-            <Title level={5} className="!mb-4 text-text-secondary">
+            <h5 className="mb-4 text-base font-semibold text-text-secondary">
               {t('blackboard.replies')} ({replies.length})
-            </Title>
+            </h5>
 
-            <List
-              dataSource={replies}
-              loading={loading && replies.length === 0}
-              locale={{ 
-                emptyText: (
-                  <Empty 
-                    description={
-                      <span className="text-text-muted">
-                        {t('blackboard.noReplies', 'No replies yet')}
-                      </span>
-                    } 
-                    image={Empty.PRESENTED_IMAGE_SIMPLE} 
-                  />
-                ) 
-              }}
-              renderItem={(reply) => (
-              <List.Item
-                  className="group px-4 py-4 hover:bg-surface-muted/80 rounded-lg transition-colors -mx-4"
-                  actions={[
-                    <Popconfirm
-                      key="delete"
-                      title={t('blackboard.deleteReplyConfirm', 'Delete this reply?')}
-                      onConfirm={() =>
-                        deleteReply(tenantId, projectId, workspaceId, selectedPost.id, reply.id)
-                      }
-                      okText={t('common.yes')}
-                      cancelText={t('common.no')}
-                      okButtonProps={{ danger: true }}
-                    >
-                      <Button 
-                        type="text" 
-                        danger 
-                        size="small" 
-                        icon={<DeleteOutlined />} 
-                        className="opacity-0 group-hover:opacity-100 hover:bg-error/10 transition-all"
-                        aria-label={t('blackboard.delete', 'Delete')}
-                      />
-                    </Popconfirm>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={
-                      <Space size="middle" className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">
-                          {reply.author_id}
-                        </span>
-                        <span className="text-text-muted">•</span>
-                        <span>{formatDateTime(reply.created_at)}</span>
-                      </Space>
-                    }
-                    description={
-                      <div className="mt-2 whitespace-pre-wrap text-text-secondary text-base">
-                        {reply.content}
+            {loading && replies.length === 0 ? (
+              <div className="flex justify-center p-8">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-light border-t-primary" />
+              </div>
+            ) : replies.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <p className="text-sm text-text-muted">
+                  {t('blackboard.noReplies', 'No replies yet')}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {replies.map((reply) => (
+                  <article
+                    key={reply.id}
+                    className="group -mx-4 rounded-lg px-4 py-4 transition-colors hover:bg-surface-muted/80 dark:hover:bg-surface-dark-alt/80"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-3 text-sm text-text-secondary">
+                          <span className="font-medium text-text-primary dark:text-text-inverse">
+                            {reply.author_id}
+                          </span>
+                          <span className="text-text-muted">&bull;</span>
+                          <span>{formatDateTime(reply.created_at)}</span>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-text-secondary dark:text-text-muted">
+                          {reply.content}
+                        </p>
                       </div>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
+                      <Popconfirm
+                        title={t('blackboard.deleteReplyConfirm', 'Delete this reply?')}
+                        onConfirm={() =>
+                          deleteReply(tenantId, projectId, workspaceId, selectedPost.id, reply.id)
+                        }
+                        okText={t('common.yes')}
+                        cancelText={t('common.no')}
+                        okButtonProps={{ danger: true }}
+                      >
+                        <Button
+                          type="text"
+                          danger
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          className="opacity-0 transition-all hover:bg-error/10 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          aria-label={t('blackboard.delete', 'Delete')}
+                        />
+                      </Popconfirm>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="border-t border-border-light bg-surface-muted p-4">
+        <div className="border-t border-border-light bg-surface-muted p-4 dark:border-border-dark dark:bg-surface-dark-alt">
           <Form form={form} onFinish={handleReply} className="flex items-start gap-2">
             <Form.Item
               name="content"
@@ -220,6 +202,6 @@ export const PostDetail: React.FC<PostDetailProps> = ({ tenantId, projectId, wor
           </Form>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };

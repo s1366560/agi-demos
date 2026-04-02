@@ -98,7 +98,7 @@ class CanvasErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-border-light bg-surface-muted p-8 text-center dark:border-border-dark dark:bg-background-dark">
+          <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-border-light bg-surface-muted p-8 text-center dark:border-border-dark dark:bg-background-dark">
             <div>
               <p className="text-sm text-text-secondary dark:text-text-muted">
                 Canvas rendering failed. Please refresh the page.
@@ -238,10 +238,10 @@ export function CentralBlackboardCanvas({
 
   return (
     <CanvasErrorBoundary>
-    <div className="relative min-h-[520px] overflow-hidden rounded-3xl border border-border-light bg-surface-light shadow-lg dark:border-border-dark dark:bg-background-dark sm:min-h-[620px]">
+    <div className="relative h-full overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-lg dark:border-border-dark dark:bg-background-dark">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-3 p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="pointer-events-auto max-w-3xl rounded-3xl border border-border-light bg-surface-light/96 px-5 py-4 shadow-md dark:border-border-dark dark:bg-surface-dark-alt/92">
+          <div className="pointer-events-auto max-w-3xl rounded-xl border border-border-light bg-surface-light/96 px-5 py-4 shadow-md dark:border-border-dark dark:bg-surface-dark-alt/92">
             <div className="text-[11px] uppercase tracking-[0.32em] text-primary/75 dark:text-primary/80">
               {t('blackboard.commandCenter', 'Workspace command center')}
             </div>
@@ -251,13 +251,7 @@ export function CentralBlackboardCanvas({
             <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary dark:text-text-muted">
               {t(
                 'blackboard.canvasHint',
-                'Use the central blackboard to review execution, align the team, and jump into shared tasks and discussions.'
-              )}
-            </p>
-            <p className="mt-3 text-xs leading-6 text-text-muted dark:text-text-muted">
-              {t(
-                'blackboard.quickActionsHint',
-                'The center tracks completion, discussions, and agent activity. Open it to edit tasks, reply to posts, and inspect topology.'
+                'Central view of tasks, discussions, and agent activity. Open the blackboard to edit.'
               )}
             </p>
           </div>
@@ -265,7 +259,7 @@ export function CentralBlackboardCanvas({
           <button
             type="button"
             onClick={onOpenBlackboard}
-            className="pointer-events-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-full border border-primary bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            className="pointer-events-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-full border border-primary bg-primary px-4 py-2 text-sm font-medium text-text-inverse transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             {t('blackboard.openBoard', 'Open central blackboard')}
             <ChevronRight size={16} />
@@ -280,7 +274,7 @@ export function CentralBlackboardCanvas({
               <div
                 key={card.key}
                 title={card.helper}
-                className="rounded-full border border-border-light bg-surface-light/96 px-3 py-2 shadow-sm dark:border-border-dark dark:bg-surface-dark-alt/90"
+                className="flex min-h-11 items-center rounded-full border border-border-light bg-surface-light/96 px-3 shadow-sm dark:border-border-dark dark:bg-surface-dark-alt/90"
               >
                 <div className="flex items-center gap-2">
                   <span className="rounded-full border border-border-light bg-surface-muted p-1.5 text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary">
@@ -301,6 +295,37 @@ export function CentralBlackboardCanvas({
         </div>
       </div>
 
+      {/* Mobile fallback: card list on small screens */}
+      <div className="space-y-3 p-4 sm:hidden">
+        {pixelActors.map((actor) => {
+          const palette = getNodePalette(actor.kind);
+          return (
+            <div
+              key={actor.key}
+              className="flex items-center gap-3 rounded-lg border border-border-light bg-surface-muted px-4 py-3 dark:border-border-dark dark:bg-surface-dark-alt"
+            >
+              <span
+                className="h-3 w-3 rounded-full"
+                style={{ backgroundColor: palette.stroke }}
+              />
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-text-primary dark:text-text-inverse">
+                  {truncateLabel(actor.title, 20)}
+                </div>
+                <div className="text-xs text-text-muted">
+                  {actor.statusLabel}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {pixelActors.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border-separator bg-surface-light p-4 text-center text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+            {t('blackboard.noAgents', 'No agents connected yet.')}
+          </div>
+        )}
+      </div>
+
       <svg
         className="hidden h-full w-full sm:block"
         aria-labelledby="central-blackboard-canvas-title central-blackboard-canvas-description"
@@ -314,38 +339,6 @@ export function CentralBlackboardCanvas({
           )}
         </desc>
 
-        {/* Mobile fallback: card list on small screens */}
-        <div className="block sm:hidden space-y-3 p-4">
-          {pixelActors.map((actor) => {
-            const palette = getNodePalette(actor.kind);
-            return (
-              <div
-                key={actor.key}
-                className="flex items-center gap-3 rounded-2xl border border-border-light bg-surface-muted px-4 py-3 dark:border-border-dark dark:bg-surface-dark-alt"
-              >
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: palette.stroke }}
-                />
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-text-primary dark:text-text-inverse">
-                    {truncateLabel(actor.title, 20)}
-                  </div>
-                  <div className="text-xs text-text-muted">
-                    {actor.statusLabel}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {pixelActors.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-border-separator bg-surface-light p-4 text-center text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-              {t('blackboard.noAgents', 'No agents connected yet.')}
-            </div>
-          )}
-        </div>
-
-        {/* SVG canvas on sm+ screens */}
         <defs>
           <filter id="board-node-glow" x="-200%" y="-200%" width="400%" height="400%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blurred" />
