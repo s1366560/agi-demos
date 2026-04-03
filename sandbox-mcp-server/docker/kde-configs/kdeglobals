@@ -2,6 +2,9 @@
 ColorScheme=BreezeLight
 Name=Breeze Light
 widgetStyle=Breeze
+TerminalApplication=konsole
+TerminalService=org.kde.konsole.desktop
+BrowserApplication=firefox.desktop
 
 [Icons]
 Theme=breeze
@@ -9,3 +12,16 @@ Theme=breeze
 [KDE]
 LookAndFeelPackage=org.kde.breeze.desktop
 SingleClick=false
+AnimationDurationFactor=0.5
+ScrollbarLeftClickNavigatesByPage=false
+
+[Locale]
+DateFormat=%Y-%m-%d
+DateFormatShort=%Y-%m-%d
+DateTimeDigitWrap=2000
+DecimalPlaces=2
+Language=zh_CN:en_US
+TimeFormat=%H:%M:%S
+
+[Toolbar style]
+ToolButtonStyle=TextBesideIcon

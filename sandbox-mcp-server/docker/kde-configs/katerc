@@ -1,0 +1,43 @@
+[General]
+RememberOpenedTabs=true
+ShowTabBar=true
+
+[MainWindow]
+ToolBarsMovable=Disabled
+
+[KTextEditor Document]
+Auto Detect Indent=true
+Encoding=UTF-8
+End of Line=Unix
+Indentation Width=4
+Line Length Limit=120
+Newline at End of File=true
+Show Spaces=0
+Show Tabs=true
+Tab Width=4
+
+[KTextEditor Editor]
+Encoding Prober Type=Universal
+
+[KTextEditor Renderer]
+Animate Bracket Matching=true
+Show Indentation Lines=true
+Word Wrap Marker=true
+
+[KTextEditor View]
+Allow Mark Menu=true
+Auto Brackets=true
+Auto Center Lines=0
+Bookmark Sorting=0
+Default Mark Type=1
+Dynamic Word Wrap=true
+Folding Bar=true
+Icon Bar=true
+Input Mode=0
+Line Modification=true
+Line Numbers=true
+Scroll Bar Marks=true
+Show Scrollbars=0
+Show Word Count=true
+Word Completion=true
+Word Completion Minimal Word Length=3

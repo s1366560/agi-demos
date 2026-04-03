@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+
+  <!-- Application Categories -->
+  <menu id="apps-development" label="Development">
+    <item label="Kate Text Editor">
+      <action name="Execute"><command>kate</command></action>
+    </item>
+    <item label="Konsole Terminal">
+      <action name="Execute"><command>konsole</command></action>
+    </item>
+    <separator/>
+    <item label="Python REPL">
+      <action name="Execute"><command>konsole -e python3</command></action>
+    </item>
+    <item label="Node.js REPL">
+      <action name="Execute"><command>konsole -e node</command></action>
+    </item>
+    <item label="IPython">
+      <action name="Execute"><command>konsole -e ipython</command></action>
+    </item>
+  </menu>
+
+  <menu id="apps-internet" label="Internet">
+    <item label="Firefox">
+      <action name="Execute"><command>firefox</command></action>
+    </item>
+    <item label="Google Chrome">
+      <action name="Execute"><command>google-chrome --no-sandbox</command></action>
+    </item>
+    <item label="Google Chrome (Incognito)">
+      <action name="Execute"><command>google-chrome --no-sandbox --incognito</command></action>
+    </item>
+  </menu>
+
+  <menu id="apps-office" label="Office">
+    <item label="LibreOffice Writer">
+      <action name="Execute"><command>libreoffice --writer</command></action>
+    </item>
+    <item label="LibreOffice Calc">
+      <action name="Execute"><command>libreoffice --calc</command></action>
+    </item>
+    <item label="LibreOffice Impress">
+      <action name="Execute"><command>libreoffice --impress</command></action>
+    </item>
+    <separator/>
+    <item label="Okular Document Viewer">
+      <action name="Execute"><command>okular</command></action>
+    </item>
+  </menu>
+
+  <menu id="apps-graphics" label="Graphics">
+    <item label="Gwenview Image Viewer">
+      <action name="Execute"><command>gwenview</command></action>
+    </item>
+    <item label="KolourPaint">
+      <action name="Execute"><command>kolourpaint</command></action>
+    </item>
+    <item label="Spectacle Screenshot">
+      <action name="Execute"><command>spectacle</command></action>
+    </item>
+    <separator/>
+    <item label="Color Chooser">
+      <action name="Execute"><command>kcolorchooser</command></action>
+    </item>
+  </menu>
+
+  <menu id="apps-multimedia" label="Multimedia">
+    <item label="VLC Media Player">
+      <action name="Execute"><command>vlc</command></action>
+    </item>
+    <item label="PulseAudio Volume Control">
+      <action name="Execute"><command>pavucontrol-qt</command></action>
+    </item>
+  </menu>
+
+  <menu id="apps-system" label="System">
+    <item label="System Monitor">
+      <action name="Execute"><command>plasma-systemmonitor</command></action>
+    </item>
+    <item label="Disk Usage (Filelight)">
+      <action name="Execute"><command>filelight</command></action>
+    </item>
+    <item label="Disk Usage (Baobab)">
+      <action name="Execute"><command>baobab</command></action>
+    </item>
+    <item label="Disks">
+      <action name="Execute"><command>gnome-disks</command></action>
+    </item>
+    <separator/>
+    <item label="System Log Viewer">
+      <action name="Execute"><command>ksystemlog</command></action>
+    </item>
+    <item label="htop">
+      <action name="Execute"><command>konsole -e htop</command></action>
+    </item>
+    <item label="System Settings">
+      <action name="Execute"><command>systemsettings</command></action>
+    </item>
+  </menu>
+
+  <menu id="apps-accessories" label="Accessories">
+    <item label="Calculator">
+      <action name="Execute"><command>kcalc</command></action>
+    </item>
+    <item label="Character Map">
+      <action name="Execute"><command>kcharselect</command></action>
+    </item>
+    <item label="Archive Manager">
+      <action name="Execute"><command>ark</command></action>
+    </item>
+    <item label="Dolphin File Manager">
+      <action name="Execute"><command>dolphin</command></action>
+    </item>
+  </menu>
+
+  <!-- Root Menu (Desktop Right-Click) -->
+  <menu id="root-menu" label="Applications">
+    <menu id="apps-development"/>
+    <menu id="apps-internet"/>
+    <menu id="apps-office"/>
+    <menu id="apps-graphics"/>
+    <menu id="apps-multimedia"/>
+    <menu id="apps-system"/>
+    <menu id="apps-accessories"/>
+    <separator/>
+    <item label="Terminal">
+      <action name="Execute"><command>konsole</command></action>
+    </item>
+    <item label="File Manager">
+      <action name="Execute"><command>dolphin</command></action>
+    </item>
+    <item label="Web Browser">
+      <action name="Execute"><command>firefox</command></action>
+    </item>
+    <separator/>
+    <item label="Reconfigure Openbox">
+      <action name="Reconfigure"/>
+    </item>
+  </menu>
+
+</openbox_menu>

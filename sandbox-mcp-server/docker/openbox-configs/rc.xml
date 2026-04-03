@@ -9,6 +9,7 @@
     <font place="InactiveWindow"><name>Noto Sans</name><size>10</size><weight>Bold</weight></font>
     <font place="MenuHeader"><name>Noto Sans</name><size>10</size><weight>Bold</weight></font>
     <font place="MenuItem"><name>Noto Sans</name><size>10</size><weight>Normal</weight></font>
+    <font place="OnScreenDisplay"><name>Noto Sans</name><size>10</size><weight>Bold</weight></font>
   </theme>
   <focus>
     <focusNew>yes</focusNew>
@@ -21,14 +22,366 @@
     <center>yes</center>
   </placement>
   <desktops>
-    <number>1</number>
+    <number>2</number>
+    <firstdesk>1</firstdesk>
+    <names>
+      <name>Desktop 1</name>
+      <name>Desktop 2</name>
+    </names>
+    <popupTime>800</popupTime>
   </desktops>
   <resize>
     <drawContents>yes</drawContents>
+    <popupShow>Nonpixel</popupShow>
+    <popupPosition>Center</popupPosition>
   </resize>
+  <margins>
+    <top>0</top>
+    <bottom>0</bottom>
+    <left>0</left>
+    <right>0</right>
+  </margins>
+
+  <!-- Keyboard Shortcuts -->
+  <keyboard>
+    <chainQuitKey>C-g</chainQuitKey>
+
+    <!-- Window Management -->
+    <keybind key="A-F4">
+      <action name="Close"/>
+    </keybind>
+    <keybind key="A-F9">
+      <action name="Iconify"/>
+    </keybind>
+    <keybind key="A-F10">
+      <action name="ToggleMaximize"/>
+    </keybind>
+    <keybind key="A-F11">
+      <action name="ToggleFullscreen"/>
+    </keybind>
+    <keybind key="A-F5">
+      <action name="UnmaximizeFull"/>
+    </keybind>
+
+    <!-- Alt+Tab Window Switching -->
+    <keybind key="A-Tab">
+      <action name="NextWindow">
+        <finalactions>
+          <action name="Focus"/>
+          <action name="Raise"/>
+          <action name="Unshade"/>
+        </finalactions>
+      </action>
+    </keybind>
+    <keybind key="A-S-Tab">
+      <action name="PreviousWindow">
+        <finalactions>
+          <action name="Focus"/>
+          <action name="Raise"/>
+          <action name="Unshade"/>
+        </finalactions>
+      </action>
+    </keybind>
+
+    <!-- Window Snapping (like Windows/KDE) -->
+    <!-- Super+Left: Snap to left half -->
+    <keybind key="W-Left">
+      <action name="UnmaximizeFull"/>
+      <action name="MoveResizeTo">
+        <x>0</x>
+        <y>0</y>
+        <width>50%</width>
+        <height>100%</height>
+      </action>
+    </keybind>
+    <!-- Super+Right: Snap to right half -->
+    <keybind key="W-Right">
+      <action name="UnmaximizeFull"/>
+      <action name="MoveResizeTo">
+        <x>50%</x>
+        <y>0</y>
+        <width>50%</width>
+        <height>100%</height>
+      </action>
+    </keybind>
+    <!-- Super+Up: Maximize -->
+    <keybind key="W-Up">
+      <action name="MaximizeFull"/>
+    </keybind>
+    <!-- Super+Down: Restore/Minimize -->
+    <keybind key="W-Down">
+      <action name="UnmaximizeFull"/>
+    </keybind>
+
+    <!-- Quarter Tiling -->
+    <!-- Ctrl+Super+Left/Up: Top-left quarter -->
+    <keybind key="C-W-1">
+      <action name="UnmaximizeFull"/>
+      <action name="MoveResizeTo">
+        <x>0</x>
+        <y>0</y>
+        <width>50%</width>
+        <height>50%</height>
+      </action>
+    </keybind>
+    <!-- Ctrl+Super+Right/Up: Top-right quarter -->
+    <keybind key="C-W-2">
+      <action name="UnmaximizeFull"/>
+      <action name="MoveResizeTo">
+        <x>50%</x>
+        <y>0</y>
+        <width>50%</width>
+        <height>50%</height>
+      </action>
+    </keybind>
+    <!-- Ctrl+Super+Left/Down: Bottom-left quarter -->
+    <keybind key="C-W-3">
+      <action name="UnmaximizeFull"/>
+      <action name="MoveResizeTo">
+        <x>0</x>
+        <y>50%</y>
+        <width>50%</width>
+        <height>50%</height>
+      </action>
+    </keybind>
+    <!-- Ctrl+Super+Right/Down: Bottom-right quarter -->
+    <keybind key="C-W-4">
+      <action name="UnmaximizeFull"/>
+      <action name="MoveResizeTo">
+        <x>50%</x>
+        <y>50%</y>
+        <width>50%</width>
+        <height>50%</height>
+      </action>
+    </keybind>
+
+    <!-- Desktop Switching -->
+    <keybind key="C-A-Left">
+      <action name="GoToDesktop"><to>left</to><wrap>yes</wrap></action>
+    </keybind>
+    <keybind key="C-A-Right">
+      <action name="GoToDesktop"><to>right</to><wrap>yes</wrap></action>
+    </keybind>
+    <keybind key="W-d">
+      <action name="ToggleShowDesktop"/>
+    </keybind>
+
+    <!-- Application Launchers -->
+    <keybind key="C-A-t">
+      <action name="Execute"><command>konsole</command></action>
+    </keybind>
+    <keybind key="W-e">
+      <action name="Execute"><command>dolphin</command></action>
+    </keybind>
+    <keybind key="W-t">
+      <action name="Execute"><command>kate</command></action>
+    </keybind>
+    <keybind key="W-b">
+      <action name="Execute"><command>firefox</command></action>
+    </keybind>
+    <keybind key="Print">
+      <action name="Execute"><command>spectacle</command></action>
+    </keybind>
+    <keybind key="W-l">
+      <action name="Execute"><command>plasma-systemmonitor</command></action>
+    </keybind>
+
+    <!-- Move/Resize with keyboard -->
+    <keybind key="A-F7">
+      <action name="Move"/>
+    </keybind>
+    <keybind key="A-F8">
+      <action name="Resize"/>
+    </keybind>
+
+    <!-- Window stacking -->
+    <keybind key="A-space">
+      <action name="ShowMenu"><menu>client-menu</menu></action>
+    </keybind>
+  </keyboard>
+
+  <!-- Mouse Bindings -->
+  <mouse>
+    <dragThreshold>1</dragThreshold>
+    <doubleClickTime>500</doubleClickTime>
+    <screenEdgeWarpTime>400</screenEdgeWarpTime>
+    <screenEdgeWarpMouse>false</screenEdgeWarpMouse>
+
+    <!-- Desktop mouse actions -->
+    <context name="Desktop">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>root-menu</menu></action>
+      </mousebind>
+      <mousebind button="Middle" action="Press">
+        <action name="ShowMenu"><menu>client-list-combined-menu</menu></action>
+      </mousebind>
+      <mousebind button="Up" action="Click">
+        <action name="GoToDesktop"><to>previous</to></action>
+      </mousebind>
+      <mousebind button="Down" action="Click">
+        <action name="GoToDesktop"><to>next</to></action>
+      </mousebind>
+    </context>
+
+    <!-- Titlebar actions -->
+    <context name="Titlebar">
+      <mousebind button="Left" action="Drag">
+        <action name="Move"/>
+      </mousebind>
+      <mousebind button="Left" action="DoubleClick">
+        <action name="ToggleMaximize"/>
+      </mousebind>
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>client-menu</menu></action>
+      </mousebind>
+      <mousebind button="Middle" action="Press">
+        <action name="Lower"/>
+        <action name="FocusToBottom"/>
+        <action name="Unfocus"/>
+      </mousebind>
+      <mousebind button="Up" action="Click">
+        <action name="if">
+          <shaded>no</shaded>
+          <then><action name="Shade"/></then>
+          <else><action name="Unshade"/></else>
+        </action>
+      </mousebind>
+    </context>
+
+    <!-- Window frame and border -->
+    <context name="Frame">
+      <mousebind button="A-Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+      </mousebind>
+      <mousebind button="A-Left" action="Drag">
+        <action name="Move"/>
+      </mousebind>
+      <mousebind button="A-Right" action="Drag">
+        <action name="Resize"/>
+      </mousebind>
+      <mousebind button="A-Middle" action="Press">
+        <action name="Lower"/>
+        <action name="FocusToBottom"/>
+        <action name="Unfocus"/>
+      </mousebind>
+    </context>
+
+    <!-- Titlebar buttons -->
+    <context name="Maximize">
+      <mousebind button="Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+        <action name="Unshade"/>
+      </mousebind>
+      <mousebind button="Left" action="Click">
+        <action name="ToggleMaximize"/>
+      </mousebind>
+    </context>
+    <context name="Close">
+      <mousebind button="Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+        <action name="Unshade"/>
+      </mousebind>
+      <mousebind button="Left" action="Click">
+        <action name="Close"/>
+      </mousebind>
+    </context>
+    <context name="Iconify">
+      <mousebind button="Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+      </mousebind>
+      <mousebind button="Left" action="Click">
+        <action name="Iconify"/>
+      </mousebind>
+    </context>
+    <context name="AllDesktops">
+      <mousebind button="Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+        <action name="Unshade"/>
+      </mousebind>
+      <mousebind button="Left" action="Click">
+        <action name="ToggleOmnipresent"/>
+      </mousebind>
+    </context>
+
+    <!-- Window client area -->
+    <context name="Client">
+      <mousebind button="Left" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+      </mousebind>
+      <mousebind button="Middle" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+      </mousebind>
+      <mousebind button="Right" action="Press">
+        <action name="Focus"/>
+        <action name="Raise"/>
+      </mousebind>
+    </context>
+  </mouse>
+
+  <!-- Desktop Right-Click Menu -->
+  <menu>
+    <file>menu.xml</file>
+    <hideDelay>200</hideDelay>
+    <middle>no</middle>
+    <submenuShowDelay>100</submenuShowDelay>
+    <submenuHideDelay>400</submenuHideDelay>
+    <showIcons>yes</showIcons>
+    <manageDesktops>yes</manageDesktops>
+  </menu>
+
   <applications>
     <application class="*">
       <decor>yes</decor>
+    </application>
+    <!-- Maximize Chrome/Chromium by default -->
+    <application class="Google-chrome">
+      <maximized>true</maximized>
+    </application>
+    <application class="Chromium-browser">
+      <maximized>true</maximized>
+    </application>
+    <!-- Kate opens centered -->
+    <application class="kate">
+      <position force="no">
+        <x>center</x>
+        <y>center</y>
+      </position>
+      <size>
+        <width>70%</width>
+        <height>80%</height>
+      </size>
+    </application>
+    <!-- KCalc stays small -->
+    <application class="kcalc">
+      <position force="no">
+        <x>center</x>
+        <y>center</y>
+      </position>
+    </application>
+    <!-- VLC media player -->
+    <application class="vlc">
+      <position force="no">
+        <x>center</x>
+        <y>center</y>
+      </position>
+    </application>
+    <!-- System Settings -->
+    <application class="systemsettings">
+      <position force="no">
+        <x>center</x>
+        <y>center</y>
+      </position>
+      <size>
+        <width>70%</width>
+        <height>80%</height>
+      </size>
     </application>
   </applications>
 </openbox_config>

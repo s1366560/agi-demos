@@ -22,6 +22,14 @@ user_session:
   idle_timeout: 0
   session_type: shared
 
+keyboard:
+  remap_keys: ""
+  ignore_numlock: false
+  raw_keyboard: false
+
+pointer:
+  enabled: true
+
 data_loss_prevention:
   clipboard:
     delay_between_operations: none
@@ -30,6 +38,8 @@ data_loss_prevention:
       - text/html
       - image/png
       - image/jpeg
+      - image/bmp
+      - text/rtf
     server_to_client:
       enabled: true
       primary_clipboard_enabled: true

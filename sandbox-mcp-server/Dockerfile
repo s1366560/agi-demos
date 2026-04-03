@@ -199,7 +199,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ====================
 # Install Playwright Browsers (webapp-testing skill)
 # ====================
-RUN playwright install chromium --with-deps
+RUN playwright install chromium --with-deps && \
+    playwright install firefox --with-deps
 
 # ====================
 # Install Google Chrome / Chromium (chrome-devtools-mcp and puppeteer)
@@ -227,6 +228,17 @@ ENV CHROME_PATH=/opt/google/chrome/chrome
 ENV PUPPETEER_EXECUTABLE_PATH=/opt/google/chrome/chrome
 ENV CHROME_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
 ENV PUPPETEER_ARGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
+
+# ====================
+# Install Firefox (use Playwright's Firefox — Ubuntu 25.04 only ships snap stubs)
+# ====================
+# Playwright already installed Firefox with deps; just symlink and create .desktop entry
+RUN set -eux; \
+    FF_BIN=$(find /root/.cache/ms-playwright -path '*/firefox/firefox' -type f | head -1); \
+    FF_DIR=$(dirname "$FF_BIN"); \
+    ln -sf "$FF_BIN" /usr/local/bin/firefox; \
+    printf '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Firefox\nGenericName=Web Browser\nComment=Mozilla Firefox Web Browser\nExec=%s %%U\nIcon=firefox\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;\nStartupNotify=true\n' \
+      "$FF_BIN" > /usr/share/applications/firefox.desktop
 
 # ====================
 # Setup Python Virtual Environment for Skills
@@ -282,6 +294,18 @@ RUN set -eux; \
     kde-plasma-desktop \
     # KDE core applications
     dolphin konsole \
+    # KDE productivity applications
+    kate \
+    gwenview \
+    okular okular-extra-backends \
+    ark \
+    kcalc \
+    kolourpaint \
+    filelight \
+    plasma-systemmonitor \
+    kcolorchooser \
+    kcharselect \
+    systemsettings \
     # KDE system utilities
     kde-spectacle ksystemlog \
     # KDE themes and visual polish
@@ -289,8 +313,14 @@ RUN set -eux; \
     plasma-workspace-wallpapers \
     # Sound (PulseAudio for KasmVNC audio streaming)
     pulseaudio pulseaudio-utils pavucontrol-qt \
+    # Media player
+    vlc \
     # X11 window manager (kwin-x11 removed in Ubuntu 25.04, openbox as fallback)
-    openbox \
+    openbox obconf \
+    # Archive format support
+    p7zip-full unrar-free lhasa \
+    # XDG integration
+    xdg-utils xdg-user-dirs desktop-file-utils shared-mime-info \
     # Utilities
     dbus-x11 \
     # SSL certificates (required by KasmVNC)
@@ -298,13 +328,25 @@ RUN set -eux; \
     # Fonts (including CJK support for Asian languages)
     fonts-freefont-ttf fonts-noto-color-emoji \
     fonts-liberation fonts-dejavu-core \
+    fonts-firacode \
     # Chinese fonts already installed in base layer, add input method
     ibus ibus-libpinyin \
     # System monitor
     htop \
+    # Clipboard tools
+    xclip xsel \
+    # Misc desktop utilities
+    baobab \
+    gnome-disk-utility \
     ; \
+    # Create XDG user directories
+    xdg-user-dirs-update --force 2>/dev/null || true; \
     # Refresh font cache for desktop
     fc-cache -fv; \
+    # Update MIME database
+    update-mime-database /usr/share/mime 2>/dev/null || true; \
+    # Update desktop database
+    update-desktop-database /usr/share/applications 2>/dev/null || true; \
     # Disable SDDM (not needed for VNC sessions)
     systemctl disable sddm 2>/dev/null || true; \
     rm -rf /var/lib/apt/lists/*
@@ -380,10 +422,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Configuration Files
 # ====================
 # KDE Plasma configs (Breeze theme defaults)
-COPY docker/kde-configs/ /etc/xdg/
+COPY docker/kde-configs/kdeglobals /etc/xdg/kdeglobals
+COPY docker/kde-configs/kwinrc /etc/xdg/kwinrc
+COPY docker/kde-configs/katerc /etc/xdg/katerc
+COPY docker/kde-configs/dolphinrc /etc/xdg/dolphinrc
+COPY docker/kde-configs/konsolerc /etc/xdg/konsolerc
+
+# Konsole profile
+RUN mkdir -p /usr/share/konsole
+COPY docker/kde-configs/Sandbox.profile /usr/share/konsole/Sandbox.profile
 
 # Openbox window manager config (Breeze-ob theme, used as X11 WM since kwin-x11 is removed)
 COPY docker/openbox-configs/rc.xml /etc/xdg/openbox/rc.xml
+COPY docker/openbox-configs/menu.xml /etc/xdg/openbox/menu.xml
 
 # KasmVNC configs
 COPY docker/kasmvnc-configs/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml

@@ -25,6 +25,7 @@ chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 mkdir -p "$XDG_CONFIG_HOME"
 mkdir -p "$XDG_DATA_HOME"
 mkdir -p "$XDG_CACHE_HOME"
+mkdir -p "$XDG_STATE_HOME"
 mkdir -p /tmp/.ICE-unix
 chmod 1777 /tmp/.ICE-unix 2>/dev/null || true
 
@@ -36,12 +37,206 @@ if [ -f /etc/xdg/kwinrc ] && [ ! -f "$XDG_CONFIG_HOME/kwinrc" ]; then
     cp /etc/xdg/kwinrc "$XDG_CONFIG_HOME/kwinrc" 2>/dev/null || true
 fi
 
+# Copy Openbox config to user directory on first run
+mkdir -p "$XDG_CONFIG_HOME/openbox"
+if [ ! -f "$XDG_CONFIG_HOME/openbox/rc.xml" ]; then
+    cp /etc/xdg/openbox/rc.xml "$XDG_CONFIG_HOME/openbox/rc.xml" 2>/dev/null || true
+fi
+if [ ! -f "$XDG_CONFIG_HOME/openbox/menu.xml" ]; then
+    cp /etc/xdg/openbox/menu.xml "$XDG_CONFIG_HOME/openbox/menu.xml" 2>/dev/null || true
+fi
+
+# Set up default MIME type associations
+mkdir -p "$XDG_CONFIG_HOME"
+if [ ! -f "$XDG_CONFIG_HOME/mimeapps.list" ]; then
+    cat > "$XDG_CONFIG_HOME/mimeapps.list" << 'MIMEEOF'
+[Default Applications]
+text/html=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/about=firefox.desktop
+application/pdf=org.kde.okular.desktop
+image/jpeg=org.kde.gwenview.desktop
+image/png=org.kde.gwenview.desktop
+image/gif=org.kde.gwenview.desktop
+image/bmp=org.kde.gwenview.desktop
+image/svg+xml=org.kde.gwenview.desktop
+image/webp=org.kde.gwenview.desktop
+text/plain=org.kde.kate.desktop
+text/x-python=org.kde.kate.desktop
+text/x-java=org.kde.kate.desktop
+text/x-c=org.kde.kate.desktop
+text/x-c++=org.kde.kate.desktop
+text/javascript=org.kde.kate.desktop
+text/x-shellscript=org.kde.kate.desktop
+text/x-makefile=org.kde.kate.desktop
+text/xml=org.kde.kate.desktop
+text/css=org.kde.kate.desktop
+text/markdown=org.kde.kate.desktop
+text/x-rust=org.kde.kate.desktop
+application/json=org.kde.kate.desktop
+application/yaml=org.kde.kate.desktop
+application/x-yaml=org.kde.kate.desktop
+application/toml=org.kde.kate.desktop
+application/xml=org.kde.kate.desktop
+inode/directory=org.kde.dolphin.desktop
+application/zip=org.kde.ark.desktop
+application/x-tar=org.kde.ark.desktop
+application/x-gzip=org.kde.ark.desktop
+application/x-bzip2=org.kde.ark.desktop
+application/x-xz=org.kde.ark.desktop
+application/x-7z-compressed=org.kde.ark.desktop
+application/x-rar=org.kde.ark.desktop
+application/vnd.oasis.opendocument.text=libreoffice-writer.desktop
+application/vnd.openxmlformats-officedocument.wordprocessingml.document=libreoffice-writer.desktop
+application/msword=libreoffice-writer.desktop
+application/vnd.oasis.opendocument.spreadsheet=libreoffice-calc.desktop
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet=libreoffice-calc.desktop
+application/vnd.ms-excel=libreoffice-calc.desktop
+application/vnd.oasis.opendocument.presentation=libreoffice-impress.desktop
+application/vnd.openxmlformats-officedocument.presentationml.presentation=libreoffice-impress.desktop
+application/vnd.ms-powerpoint=libreoffice-impress.desktop
+video/mp4=vlc.desktop
+video/x-matroska=vlc.desktop
+video/webm=vlc.desktop
+video/x-msvideo=vlc.desktop
+audio/mpeg=vlc.desktop
+audio/ogg=vlc.desktop
+audio/flac=vlc.desktop
+audio/wav=vlc.desktop
+MIMEEOF
+fi
+
+# Create XDG user directories
+mkdir -p "${HOME}/Desktop" "${HOME}/Documents" "${HOME}/Downloads" \
+    "${HOME}/Music" "${HOME}/Pictures" "${HOME}/Videos"
+
+# Create desktop shortcuts on first run
+if [ ! -f "${HOME}/Desktop/.shortcuts-created" ]; then
+    # Terminal
+    cat > "${HOME}/Desktop/konsole.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Terminal
+Comment=KDE Terminal Emulator
+Exec=konsole
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
+EOF
+    chmod +x "${HOME}/Desktop/konsole.desktop"
+
+    # File Manager
+    cat > "${HOME}/Desktop/dolphin.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Files
+Comment=File Manager
+Exec=dolphin
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileManager;
+EOF
+    chmod +x "${HOME}/Desktop/dolphin.desktop"
+
+    # Web Browser
+    cat > "${HOME}/Desktop/firefox.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Firefox
+Comment=Mozilla Firefox Web Browser
+Exec=firefox %U
+Icon=firefox
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;
+EOF
+    chmod +x "${HOME}/Desktop/firefox.desktop"
+
+    # Kate Text Editor
+    cat > "${HOME}/Desktop/kate.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Text Editor
+Comment=Kate Advanced Text Editor
+Exec=kate %U
+Icon=kate
+Terminal=false
+Categories=Development;TextEditor;
+MimeType=text/plain;
+EOF
+    chmod +x "${HOME}/Desktop/kate.desktop"
+
+    # LibreOffice Writer
+    cat > "${HOME}/Desktop/libreoffice-writer.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Writer
+Comment=LibreOffice Writer
+Exec=libreoffice --writer %U
+Icon=libreoffice-writer
+Terminal=false
+Categories=Office;WordProcessor;
+EOF
+    chmod +x "${HOME}/Desktop/libreoffice-writer.desktop"
+
+    # Calculator
+    cat > "${HOME}/Desktop/kcalc.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Calculator
+Comment=KDE Calculator
+Exec=kcalc
+Icon=accessories-calculator
+Terminal=false
+Categories=Utility;Calculator;
+EOF
+    chmod +x "${HOME}/Desktop/kcalc.desktop"
+
+    # Workspace folder
+    cat > "${HOME}/Desktop/workspace.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Link
+Name=Workspace
+Comment=Open workspace directory
+URL=/workspace
+Icon=folder-open
+EOF
+    chmod +x "${HOME}/Desktop/workspace.desktop"
+
+    # System Monitor
+    cat > "${HOME}/Desktop/sysmonitor.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=System Monitor
+Comment=KDE System Monitor
+Exec=plasma-systemmonitor
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+EOF
+    chmod +x "${HOME}/Desktop/sysmonitor.desktop"
+
+    touch "${HOME}/Desktop/.shortcuts-created"
+fi
+
 # Unset session management variables for VNC
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 export DESKTOP_SESSION=plasma
 export XDG_SESSION_TYPE=x11
 export XDG_CURRENT_DESKTOP=KDE
+
+# Set up PATH for development tools
+export PATH="/opt/skills-venv/bin:/usr/local/bin:/usr/bin:/bin:${HOME}/.local/bin:${PATH}"
 
 # Start D-Bus session bus
 mkdir -p "$XDG_RUNTIME_DIR"
@@ -55,6 +250,23 @@ fi
 
 # Start PulseAudio for audio streaming
 pulseaudio --start --log-target=syslog 2>/dev/null || true
+
+# Start iBus daemon for Chinese input method
+ibus-daemon -drx 2>/dev/null || true
+export GTK_IM_MODULE=ibus
+export QT_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+
+# Disable screensaver and power management (container environment)
+xset s off 2>/dev/null || true
+xset -dpms 2>/dev/null || true
+xset s noblank 2>/dev/null || true
+
+# Set cursor theme
+xsetroot -cursor_name left_ptr 2>/dev/null || true
+
+# Update MIME database for the user
+update-mime-database "$XDG_DATA_HOME/mime" 2>/dev/null &
 
 # Launch desktop session
 # Ubuntu 25.04 removed kwin-x11 (KDE Plasma 6 is Wayland-only).
