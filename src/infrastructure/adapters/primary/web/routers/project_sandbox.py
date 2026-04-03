@@ -596,7 +596,9 @@ async def _list_http_services(
                     _http_service_registry.pop(project_id, None)
             return services
         except Exception as e:
-            logger.warning("Failed to list HTTP services from Redis for project %s: %s", project_id, e)
+            logger.warning(
+                "Failed to list HTTP services from Redis for project %s: %s", project_id, e
+            )
 
     async with _http_service_registry_lock:
         project_services = _http_service_registry.get(project_id, {})
@@ -805,7 +807,9 @@ def _rewrite_http_service_content(
         proxied = _append_token(f"{proxy_prefix}{path_part}")
         return f"{attr}={quote}{proxied}"
 
-    content_str = re.sub(r'(href|src|action)=(["\'])/([^"\']*)', _rewrite_root_relative, content_str)
+    content_str = re.sub(
+        r'(href|src|action)=(["\'])/([^"\']*)', _rewrite_root_relative, content_str
+    )
 
     ws_with_token = _append_token(ws_proxy_prefix)
     content_str = content_str.replace(
@@ -827,8 +831,9 @@ async def _connect_http_service_upstream(ws_target: str, origin: str) -> Any:
     return await websockets.connect(
         ws_target,
         open_timeout=10,
-        ping_interval=30,
-        ping_timeout=10,
+        ping_interval=60,
+        ping_timeout=30,
+        close_timeout=5,
         max_size=2**23,
         additional_headers={"Origin": origin},
         proxy=None,
@@ -1455,7 +1460,9 @@ async def register_project_http_service(
             sandbox_id = info.sandbox_id
             sandbox_ip = await _resolve_sandbox_container_ip(adapter, sandbox_id)
             path_prefix = _normalize_path_prefix(request.path_prefix)
-            service_url = f"{request.internal_scheme}://{sandbox_ip}:{request.internal_port}{path_prefix}"
+            service_url = (
+                f"{request.internal_scheme}://{sandbox_ip}:{request.internal_port}{path_prefix}"
+            )
             preview_url = _build_http_preview_proxy_url(project_id, service_id)
             ws_preview_url = _build_http_preview_ws_proxy_url(project_id, service_id)
         else:
@@ -1806,7 +1813,13 @@ def _create_desktop_ssl_context() -> Any:
 
 
 async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
-    """Connect to KasmVNC upstream WebSocket with TLS and binary subprotocol."""
+    """Connect to KasmVNC upstream WebSocket with TLS and binary subprotocol.
+
+    Pings are disabled because KasmVNC (websockify) does not reliably respond to
+    WebSocket-level ping frames, causing spurious ``1011 keepalive ping timeout``
+    disconnects.  The VNC protocol itself generates constant bidirectional traffic,
+    so dead connections are detected naturally via TCP/TLS errors.
+    """
     import websockets
 
     ssl_context = _create_desktop_ssl_context()
@@ -1816,8 +1829,9 @@ async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
         additional_headers={"Origin": desktop_url},
         max_size=2**23,  # 8MB max frame for desktop data
         open_timeout=10,
-        ping_interval=30,
-        ping_timeout=10,
+        ping_interval=None,  # KasmVNC does not respond to WS pings
+        ping_timeout=None,
+        close_timeout=5,
         proxy=None,  # bypass http_proxy env var for local container connections
         ssl=ssl_context,
     )
@@ -1858,9 +1872,14 @@ async def _relay_binary_upstream_to_browser(websocket: WebSocket, upstream_ws: A
             else:
                 await websocket.send_text(message)
     except Exception as e:
-        logger.warning(
-            f"Upstream->browser relay ended after {frame_count} frames: {type(e).__name__}: {e}"
-        )
+        from websockets.exceptions import ConnectionClosedOK
+
+        if isinstance(e, ConnectionClosedOK):
+            logger.info(f"Upstream closed normally after {frame_count} frames")
+        else:
+            logger.warning(
+                f"Upstream->browser relay ended after {frame_count} frames: {type(e).__name__}: {e}"
+            )
 
 
 async def _connect_mcp_upstream(ws_target: str) -> Any:
@@ -1870,8 +1889,9 @@ async def _connect_mcp_upstream(ws_target: str) -> Any:
     return await websockets.connect(
         ws_target,
         open_timeout=10,
-        ping_interval=30,
-        ping_timeout=10,
+        ping_interval=60,
+        ping_timeout=30,
+        close_timeout=5,
         max_size=2**22,  # 4MB max frame for MCP messages
         proxy=None,  # bypass http_proxy env var for local container connections
     )
@@ -2005,7 +2025,9 @@ async def proxy_project_http_service(
 
     import httpx
 
-    query_pairs = [(k, v) for k, v in parse_qsl(request.url.query, keep_blank_values=True) if k != "token"]
+    query_pairs = [
+        (k, v) for k, v in parse_qsl(request.url.query, keep_blank_values=True) if k != "token"
+    ]
     target_url = _build_upstream_http_url(service_info.service_url, path, query_pairs)
 
     try:
@@ -2052,7 +2074,9 @@ async def proxy_project_http_service(
             return response_obj
     except httpx.RequestError as e:
         error_detail = str(e) or type(e).__name__
-        logger.error("HTTP service proxy error for %s (%s): %s", service_id, target_url, error_detail)
+        logger.error(
+            "HTTP service proxy error for %s (%s): %s", service_id, target_url, error_detail
+        )
         await _publish_http_service_error_event(
             event_publisher,
             project_id=project_id,
