@@ -1,9 +1,7 @@
 import React from 'react';
 
 import { Dropdown } from 'antd';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-
-import { ObjectiveProgress } from './ObjectiveProgress';
+import { Circle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import type { CyberObjective } from '@/types/workspace';
 
@@ -17,9 +15,7 @@ export interface ObjectiveCardProps {
 
 export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({ objective, onEdit, onDelete }) => {
   const isObjective = objective.obj_type === 'objective';
-  const badgeTone = isObjective
-    ? 'border-primary/20 bg-primary/8 text-primary dark:border-primary/30 dark:bg-primary/12 dark:text-primary-200'
-    : 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark';
+  const progressColor = isObjective ? 'bg-primary' : 'bg-success';
 
   const menuItems: NonNullable<MenuProps['items']> = [
     ...(onEdit
@@ -58,52 +54,51 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({ objective, onEdit,
   ];
 
   return (
-    <article className="w-full rounded-2xl border border-border-light bg-surface-light px-4 py-4 shadow-sm transition-colors hover:border-border-separator dark:border-border-dark dark:bg-surface-dark">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${badgeTone}`}
-            >
-              {isObjective ? 'Objective' : 'Key Result'}
-            </span>
-            <span className="text-xs text-text-muted dark:text-text-muted">
-              Created: {new Date(objective.created_at).toLocaleDateString()}
-            </span>
+    <article className="group rounded-xl border border-border-light bg-surface-light px-4 py-3 transition-colors hover:border-border-separator dark:border-border-dark dark:bg-surface-dark">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <Circle
+            size={16}
+            className="mt-0.5 flex-none text-primary dark:text-primary-200"
+          />
+          <div className="min-w-0 flex-1">
+            <h4 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
+              {objective.title}
+            </h4>
+            {objective.description && (
+              <p
+                className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary dark:text-text-muted"
+                title={objective.description}
+              >
+                {objective.description}
+              </p>
+            )}
           </div>
-          <h4 className="mt-3 break-words text-base font-semibold text-text-primary dark:text-text-inverse">
-            {objective.title}
-          </h4>
-          {objective.description && (
-            <p
-              className="mt-2 line-clamp-2 break-words text-sm leading-6 text-text-secondary dark:text-text-muted"
-              title={objective.description}
-            >
-              {objective.description}
-            </p>
-          )}
         </div>
 
-        <div className="flex items-start gap-3 sm:flex-none">
-          <ObjectiveProgress
-            progress={objective.progress}
-            size={44}
-            strokeWidth={4}
-            color={isObjective ? 'var(--color-primary)' : 'var(--color-success)'}
-          />
-
+        <div className="flex flex-none items-center gap-2">
+          <span className="text-sm font-medium text-text-secondary dark:text-text-muted">
+            {Math.round(objective.progress)}%
+          </span>
           {menuItems.length > 0 && (
             <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
               <button
                 type="button"
                 aria-label={`Open actions for ${objective.title}`}
-                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-border-light bg-surface-muted text-text-muted transition hover:border-border-separator hover:bg-surface-light hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-background-dark dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted opacity-0 transition hover:bg-surface-muted hover:text-text-primary group-hover:opacity-100 dark:text-text-muted dark:hover:bg-background-dark dark:hover:text-text-inverse"
               >
-                <MoreHorizontal size={18} />
+                <MoreHorizontal size={16} />
               </button>
             </Dropdown>
           )}
         </div>
+      </div>
+
+      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border-light dark:bg-border-dark">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
+          style={{ width: `${String(Math.min(100, Math.max(0, objective.progress)))}%` }}
+        />
       </div>
     </article>
   );

@@ -40,11 +40,18 @@ describe('TaskBoard', () => {
     expect(screen.getByText('Define scope')).toBeInTheDocument();
     expect(screen.queryByText('Ignore me')).not.toBeInTheDocument();
 
+    // Open the add form first (hidden by default in kanban view)
+    const addButtons = screen.getAllByRole('button', { name: 'workspaceDetail.taskBoard.add' });
+    await act(async () => {
+      fireEvent.click(addButtons[0]);
+    });
+
     await act(async () => {
       fireEvent.change(screen.getByLabelText('workspaceDetail.taskBoard.taskTitle'), {
         target: { value: 'Build MVP' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'workspaceDetail.taskBoard.add' }));
+      const submitButtons = screen.getAllByRole('button', { name: 'workspaceDetail.taskBoard.add' });
+      fireEvent.click(submitButtons[submitButtons.length - 1]);
     });
 
     expect(workspaceTaskService.create).toHaveBeenCalledWith('ws-1', { title: 'Build MVP' });

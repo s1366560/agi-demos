@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Skeleton } from 'antd';
-import { Plus } from 'lucide-react';
+import { Plus, Target } from 'lucide-react';
 
 import { ObjectiveCard } from './ObjectiveCard';
 
@@ -46,82 +46,76 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <Skeleton active paragraph={{ rows: 2 }} />
-        <Skeleton active paragraph={{ rows: 2 }} />
+      <div className="space-y-3">
+        <Skeleton active paragraph={{ rows: 1 }} />
+        <Skeleton active paragraph={{ rows: 1 }} />
       </div>
     );
   }
 
   return (
-    <section className="flex h-full w-full flex-col rounded-3xl border border-border-light bg-surface-muted/90 p-4 shadow-sm dark:border-border-dark dark:bg-surface-dark-alt sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
-            {t('workspaceDetail.objectives.title')}
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Target
+            size={16}
+            className="text-text-muted dark:text-text-muted"
+          />
+          <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
+            {t('blackboard.objectivesTitle', 'Goals')}
           </h3>
-          <p className="mt-1 max-w-2xl text-sm leading-7 text-text-secondary dark:text-text-muted">
-            {t(
-              'workspaceDetail.objectives.summary',
-              'Capture the big outcomes first, then keep supporting key results nested underneath.'
-            )}
-          </p>
         </div>
         {onCreate && (
           <Button
-            type="primary"
-            icon={<Plus size={16} />}
+            type="text"
+            size="small"
+            icon={<Plus size={14} />}
             onClick={onCreate}
-            className="min-h-11 self-start"
+            className="text-xs text-text-secondary hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse"
           >
             {t('workspaceDetail.objectives.addObjective')}
           </Button>
         )}
       </div>
 
-      <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
-        {topLevel.length === 0 ? (
-          <div className="flex h-full min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border-separator bg-surface-light px-6 py-8 text-center dark:border-border-dark dark:bg-surface-dark">
-            <div className="max-w-md">
-              <div className="text-base font-semibold text-text-primary dark:text-text-inverse">
-                {t('workspaceDetail.objectives.noObjectives')}
-              </div>
-              <p className="mt-2 text-sm leading-7 text-text-secondary dark:text-text-muted">
-                {t(
-                  'workspaceDetail.objectives.emptySummary',
-                  'Start with one shared objective so the blackboard has a clear outcome to anchor tasks and discussion.'
-                )}
-              </p>
-              {onCreate && (
-                <Button type="primary" onClick={onCreate} className="mt-4 min-h-11">
-                  {t('workspaceDetail.objectives.createFirst')}
-                </Button>
+      {topLevel.length === 0 ? (
+        <div className="flex items-center justify-center rounded-xl border border-dashed border-border-separator bg-surface-light/50 px-4 py-6 text-center dark:border-border-dark dark:bg-surface-dark/50">
+          <div className="max-w-sm">
+            <p className="text-sm text-text-secondary dark:text-text-muted">
+              {t(
+                'workspaceDetail.objectives.emptySummary',
+                'Start with one shared objective so the blackboard has a clear outcome to anchor tasks and discussion.'
+              )}
+            </p>
+            {onCreate && (
+              <Button type="primary" size="small" onClick={onCreate} className="mt-3">
+                {t('workspaceDetail.objectives.createFirst')}
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {topLevel.map((parent) => (
+            <div key={parent.id} className="space-y-2">
+              <ObjectiveCard objective={parent} onEdit={onEdit} onDelete={onDelete} />
+
+              {childrenMap.has(parent.id) && (
+                <div className="ml-4 space-y-2 border-l-2 border-border-light pl-3 dark:border-border-dark">
+                  {childrenMap.get(parent.id)?.map((child) => (
+                    <ObjectiveCard
+                      key={child.id}
+                      objective={child}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {topLevel.map((parent) => (
-              <div key={parent.id} className="space-y-3">
-                <ObjectiveCard objective={parent} onEdit={onEdit} onDelete={onDelete} />
-
-                {childrenMap.has(parent.id) && (
-                  <div className="ml-4 space-y-3 border-l border-border-light pl-4 transition-colors duration-200 dark:border-border-dark">
-                    {childrenMap.get(parent.id)?.map((child) => (
-                      <ObjectiveCard
-                        key={child.id}
-                        objective={child}
-                        onEdit={onEdit}
-                        onDelete={onDelete}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 };
