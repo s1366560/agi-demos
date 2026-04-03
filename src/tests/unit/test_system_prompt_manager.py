@@ -1001,3 +1001,56 @@ class TestPersonaIntegration:
     def test_custom_rules_only_loads_claude_md(self):
         """RULE_FILE_NAMES should only contain CLAUDE.md."""
         assert SystemPromptManager.RULE_FILE_NAMES == ["CLAUDE.md"]
+
+
+@pytest.mark.unit
+class TestAgentDefinitionPromptInjection:
+    """Test agent definition system prompt injection into assembled prompt."""
+
+    async def test_agent_definition_prompt_injected(self, tmp_path):
+        """Agent definition prompt should appear in the assembled system prompt."""
+        manager = SystemPromptManager(prompts_dir=tmp_path, project_root=tmp_path)
+        context = PromptContext(
+            model_provider=ModelProvider.DEFAULT,
+            mode=PromptMode.BUILD,
+            tool_definitions=[],
+            agent_definition_prompt="You are a Python expert. Always use type hints.",
+        )
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "<agent-definition>" in prompt
+        assert "You are a Python expert. Always use type hints." in prompt
+        assert "specialized agent" in prompt
+
+    async def test_no_agent_definition_prompt_when_none(self, tmp_path):
+        """No agent definition section when prompt is None."""
+        manager = SystemPromptManager(prompts_dir=tmp_path, project_root=tmp_path)
+        context = PromptContext(
+            model_provider=ModelProvider.DEFAULT,
+            mode=PromptMode.BUILD,
+            tool_definitions=[],
+            agent_definition_prompt=None,
+        )
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "<agent-definition>" not in prompt
+
+    async def test_agent_definition_prompt_before_tools(self, tmp_path):
+        """Agent definition should appear before the tools section."""
+        manager = SystemPromptManager(prompts_dir=tmp_path, project_root=tmp_path)
+        context = PromptContext(
+            model_provider=ModelProvider.DEFAULT,
+            mode=PromptMode.BUILD,
+            tool_definitions=[{"name": "test_tool", "description": "A test tool"}],
+            agent_definition_prompt="Custom agent instructions here.",
+        )
+
+        prompt = await manager.build_system_prompt(context)
+
+        agent_def_pos = prompt.find("<agent-definition>")
+        tools_pos = prompt.find("test_tool")
+        assert agent_def_pos != -1
+        assert tools_pos != -1
+        assert agent_def_pos < tools_pos

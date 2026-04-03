@@ -295,7 +295,11 @@ export type AgentEventType =
   | 'agent_completed' // Agent finished execution
   | 'agent_stopped' // Agent stopped (manually or by policy)
   | 'agent_message_sent' // Inter-agent message sent
-  | 'agent_message_received'; // Inter-agent message received
+  | 'agent_message_received' // Inter-agent message received
+  // Agent definition management events (self-creation tool)
+  | 'agent_definition_created' // New agent definition created by tool
+  | 'agent_definition_updated' // Agent definition updated by tool
+  | 'agent_definition_deleted'; // Agent definition deleted by tool
 
 /**
  * Base SSE event from agent

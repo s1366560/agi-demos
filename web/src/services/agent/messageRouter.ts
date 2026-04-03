@@ -666,5 +666,15 @@ export function routeToHandler(
     case 'graph_handoff':
       handler.onGraphHandoff?.(event as AgentEvent<GraphHandoffEventData>);
       break;
+    // Agent definition management events (self-creation tool)
+    case 'agent_definition_created':
+      handler.onAgentDefinitionCreated?.(event as AgentEvent);
+      break;
+    case 'agent_definition_updated':
+      handler.onAgentDefinitionUpdated?.(event as AgentEvent);
+      break;
+    case 'agent_definition_deleted':
+      handler.onAgentDefinitionDeleted?.(event as AgentEvent);
+      break;
   }
 }

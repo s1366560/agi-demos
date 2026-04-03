@@ -231,6 +231,10 @@ export interface AgentStreamHandler {
   // Memory handlers (auto-recall / auto-capture)
   onMemoryRecalled?: ((event: AgentEvent<MemoryRecalledEventData>) => void) | undefined;
   onMemoryCaptured?: ((event: AgentEvent<MemoryCapturedEventData>) => void) | undefined;
+  // Agent definition management handlers (self-creation tool)
+  onAgentDefinitionCreated?: ((event: AgentEvent) => void) | undefined;
+  onAgentDefinitionUpdated?: ((event: AgentEvent) => void) | undefined;
+  onAgentDefinitionDeleted?: ((event: AgentEvent) => void) | undefined;
   // Terminal handlers
   onComplete?: ((event: AgentEvent<CompleteEventData>) => void) | undefined;
   onError?: ((event: AgentEvent<ErrorEventData>) => void) | undefined;

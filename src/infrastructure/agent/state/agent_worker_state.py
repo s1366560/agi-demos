@@ -695,6 +695,9 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             logger.debug("Agent Worker: AgentOrchestrator not set, skipping agent tools")
             return
 
+        from src.infrastructure.agent.tools.agent_definition_tool import (
+            configure_agent_definition_manage,
+        )
         from src.infrastructure.agent.tools.agent_history import configure_agent_history
         from src.infrastructure.agent.tools.agent_list import configure_agent_list
         from src.infrastructure.agent.tools.agent_send import configure_agent_send
@@ -711,6 +714,7 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         configure_agent_sessions(orchestrator=orchestrator)
         configure_agent_history(orchestrator=orchestrator)
         configure_agent_stop(orchestrator=orchestrator)
+        configure_agent_definition_manage(orchestrator=orchestrator)
 
         registry = get_registered_tools()
         agent_tool_names = (
@@ -720,6 +724,7 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "agent_sessions",
             "agent_history",
             "agent_stop",
+            "agent_definition_manage",
         )
         for name in agent_tool_names:
             if name in registry:

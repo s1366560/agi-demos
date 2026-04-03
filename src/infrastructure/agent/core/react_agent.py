@@ -1158,7 +1158,7 @@ class ReActAgent:
         except Exception as e:
             logger.debug(f"[ReActAgent] Background conversation indexing failed: {e}")
 
-    async def _build_system_prompt(
+    async def _build_system_prompt(  # noqa: PLR0913
         self,
         user_query: str,
         conversation_context: list[dict[str, str]],
@@ -1172,6 +1172,7 @@ class ReActAgent:
         memory_context: str | None = None,
         selection_context: ToolSelectionContext | None = None,
         heartbeat_prompt: str | None = None,
+        agent_definition_prompt: str | None = None,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -1285,6 +1286,7 @@ class ReActAgent:
             persona=persona,
             heartbeat_prompt=heartbeat_prompt,
             workspace_context=workspace_context,
+            agent_definition_prompt=agent_definition_prompt,
         )
 
         # Use SystemPromptManager to build the prompt
@@ -1295,6 +1297,35 @@ class ReActAgent:
                 subagent=subagent,
             ),
         )
+
+    async def _load_agent_definition_prompt(self, agent_id: str) -> str | None:
+        """Load agent definition's system_prompt by ID via the global orchestrator.
+
+        Returns the custom system prompt string, or None if not found.
+        """
+        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+
+        orchestrator = get_agent_orchestrator()
+        if orchestrator is None:
+            logger.debug("[ReActAgent] No orchestrator available, skipping agent definition lookup")
+            return None
+
+        try:
+            agent_def = await orchestrator.get_agent(agent_id)
+            if agent_def is None:
+                logger.warning("[ReActAgent] Agent definition not found: %s", agent_id)
+                return None
+            if agent_def.system_prompt:
+                logger.info(
+                    "[ReActAgent] Injecting agent definition prompt: id=%s name=%s (%d chars)",
+                    agent_def.id,
+                    agent_def.name,
+                    len(agent_def.system_prompt),
+                )
+                return agent_def.system_prompt
+        except Exception:
+            logger.exception("[ReActAgent] Failed to load agent definition: %s", agent_id)
+        return None
 
     async def _stream_detect_plan_mode(
         self,
@@ -2311,6 +2342,11 @@ class ReActAgent:
                 heartbeat_prompt = hb_result.prompt
                 logger.info("[ReActAgent] Heartbeat due, injecting heartbeat prompt into context")
 
+        # Phase 7c: Agent definition lookup (custom system prompt injection)
+        agent_definition_prompt: str | None = None
+        if agent_id:
+            agent_definition_prompt = await self._load_agent_definition_prompt(agent_id)
+
         # Phase 8: System prompt building
         system_prompt = await self._build_system_prompt(
             processed_user_message,
@@ -2325,6 +2361,7 @@ class ReActAgent:
             memory_context=memory_context,
             selection_context=selection_context,
             heartbeat_prompt=heartbeat_prompt,
+            agent_definition_prompt=agent_definition_prompt,
         )
 
         # Phase 9: Context building

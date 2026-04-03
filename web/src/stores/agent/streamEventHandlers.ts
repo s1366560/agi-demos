@@ -8,6 +8,7 @@
 import { isCanvasPreviewable } from '../../utils/filePreview';
 import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
+import { useAgentDefinitionStore } from '../agentDefinitions';
 import { useBackgroundStore } from '../backgroundStore';
 import { useCanvasStore } from '../canvasStore';
 import { useContextStore } from '../contextStore';
@@ -1796,6 +1797,20 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
       });
+    },
+
+    // ===== Agent Definition Management Handlers =====
+
+    onAgentDefinitionCreated: () => {
+      useAgentDefinitionStore.getState().listDefinitions();
+    },
+
+    onAgentDefinitionUpdated: () => {
+      useAgentDefinitionStore.getState().listDefinitions();
+    },
+
+    onAgentDefinitionDeleted: () => {
+      useAgentDefinitionStore.getState().listDefinitions();
     },
 
     // ===== Multi-Agent Spawn Tree Handlers =====

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_role import AgentRoleResolver
@@ -28,6 +28,9 @@ from src.infrastructure.agent.orchestration.session_registry import (
 )
 from src.infrastructure.agent.orchestration.spawn_manager import SpawnManager
 from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +69,14 @@ class AgentOrchestrator:
         spawn_manager: SpawnManager,
         message_bus: AgentMessageBusPort,
         spawn_validator: SpawnValidator | None = None,
+        db_session: AsyncSession | None = None,
     ) -> None:
         self._agent_registry = agent_registry
         self._session_registry = session_registry
         self._spawn_manager = spawn_manager
         self._message_bus = message_bus
         self._spawn_validator = spawn_validator
+        self._db_session = db_session
 
     async def spawn_agent(
         self,
@@ -335,3 +340,64 @@ class AgentOrchestrator:
             session_id=session_id,
             limit=limit,
         )
+
+    # ------------------------------------------------------------------
+    # Agent Definition CRUD (used by agent_definition_manage tool)
+    # ------------------------------------------------------------------
+
+    async def get_agent(self, agent_id: str) -> Agent | None:
+        """Get an agent definition by ID."""
+        return await self._agent_registry.get_by_id(agent_id)
+
+    async def get_agent_by_name(
+        self,
+        tenant_id: str,
+        name: str,
+    ) -> Agent | None:
+        """Get an agent definition by name within a tenant."""
+        return await self._agent_registry.get_by_name(tenant_id, name)
+
+    async def create_agent(self, agent: Agent) -> Agent:
+        """Create a new agent definition.
+
+        Validates name uniqueness within the tenant before persisting.
+        """
+        existing = await self._agent_registry.get_by_name(
+            agent.tenant_id,
+            agent.name,
+        )
+        if existing is not None:
+            raise ValueError(f"Agent with name '{agent.name}' already exists (id={existing.id})")
+        created = await self._agent_registry.create(agent)
+        if self._db_session is not None:
+            await self._db_session.commit()
+        logger.info(
+            "Agent definition created: id=%s name=%s tenant=%s",
+            created.id,
+            created.name,
+            created.tenant_id,
+        )
+        return created
+
+    async def update_agent(self, agent: Agent) -> Agent:
+        """Update an existing agent definition."""
+        existing = await self._agent_registry.get_by_id(agent.id)
+        if existing is None:
+            raise ValueError(f"Agent not found: {agent.id}")
+        updated = await self._agent_registry.update(agent)
+        if self._db_session is not None:
+            await self._db_session.commit()
+        logger.info("Agent definition updated: id=%s", updated.id)
+        return updated
+
+    async def delete_agent(self, agent_id: str) -> bool:
+        """Delete an agent definition by ID."""
+        existing = await self._agent_registry.get_by_id(agent_id)
+        if existing is None:
+            raise ValueError(f"Agent not found: {agent_id}")
+        deleted = await self._agent_registry.delete(agent_id)
+        if deleted and self._db_session is not None:
+            await self._db_session.commit()
+        if deleted:
+            logger.info("Agent definition deleted: id=%s", agent_id)
+        return deleted

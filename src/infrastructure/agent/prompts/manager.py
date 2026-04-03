@@ -91,6 +91,9 @@ class PromptContext:
     # Dynamic workspace context (members, agents, messages, blackboard posts)
     workspace_context: str | None = None
 
+    # Agent definition system prompt (when user selects a specific agent)
+    agent_definition_prompt: str | None = None
+
     @property
     def is_last_step(self) -> bool:
         """Check if this is the last allowed step."""
@@ -180,7 +183,18 @@ class SystemPromptManager:
         # 3.5. Persona/soul sections (after base, before tools)
         self._build_persona_sections(sections, context)
 
-        # 3.6. Heartbeat section (periodic self-check prompt)
+        # 3.6. Agent definition prompt (when user selects a specific agent)
+        if context.agent_definition_prompt:
+            sections.append(
+                "# Agent Definition\n\n"
+                "<agent-definition>\n"
+                "You are operating as a specialized agent. "
+                "Follow the instructions below as your primary directive.\n\n"
+                f"{context.agent_definition_prompt}\n"
+                "</agent-definition>"
+            )
+
+        # 3.7. Heartbeat section (periodic self-check prompt)
         heartbeat_section = self._build_heartbeat_section(context)
         if heartbeat_section:
             sections.append(heartbeat_section)

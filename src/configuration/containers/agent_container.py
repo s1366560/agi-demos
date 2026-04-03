@@ -540,6 +540,7 @@ class AgentContainer:
             spawn_manager=self.spawn_manager(),
             message_bus=message_bus,
             spawn_validator=self.spawn_validator(),
+            db_session=self._db,
         )
         return self._agent_orchestrator_instance
 

@@ -461,6 +461,7 @@ class AgentRuntimeBootstrapper:
                     session_registry=_session_registry,
                     spawn_manager=SpawnManager(session_registry=_session_registry),
                     message_bus=RedisAgentMessageBusAdapter(_redis),
+                    db_session=_db_session,
                 )
                 set_agent_orchestrator(_orchestrator)
                 logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")
