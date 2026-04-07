@@ -668,6 +668,31 @@ const BASE_URL = '/api/v1/mcp/apps';
 const BASE_URL = '/mcp/apps';
 ```
 
+**⚠️ CRITICAL: Trailing Slashes on Collection Endpoints:**
+
+FastAPI's `redirect_slashes` returns `307 Temporary Redirect` when a URL lacks
+a trailing slash. In dev mode (Vite proxy on port 3000 → backend on port 8000),
+the 307 `Location` header points to `http://localhost:8000/...` (cross-origin).
+The browser strips the `Authorization` header on cross-origin redirects per HTTP spec,
+causing a 401 → `clearAuthState()` → redirect to `/login`.
+
+```tsx
+// ❌ WRONG - triggers 307 redirect, strips auth header, causes login redirect
+list: (params) => httpClient.get(BASE_URL, { params }),
+create: (data) => httpClient.post(BASE_URL, data),
+
+// ✅ CORRECT - direct hit, no redirect
+list: (params) => httpClient.get(`${BASE_URL}/`, { params }),
+create: (data) => httpClient.post(`${BASE_URL}/`, data),
+
+// ✅ Paths with sub-resources are fine (no redirect)
+getById: (id: string) => httpClient.get(`${BASE_URL}/${id}`),
+```
+
+**Rule**: Any `httpClient` call that hits a collection root (list/create) MUST
+include a trailing slash. Calls with path segments (`/${id}`, `/${id}/action`)
+are unaffected.
+
 **Component Template:**
 ```tsx
 import React from 'react';
@@ -885,6 +910,7 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | **Tool event pattern** | Tools emit side-effect events via `_pending_events` list + `consume_pending_events()`. The processor must explicitly consume and yield them after `tool_def.execute()` |
 | **Logging** | `main.py` has `logging.basicConfig()`. Without it, all `src.*` loggers silently discard output. `LOG_LEVEL` env var controls level |
 | **Ray Actor code** | Runs in Docker containers with baked-in images. Local code changes require image rebuild to take effect in actors. **Dev mode**: Use `make ray-up-dev` for live code reloading |
+| **Trailing slashes** | Frontend service collection URLs (list/create) MUST include trailing slashes (`${BASE_URL}/`). Without them, FastAPI 307 redirects strip the Authorization header via cross-origin redirect (Vite 3000 → backend 8000), causing silent 401 → login redirect |
 
 <!-- gitnexus:start -->
 # GitNexus MCP
