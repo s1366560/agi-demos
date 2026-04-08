@@ -588,3 +588,15 @@ class WorkspaceManager:
         """Invalidate the cache, forcing reload on next access."""
         self._cache.clear()
         self._cache_valid = False
+
+    def for_agent(self, agent_id: str | None) -> "WorkspaceManager":
+        """Clone this manager for a specific agent workspace scope."""
+        return WorkspaceManager(
+            workspace_dir=self._workspace_dir,
+            tenant_workspace_dir=self._tenant_workspace_dir,
+            max_chars_per_file=self._max_chars_per_file,
+            max_chars_total=self._max_chars_total,
+            templates_dir=self._templates_dir,
+            enabled=self._enabled,
+            agent_id=agent_id,
+        )

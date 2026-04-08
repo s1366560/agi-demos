@@ -2,22 +2,23 @@
  * Layout Mode Store
  *
  * Manages the workspace layout mode for the agent chat page.
- * Four modes optimize for different workflows:
+ * Five modes optimize for different workflows:
  * - chat: Full chat view, optional plan panel
  * - task: Split view with task/plan panel (50/50)
  * - code: Split view with terminal (50/50)
  * - canvas: Split view with canvas/artifact editor (35/65)
+ * - collab: Split view with workspace group chat (55/45)
  */
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-export type LayoutMode = 'chat' | 'task' | 'code' | 'canvas';
+export type LayoutMode = 'chat' | 'task' | 'code' | 'canvas' | 'collab';
 
 interface LayoutModeState {
   /** Current layout mode */
   mode: LayoutMode;
-  /** Split ratio for task/code/canvas modes (0-1, represents left panel proportion) */
+  /** Split ratio for task/code/canvas/collab modes (0-1, represents left panel proportion) */
   splitRatio: number;
   /** Whether the right panel is visible in chat mode */
   chatPanelVisible: boolean;
@@ -42,6 +43,7 @@ const MODE_DEFAULTS: Record<
   task: { splitRatio: 0.5, rightPanelTab: 'plan' },
   code: { splitRatio: 0.5, rightPanelTab: 'terminal' },
   canvas: { splitRatio: 0.35, rightPanelTab: 'plan' },
+  collab: { splitRatio: 0.55, rightPanelTab: 'plan' },
 };
 
 export const useLayoutModeStore = create<LayoutModeState>()(

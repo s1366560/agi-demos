@@ -52,6 +52,7 @@ class ToolContext:
     project_id: str = ""
     tenant_id: str = ""
     user_id: str = ""
+    runtime_context: dict[str, Any] = field(default_factory=dict)
 
     # Internal event collection (pipeline reads these)
     _pending_events: list[Any] = field(default_factory=list, repr=False)

@@ -735,7 +735,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             {
               path: `/tenant/${tenantId}/agents`,
               icon: <Headphones size={16} />,
-              label: t('nav.agents', 'Agents'),
+              label: t('nav.agentConfiguration', 'Agent Configuration'),
             },
             {
               path: `/tenant/${tenantId}/skills`,

@@ -35,5 +35,9 @@ class InstanceRepository(ABC):
         """List all instances deployed to a cluster."""
 
     @abstractmethod
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        """Count all instances in a tenant."""
+
+    @abstractmethod
     async def delete(self, entity_id: str) -> bool:
         """Delete an instance. Returns True if deleted, False if not found."""

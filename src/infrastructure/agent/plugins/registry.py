@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 PluginToolFactory = Callable[["PluginToolBuildContext"], dict[str, Any] | Awaitable[dict[str, Any]]]
 ChannelReloadHook = Callable[["ChannelReloadContext"], None | Awaitable[None]]
 ChannelAdapterFactory = Callable[["ChannelAdapterBuildContext"], Any | Awaitable[Any]]
-PluginHookHandler = Callable[[Mapping[str, Any]], None | Awaitable[None]]
+PluginHookHandler = Callable[
+    [Mapping[str, Any]],
+    Mapping[str, Any] | None | Awaitable[Mapping[str, Any] | None],
+]
 
 # Well-known hook names recognised by the agent runtime.
 # Plugins may register handlers for any string, but these names have
@@ -173,6 +176,28 @@ class PluginDiagnostic:
     level: str = "warning"
 
 
+@dataclass(frozen=True)
+class RegisteredHookMetadata:
+    """Catalog metadata for a registered plugin hook."""
+
+    plugin_name: str
+    hook_name: str
+    display_name: str
+    description: str | None = None
+    default_priority: int = 100
+    default_enabled: bool = True
+    default_settings: dict[str, Any] = field(default_factory=dict)
+    settings_schema: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class HookDispatchResult:
+    """Hook execution result including the final payload and diagnostics."""
+
+    payload: dict[str, Any]
+    diagnostics: list[PluginDiagnostic] = field(default_factory=list)
+
+
 class AgentPluginRegistry:
     """Registry for plugin-provided capabilities."""
 
@@ -183,6 +208,7 @@ class AgentPluginRegistry:
         self._channel_adapter_factories: dict[str, tuple[str, ChannelAdapterFactory]] = {}
         self._channel_type_metadata: dict[str, ChannelTypeConfigMetadata] = {}
         self._hook_handlers: dict[str, dict[str, tuple[int, PluginHookHandler]]] = {}
+        self._hook_metadata: dict[tuple[str, str], RegisteredHookMetadata] = {}
         self._commands: dict[str, tuple[str, PluginCommandHandler]] = {}
         self._services: dict[str, tuple[str, Any]] = {}
         self._providers: dict[str, tuple[str, Any]] = {}
@@ -366,6 +392,11 @@ class AgentPluginRegistry:
         handler: PluginHookHandler,
         *,
         priority: int = 100,
+        display_name: str | None = None,
+        description: str | None = None,
+        default_enabled: bool = True,
+        default_settings: dict[str, Any] | None = None,
+        settings_schema: dict[str, Any] | None = None,
         overwrite: bool = False,
     ) -> None:
         """Register a named runtime hook handler.
@@ -387,6 +418,16 @@ class AgentPluginRegistry:
                     f"Hook already registered for plugin={plugin_name}: {normalized_hook_name}"
                 )
             bucket[plugin_name] = (priority, handler)
+            self._hook_metadata[(plugin_name, normalized_hook_name)] = RegisteredHookMetadata(
+                plugin_name=plugin_name,
+                hook_name=normalized_hook_name,
+                display_name=display_name or normalized_hook_name.replace("_", " ").title(),
+                description=description,
+                default_priority=priority,
+                default_enabled=default_enabled,
+                default_settings=dict(default_settings or {}),
+                settings_schema=dict(settings_schema or {}),
+            )
 
     def register_command(
         self,
@@ -486,6 +527,12 @@ class AgentPluginRegistry:
                 hook_name: dict(handlers) for hook_name, handlers in self._hook_handlers.items()
             }
 
+    def list_hook_catalog(self) -> list[RegisteredHookMetadata]:
+        """Return catalog metadata for all registered runtime hooks."""
+        with self._lock:
+            metadata = list(self._hook_metadata.values())
+        return sorted(metadata, key=lambda item: (item.plugin_name, item.hook_name))
+
     @staticmethod
     def list_well_known_hooks() -> frozenset[str]:
         """Return the set of well-known hook names with documented semantics."""
@@ -571,37 +618,68 @@ class AgentPluginRegistry:
         with self._lock:
             return {event: dict(handlers) for event, handlers in self._lifecycle_hooks.items()}
 
-    async def notify_hook(
+    async def apply_hook(
         self,
         hook_name: str,
         *,
         payload: Mapping[str, Any] | None = None,
-    ) -> list[PluginDiagnostic]:
-        """Invoke named hook handlers sorted by priority and collect diagnostics.
-
-        Handlers with a *lower* numeric priority run first.  Handlers sharing
-        the same priority execute in registration order.
-        """
+        runtime_overrides: list[Mapping[str, Any]] | None = None,
+    ) -> HookDispatchResult:
+        """Invoke named hook handlers and return the mutated payload."""
         normalized_name = (hook_name or "").strip().lower()
         if not normalized_name:
-            return []
+            return HookDispatchResult(payload=dict(payload or {}))
 
         with self._lock:
             raw_handlers = dict(self._hook_handlers.get(normalized_name, {}))
+            raw_metadata = {
+                plugin_name: self._hook_metadata.get((plugin_name, normalized_name))
+                for plugin_name in raw_handlers
+            }
 
-        # Sort by priority (lower = earlier).  dict ordering is stable so equal
-        # priorities preserve registration order.
+        override_map: dict[tuple[str, str], dict[str, Any]] = {}
+        for raw_override in runtime_overrides or []:
+            plugin_name = str(raw_override.get("plugin_name", "")).strip().lower()
+            override_hook_name = str(raw_override.get("hook_name", "")).strip().lower()
+            if not plugin_name or not override_hook_name:
+                continue
+            override_map[(plugin_name, override_hook_name)] = dict(raw_override)
+
         sorted_handlers = sorted(
             raw_handlers.items(),
-            key=lambda item: item[1][0],
+            key=lambda item: (
+                override_map.get((item[0], normalized_name), {}).get("priority", item[1][0]),
+            ),
         )
 
+        current_payload = dict(payload or {})
         diagnostics: list[PluginDiagnostic] = []
-        for plugin_name, (_priority, handler) in sorted_handlers:
+        for plugin_name, (default_priority, handler) in sorted_handlers:
+            override = override_map.get((plugin_name, normalized_name), {})
+            if override and not bool(override.get("enabled", True)):
+                continue
+
+            metadata = raw_metadata.get(plugin_name)
+            effective_settings = {}
+            if metadata is not None:
+                effective_settings.update(metadata.default_settings)
+            override_settings = override.get("settings")
+            if isinstance(override_settings, dict):
+                effective_settings.update(override_settings)
+
+            hook_payload = dict(current_payload)
+            hook_payload["hook_settings"] = effective_settings
+            hook_payload["hook_identity"] = {
+                "plugin_name": plugin_name,
+                "hook_name": normalized_name,
+                "priority": override.get("priority", default_priority),
+            }
             try:
-                result = handler(dict(payload or {}))
+                result = handler(hook_payload)
                 if inspect.isawaitable(result):
-                    await result
+                    result = await result
+                if isinstance(result, Mapping):
+                    current_payload = dict(result)
             except Exception as exc:
                 diagnostics.append(
                     PluginDiagnostic(
@@ -611,7 +689,23 @@ class AgentPluginRegistry:
                         level="error",
                     )
                 )
-        return diagnostics
+
+        return HookDispatchResult(payload=current_payload, diagnostics=diagnostics)
+
+    async def notify_hook(
+        self,
+        hook_name: str,
+        *,
+        payload: Mapping[str, Any] | None = None,
+        runtime_overrides: list[Mapping[str, Any]] | None = None,
+    ) -> list[PluginDiagnostic]:
+        """Invoke named hook handlers and discard payload mutations."""
+        result = await self.apply_hook(
+            hook_name,
+            payload=payload,
+            runtime_overrides=runtime_overrides,
+        )
+        return result.diagnostics
 
     async def execute_command(
         self,
@@ -913,6 +1007,7 @@ class AgentPluginRegistry:
             self._channel_adapter_factories.clear()
             self._channel_type_metadata.clear()
             self._hook_handlers.clear()
+            self._hook_metadata.clear()
             self._commands.clear()
             self._services.clear()
             self._providers.clear()
@@ -972,6 +1067,21 @@ class AgentPluginRegistry:
 _global_plugin_registry = AgentPluginRegistry()
 
 
+def _register_builtin_hooks() -> None:
+    """Ensure built-in runtime hooks are registered exactly once."""
+    if any(
+        entry.plugin_name == "sisyphus-runtime"
+        for entry in _global_plugin_registry.list_hook_catalog()
+    ):
+        return
+    from src.infrastructure.agent.sisyphus.runtime_plugin import (
+        register_builtin_sisyphus_plugin,
+    )
+
+    register_builtin_sisyphus_plugin(_global_plugin_registry)
+
+
 def get_plugin_registry() -> AgentPluginRegistry:
     """Get the global plugin registry singleton."""
+    _register_builtin_hooks()
     return _global_plugin_registry

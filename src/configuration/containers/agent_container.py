@@ -443,16 +443,49 @@ class AgentContainer:
 
         self._spawn_manager_instance = SpawnManager(
             session_registry=self.agent_session_registry(),
+            run_registry=self.subagent_run_registry(),
         )
         return self._spawn_manager_instance
 
     def subagent_run_registry(self) -> Any:
-        """Get SubAgentRunRegistry singleton (in-memory run tracking)."""
+        """Get shared SubAgentRunRegistry singleton for trace and runtime access."""
         if self._subagent_run_registry_instance is not None:
             return self._subagent_run_registry_instance
-        from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+        from src.infrastructure.agent.subagent.run_registry import (
+            get_shared_subagent_run_registry,
+        )
 
-        self._subagent_run_registry_instance = SubAgentRunRegistry()
+        retention_seconds = (
+            self._settings.agent_subagent_terminal_retention_seconds if self._settings else 86400
+        )
+        self._subagent_run_registry_instance = get_shared_subagent_run_registry(
+            persistence_path=(
+                getattr(self._settings, "agent_subagent_run_registry_path", None)
+                if self._settings
+                else None
+            ),
+            postgres_persistence_dsn=(
+                getattr(self._settings, "agent_subagent_run_postgres_dsn", None)
+                if self._settings
+                else None
+            ),
+            sqlite_persistence_path=(
+                getattr(self._settings, "agent_subagent_run_sqlite_path", None)
+                if self._settings
+                else None
+            ),
+            redis_cache_url=(
+                getattr(self._settings, "agent_subagent_run_redis_cache_url", None)
+                if self._settings
+                else None
+            ),
+            redis_cache_ttl_seconds=(
+                getattr(self._settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
+                if self._settings
+                else 60
+            ),
+            terminal_retention_seconds=retention_seconds,
+        )
         return self._subagent_run_registry_instance
 
     def spawn_policy(self) -> Any:
@@ -526,6 +559,9 @@ class AgentContainer:
         """Get AgentOrchestrator singleton for multi-agent coordination."""
         if self._agent_orchestrator_instance is not None:
             return self._agent_orchestrator_instance
+        from src.application.services.agent.runtime_bootstrapper import (
+            AgentRuntimeBootstrapper,
+        )
         from src.infrastructure.agent.orchestration.orchestrator import (
             AgentOrchestrator,
         )
@@ -534,6 +570,7 @@ class AgentContainer:
         assert message_bus is not None, (
             "agent_message_bus_factory must be set for AgentOrchestrator"
         )
+        runtime_bootstrapper = AgentRuntimeBootstrapper()
         self._agent_orchestrator_instance = AgentOrchestrator(
             agent_registry=self.agent_registry(),
             session_registry=self.agent_session_registry(),
@@ -541,6 +578,7 @@ class AgentContainer:
             message_bus=message_bus,
             spawn_validator=self.spawn_validator(),
             db_session=self._db,
+            spawn_executor=runtime_bootstrapper.launch_spawned_agent_session,
         )
         return self._agent_orchestrator_instance
 

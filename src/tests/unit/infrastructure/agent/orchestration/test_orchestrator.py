@@ -204,6 +204,50 @@ class TestSpawnAgent:
         assert send_kwargs["from_agent_id"] == "parent-1"
         assert send_kwargs["to_agent_id"] == "target-1"
 
+    async def test_spawn_agent_invokes_spawn_executor_with_child_request(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        spawn_executor = AsyncMock()
+        fx.orchestrator = AgentOrchestrator(
+            fx.agent_registry,
+            fx.session_registry,
+            fx.spawn_manager,
+            fx.message_bus,
+            spawn_executor=spawn_executor,
+        )
+        fx.agent_registry.get_by_id = AsyncMock(
+            return_value=_make_agent(name="child-agent", display_name="Child Agent")
+        )
+        fx.spawn_manager.get_spawn_depth = AsyncMock(return_value=0)
+        fx.spawn_manager.max_spawn_depth = 3
+        fx.spawn_manager.register_spawn = AsyncMock(return_value=_make_spawn_record())
+        fx.session_registry.register = AsyncMock(return_value=_make_session())
+        fx.message_bus.send_message = AsyncMock(return_value="msg-id-1")
+
+        await fx.orchestrator.spawn_agent(
+            parent_agent_id="parent-1",
+            target_agent_id="target-1",
+            message="Do this task",
+            mode=SpawnMode.RUN,
+            parent_session_id="parent-sess",
+            project_id="proj-1",
+            conversation_id="conv-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+        )
+
+        spawn_executor.assert_awaited_once()
+        request = spawn_executor.await_args.args[0]
+        assert request.parent_agent_id == "parent-1"
+        assert request.child_agent_id == "target-1"
+        assert request.child_agent_name == "Child Agent"
+        assert request.parent_session_id == "parent-sess"
+        assert request.project_id == "proj-1"
+        assert request.tenant_id == "tenant-1"
+        assert request.user_id == "user-1"
+        assert request.conversation_id == "conv-1"
+        assert request.message == "Do this task"
+
     async def test_spawn_agent_not_found_raises_value_error(self, fx: _OrchestratorFixture) -> None:
         """Agent not found raises ValueError."""
         # Arrange

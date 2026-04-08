@@ -188,6 +188,7 @@
     "analytics": "Analytics",
     "tasks": "Tasks",
     "agents": "Agent Management",
+    "agentConfiguration": "Agent Configuration",
     "subagents": "Agents",
     "skills": "Skills",
     "plugins": "Plugins",
@@ -839,6 +840,195 @@
         "paid": "Paid",
         "pending": "Pending",
         "failed": "Failed"
+      }
+    },
+    "agentDashboard": {
+      "eyebrow": "Tenant runtime policy",
+      "activeRuns": "{{count}} active runs",
+      "title": "Agent Configuration",
+      "description": "Set the model, execution guardrails, tool boundaries, and runtime hooks that shape every Sisyphus turn in this tenant.",
+      "scopeTitle": "Scope",
+      "scopeDescription": "This page stays focused on live configuration surfaces. Definitions, skills, bindings, and plugins are linked as supporting systems instead of duplicated as mock dashboard widgets.",
+      "noTenantTitle": "Select a tenant to edit agent policy",
+      "noTenantDescription": "The configuration surface is scoped per tenant. Open it from a tenant route to review or edit the active runtime policy.",
+      "feedbackEyebrow": "Operational feedback",
+      "feedbackTitle": "Validate policy changes against live runs",
+      "traceLoadErrorTitle": "We could not load runtime traces",
+      "traceLoadErrorDescription": "Retry to fetch recent runs for this tenant before validating a policy change.",
+      "retryTraceLoad": "Retry trace load",
+      "traceChainLoadErrorTitle": "Failed to load trace details",
+      "traceChainLoadErrorDescription": "The selected trace exists, but its detail chain could not be loaded right now.",
+      "retryTraceChainLoad": "Retry loading trace",
+      "loadingTracesTitle": "Loading runtime traces",
+      "loadingTracesDescription": "Fetching recent runs for this tenant to validate the current runtime policy.",
+      "noTracesTitle": "No runtime traces yet",
+      "noTracesDescription": "Start a conversation in Agent Workspace to confirm how the current model, tool policy, and runtime hooks behave in practice.",
+      "openWorkspace": "Open Agent Workspace",
+      "selectedTrace": "Selected trace",
+      "clearSelectedTrace": "Clear selected trace",
+      "relatedSurfaces": "Related surfaces",
+      "editingModelTitle": "Editing model",
+      "editingModelApplies": "Tenant policy applies broadly unless a narrower workspace binding overrides it.",
+      "editingModelHooks": "Runtime hooks are stored only when they diverge from catalog defaults.",
+      "editingModelTraces": "Use live traces to verify that a policy change actually changes behavior.",
+      "related": {
+        "agentWorkspaceDescription": "Run a conversation and inspect how the current runtime policy behaves.",
+        "skillsDescription": "Manage reusable skill packs that the runtime policy can allow or restrict.",
+        "agentDefinitionsDescription": "Update agent prompts, boundaries, and capabilities available to this tenant.",
+        "agentBindingsDescription": "Choose where definitions are attached across projects and workspaces.",
+        "pluginsDescription": "Review runtime plugins and the hook implementations backing this policy.",
+        "mcpServersDescription": "Audit connected tool surfaces that affect agent execution at runtime."
+      }
+    },
+    "agentConfigView": {
+      "loading": "Loading tenant policy",
+      "loadError": "Failed to load configuration",
+      "errorTitle": "We couldn't load the tenant policy",
+      "emptyTitle": "No tenant policy was returned",
+      "emptyDescription": "The runtime returned an empty configuration payload. Reload to try again.",
+      "title": "Tenant runtime policy",
+      "description": "Every tenant conversation inherits this policy unless a narrower binding overrides it. Model selection, reasoning flags, tool boundaries, and runtime hook overrides all land here.",
+      "defaultBanner": "This tenant is inheriting the platform default. Save any change to create a custom policy for this tenant.",
+      "actions": {
+        "reload": "Reload configuration",
+        "edit": "Edit configuration"
+      },
+      "badges": {
+        "defaultPolicy": "Using default policy",
+        "customPolicy": "Custom tenant policy",
+        "multiAgentEnabled": "Multi-agent enabled",
+        "multiAgentDisabled": "Multi-agent disabled"
+      },
+      "summary": {
+        "model": "Model",
+        "modelHint": "Provider-prefixed model in use",
+        "temperature": "Temperature",
+        "temperatureHint": "Lower values keep responses more deterministic",
+        "toolPolicy": "Tool policy",
+        "toolPolicyInherited": "Inherited",
+        "toolPolicyOverrides": "{{count}} overrides",
+        "toolPolicyHint": "Explicit allow / deny rules stored for this tenant",
+        "hookOverrides": "Hook overrides",
+        "hookOverridesDefault": "Catalog defaults",
+        "hookOverridesHint": "Runtime hooks only appear here when this tenant diverges"
+      },
+      "sections": {
+        "modelReasoning": {
+          "title": "Model & reasoning",
+          "description": "How Sisyphus plans and reasons before it reaches for tools.",
+          "modelIdentifier": "Model identifier",
+          "temperature": "Temperature",
+          "temperatureHint": "0 is more deterministic, 2 is more exploratory.",
+          "patternLearning": "Pattern learning",
+          "multiLevelThinking": "Multi-level thinking"
+        },
+        "executionGuardrails": {
+          "title": "Execution guardrails",
+          "description": "Limits that shape runtime depth, tool execution, and the last persisted update.",
+          "maxWorkPlanSteps": "Max work plan steps",
+          "maxWorkPlanStepsValue": "{{count}} steps",
+          "maxWorkPlanStepsHint": "Upper bound for the planner before it needs to simplify.",
+          "toolTimeout": "Tool timeout",
+          "toolTimeoutValue": "{{count}}s",
+          "toolTimeoutHint": "Default timeout applied to tool execution.",
+          "lastUpdated": "Last updated"
+        },
+        "toolPolicy": {
+          "title": "Tool policy",
+          "description": "Explicit allow / deny lists. Empty lists mean the runtime stays on its default tool boundary.",
+          "enabledTools": "Enabled tools",
+          "enabledToolsEmpty": "No explicit allowlist. Runtime uses its default enabled tools.",
+          "disabledTools": "Disabled tools",
+          "disabledToolsEmpty": "No explicit denylist stored for this tenant."
+        },
+        "runtimeHooks": {
+          "title": "Runtime hooks",
+          "description": "Per-tenant runtime hook overrides. Hooks only appear here when the tenant diverges from the shared catalog defaults.",
+          "empty": "No explicit hook overrides are stored. The tenant is currently inheriting the built-in runtime hook catalog defaults.",
+          "noCustomSettings": "No custom settings",
+          "settingsHidden": "Hook settings are visible to tenant admins only.",
+          "priority": "Priority {{value}}",
+          "inherit": "inherit"
+        }
+      }
+    },
+    "agentConfigEditor": {
+      "eyebrow": "Tenant runtime policy",
+      "title": "Edit configuration",
+      "description": "Update the model, execution guardrails, tool policy, and runtime hook overrides applied across this tenant.",
+      "loadError": "Failed to load configuration",
+      "saveError": "Failed to save configuration",
+      "saveErrorToast": "We could not save the tenant policy. Try again.",
+      "saveSuccess": "Tenant policy saved.",
+      "validationError": "Some configuration values are invalid. Review the highlighted fields.",
+      "accessDenied": "You do not have access to edit this tenant policy.",
+      "alertTitle": "We couldn't save the tenant policy",
+      "discardChangesTitle": "Discard changes?",
+      "discardChangesDescription": "You have unsaved edits in the tenant policy.",
+      "actions": {
+        "save": "Save configuration",
+        "close": "Close",
+        "discard": "Discard changes",
+        "keepEditing": "Keep editing"
+      },
+      "sections": {
+        "modelReasoning": {
+          "title": "Model & reasoning",
+          "description": "Set the primary model and the reasoning features that shape every response.",
+          "modelIdentifier": "Model identifier",
+          "modelIdentifierHint": "Use the exact provider-prefixed model name the runtime should call.",
+          "modelIdentifierRequired": "Please enter a model identifier.",
+          "modelIdentifierPlaceholder": "openai/gpt-5.4",
+          "temperature": "Temperature",
+          "temperatureHint": "Lower values keep responses more deterministic.",
+          "temperatureRequired": "Please set a temperature.",
+          "temperatureRange": "Temperature must stay between 0 and 2.",
+          "patternLearning": "Pattern learning",
+          "patternLearningDescription": "Let successful workflows teach the runtime reusable patterns.",
+          "patternLearningToggle": "Toggle pattern learning",
+          "multiLevelThinking": "Multi-level thinking",
+          "multiLevelThinkingDescription": "Allow the planner to reason across both work plans and individual steps.",
+          "multiLevelThinkingToggle": "Toggle multi-level thinking"
+        },
+        "executionGuardrails": {
+          "title": "Execution guardrails",
+          "description": "Set planning depth and execution timeouts for the tenant runtime.",
+          "maxWorkPlanSteps": "Max work plan steps",
+          "maxWorkPlanStepsHint": "Upper bound for the planner before it needs to simplify.",
+          "maxWorkPlanStepsRequired": "Please set a max work plan step count.",
+          "minValue": "Value must be at least 1.",
+          "toolTimeout": "Tool timeout (seconds)",
+          "toolTimeoutHint": "Default timeout applied to tool execution.",
+          "toolTimeoutRequired": "Please set a tool timeout.",
+          "toolTimeoutMin": "Value must be at least 1 second.",
+          "multiAgentRouting": "Multi-agent routing",
+          "multiAgentRoutingDescription": "This is controlled at the system level through"
+        },
+        "toolPolicy": {
+          "title": "Tool policy",
+          "description": "Use explicit allow and deny lists when this tenant needs a narrower tool boundary than the shared runtime default.",
+          "enabledTools": "Enabled tools",
+          "enabledToolsHint": "Comma-separated internal tool names. Leave empty to inherit the runtime default.",
+          "disabledTools": "Disabled tools",
+          "disabledToolsHint": "Comma-separated internal tool names to explicitly deny for this tenant.",
+          "toolPlaceholder": "tool_name, another_tool"
+        }
+      },
+      "runtimeHooks": {
+        "title": "Runtime hooks",
+        "description": "Only save a hook when this tenant needs to diverge from the shared catalog defaults.",
+        "catalogUnavailableTitle": "Runtime hook catalog unavailable",
+        "catalogUnavailableDescription": "Runtime hook catalog is currently unavailable. You can still update the rest of this tenant policy.",
+        "override": "Override",
+        "catalogDefault": "Catalog default",
+        "defaultHookDescription": "This hook applies runtime reminders during execution.",
+        "useDefaults": "Use defaults",
+        "useDefaultsAria": "Use defaults for {{name}}",
+        "priority": "Priority",
+        "priorityAria": "{{name}} priority",
+        "catalogDefaultPriority": "Catalog default: {{value}}",
+        "noExtraSettings": "This hook exposes no extra settings beyond enablement and priority.",
+        "empty": "No runtime hooks are currently exposed for tenant customization."
       }
     },
     "instances": {

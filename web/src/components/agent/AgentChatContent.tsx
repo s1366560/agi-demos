@@ -37,6 +37,8 @@ import {
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
+import { useTenantStore } from '@/stores/tenant';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
@@ -66,6 +68,8 @@ import { SplitPaneLayout } from './SplitPaneLayout';
 import { SandboxSection } from './SandboxSection';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
+
+import { WorkspaceGroupChatPanel } from '../workspace/chat/WorkspaceGroupChatPanel';
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
 
@@ -116,6 +120,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Use external project ID if provided, otherwise fall back to URL param
     const queryProjectId = searchParams.get('projectId');
+    const queryWorkspaceId = searchParams.get('workspaceId');
+    // Also check navigationQuery prop for workspaceId (e.g. restored from localStorage)
+    const navQueryWorkspaceId = useMemo(() => {
+      if (!navigationQuery) return null;
+      return new URLSearchParams(navigationQuery).get('workspaceId');
+    }, [navigationQuery]);
+    const storeWorkspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id ?? null);
+    // Local override: set by collab panel workspace picker (no URL change)
+    const [collabWorkspaceOverride, setCollabWorkspaceOverride] = useState<string | null>(null);
+    const effectiveWorkspaceId =
+      collabWorkspaceOverride || queryWorkspaceId || navQueryWorkspaceId || storeWorkspaceId;
     const effectiveNavigationQuery =
       navigationQuery || (queryProjectId ? `projectId=${queryProjectId}` : undefined);
     const navigationSuffix = effectiveNavigationQuery ? `?${effectiveNavigationQuery}` : '';
@@ -217,7 +232,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Get tenant ID from current project
     const currentProject = useProjectStore((state) => state.currentProject);
-    const tenantId = currentProject?.tenant_id || 'default-tenant';
+    const currentTenant = useTenantStore((state) => state.currentTenant);
+    const tenantId = currentProject?.tenant_id || currentTenant?.id || '';
 
     // Note: HITL is now rendered inline in the message timeline via InlineHITLCard.
     // The useUnifiedHITL hook and modal rendering have been removed.
@@ -227,13 +243,22 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       mode: layoutMode,
       splitRatio,
       setSplitRatio,
+      setMode: setLayoutMode,
     } = useLayoutModeStore(
       useShallow((state) => ({
         mode: state.mode,
         splitRatio: state.splitRatio,
         setSplitRatio: state.setSplitRatio,
+        setMode: state.setMode,
       }))
     );
+
+    // Auto-fallback: if collab mode is active but no workspace is available, revert to chat
+    useEffect(() => {
+      if (layoutMode === 'collab' && !effectiveWorkspaceId) {
+        setLayoutMode('chat');
+      }
+    }, [layoutMode, effectiveWorkspaceId, setLayoutMode]);
 
     // Tasks from active conversation state (separate selector to avoid re-renders)
     const EMPTY_TASKS: AgentTask[] = useMemo(() => [], []);
@@ -750,7 +775,7 @@ ${content}`;
               )}
             </div>
           )}
-          <LayoutModeSelector />
+          <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />
         </div>
       </div>
     );
@@ -866,6 +891,30 @@ ${content}`;
           handleAccentColor="violet"
           leftMinWidth="280px"
           rightMinWidth="320px"
+          className={className}
+          statusBar={statusBarWithLayout}
+        />
+      );
+    }
+
+    // Collab mode: chat + workspace group chat
+    if (layoutMode === 'collab') {
+      return (
+        <SplitPaneLayout
+          leftContent={chatColumn}
+          rightContent={
+            <WorkspaceGroupChatPanel
+              tenantId={tenantId}
+              projectId={projectId || ''}
+              workspaceId={effectiveWorkspaceId}
+              onWorkspaceChange={setCollabWorkspaceOverride}
+            />
+          }
+          splitRatio={splitRatio}
+          onSplitRatioChange={setSplitRatio}
+          handleAccentColor="primary"
+          leftMinWidth="280px"
+          rightMinWidth="260px"
           className={className}
           statusBar={statusBarWithLayout}
         />

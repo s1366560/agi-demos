@@ -127,10 +127,9 @@ export interface InstanceMemberUpdate {
 }
 
 export interface UserSearchResult {
-  user_id: string;
-  name: string;
+  id: string;
   email: string;
-  avatar_url: string | null;
+  full_name: string | null;
 }
 
 export interface InstanceMemberResponse {
@@ -176,7 +175,7 @@ export const instanceService = {
   delete: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
 
   scale: (id: string, replicas: number) =>
-    httpClient.post<InstanceResponse>(`${BASE_URL}/${id}/scale`, { replicas }),
+    httpClient.post<InstanceResponse>(`${BASE_URL}/${id}/scale`, { desired_replicas: replicas }),
 
   restart: (id: string) => httpClient.post<InstanceResponse>(`${BASE_URL}/${id}/restart`),
 

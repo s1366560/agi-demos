@@ -49,6 +49,7 @@ class ProjectChatRequest:
     image_attachments: list[str] | None = None
     # Multi-agent: resolved agent definition ID for routing
     agent_id: str | None = None
+    tenant_agent_config: dict[str, Any] | None = None
     # Multi-agent: parent conversation_id for child-to-parent announce
     parent_session_id: str | None = None
 

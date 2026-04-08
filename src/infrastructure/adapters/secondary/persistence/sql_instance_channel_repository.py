@@ -33,6 +33,8 @@ class SqlInstanceChannelRepository(InstanceChannelRepository):
         )
         result = await self._session.execute(query)
         db_model = result.scalar_one_or_none()
+        if db_model is None:
+            return None
         return self._to_domain(db_model)
 
     async def find_by_instance_id(self, instance_id: str) -> list[InstanceChannelConfig]:
@@ -83,11 +85,8 @@ class SqlInstanceChannelRepository(InstanceChannelRepository):
         await self._session.execute(stmt)
         await self._session.flush()
 
-    def _to_domain(self, db_model: InstanceChannelConfigModel | None) -> InstanceChannelConfig:
+    def _to_domain(self, db_model: InstanceChannelConfigModel) -> InstanceChannelConfig:
         """Convert database model to domain entity."""
-        if db_model is None:
-            msg = "Cannot convert None to InstanceChannelConfig"
-            raise ValueError(msg)
         return InstanceChannelConfig(
             id=db_model.id,
             instance_id=db_model.instance_id,

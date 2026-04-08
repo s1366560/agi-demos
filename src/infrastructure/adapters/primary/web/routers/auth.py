@@ -208,6 +208,8 @@ async def create_new_api_key(
         expires_in_days=key_data.expires_in_days,
     )
 
+    await db.commit()
+
     assert api_key is not None
     return APIKeyResponse(
         key_id=api_key.id,

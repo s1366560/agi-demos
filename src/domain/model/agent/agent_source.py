@@ -15,10 +15,12 @@ class AgentSource(str, Enum):
     Attributes:
         FILESYSTEM: Agent loaded from .memstack/agents/
         DATABASE: Agent stored in PostgreSQL database
+        BUILTIN: Agent provided by the runtime
     """
 
     FILESYSTEM = "filesystem"
     DATABASE = "database"
+    BUILTIN = "builtin"
 
     def __str__(self) -> str:
         return self.value

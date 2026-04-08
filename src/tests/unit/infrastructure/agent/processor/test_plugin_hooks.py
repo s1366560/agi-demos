@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.infrastructure.agent.plugins.registry import HookDispatchResult
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
@@ -16,9 +17,17 @@ from src.infrastructure.agent.processor.processor import (
 
 
 def _make_registry(hook_side_effect=None):
-    """Create a mock plugin registry with an async notify_hook."""
+    """Create a mock plugin registry with an async apply_hook."""
     registry = MagicMock()
-    registry.notify_hook = AsyncMock(return_value=[], side_effect=hook_side_effect)
+    if hook_side_effect is None:
+        registry.apply_hook = AsyncMock(
+            side_effect=lambda _hook_name, *, payload, runtime_overrides=None: HookDispatchResult(
+                payload=dict(payload),
+                diagnostics=[],
+            )
+        )
+    else:
+        registry.apply_hook = AsyncMock(side_effect=hook_side_effect)
     return registry
 
 
@@ -58,21 +67,25 @@ class TestNotifyPluginHookHelper:
         await proc._notify_plugin_hook("on_session_start", {"x": 1})
 
     async def test_hook_called_with_correct_args(self):
-        """notify_hook receives hook_name and payload."""
+        """apply_hook receives hook_name and payload."""
         registry = _make_registry()
         proc = _make_processor(registry=registry)
         payload = {"session_id": "s1"}
         await proc._notify_plugin_hook("on_session_start", payload)
 
-        registry.notify_hook.assert_awaited_once_with("on_session_start", payload=payload)
+        registry.apply_hook.assert_awaited_once_with(
+            "on_session_start",
+            payload=payload,
+            runtime_overrides=[],
+        )
 
     async def test_hook_error_does_not_propagate(self):
-        """Errors inside notify_hook are caught and logged, not raised."""
+        """Errors inside apply_hook are caught and logged, not raised."""
         registry = _make_registry(hook_side_effect=RuntimeError("boom"))
         proc = _make_processor(registry=registry)
         # Must not raise
         await proc._notify_plugin_hook("on_error", {"err": "x"})
-        registry.notify_hook.assert_awaited_once()
+        registry.apply_hook.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +135,7 @@ class TestProcessLifecycleHooks:
         async for ev in proc.process("sess-1", [{"role": "user", "content": "hi"}]):
             events.append(ev)
 
-        calls = registry.notify_hook.call_args_list
+        calls = registry.apply_hook.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "on_session_start" in hook_names
 
@@ -143,7 +156,7 @@ class TestProcessLifecycleHooks:
         async for ev in proc.process("sess-2", [{"role": "user", "content": "hi"}]):
             events.append(ev)
 
-        calls = registry.notify_hook.call_args_list
+        calls = registry.apply_hook.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "on_session_end" in hook_names
 
@@ -169,7 +182,7 @@ class TestProcessLifecycleHooks:
         async for ev in proc.process("sess-3", [{"role": "user", "content": "hi"}]):
             events.append(ev)
 
-        calls = registry.notify_hook.call_args_list
+        calls = registry.apply_hook.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "on_error" in hook_names
 
@@ -210,7 +223,7 @@ class TestExecuteToolHooks:
         ):
             events.append(ev)
 
-        calls = registry.notify_hook.call_args_list
+        calls = registry.apply_hook.call_args_list
         hook_names = [c.args[0] for c in calls]
         assert "before_tool_execution" in hook_names
         assert "after_tool_execution" in hook_names

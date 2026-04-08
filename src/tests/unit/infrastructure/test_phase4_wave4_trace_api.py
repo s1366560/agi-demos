@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
@@ -18,6 +18,8 @@ from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
     TraceChainResponse,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.trace_router import (
+    _get_accessible_conversation,
+    _list_user_conversation_ids,
     parse_statuses,
     router,
     run_to_response,
@@ -54,9 +56,12 @@ def _make_run(
 def mock_registry():
     registry = MagicMock()
     registry.list_runs.return_value = []
+    registry.list_trace_runs.return_value = []
+    registry.list_runs_for_conversations.return_value = []
     registry.get_run.return_value = None
     registry.list_descendant_runs.return_value = []
     registry.count_active_runs.return_value = 0
+    registry.count_active_runs_for_conversations.return_value = 0
     registry.count_all_active_runs.return_value = 0
     return registry
 
@@ -89,12 +94,46 @@ def client(app: FastAPI):
 
 
 @pytest.fixture(autouse=True)
-def _patch_container_helper(mock_container: MagicMock):
-    with patch(
-        "src.infrastructure.adapters.primary.web.routers.agent.trace_router.get_container_with_db",
-        return_value=mock_container,
+def _patch_container_helper(
+    mock_container: MagicMock,
+    mock_get_accessible_conversation: AsyncMock,
+    mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    mock_list_user_conversation_ids: AsyncMock,
+):
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router.get_container_with_db",
+            return_value=mock_container,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router._get_accessible_conversation",
+            mock_get_accessible_conversation,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router._list_accessible_tenant_conversation_ids",
+            mock_list_accessible_tenant_conversation_ids,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router._list_user_conversation_ids",
+            mock_list_user_conversation_ids,
+        ),
     ):
         yield
+
+
+@pytest.fixture
+def mock_get_accessible_conversation() -> AsyncMock:
+    return AsyncMock(return_value=SimpleNamespace(id="conv-1", tenant_id="t-1", user_id="user-1"))
+
+
+@pytest.fixture
+def mock_list_accessible_tenant_conversation_ids() -> AsyncMock:
+    return AsyncMock(return_value=[])
+
+
+@pytest.fixture
+def mock_list_user_conversation_ids() -> AsyncMock:
+    return AsyncMock(return_value=[])
 
 
 # --- Helper Tests ---
@@ -162,6 +201,51 @@ class TestParseStatuses:
         assert "Invalid status filter value" in str(exc_info.value.detail)
 
 
+@pytest.mark.unit
+class TestTraceRouterHelpers:
+    @pytest.mark.asyncio
+    async def test_list_user_conversation_ids_filters_to_active_memberships(self) -> None:
+        db = MagicMock()
+        global_role_result = MagicMock()
+        global_role_result.scalar_one_or_none.return_value = None
+        conversation_result = MagicMock()
+        conversation_result.scalars.return_value.all.return_value = []
+        db.execute = AsyncMock(side_effect=[global_role_result, conversation_result])
+
+        await _list_user_conversation_ids(
+            db,
+            SimpleNamespace(id="user-1", roles=[]),
+        )
+
+        executed_query = db.execute.await_args.args[0]
+        assert "user_tenants" in str(executed_query)
+
+    @pytest.mark.asyncio
+    async def test_get_accessible_conversation_returns_404_for_revoked_owner(self) -> None:
+        conversation = SimpleNamespace(id="conv-1", tenant_id="t-1", user_id="user-1")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.trace_router._get_conversation",
+                AsyncMock(return_value=conversation),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.trace_router.require_tenant_access",
+                AsyncMock(
+                    side_effect=HTTPException(status_code=403, detail="Tenant access required")
+                ),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await _get_accessible_conversation(
+                MagicMock(),
+                SimpleNamespace(id="user-1", roles=[]),
+                "conv-1",
+            )
+
+        assert exc_info.value.status_code == 404
+
+
 # --- Schema Tests ---
 
 
@@ -179,6 +263,40 @@ class TestSchemaModels:
         assert resp.started_at is None
         assert resp.trace_id is None
         assert resp.metadata == {}
+
+    def test_run_to_response_preserves_sensitive_trace_fields_by_default(self) -> None:
+        run = SubAgentRun(
+            run_id="r1",
+            conversation_id="c1",
+            subagent_name="a",
+            task="t",
+            status=SubAgentRunStatus.COMPLETED,
+            created_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+            metadata={"secret": "value"},
+            frozen_result_text="raw output",
+        )
+
+        resp = run_to_response(run)
+
+        assert resp.metadata == {"secret": "value"}
+        assert resp.frozen_result_text == "raw output"
+
+    def test_run_to_response_can_redact_sensitive_trace_fields(self) -> None:
+        run = SubAgentRun(
+            run_id="r1",
+            conversation_id="c1",
+            subagent_name="a",
+            task="t",
+            status=SubAgentRunStatus.COMPLETED,
+            created_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+            metadata={"secret": "value"},
+            frozen_result_text="raw output",
+        )
+
+        resp = run_to_response(run, redact_sensitive_fields=True)
+
+        assert resp.metadata == {}
+        assert resp.frozen_result_text is None
 
     def test_subagent_run_list_response(self) -> None:
         resp = SubAgentRunListResponse(conversation_id="c1", runs=[], total=0)
@@ -243,10 +361,8 @@ class TestListRunsEndpoint:
         assert SubAgentRunStatus.RUNNING in statuses
 
     def test_trace_id_filter(self, client: TestClient, mock_registry: MagicMock) -> None:
-        mock_registry.list_runs.return_value = [
+        mock_registry.list_trace_runs.return_value = [
             _make_run(run_id="r1", trace_id="trace-abc"),
-            _make_run(run_id="r2", trace_id="trace-xyz"),
-            _make_run(run_id="r3", trace_id=None),
         ]
         resp = client.get("/api/v1/agent/trace/runs/conv-1?trace_id=trace-abc")
         assert resp.status_code == 200
@@ -263,6 +379,75 @@ class TestListRunsEndpoint:
         mock_registry.list_runs.side_effect = RuntimeError("boom")
         resp = client.get("/api/v1/agent/trace/runs/conv-1")
         assert resp.status_code == 500
+
+    def test_rejects_inaccessible_conversation(
+        self,
+        client: TestClient,
+        mock_get_accessible_conversation: AsyncMock,
+    ) -> None:
+        mock_get_accessible_conversation.side_effect = HTTPException(
+            status_code=404, detail="Conversation conv-1 not found"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/conv-1")
+
+        assert resp.status_code == 404
+
+
+@pytest.mark.unit
+class TestListTenantRunsEndpoint:
+    def test_returns_recent_runs_for_tenant(
+        self,
+        client: TestClient,
+        mock_registry: MagicMock,
+        mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    ) -> None:
+        newer_run = _make_run(
+            run_id="r-new",
+            conversation_id="conv-2",
+            created_at=datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC),
+        )
+        mock_list_accessible_tenant_conversation_ids.return_value = ["conv-1", "conv-2"]
+        mock_registry.list_runs_for_conversations.return_value = [newer_run]
+
+        resp = client.get("/api/v1/agent/trace/runs/tenant/t-1?limit=1")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["tenant_id"] == "t-1"
+        assert data["total"] == 1
+        assert len(data["runs"]) == 1
+        assert data["runs"][0]["run_id"] == "r-new"
+        mock_registry.list_runs_for_conversations.assert_called_once_with(
+            ["conv-1", "conv-2"],
+            statuses=None,
+            limit=1,
+        )
+
+    def test_returns_empty_tenant_trace_list(
+        self,
+        client: TestClient,
+        mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_accessible_tenant_conversation_ids.return_value = []
+
+        resp = client.get("/api/v1/agent/trace/runs/tenant/t-1")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"tenant_id": "t-1", "runs": [], "total": 0}
+
+    def test_rejects_inaccessible_tenant(
+        self,
+        client: TestClient,
+        mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_accessible_tenant_conversation_ids.side_effect = HTTPException(
+            status_code=403, detail="Tenant access required"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/tenant/t-1")
+
+        assert resp.status_code == 403
 
 
 # --- get_run endpoint ---
@@ -288,6 +473,19 @@ class TestGetRunEndpoint:
         resp = client.get("/api/v1/agent/trace/runs/conv-1/r1")
         assert resp.status_code == 500
 
+    def test_rejects_inaccessible_conversation(
+        self,
+        client: TestClient,
+        mock_get_accessible_conversation: AsyncMock,
+    ) -> None:
+        mock_get_accessible_conversation.side_effect = HTTPException(
+            status_code=404, detail="Conversation conv-1 not found"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/conv-1/r1")
+
+        assert resp.status_code == 404
+
 
 # --- get_trace_chain endpoint ---
 
@@ -307,8 +505,7 @@ class TestGetTraceChainEndpoint:
             trace_id="t-1",
             created_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
         )
-        run_other = _make_run(run_id="r3", trace_id="t-other")
-        mock_registry.list_runs.return_value = [run_late, run_early, run_other]
+        mock_registry.list_trace_runs.return_value = [run_early, run_late]
 
         resp = client.get("/api/v1/agent/trace/runs/conv-1/trace/t-1")
         assert resp.status_code == 200
@@ -319,7 +516,7 @@ class TestGetTraceChainEndpoint:
         assert data["runs"][1]["run_id"] == "r2"
 
     def test_empty_chain(self, client: TestClient, mock_registry: MagicMock) -> None:
-        mock_registry.list_runs.return_value = []
+        mock_registry.list_trace_runs.return_value = []
         resp = client.get("/api/v1/agent/trace/runs/conv-1/trace/nonexistent")
         assert resp.status_code == 200
         data = resp.json()
@@ -327,9 +524,22 @@ class TestGetTraceChainEndpoint:
         assert data["runs"] == []
 
     def test_internal_error_returns_500(self, client: TestClient, mock_registry: MagicMock) -> None:
-        mock_registry.list_runs.side_effect = RuntimeError("boom")
+        mock_registry.list_trace_runs.side_effect = RuntimeError("boom")
         resp = client.get("/api/v1/agent/trace/runs/conv-1/trace/t-1")
         assert resp.status_code == 500
+
+    def test_rejects_inaccessible_conversation(
+        self,
+        client: TestClient,
+        mock_get_accessible_conversation: AsyncMock,
+    ) -> None:
+        mock_get_accessible_conversation.side_effect = HTTPException(
+            status_code=404, detail="Conversation conv-1 not found"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/conv-1/trace/t-1")
+
+        assert resp.status_code == 404
 
 
 # --- get_descendants endpoint ---
@@ -375,14 +585,33 @@ class TestGetDescendantsEndpoint:
         resp = client.get("/api/v1/agent/trace/runs/conv-1/r1/descendants")
         assert resp.status_code == 500
 
+    def test_rejects_inaccessible_conversation(
+        self,
+        client: TestClient,
+        mock_get_accessible_conversation: AsyncMock,
+    ) -> None:
+        mock_get_accessible_conversation.side_effect = HTTPException(
+            status_code=404, detail="Conversation conv-1 not found"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/conv-1/r1/descendants")
+
+        assert resp.status_code == 404
+
 
 # --- get_active_run_count endpoint ---
 
 
 @pytest.mark.unit
 class TestGetActiveRunCountEndpoint:
-    def test_global_count(self, client: TestClient, mock_registry: MagicMock) -> None:
-        mock_registry.count_all_active_runs.return_value = 42
+    def test_user_scoped_count(
+        self,
+        client: TestClient,
+        mock_registry: MagicMock,
+        mock_list_user_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_user_conversation_ids.return_value = ["conv-1", "conv-2"]
+        mock_registry.count_active_runs_for_conversations.return_value = 42
         resp = client.get("/api/v1/agent/trace/runs/active/count")
         assert resp.status_code == 200
         data = resp.json()
@@ -398,15 +627,61 @@ class TestGetActiveRunCountEndpoint:
         assert data["conversation_id"] == "conv-1"
 
     def test_zero_count(self, client: TestClient, mock_registry: MagicMock) -> None:
-        mock_registry.count_all_active_runs.return_value = 0
+        mock_registry.count_active_runs_for_conversations.return_value = 0
         resp = client.get("/api/v1/agent/trace/runs/active/count")
         assert resp.status_code == 200
         assert resp.json()["active_count"] == 0
 
     def test_internal_error_returns_500(self, client: TestClient, mock_registry: MagicMock) -> None:
-        mock_registry.count_all_active_runs.side_effect = RuntimeError("boom")
+        mock_registry.count_active_runs_for_conversations.side_effect = RuntimeError("boom")
         resp = client.get("/api/v1/agent/trace/runs/active/count")
         assert resp.status_code == 500
+
+    def test_rejects_inaccessible_conversation(
+        self,
+        client: TestClient,
+        mock_get_accessible_conversation: AsyncMock,
+    ) -> None:
+        mock_get_accessible_conversation.side_effect = HTTPException(
+            status_code=404, detail="Conversation conv-1 not found"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/active/count?conversation_id=conv-1")
+
+        assert resp.status_code == 404
+
+
+@pytest.mark.unit
+class TestGetTenantActiveRunCountEndpoint:
+    def test_aggregates_active_runs_for_tenant(
+        self,
+        client: TestClient,
+        mock_registry: MagicMock,
+        mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_accessible_tenant_conversation_ids.return_value = ["conv-1", "conv-2", "conv-3"]
+        mock_registry.count_active_runs_for_conversations.return_value = 5
+
+        resp = client.get("/api/v1/agent/trace/runs/tenant/t-1/active/count")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"tenant_id": "t-1", "active_count": 5}
+        mock_registry.count_active_runs_for_conversations.assert_called_once_with(
+            ["conv-1", "conv-2", "conv-3"]
+        )
+
+    def test_rejects_inaccessible_tenant(
+        self,
+        client: TestClient,
+        mock_list_accessible_tenant_conversation_ids: AsyncMock,
+    ) -> None:
+        mock_list_accessible_tenant_conversation_ids.side_effect = HTTPException(
+            status_code=403, detail="Tenant access required"
+        )
+
+        resp = client.get("/api/v1/agent/trace/runs/tenant/t-1/active/count")
+
+        assert resp.status_code == 403
 
 
 # --- Route Conflict Tests ---
@@ -417,7 +692,7 @@ class TestRouteOrdering:
     def test_active_count_not_confused_with_run_id(
         self, client: TestClient, mock_registry: MagicMock
     ) -> None:
-        mock_registry.count_all_active_runs.return_value = 7
+        mock_registry.count_active_runs_for_conversations.return_value = 7
         resp = client.get("/api/v1/agent/trace/runs/active/count")
         assert resp.status_code == 200
         assert resp.json()["active_count"] == 7

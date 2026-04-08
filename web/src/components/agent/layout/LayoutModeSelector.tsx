@@ -2,13 +2,13 @@
  * LayoutModeSelector - Quick-switch buttons for layout modes
  *
  * Renders in the status bar area. Provides visual indication of current mode
- * and one-click switching between Chat, Task, Code, and Canvas modes.
+ * and one-click switching between Chat, Task, Code, Canvas, and Collab modes.
  */
 
 import type { FC } from 'react';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 
-import { MessageSquareText, ListTodo, TerminalSquare, PanelRight } from 'lucide-react';
+import { MessageSquareText, ListTodo, TerminalSquare, PanelRight, Users } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useLayoutModeStore, type LayoutMode } from '@/stores/layoutMode';
@@ -17,12 +17,13 @@ import { LazyTooltip } from '@/components/ui/lazyAntd';
 
 import type { LucideIcon } from 'lucide-react';
 
-const modes: Array<{
+const ALL_MODES: Array<{
   key: LayoutMode;
   icon: LucideIcon;
   label: string;
   shortcut: string;
   description: string;
+  requiresWorkspace?: boolean;
 }> = [
   {
     key: 'chat',
@@ -52,24 +53,41 @@ const modes: Array<{
     shortcut: '4',
     description: 'Split view: chat + artifact canvas (35/65)',
   },
+  {
+    key: 'collab',
+    icon: Users,
+    label: 'Collab',
+    shortcut: '5',
+    description: 'Split view: chat + workspace group chat (55/45)',
+    requiresWorkspace: true,
+  },
 ];
 
-export const LayoutModeSelector: FC = () => {
+interface LayoutModeSelectorProps {
+  hasWorkspace?: boolean;
+}
+
+export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace = false }) => {
   const { mode, setMode } = useLayoutModeStore(
     useShallow((state) => ({ mode: state.mode, setMode: state.setMode }))
+  );
+
+  const visibleModes = useMemo(
+    () => ALL_MODES.filter((m) => !m.requiresWorkspace || hasWorkspace),
+    [hasWorkspace],
   );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
-        const modeForKey = modes.find((m) => m.shortcut === e.key);
+        const modeForKey = visibleModes.find((m) => m.shortcut === e.key);
         if (modeForKey) {
           e.preventDefault();
           setMode(modeForKey.key);
         }
       }
     },
-    [setMode]
+    [setMode, visibleModes]
   );
 
   useEffect(() => {
@@ -84,7 +102,7 @@ export const LayoutModeSelector: FC = () => {
       data-tour="layout-selector"
       className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5"
     >
-      {modes.map((m) => {
+      {visibleModes.map((m) => {
         const Icon = m.icon;
         const isActive = mode === m.key;
         return (

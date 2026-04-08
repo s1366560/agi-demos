@@ -3,6 +3,8 @@ import { httpClient } from './client/httpClient';
 import type {
   SubAgentRunDTO,
   SubAgentRunListDTO,
+  TenantActiveRunCountDTO,
+  TenantSubAgentRunListDTO,
   TraceChainDTO,
   DescendantTreeDTO,
   ActiveRunCountDTO,
@@ -22,6 +24,16 @@ export const traceAPI = {
   ): Promise<SubAgentRunListDTO> => {
     return await httpClient.get<SubAgentRunListDTO>(
       `${BASE_URL}/${encodeURIComponent(conversationId)}`,
+      { params }
+    );
+  },
+
+  listTenantRuns: async (
+    tenantId: string,
+    params: { status?: string | undefined; limit?: number | undefined } = {}
+  ): Promise<TenantSubAgentRunListDTO> => {
+    return await httpClient.get<TenantSubAgentRunListDTO>(
+      `${BASE_URL}/tenant/${encodeURIComponent(tenantId)}`,
       { params }
     );
   },
@@ -48,6 +60,12 @@ export const traceAPI = {
     return await httpClient.get<ActiveRunCountDTO>(`${BASE_URL}/active/count`, {
       params: conversationId ? { conversation_id: conversationId } : undefined,
     });
+  },
+
+  getTenantActiveRunCount: async (tenantId: string): Promise<TenantActiveRunCountDTO> => {
+    return await httpClient.get<TenantActiveRunCountDTO>(
+      `${BASE_URL}/tenant/${encodeURIComponent(tenantId)}/active/count`
+    );
   },
 };
 

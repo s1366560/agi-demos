@@ -9,7 +9,7 @@ import { useWorkspaceActions } from '@/stores/workspace';
 import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
-import { ChatPanel } from '@/components/workspace/chat/ChatPanel';
+
 import { GeneList } from '@/components/workspace/genes/GeneList';
 import { MemberPanel } from '@/components/workspace/MemberPanel';
 import { ObjectiveCreateModal } from '@/components/workspace/objectives/ObjectiveCreateModal';
@@ -17,7 +17,8 @@ import { ObjectiveCreateModal } from '@/components/workspace/objectives/Objectiv
 import { BlackboardTabBar, BLACKBOARD_TABS } from './BlackboardTabBar';
 import { buildBlackboardNotes, buildBlackboardStats } from './blackboardUtils';
 import { DiscussionTab } from './tabs/DiscussionTab';
-import { FilesPlaceholder } from './tabs/FilesPlaceholder';
+import { CollaborationOverviewTab } from './tabs/CollaborationOverviewTab';
+import { SharedFileBrowser } from './tabs/SharedFileBrowser';
 import { GoalsTab } from './tabs/GoalsTab';
 import { NotesTab } from './tabs/NotesTab';
 import { StatusTab } from './tabs/StatusTab';
@@ -236,16 +237,12 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'collaboration' && (
-              <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
-                <div className="mb-4">
-                  <div className="text-lg font-semibold text-text-primary dark:text-text-inverse">
-                    {t('blackboard.tabs.collaboration', 'Collaboration')}
-                  </div>
-                </div>
-                <div className="min-h-[560px]">
-                  <ChatPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
-                </div>
-              </div>
+              <CollaborationOverviewTab
+                tenantId={tenantId}
+                projectId={projectId}
+                workspaceId={workspaceId}
+                agents={agents}
+              />
             )}
 
             {activeTab === 'members' && (
@@ -269,7 +266,11 @@ export function CentralBlackboardModal({
             )}
 
             {activeTab === 'files' && (
-              <FilesPlaceholder />
+              <SharedFileBrowser
+                tenantId={tenantId}
+                projectId={projectId}
+                workspaceId={workspaceId}
+              />
             )}
 
             {activeTab === 'status' && (

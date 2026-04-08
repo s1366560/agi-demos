@@ -24,7 +24,7 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, cast
@@ -165,6 +165,8 @@ class ProcessorConfig:
 
     # Plugin registry (optional, for hook notifications)
     plugin_registry: Any | None = None
+    runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
+    runtime_context: dict[str, Any] = field(default_factory=dict)
 
     # Tool refresh callback (optional, enables dynamic tool loading)
     # When provided, _refresh_tools() can fetch updated tools at runtime
@@ -307,6 +309,10 @@ class SessionProcessor:
         # When set, _refresh_tools() can update self.tools at runtime
         self._tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
 
+        # Runtime hook state
+        self._session_instructions: list[str] = []
+        self._response_instructions: list[str] = []
+
         # Forced skill context for loop reinforcement
         self._forced_skill_name: str | None = config.forced_skill_name
         self._forced_skill_tools: set[str] | None = (
@@ -349,14 +355,55 @@ class SessionProcessor:
         self,
         hook_name: str,
         payload: dict[str, Any] | None = None,
-    ) -> None:
-        """Fire a plugin hook if registry is available. Errors are logged, never raised."""
+    ) -> dict[str, Any]:
+        """Fire a plugin hook, log diagnostics, and return the resulting payload."""
+        effective_payload = dict(payload or {})
         if self._plugin_registry is None:
-            return
+            return effective_payload
         try:
-            await self._plugin_registry.notify_hook(hook_name, payload=payload)
+            result = await self._plugin_registry.apply_hook(
+                hook_name,
+                payload=effective_payload,
+                runtime_overrides=self.config.runtime_hook_overrides,
+            )
+            for diagnostic in result.diagnostics:
+                log_level = logging.ERROR if diagnostic.level == "error" else logging.WARNING
+                logger.log(
+                    log_level,
+                    "Plugin hook %s diagnostic [%s]: %s",
+                    hook_name,
+                    diagnostic.plugin_name,
+                    diagnostic.message,
+                )
+            self._merge_hook_instructions(result.payload)
+            return result.payload
         except Exception:
             logger.warning("Plugin hook %r failed", hook_name, exc_info=True)
+            return effective_payload
+
+    def _merge_hook_instructions(self, payload: Mapping[str, Any]) -> None:
+        """Merge hook-provided session/response instructions into processor state."""
+        for field_name, target in (
+            ("session_instructions", self._session_instructions),
+            ("response_instructions", self._response_instructions),
+        ):
+            raw_items = payload.get(field_name)
+            if not isinstance(raw_items, list):
+                continue
+            for raw_item in raw_items:
+                if not isinstance(raw_item, str):
+                    continue
+                item = raw_item.strip()
+                if item and item not in target:
+                    target.append(item)
+
+    def _build_runtime_guidance_message(self) -> dict[str, str] | None:
+        """Build a system message from accumulated runtime instructions."""
+        instructions = [*self._session_instructions, *self._response_instructions]
+        if not instructions:
+            return None
+        content = "[Runtime Guidance]\n" + "\n".join(f"- {item}" for item in instructions)
+        return {"role": "system", "content": content}
 
     def _get_hitl_coordinator(self) -> HITLCoordinator:
         """Get or create the HITL coordinator for current context."""
@@ -494,7 +541,7 @@ class SessionProcessor:
 
         return ui_metadata
 
-    async def process(  # noqa: PLR0912
+    async def process(  # noqa: PLR0912,PLR0915
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -545,6 +592,8 @@ class SessionProcessor:
         self._abort_event = run_ctx.abort_signal or asyncio.Event()
         self._step_count = 0
         self._no_progress_steps = 0
+        self._session_instructions = []
+        self._response_instructions = []
         self._langfuse_context = effective_langfuse_context
         self._artifact_handler.set_langfuse_context(self._langfuse_context)
 
@@ -557,6 +606,8 @@ class SessionProcessor:
             {
                 "session_id": session_id,
                 "message_count": len(messages),
+                "tenant_id": (self._langfuse_context or {}).get("tenant_id"),
+                "project_id": (self._langfuse_context or {}).get("project_id"),
             },
         )
 
@@ -980,6 +1031,14 @@ class SessionProcessor:
             live_skills = get_available_skills()
             if live_skills:
                 skills = live_skills
+        allowed_skills = self.config.runtime_context.get("allowed_skills")
+        if isinstance(allowed_skills, list) and allowed_skills:
+            normalized_allowed = {
+                str(item).strip().lower()
+                for item in allowed_skills
+                if isinstance(item, str) and item.strip()
+            }
+            skills = [skill for skill in skills if skill.strip().lower() in normalized_allowed]
         ctx: dict[str, Any] = {
             "model_name": self.config.model,
             "tools": list(self.tools.keys()),
@@ -1197,6 +1256,8 @@ class SessionProcessor:
         self._pending_tool_calls = {}
         self._pending_tool_args = {}
 
+        step_messages = list(messages)
+
         # Inject skill reminder for multi-step forced skill execution
         if self._forced_skill_name and self._step_count > 1:
             skill_tool_msg = (
@@ -1215,7 +1276,25 @@ class SessionProcessor:
                     + skill_tool_msg
                 ),
             }
-            messages.append(skill_reminder)
+            step_messages.append(skill_reminder)
+
+        before_response_payload = await self._notify_plugin_hook(
+            "before_response",
+            {
+                "session_id": session_id,
+                "step_count": self._step_count,
+                "message_count": len(messages),
+                "session_instructions": list(self._session_instructions),
+                "response_instructions": list(self._response_instructions),
+            },
+        )
+        runtime_guidance = self._build_runtime_guidance_message()
+        if runtime_guidance is not None:
+            step_messages.append(runtime_guidance)
+        elif before_response_payload.get("response_instructions"):
+            runtime_guidance = self._build_runtime_guidance_message()
+            if runtime_guidance is not None:
+                step_messages.append(runtime_guidance)
 
         # Prepare tools for LLM
         tools_for_llm = [t.to_openai_format() for t in self.tools.values()]
@@ -1261,7 +1340,7 @@ class SessionProcessor:
 
                 logger.debug(f"[Processor] Calling llm_stream.generate(), step={self._step_count}")
                 async for event in llm_stream.generate(
-                    messages, langfuse_context=step_langfuse_context
+                    step_messages, langfuse_context=step_langfuse_context
                 ):
                     # Check abort
                     if self._abort_event and self._abort_event.is_set():
@@ -1485,6 +1564,16 @@ class SessionProcessor:
                     elif event.type == StreamEventType.ERROR:
                         error_msg = event.data.get("message", "Unknown error")
                         raise Exception(error_msg)
+
+                await self._notify_plugin_hook(
+                    "after_response",
+                    {
+                        "session_id": session_id,
+                        "step_count": self._step_count,
+                        "response_text": text_buffer,
+                        "tool_call_count": len(tool_calls_completed) + len(deferred_tool_calls),
+                    },
+                )
 
                 # Step completed successfully
                 break
@@ -2084,6 +2173,7 @@ class SessionProcessor:
                 project_id=_lctx.get("project_id", ""),
                 tenant_id=_lctx.get("tenant_id", ""),
                 user_id=_lctx.get("user_id", ""),
+                runtime_context=dict(self.config.runtime_context),
             )
 
         start_time = time.time()
@@ -2586,6 +2676,7 @@ class SessionProcessor:
             project_id=(self._langfuse_context or {}).get("project_id", ""),
             tenant_id=(self._langfuse_context or {}).get("tenant_id", ""),
             user_id=(self._langfuse_context or {}).get("user_id", ""),
+            runtime_context=dict(self.config.runtime_context),
         )
 
         # Adapt ToolDefinition to ToolInfoProtocol
@@ -2963,7 +3054,7 @@ class SessionProcessor:
                 return
             arguments = cleaned
 
-            await self._notify_plugin_hook(
+            before_tool_payload = await self._notify_plugin_hook(
                 "before_tool_execution",
                 {
                     "tool_name": tool_name,
@@ -2972,6 +3063,8 @@ class SessionProcessor:
                     "session_id": session_id,
                 },
             )
+            if isinstance(before_tool_payload.get("arguments"), dict):
+                arguments = cast(dict[str, Any], before_tool_payload["arguments"])
             try:
                 # 6. Pipeline execution (doom loop + permission + invoke)
                 async for ev in self._execute_tool_via_pipeline(
@@ -2990,6 +3083,8 @@ class SessionProcessor:
                         "tool_name": tool_name,
                         "call_id": call_id,
                         "session_id": session_id,
+                        "result": getattr(tool_part, "output", None),
+                        "error": getattr(tool_part, "error", None),
                     },
                 )
                 # 7. Side effects (same as non-pipeline path)
@@ -3061,7 +3156,7 @@ class SessionProcessor:
         arguments = cleaned
 
         # 6. Invoke tool + emit observe
-        await self._notify_plugin_hook(
+        before_tool_payload = await self._notify_plugin_hook(
             "before_tool_execution",
             {
                 "tool_name": tool_name,
@@ -3070,6 +3165,8 @@ class SessionProcessor:
                 "session_id": session_id,
             },
         )
+        if isinstance(before_tool_payload.get("arguments"), dict):
+            arguments = cast(dict[str, Any], before_tool_payload["arguments"])
         try:
             async for ev in self._invoke_and_emit_observe(
                 tool_name,
@@ -3087,6 +3184,8 @@ class SessionProcessor:
                     "tool_name": tool_name,
                     "call_id": call_id,
                     "session_id": session_id,
+                    "result": getattr(tool_part, "output", None),
+                    "error": getattr(tool_part, "error", None),
                 },
             )
             # 7. Side effects

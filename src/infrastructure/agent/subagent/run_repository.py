@@ -11,10 +11,13 @@ from contextlib import closing, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
+from src.domain.model.agent.announce_config import AnnounceState
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 
 logger = logging.getLogger(__name__)
+_LOCAL_REDIS_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 class SubAgentRunRepository(Protocol):
@@ -22,12 +25,15 @@ class SubAgentRunRepository(Protocol):
 
     def load_runs(self) -> dict[str, dict[str, SubAgentRun]]:
         """Load all runs indexed by conversation_id -> run_id."""
+        ...
 
     def save_runs(self, runs: Mapping[str, Mapping[str, SubAgentRun]]) -> None:
         """Persist full run snapshot."""
+        ...
 
     def close(self) -> None:
         """Release repository resources."""
+        ...
 
 
 class SqliteSubAgentRunRepository:
@@ -232,6 +238,11 @@ class RedisRunSnapshotCache:
         self._ttl_seconds = max(1, int(ttl_seconds))
         self._client = client
         if self._client is None and redis_url:
+            if not _is_secure_or_local_redis_url(redis_url):
+                logger.warning(
+                    "[RedisRunSnapshotCache] Refusing insecure remote Redis URL for run snapshots"
+                )
+                return
             try:
                 import redis
 
@@ -257,6 +268,8 @@ class RedisRunSnapshotCache:
             return None
         if isinstance(cached, bytes):
             cached = cached.decode("utf-8")
+        if not isinstance(cached, str):
+            return None
         return _deserialize_snapshot(cached)
 
     def save_runs(self, runs: Mapping[str, Mapping[str, SubAgentRun]]) -> None:
@@ -275,6 +288,15 @@ class RedisRunSnapshotCache:
         if callable(close):
             with suppress(Exception):
                 close()
+
+
+def _is_secure_or_local_redis_url(redis_url: str) -> bool:
+    parsed = urlparse(redis_url)
+    if parsed.scheme in {"rediss", "unix"}:
+        return True
+    if parsed.scheme != "redis":
+        return False
+    return parsed.hostname in _LOCAL_REDIS_HOSTS
 
 
 class HybridSubAgentRunRepository:
@@ -379,6 +401,9 @@ def _deserialize_run(payload: Any) -> SubAgentRun | None:
             metadata=metadata,
             frozen_result_text=_optional_str(payload.get("frozen_result_text")),
             frozen_at=_parse_datetime(payload.get("frozen_at")),
+            trace_id=_optional_str(payload.get("trace_id")),
+            parent_span_id=_optional_str(payload.get("parent_span_id")),
+            announce_state=_parse_announce_state(payload.get("announce_state")),
         )
     except Exception:
         return None
@@ -409,4 +434,14 @@ def _optional_int(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
+        return None
+
+
+def _parse_announce_state(value: Any) -> AnnounceState | None:
+    raw_value = _optional_str(value)
+    if raw_value is None:
+        return None
+    try:
+        return AnnounceState(raw_value)
+    except ValueError:
         return None

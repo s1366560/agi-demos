@@ -157,7 +157,7 @@ class InstanceService:
         tenant_id: str,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Instance]:
+    ) -> tuple[list[Instance], int]:
         """List instances belonging to a tenant.
 
         Args:
@@ -166,9 +166,11 @@ class InstanceService:
             offset: Pagination offset.
 
         Returns:
-            List of instances.
+            Tuple of (list of instances, total count).
         """
-        return await self._instance_repo.find_by_tenant(tenant_id, limit=limit, offset=offset)
+        items = await self._instance_repo.find_by_tenant(tenant_id, limit=limit, offset=offset)
+        total = await self._instance_repo.count_by_tenant(tenant_id)
+        return items, total
 
     async def update_instance(  # noqa: PLR0913, C901, PLR0912
         self,
@@ -355,6 +357,43 @@ class InstanceService:
     # ------------------------------------------------------------------
     # Configuration
     # ------------------------------------------------------------------
+
+    async def update_config(
+        self,
+        instance_id: str,
+        env_vars: dict[str, Any] | None = None,
+        advanced_config: dict[str, Any] | None = None,
+        llm_providers: dict[str, Any] | None = None,
+    ) -> Instance:
+        """Update instance configuration fields directly.
+
+        Args:
+            instance_id: Target instance.
+            env_vars: Environment variables to set (if provided).
+            advanced_config: Advanced config to set (if provided).
+            llm_providers: LLM provider config to set (if provided).
+
+        Returns:
+            The updated Instance.
+
+        Raises:
+            ValueError: If instance does not exist.
+        """
+        instance = await self._instance_repo.find_by_id(instance_id)
+        if not instance:
+            raise ValueError(f"Instance {instance_id} not found")
+
+        if env_vars is not None:
+            instance.env_vars = env_vars
+        if advanced_config is not None:
+            instance.advanced_config = advanced_config
+        if llm_providers is not None:
+            instance.llm_providers = llm_providers
+        instance.updated_at = datetime.now(UTC)
+        await self._instance_repo.save(instance)
+
+        logger.info("Updated config for instance %s", instance_id)
+        return instance
 
     async def save_pending_config(
         self,

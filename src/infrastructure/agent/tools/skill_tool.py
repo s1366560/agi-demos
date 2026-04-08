@@ -83,6 +83,19 @@ def get_skill_loader() -> SkillLoaderProtocol | None:
     return _skill_loader
 
 
+def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
+    """Check request-scoped skill allowlist from the runtime context."""
+    allowed_skills = ctx.runtime_context.get("allowed_skills")
+    if not isinstance(allowed_skills, list) or not allowed_skills:
+        return True
+    normalized_allowed = {
+        str(item).strip().lower()
+        for item in allowed_skills
+        if isinstance(item, str) and item.strip()
+    }
+    return skill_name.strip().lower() in normalized_allowed
+
+
 # ---------------------------------------------------------------------------
 # Tool definition
 # ---------------------------------------------------------------------------
@@ -120,6 +133,12 @@ async def skill_tool(ctx: ToolContext, *, name: str, user_message: str = "") -> 
     if _skill_loader is None:
         return ToolResult(
             output="Skill system is not configured. No skill loader available.",
+            is_error=True,
+        )
+
+    if not _is_skill_allowed(ctx, name):
+        return ToolResult(
+            output=f"Skill '{name}' is not allowed for the active agent profile.",
             is_error=True,
         )
 

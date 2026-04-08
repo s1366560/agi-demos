@@ -1,7 +1,7 @@
 """Instance Management API endpoints."""
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -21,7 +21,9 @@ from src.application.schemas.instance_schemas import (
 )
 from src.configuration.di_container import DIContainer
 from src.domain.model.instance.enums import ServiceType
+from src.domain.model.instance.instance import Instance
 from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -73,6 +75,37 @@ class InstanceLlmConfigUpdate(BaseModel):
     api_key_override: str | None = Field(None, description="Optional API key override")
 
 
+class InstanceConfigResponse(BaseModel):
+    """Response body for instance configuration."""
+
+    env_vars: dict[str, Any] = Field(default_factory=dict, description="Environment variables")
+    advanced_config: dict[str, Any] = Field(
+        default_factory=dict, description="Advanced configuration"
+    )
+    llm_providers: dict[str, Any] = Field(
+        default_factory=dict, description="LLM provider configurations"
+    )
+
+
+class _InstanceReader(Protocol):
+    async def get_instance(self, instance_id: str) -> Instance | None: ...
+
+
+async def _get_owned_instance_or_404(
+    service: _InstanceReader,
+    instance_id: str,
+    tenant_id: str,
+) -> Instance:
+    """Load an instance and enforce tenant ownership without revealing existence."""
+    instance = await service.get_instance(instance_id)
+    if instance is None or getattr(instance, "tenant_id", None) != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Instance {instance_id} not found",
+        )
+    return instance
+
+
 # ------------------------------------------------------------------
 # Instance CRUD
 # ------------------------------------------------------------------
@@ -87,6 +120,7 @@ async def create_instance(
     request: Request,
     data: InstanceCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceResponse:
     """Create a new instance."""
@@ -97,7 +131,7 @@ async def create_instance(
             name=data.name,
             slug=data.slug,
             tenant_id=tenant_id,
-            created_by=tenant_id,
+            created_by=current_user.id,
             cluster_id=data.cluster_id,
             namespace=data.namespace,
             image_version=data.image_version,
@@ -138,14 +172,14 @@ async def list_instances(
         container = get_container_with_db(request, db)
         service = container.instance_service()
         offset = (page - 1) * page_size
-        items = await service.list_instances(
+        items, total = await service.list_instances(
             tenant_id=tenant_id,
             limit=page_size,
             offset=offset,
         )
         return InstanceListResponse(
             instances=[InstanceResponse.model_validate(i, from_attributes=True) for i in items],
-            total=len(items),
+            total=total,
             page=page,
             page_size=page_size,
         )
@@ -170,12 +204,7 @@ async def get_instance(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
-        result = await service.get_instance(instance_id)
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Instance not found",
-            )
+        result = await _get_owned_instance_or_404(service, instance_id, tenant_id)
         return InstanceResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
@@ -203,6 +232,7 @@ async def update_instance(
 
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         result = await service.update_instance(
             instance_id,
             name=data.name,
@@ -254,6 +284,7 @@ async def delete_instance(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         await service.delete_instance(instance_id)
         await db.commit()
     except ValueError as e:
@@ -278,7 +309,7 @@ async def delete_instance(
 
 @router.post(
     "/{instance_id}/scale",
-    response_model=DeployResponse,
+    response_model=InstanceResponse,
 )
 async def scale_instance(
     request: Request,
@@ -286,18 +317,20 @@ async def scale_instance(
     data: ScaleRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> DeployResponse:
+) -> InstanceResponse:
     """Scale an instance to a desired replica count."""
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
-        result = await service.scale_instance(
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        await service.scale_instance(
             instance_id=instance_id,
             replicas=data.desired_replicas,
             triggered_by=tenant_id,
         )
         await db.commit()
-        return DeployResponse.model_validate(result, from_attributes=True)
+        instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        return InstanceResponse.model_validate(instance, from_attributes=True)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -315,24 +348,26 @@ async def scale_instance(
 
 @router.post(
     "/{instance_id}/restart",
-    response_model=DeployResponse,
+    response_model=InstanceResponse,
 )
 async def restart_instance(
     request: Request,
     instance_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> DeployResponse:
+) -> InstanceResponse:
     """Restart an instance."""
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
-        result = await service.restart_instance(
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        await service.restart_instance(
             instance_id=instance_id,
             triggered_by=tenant_id,
         )
         await db.commit()
-        return DeployResponse.model_validate(result, from_attributes=True)
+        instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        return InstanceResponse.model_validate(instance, from_attributes=True)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -353,6 +388,74 @@ async def restart_instance(
 # ------------------------------------------------------------------
 
 
+@router.get(
+    "/{instance_id}/config",
+    response_model=InstanceConfigResponse,
+)
+async def get_config(
+    request: Request,
+    instance_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> InstanceConfigResponse:
+    """Get the current configuration for an instance."""
+    try:
+        container = get_container_with_db(request, db)
+        service = container.instance_service()
+        instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        return InstanceConfigResponse(
+            env_vars=instance.env_vars,
+            advanced_config=instance.advanced_config,
+            llm_providers=instance.llm_providers,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error getting instance config")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error",
+        ) from e
+
+
+@router.put(
+    "/{instance_id}/config",
+    response_model=InstanceConfigResponse,
+)
+async def update_config(
+    request: Request,
+    instance_id: str,
+    data: InstanceConfigResponse,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> InstanceConfigResponse:
+    """Update the configuration for an instance."""
+    try:
+        container = get_container_with_db(request, db)
+        service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        instance = await service.update_config(
+            instance_id=instance_id,
+            env_vars=data.env_vars,
+            advanced_config=data.advanced_config,
+            llm_providers=data.llm_providers,
+        )
+        await db.commit()
+        return InstanceConfigResponse(
+            env_vars=instance.env_vars,
+            advanced_config=instance.advanced_config,
+            llm_providers=instance.llm_providers,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error updating instance config")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error",
+        ) from e
+
+
 @router.put(
     "/{instance_id}/config/pending",
     response_model=InstanceResponse,
@@ -368,6 +471,7 @@ async def save_pending_config(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         result = await service.save_pending_config(
             instance_id=instance_id,
             config=data.pending_config,
@@ -403,6 +507,7 @@ async def apply_pending_config(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         result = await service.apply_pending_config(
             instance_id=instance_id,
             triggered_by=tenant_id,
@@ -445,6 +550,7 @@ async def add_member(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         result = await service.add_member(
             instance_id=instance_id,
             user_id=data.user_id,
@@ -493,6 +599,9 @@ async def search_users(
 ) -> list[UserSearchResult]:
     """Search for users that can be added to an instance."""
     try:
+        container = get_container_with_db(request, db)
+        service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         query = select(UserModel).where(
             UserModel.is_active.is_(True),
         )
@@ -536,6 +645,7 @@ async def update_member_role(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         result = await service.update_member_role(
             instance_id=instance_id,
             member_id=member_id,
@@ -586,6 +696,7 @@ async def remove_member(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         await service.remove_member(
             instance_id=instance_id,
             user_id=user_id,
@@ -620,6 +731,7 @@ async def list_members(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
+        await _get_owned_instance_or_404(service, instance_id, tenant_id)
         members = await service.list_members(instance_id)
 
         user_ids = [m.user_id for m in members]
@@ -675,12 +787,7 @@ async def get_instance_llm_config(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
-        instance = await service.get_instance(instance_id)
-        if not instance:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Instance not found",
-            )
+        instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
         llm_cfg = instance.llm_providers or {}
         return InstanceLlmConfigResponse(
             provider_id=llm_cfg.get("provider_id"),
@@ -711,12 +818,7 @@ async def update_instance_llm_config(
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
-        instance = await service.get_instance(instance_id)
-        if not instance:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Instance not found",
-            )
+        instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
         llm_cfg: dict[str, Any] = dict(instance.llm_providers or {})
         llm_cfg["provider_id"] = data.provider_id
         llm_cfg["model_name"] = data.model_name

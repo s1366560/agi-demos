@@ -30,6 +30,7 @@ from src.domain.ports.repositories.graph_repository import (
     AgentGraphRepository,
     GraphRunRepository,
 )
+from src.domain.ports.repositories.artifact_repository import ArtifactRepositoryPort
 from src.domain.ports.repositories.workspace import (
     BlackboardRepository,
     TopologyRepository,
@@ -68,4 +69,5 @@ __all__ = [
     "BlackboardRepository",
     "WorkspaceTaskRepository",
     "TopologyRepository",
+    "ArtifactRepositoryPort",
 ]

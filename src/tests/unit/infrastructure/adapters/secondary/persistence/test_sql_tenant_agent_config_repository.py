@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.agent.tenant_agent_config import ConfigType, TenantAgentConfig
+from src.domain.model.agent.tenant_agent_config import (
+    ConfigType,
+    RuntimeHookConfig,
+    TenantAgentConfig,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
     SqlTenantAgentConfigRepository,
 )
@@ -37,6 +41,15 @@ class TestSqlTenantAgentConfigRepositoryCreate:
             tool_timeout_seconds=60,
             enabled_tools=["search", "calculate"],
             disabled_tools=["danger"],
+            runtime_hooks=[
+                RuntimeHookConfig(
+                    plugin_name="sisyphus-runtime",
+                    hook_name="before_response",
+                    enabled=True,
+                    priority=10,
+                    settings={"message": "keep going"},
+                )
+            ],
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -45,6 +58,7 @@ class TestSqlTenantAgentConfigRepositoryCreate:
 
         assert result.id == "config-test-1"
         assert result.tenant_id == "tenant-1"
+        assert result.runtime_hooks[0].hook_name == "before_response"
 
     @pytest.mark.asyncio
     async def test_save_updates_existing(self, v2_config_repo: SqlTenantAgentConfigRepository):
@@ -61,6 +75,15 @@ class TestSqlTenantAgentConfigRepositoryCreate:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
+            runtime_hooks=[
+                RuntimeHookConfig(
+                    plugin_name="sisyphus-runtime",
+                    hook_name="after_tool_execution",
+                    enabled=False,
+                    priority=5,
+                    settings={"message": "summarize"},
+                )
+            ],
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -94,6 +117,15 @@ class TestSqlTenantAgentConfigRepositoryFind:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
+            runtime_hooks=[
+                RuntimeHookConfig(
+                    plugin_name="sisyphus-runtime",
+                    hook_name="after_tool_execution",
+                    enabled=False,
+                    priority=5,
+                    settings={"message": "summarize"},
+                )
+            ],
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -103,6 +135,7 @@ class TestSqlTenantAgentConfigRepositoryFind:
         assert result is not None
         assert result.tenant_id == "tenant-find"
         assert result.llm_model == "gpt-4"
+        assert result.runtime_hooks[0].settings == {"message": "summarize"}
 
     @pytest.mark.asyncio
     async def test_get_by_tenant_not_found(self, v2_config_repo: SqlTenantAgentConfigRepository):

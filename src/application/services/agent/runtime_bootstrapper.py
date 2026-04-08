@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any, ClassVar
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.configuration.config import Settings
 from src.domain.model.agent import Conversation
+from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
+    from src.infrastructure.agent.orchestration.orchestrator import SpawnExecutionRequest
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +40,122 @@ class AgentRuntimeBootstrapper:
             return normalized
         return "auto"
 
+    @staticmethod
+    async def _load_tenant_agent_config(tenant_id: str) -> TenantAgentConfig:
+        """Load tenant agent config for request-scoped runtime policy."""
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
+            SqlTenantAgentConfigRepository,
+        )
+
+        session = async_session_factory()
+        try:
+            repo = SqlTenantAgentConfigRepository(session)
+            try:
+                config = await repo.get_by_tenant(tenant_id)
+            except (RuntimeError, SQLAlchemyError) as exc:
+                logger.warning(
+                    "Failed to load tenant agent config for tenant %s; using defaults instead: %s",
+                    tenant_id,
+                    exc,
+                )
+                return TenantAgentConfig.create_default(tenant_id=tenant_id)
+            return config or TenantAgentConfig.create_default(tenant_id=tenant_id)
+        finally:
+            try:
+                await session.close()
+            except (RuntimeError, SQLAlchemyError) as exc:
+                logger.warning(
+                    "Failed to close tenant agent config session for tenant %s: %s",
+                    tenant_id,
+                    exc,
+                )
+
+    @staticmethod
+    async def ensure_spawned_agent_conversation(
+        *,
+        child_session_id: str,
+        parent_session_id: str,
+        project_id: str,
+        tenant_id: str,
+        user_id: str,
+        parent_agent_id: str,
+        child_agent_id: str,
+        child_agent_name: str,
+        mode: str,
+    ) -> Conversation:
+        """Create or load the persisted conversation backing a spawned child session."""
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+            SqlConversationRepository,
+        )
+
+        session = async_session_factory()
+        try:
+            repo = SqlConversationRepository(session)
+            existing = await repo.find_by_id(child_session_id)
+            if existing is not None:
+                return existing
+
+            parent = await repo.find_by_id(parent_session_id)
+            resolved_project_id = (project_id or (parent.project_id if parent else "")).strip()
+            resolved_tenant_id = (tenant_id or (parent.tenant_id if parent else "")).strip()
+            resolved_user_id = (user_id or (parent.user_id if parent else "")).strip()
+            if not resolved_project_id:
+                raise ValueError("Spawned agent session requires a project_id")
+            if not resolved_tenant_id:
+                raise ValueError("Spawned agent session requires a tenant_id")
+            if not resolved_user_id:
+                raise ValueError("Spawned agent session requires a user_id")
+
+            conversation = Conversation(
+                id=child_session_id,
+                project_id=resolved_project_id,
+                tenant_id=resolved_tenant_id,
+                user_id=resolved_user_id,
+                title=f"{child_agent_name or child_agent_id} session",
+                agent_config={"selected_agent_id": child_agent_id},
+                metadata={
+                    "spawned_by_agent_id": parent_agent_id,
+                    "spawned_agent_id": child_agent_id,
+                    "spawn_mode": mode,
+                },
+                parent_conversation_id=parent_session_id,
+            )
+            await repo.save_and_commit(conversation)
+            return conversation
+        finally:
+            await session.close()
+
+    async def launch_spawned_agent_session(
+        self,
+        request: SpawnExecutionRequest,
+    ) -> None:
+        """Persist and start a child session created via agent_spawn."""
+        conversation = await self.ensure_spawned_agent_conversation(
+            child_session_id=request.child_session_id,
+            parent_session_id=request.parent_session_id,
+            project_id=request.project_id,
+            tenant_id=request.tenant_id,
+            user_id=request.user_id,
+            parent_agent_id=request.parent_agent_id,
+            child_agent_id=request.child_agent_id,
+            child_agent_name=request.child_agent_name,
+            mode=request.mode.value,
+        )
+        await self.start_chat_actor(
+            conversation=conversation,
+            message_id=str(uuid.uuid4()),
+            user_message=request.message,
+            conversation_context=[],
+            agent_id=request.child_agent_id,
+            parent_session_id=request.parent_session_id,
+        )
+
     async def start_chat_actor(  # noqa: PLR0913
         self,
         conversation: Conversation,
@@ -49,6 +171,7 @@ class AgentRuntimeBootstrapper:
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
         model_override: str | None = None,
+        parent_session_id: str | None = None,
     ) -> str:
         """Start agent execution using configured runtime mode."""
         from src.configuration.config import get_settings
@@ -62,6 +185,7 @@ class AgentRuntimeBootstrapper:
         settings = get_settings()
         agent_mode = "default"
         runtime_mode = self._normalize_runtime_mode(settings.agent_runtime_mode)
+        tenant_agent_config = await self._load_tenant_agent_config(conversation.tenant_id)
 
         # Resolve provider config from DB
         factory = get_ai_service_factory()
@@ -71,16 +195,23 @@ class AgentRuntimeBootstrapper:
         encryption_service = get_encryption_service()
         api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
 
+        configured_model = tenant_agent_config.llm_model.strip()
+        base_model = (
+            configured_model
+            if configured_model and configured_model.lower() != "default"
+            else provider_config.llm_model
+        )
+
         config = ProjectAgentActorConfig(
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
             agent_mode=agent_mode,
-            model=model_override or provider_config.llm_model,
+            model=model_override or base_model,
             api_key=api_key,
             base_url=provider_config.base_url,
-            temperature=0.7,
+            temperature=tenant_agent_config.llm_temperature,
             max_tokens=settings.agent_max_tokens,
-            max_steps=settings.agent_max_steps,
+            max_steps=tenant_agent_config.max_work_plan_steps,
             persistent=True,
             mcp_tools_ttl_seconds=300,
             max_concurrent_chats=10,
@@ -102,7 +233,9 @@ class AgentRuntimeBootstrapper:
             plan_mode=conversation.is_in_plan_mode,
             app_model_context=app_model_context,
             image_attachments=image_attachments,
-            agent_id=agent_id,
+            agent_id=agent_id or BUILTIN_SISYPHUS_ID,
+            tenant_agent_config=tenant_agent_config.to_dict(),
+            parent_session_id=parent_session_id,
         )
 
         if runtime_mode == "local":
@@ -452,16 +585,43 @@ class AgentRuntimeBootstrapper:
                 from src.infrastructure.agent.state.agent_worker_state import (
                     get_redis_client,
                 )
+                from src.infrastructure.agent.subagent.run_registry import (
+                    get_shared_subagent_run_registry,
+                )
 
                 _db_session = async_session_factory()
                 _redis = await get_redis_client()
                 _session_registry = AgentSessionRegistry()
+                _run_registry = get_shared_subagent_run_registry(
+                    persistence_path=getattr(
+                        _ma_settings, "agent_subagent_run_registry_path", None
+                    ),
+                    postgres_persistence_dsn=getattr(
+                        _ma_settings, "agent_subagent_run_postgres_dsn", None
+                    ),
+                    sqlite_persistence_path=getattr(
+                        _ma_settings, "agent_subagent_run_sqlite_path", None
+                    ),
+                    redis_cache_url=getattr(
+                        _ma_settings, "agent_subagent_run_redis_cache_url", None
+                    ),
+                    redis_cache_ttl_seconds=(
+                        getattr(_ma_settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
+                    ),
+                    terminal_retention_seconds=(
+                        _ma_settings.agent_subagent_terminal_retention_seconds
+                    ),
+                )
                 _orchestrator = AgentOrchestrator(
                     agent_registry=SqlAgentRegistryRepository(_db_session),
                     session_registry=_session_registry,
-                    spawn_manager=SpawnManager(session_registry=_session_registry),
+                    spawn_manager=SpawnManager(
+                        session_registry=_session_registry,
+                        run_registry=_run_registry,
+                    ),
                     message_bus=RedisAgentMessageBusAdapter(_redis),
                     db_session=_db_session,
+                    spawn_executor=self.launch_spawned_agent_session,
                 )
                 set_agent_orchestrator(_orchestrator)
                 logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")

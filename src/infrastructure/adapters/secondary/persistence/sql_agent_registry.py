@@ -23,6 +23,14 @@ from src.domain.ports.agent.agent_registry import AgentRegistryPort
 from src.infrastructure.adapters.secondary.common.base_repository import (
     BaseRepository,
 )
+from src.infrastructure.agent.sisyphus.builtin_agent import (
+    BUILTIN_AGENT_NAMESPACE,
+    get_builtin_agent_by_id,
+    get_builtin_agent_by_name,
+    is_builtin_agent_id,
+    is_builtin_agent_name,
+    list_builtin_agents,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +49,9 @@ class SqlAgentRegistryRepository(
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
         )
+
+        if is_builtin_agent_id(agent.id) or is_builtin_agent_name(agent.name):
+            raise ValueError("Built-in agent ids and names are reserved")
 
         db_agent = AgentDefinitionModel(
             id=agent.id,
@@ -86,7 +97,21 @@ class SqlAgentRegistryRepository(
 
         return agent
 
-    async def get_by_id(self, agent_id: str) -> Agent | None:
+    async def get_by_id(
+        self,
+        agent_id: str,
+        *,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Agent | None:
+        builtin_agent = get_builtin_agent_by_id(
+            agent_id,
+            tenant_id=tenant_id or BUILTIN_AGENT_NAMESPACE,
+            project_id=project_id,
+        )
+        if builtin_agent is not None:
+            return builtin_agent
+
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
         )
@@ -102,6 +127,10 @@ class SqlAgentRegistryRepository(
         tenant_id: str,
         name: str,
     ) -> Agent | None:
+        builtin_agent = get_builtin_agent_by_name(name, tenant_id=tenant_id)
+        if builtin_agent is not None:
+            return builtin_agent
+
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
         )
@@ -115,6 +144,9 @@ class SqlAgentRegistryRepository(
         return self._to_domain(db_agent) if db_agent else None
 
     async def update(self, agent: Agent) -> Agent:
+        if is_builtin_agent_id(agent.id) or is_builtin_agent_name(agent.name):
+            raise ValueError("Built-in agents cannot be updated")
+
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
         )
@@ -169,6 +201,9 @@ class SqlAgentRegistryRepository(
         return agent
 
     async def delete(self, agent_id: str) -> bool:
+        if is_builtin_agent_id(agent_id):
+            raise ValueError("Built-in agents cannot be deleted")
+
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
         )
@@ -197,12 +232,19 @@ class SqlAgentRegistryRepository(
         if enabled_only:
             query = query.where(AgentDefinitionModel.enabled.is_(True))
 
-        query = query.order_by(AgentDefinitionModel.created_at.desc()).limit(limit).offset(offset)
+        builtin_agents = list_builtin_agents(tenant_id=tenant_id)
+        builtin_slice = builtin_agents[offset : offset + limit]
+        builtin_count = len(builtin_slice)
+
+        db_limit = max(limit - builtin_count, 0)
+        db_offset = max(offset - len(builtin_agents), 0)
+        query = query.order_by(AgentDefinitionModel.created_at.desc()).limit(db_limit).offset(db_offset)
 
         result = await self._session.execute(query)
         db_agents = result.scalars().all()
 
-        return [d for a in db_agents if (d := self._to_domain(a)) is not None]
+        agents = [d for a in db_agents if (d := self._to_domain(a)) is not None]
+        return builtin_slice + agents
 
     async def list_by_project(
         self,
@@ -238,13 +280,22 @@ class SqlAgentRegistryRepository(
         result = await self._session.execute(query)
         db_agents = result.scalars().all()
 
-        return [d for a in db_agents if (d := self._to_domain(a)) is not None]
+        resolved_tenant_id = tenant_id or BUILTIN_AGENT_NAMESPACE
+        agents = [d for a in db_agents if (d := self._to_domain(a)) is not None]
+        builtin_agents = list_builtin_agents(
+            tenant_id=resolved_tenant_id,
+            project_id=project_id,
+        )
+        return builtin_agents + agents
 
     async def set_enabled(
         self,
         agent_id: str,
         enabled: bool,
     ) -> Agent:
+        if is_builtin_agent_id(agent_id):
+            raise ValueError("Built-in agents cannot be disabled")
+
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
         )
@@ -296,7 +347,8 @@ class SqlAgentRegistryRepository(
             query = query.where(AgentDefinitionModel.enabled.is_(True))
 
         result = await self._session.execute(query)
-        return result.scalar() or 0
+        builtin_count = 1
+        return (result.scalar() or 0) + builtin_count
 
     def _to_domain(self, db_agent: AgentDefinitionModel | None) -> Agent | None:
         if db_agent is None:

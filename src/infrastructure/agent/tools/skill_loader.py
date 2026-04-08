@@ -186,6 +186,19 @@ def _load_skill_content_from_cwd(skill_name: str) -> tuple[str | None, str | Non
         return None, None
 
 
+def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
+    """Check request-scoped skill allowlist from the runtime context."""
+    allowed_skills = ctx.runtime_context.get("allowed_skills")
+    if not isinstance(allowed_skills, list) or not allowed_skills:
+        return True
+    normalized_allowed = {
+        str(item).strip().lower()
+        for item in allowed_skills
+        if isinstance(item, str) and item.strip()
+    }
+    return skill_name.strip().lower() in normalized_allowed
+
+
 # ---------------------------------------------------------------------------
 # Tool definition
 # ---------------------------------------------------------------------------
@@ -212,7 +225,7 @@ def _load_skill_content_from_cwd(skill_name: str) -> tuple[str | None, str | Non
     category="knowledge",
     tags=frozenset({"skill", "knowledge"}),
 )
-async def skill_loader_tool(
+async def skill_loader_tool(  # noqa: C901
     ctx: ToolContext,
     *,
     name: str,
@@ -230,6 +243,12 @@ async def skill_loader_tool(
     if not skill_name:
         return ToolResult(
             output="skill name parameter is required.",
+            is_error=True,
+        )
+
+    if not _is_skill_allowed(ctx, skill_name):
+        return ToolResult(
+            output=f"Skill '{skill_name}' is not allowed for the active agent profile.",
             is_error=True,
         )
 

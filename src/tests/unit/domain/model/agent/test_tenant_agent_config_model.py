@@ -11,6 +11,7 @@ import pytest
 
 from src.domain.model.agent.tenant_agent_config import (
     ConfigType,
+    RuntimeHookConfig,
     TenantAgentConfig,
 )
 
@@ -28,6 +29,7 @@ class TestTenantAgentConfig:
         assert config.multi_level_thinking_enabled is True
         assert config.max_work_plan_steps == 10
         assert config.tool_timeout_seconds == 30
+        assert config.runtime_hooks == []
 
     def test_create_custom_config(self):
         """Test creating custom configuration."""
@@ -199,6 +201,7 @@ class TestTenantAgentConfig:
         assert data["tenant_id"] == "tenant-1"
         assert data["pattern_learning_enabled"] is True
         assert data["multi_level_thinking_enabled"] is True
+        assert data["runtime_hooks"] == []
         assert "created_at" in data
         assert "updated_at" in data
 
@@ -216,6 +219,15 @@ class TestTenantAgentConfig:
             "tool_timeout_seconds": 60,
             "enabled_tools": ["memory_search"],
             "disabled_tools": ["episode_retrieval"],
+            "runtime_hooks": [
+                {
+                    "plugin_name": "sisyphus-runtime",
+                    "hook_name": "before_response",
+                    "enabled": True,
+                    "priority": 50,
+                    "settings": {"message": "stay focused"},
+                }
+            ],
             "created_at": datetime.now(UTC).isoformat(),
             "updated_at": datetime.now(UTC).isoformat(),
         }
@@ -226,3 +238,28 @@ class TestTenantAgentConfig:
         assert config.tenant_id == "tenant-1"
         assert config.llm_model == "gpt-4"
         assert config.max_work_plan_steps == 15
+        assert len(config.runtime_hooks) == 1
+        assert config.runtime_hooks[0].plugin_name == "sisyphus-runtime"
+
+    def test_update_runtime_hooks(self):
+        """Test replacing runtime hook settings."""
+        config = TenantAgentConfig.create_default(tenant_id="tenant-1")
+
+        updated = config.update_runtime_hooks(
+            [
+                RuntimeHookConfig(
+                    plugin_name="sisyphus-runtime",
+                    hook_name="before_response",
+                    enabled=False,
+                    priority=25,
+                    settings={"message": "be concise"},
+                )
+            ]
+        )
+
+        hook = updated.get_runtime_hook("SISYPHUS-RUNTIME", "before_response")
+
+        assert hook is not None
+        assert hook.enabled is False
+        assert hook.priority == 25
+        assert hook.settings == {"message": "be concise"}

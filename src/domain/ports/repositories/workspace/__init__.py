@@ -1,3 +1,6 @@
+from src.domain.ports.repositories.workspace.blackboard_file_repository import (
+    BlackboardFileRepository,
+)
 from src.domain.ports.repositories.workspace.blackboard_repository import (
     BlackboardRepository,
 )
@@ -27,6 +30,7 @@ from src.domain.ports.repositories.workspace.workspace_task_repository import (
 )
 
 __all__ = [
+    "BlackboardFileRepository",
     "BlackboardRepository",
     "CyberGeneRepository",
     "CyberObjectiveRepository",

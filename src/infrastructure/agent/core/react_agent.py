@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 import time
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -44,8 +44,10 @@ from src.domain.events.agent_events import (
     AgentSkillMatchedEvent,
     AgentThoughtEvent,
 )
+from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
 from ..commands.builtins import register_builtin_commands
@@ -59,6 +61,7 @@ from ..heartbeat.runner import HeartbeatRunner
 from ..permission import PermissionManager
 from ..planning.plan_detector import PlanDetector
 from ..plugins.policy_context import PolicyContext, normalize_policy_layers
+from ..plugins.registry import get_plugin_registry
 from ..plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionTraceStep,
@@ -70,6 +73,12 @@ from ..routing import (
     IntentGate,
     RoutingDecision,
 )
+from ..sisyphus.builtin_agent import (
+    BUILTIN_SISYPHUS_ID,
+    build_builtin_sisyphus_agent,
+    get_builtin_agent_by_id,
+)
+from ..sisyphus.prompt_builder import SisyphusPromptBuilder, SisyphusPromptContext
 from ..skill import SkillProtocol
 from .processor import (
     ProcessorConfig,
@@ -93,6 +102,23 @@ _react_bg_tasks: set[asyncio.Task[Any]] = set()
 _MODEL_PROVIDER_ALIASES: dict[str, str] = {
     "azure_openai": "openai",
 }
+
+
+@dataclass(frozen=True)
+class AgentRuntimeProfile:
+    """Request-scoped runtime profile derived from selected agent + tenant config."""
+
+    selected_agent: Agent | None
+    tenant_agent_config: TenantAgentConfig
+    available_skills: list[Skill]
+    allow_tools: list[str]
+    deny_tools: list[str]
+    effective_model: str
+    effective_temperature: float
+    effective_max_tokens: int
+    effective_max_steps: int
+    primary_agent_prompt: str | None = None
+    agent_definition_prompt: str | None = None
 
 
 def _normalize_model_provider(provider: str | None) -> str | None:
@@ -387,6 +413,7 @@ class ReActAgent:
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
         self._workspace_manager = workspace_manager  # Workspace persona/soul file loader
+        self._sisyphus_prompt_builder = SisyphusPromptBuilder()
         self._heartbeat_runner: HeartbeatRunner | None = None
         if heartbeat_config and heartbeat_config.enabled:
             self._heartbeat_runner = HeartbeatRunner(
@@ -468,6 +495,7 @@ class ReActAgent:
             base_model=self.model,
             base_api_key=self.api_key,
             base_url=self.base_url,
+            plugin_registry=get_plugin_registry(),
         )
 
         # -- Wire extracted SubAgent helpers --
@@ -743,29 +771,13 @@ class ReActAgent:
         subagent_terminal_retention_seconds: int,
     ) -> None:
         """Initialize SubAgent run registry with persistence backend."""
-        from ..subagent.run_registry import SubAgentRunRegistry
+        from ..subagent.run_registry import get_shared_subagent_run_registry
 
-        resolved_registry_path = subagent_run_registry_path or os.getenv(
-            "AGENT_SUBAGENT_RUN_REGISTRY_PATH"
-        )
-        resolved_postgres_registry_dsn = subagent_run_postgres_dsn or os.getenv(
-            "AGENT_SUBAGENT_RUN_POSTGRES_DSN"
-        )
-        resolved_sqlite_registry_path = subagent_run_sqlite_path or os.getenv(
-            "AGENT_SUBAGENT_RUN_SQLITE_PATH"
-        )
-        resolved_run_cache_url = subagent_run_redis_cache_url or os.getenv(
-            "AGENT_SUBAGENT_RUN_REDIS_CACHE_URL"
-        )
-        self._subagent_run_registry = SubAgentRunRegistry(
-            persistence_path=(
-                resolved_registry_path
-                if not resolved_postgres_registry_dsn and not resolved_sqlite_registry_path
-                else None
-            ),
-            postgres_persistence_dsn=resolved_postgres_registry_dsn,
-            sqlite_persistence_path=resolved_sqlite_registry_path,
-            redis_cache_url=resolved_run_cache_url,
+        self._subagent_run_registry = get_shared_subagent_run_registry(
+            persistence_path=subagent_run_registry_path,
+            postgres_persistence_dsn=subagent_run_postgres_dsn,
+            sqlite_persistence_path=subagent_run_sqlite_path,
+            redis_cache_url=subagent_run_redis_cache_url,
             redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
             terminal_retention_seconds=subagent_terminal_retention_seconds,
         )
@@ -845,6 +857,7 @@ class ReActAgent:
             max_tokens=max_tokens,
             max_steps=max_steps,
             llm_client=self._llm_client,
+            plugin_registry=get_plugin_registry(),
             skill_names=[s.name for s in (self.skills or [])],
             provider_options=_provider_opts,
         )
@@ -858,14 +871,17 @@ class ReActAgent:
         conversation_context: list[dict[str, str]],
         effective_mode: str,
         routing_metadata: Mapping[str, Any] | None = None,
+        allow_tools: list[str] | None = None,
+        deny_tools: list[str] | None = None,
     ) -> ToolSelectionContext:
         """Build selection context for context/intent/semantic/policy pipeline."""
         policy_context = PolicyContext.from_metadata(
             {"policy_layers": dict(self._tool_policy_layers)},
         )
-        deny_tools: list[str] = []
+        effective_deny_tools = list(deny_tools or [])
         if effective_mode == "plan":
-            deny_tools = ["plugin_manager", "skill_installer", "skill_sync"]
+            effective_deny_tools.extend(["plugin_manager", "skill_installer", "skill_sync"])
+        effective_deny_tools = sorted({tool for tool in effective_deny_tools if tool})
         metadata: dict[str, Any] = {
             "user_message": user_message,
             "conversation_history": conversation_context,
@@ -873,8 +889,16 @@ class ReActAgent:
             "agent_mode": self.agent_mode,
             "max_tools": self._tool_selection_max_tools,
             "semantic_backend": self._tool_selection_semantic_backend,
-            "deny_tools": deny_tools,
-            "policy_agent": {"deny_tools": deny_tools} if deny_tools else {},
+            "deny_tools": effective_deny_tools,
+            "allow_tools": list(allow_tools or []),
+            "policy_agent": (
+                {
+                    "allow_tools": list(allow_tools or []),
+                    "deny_tools": effective_deny_tools,
+                }
+                if allow_tools or effective_deny_tools
+                else {}
+            ),
         }
         if routing_metadata:
             domain_lane = routing_metadata.get("domain_lane")
@@ -1045,7 +1069,11 @@ class ReActAgent:
 
         return self.raw_tools, self.tool_definitions
 
-    def _match_skill(self, query: str) -> tuple[SkillProtocol | None, float]:
+    def _match_skill(
+        self,
+        query: str,
+        available_skills: list[SkillProtocol] | None = None,
+    ) -> tuple[SkillProtocol | None, float]:
         """Match query against available skills, filtered by agent_mode.
 
         Inlined from SkillOrchestrator.match() (Wave 5.1).
@@ -1056,7 +1084,7 @@ class ReActAgent:
         Returns:
             Tuple of (best matching skill or None, match score)
         """
-        skills = cast("list[SkillProtocol]", self.skills or [])
+        skills = available_skills or cast("list[SkillProtocol]", self.skills or [])
         if not skills:
             logger.debug("[ReActAgent] No skills available for matching")
             return None, 0.0
@@ -1173,6 +1201,12 @@ class ReActAgent:
         selection_context: ToolSelectionContext | None = None,
         heartbeat_prompt: str | None = None,
         agent_definition_prompt: str | None = None,
+        primary_agent_prompt: str | None = None,
+        available_skills: list[Skill] | None = None,
+        model_name: str | None = None,
+        max_steps_override: int | None = None,
+        workspace_manager: Any | None = None,
+        selected_agent_name: str | None = None,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -1192,11 +1226,12 @@ class ReActAgent:
             System prompt string
         """
         # Detect model provider from model name
-        model_provider = SystemPromptManager.detect_model_provider(self.model)
+        model_provider = SystemPromptManager.detect_model_provider(model_name or self.model)
 
         # Convert skills to dict format for PromptContext
         skills_data = None
-        if self.skills:
+        effective_skills = available_skills if available_skills is not None else self.skills
+        if effective_skills:
             skills_data = [
                 {
                     "name": s.name,
@@ -1205,7 +1240,7 @@ class ReActAgent:
                     "status": s.status.value,
                     "prompt_template": s.prompt_template,
                 }
-                for s in self.skills
+                for s in effective_skills
             ]
 
         # Convert matched skill to dict format
@@ -1252,9 +1287,10 @@ class ReActAgent:
 
         # Load workspace persona as first-class AgentPersona
         persona = None
-        if self._workspace_manager:
+        active_workspace_manager = workspace_manager or self._workspace_manager
+        if active_workspace_manager:
             try:
-                persona = await self._workspace_manager.build_persona()
+                persona = await active_workspace_manager.build_persona()
             except Exception as e:
                 logger.warning("Failed to load workspace persona: %s", e)
 
@@ -1281,12 +1317,14 @@ class ReActAgent:
             conversation_history_length=len(conversation_context),
             user_query=user_query,
             current_step=current_step,
-            max_steps=self.max_steps,
+            max_steps=max_steps_override or self.max_steps,
             memory_context=memory_context,
             persona=persona,
             heartbeat_prompt=heartbeat_prompt,
             workspace_context=workspace_context,
             agent_definition_prompt=agent_definition_prompt,
+            primary_agent_prompt=primary_agent_prompt,
+            selected_agent_name=selected_agent_name,
         )
 
         # Use SystemPromptManager to build the prompt
@@ -1298,34 +1336,200 @@ class ReActAgent:
             ),
         )
 
-    async def _load_agent_definition_prompt(self, agent_id: str) -> str | None:
-        """Load agent definition's system_prompt by ID via the global orchestrator.
+    async def _load_selected_agent(
+        self,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str,
+    ) -> Agent | None:
+        """Load the selected runtime agent from built-ins, orchestrator, or DB."""
+        builtin_agent = get_builtin_agent_by_id(
+            agent_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        if builtin_agent is not None:
+            return builtin_agent
 
-        Returns the custom system prompt string, or None if not found.
-        """
         from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
 
         orchestrator = get_agent_orchestrator()
-        if orchestrator is None:
-            logger.debug("[ReActAgent] No orchestrator available, skipping agent definition lookup")
+        if orchestrator is not None:
+            try:
+                agent_def = await orchestrator.get_agent(agent_id)
+                if agent_def is not None:
+                    return cast(Agent, agent_def)
+            except Exception:
+                logger.exception("[ReActAgent] Failed orchestrator lookup for agent %s", agent_id)
+
+        session_factory = getattr(self._memory_capture, "_session_factory", None)
+        if session_factory is None:
+            logger.debug("[ReActAgent] No session_factory available for agent lookup: %s", agent_id)
             return None
 
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
+            SqlAgentRegistryRepository,
+        )
+
+        session = session_factory()
         try:
-            agent_def = await orchestrator.get_agent(agent_id)
+            repository = SqlAgentRegistryRepository(session)
+            agent_def = await repository.get_by_id(
+                agent_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
             if agent_def is None:
                 logger.warning("[ReActAgent] Agent definition not found: %s", agent_id)
-                return None
-            if agent_def.system_prompt:
-                logger.info(
-                    "[ReActAgent] Injecting agent definition prompt: id=%s name=%s (%d chars)",
-                    agent_def.id,
-                    agent_def.name,
-                    len(agent_def.system_prompt),
-                )
-                return agent_def.system_prompt
+            return agent_def
         except Exception:
-            logger.exception("[ReActAgent] Failed to load agent definition: %s", agent_id)
-        return None
+            logger.exception("[ReActAgent] Failed DB lookup for agent definition: %s", agent_id)
+            return None
+        finally:
+            await session.close()
+
+    def _load_tenant_agent_config(
+        self,
+        tenant_id: str,
+        tenant_agent_config_data: dict[str, Any] | None,
+    ) -> TenantAgentConfig:
+        """Load tenant config from request payload or fall back to defaults."""
+        if isinstance(tenant_agent_config_data, dict):
+            try:
+                return TenantAgentConfig.from_dict(tenant_agent_config_data)
+            except Exception:
+                logger.exception("[ReActAgent] Failed to parse tenant agent config override")
+        return TenantAgentConfig.create_default(tenant_id=tenant_id)
+
+    def _build_runtime_workspace_manager(self, agent: Agent | None) -> Any | None:
+        """Return an agent-scoped workspace manager clone when available."""
+        if self._workspace_manager is None:
+            return None
+        scoped_agent_id = None
+        if agent is not None:
+            scoped_agent_id = agent.id.replace(":", "__")
+        if hasattr(self._workspace_manager, "for_agent"):
+            return self._workspace_manager.for_agent(scoped_agent_id)
+        return self._workspace_manager
+
+    def _filter_skills_for_agent(self, selected_agent: Agent | None) -> list[Skill]:
+        """Filter skills using the selected agent's allowlist."""
+        available_skills = list(self.skills or [])
+        if selected_agent is None or not selected_agent.allowed_skills:
+            return available_skills
+        allowed_skill_names = {skill_name.strip().lower() for skill_name in selected_agent.allowed_skills}
+        return [
+            skill
+            for skill in available_skills
+            if skill.name.strip().lower() in allowed_skill_names
+        ]
+
+    def _resolve_tool_policy(
+        self,
+        *,
+        selected_agent: Agent | None,
+        tenant_agent_config: TenantAgentConfig,
+    ) -> tuple[list[str], list[str]]:
+        """Resolve effective tool allow/deny lists for this request."""
+        allowlists: list[set[str]] = []
+        if selected_agent and selected_agent.allowed_tools and "*" not in selected_agent.allowed_tools:
+            allowlists.append({tool for tool in selected_agent.allowed_tools if tool})
+        if tenant_agent_config.enabled_tools:
+            allowlists.append({tool for tool in tenant_agent_config.enabled_tools if tool})
+
+        effective_allow = set.intersection(*allowlists) if allowlists else set()
+        effective_deny = {tool for tool in tenant_agent_config.disabled_tools if tool}
+        return sorted(effective_allow), sorted(effective_deny)
+
+    def _resolve_effective_model(
+        self,
+        *,
+        selected_agent: Agent | None,
+        tenant_agent_config: TenantAgentConfig,
+    ) -> str:
+        """Resolve the request-scoped base model before per-turn overrides."""
+        if selected_agent is not None and selected_agent.model.value != "inherit":
+            return selected_agent.model.value
+        tenant_model = tenant_agent_config.llm_model.strip()
+        if tenant_model and tenant_model.lower() != "default":
+            return tenant_model
+        return self.model
+
+    def _build_runtime_profile(
+        self,
+        *,
+        tenant_id: str,
+        tenant_agent_config_data: dict[str, Any] | None,
+        selected_agent: Agent | None,
+    ) -> AgentRuntimeProfile:
+        """Build the request-scoped runtime profile."""
+        tenant_agent_config = self._load_tenant_agent_config(tenant_id, tenant_agent_config_data)
+        available_skills = self._filter_skills_for_agent(selected_agent)
+        allow_tools, deny_tools = self._resolve_tool_policy(
+            selected_agent=selected_agent,
+            tenant_agent_config=tenant_agent_config,
+        )
+        effective_model = self._resolve_effective_model(
+            selected_agent=selected_agent,
+            tenant_agent_config=tenant_agent_config,
+        )
+        is_builtin_sisyphus = selected_agent is not None and selected_agent.id == BUILTIN_SISYPHUS_ID
+        effective_temperature = (
+            selected_agent.temperature
+            if selected_agent is not None and not is_builtin_sisyphus
+            else tenant_agent_config.llm_temperature
+        )
+        effective_max_tokens = (
+            selected_agent.max_tokens
+            if selected_agent is not None and not is_builtin_sisyphus
+            else self.max_tokens
+        )
+        effective_max_steps = (
+            selected_agent.max_iterations
+            if selected_agent is not None and not is_builtin_sisyphus
+            else tenant_agent_config.max_work_plan_steps
+        )
+        agent_definition_prompt = (
+            selected_agent.system_prompt
+            if selected_agent is not None and selected_agent.id != BUILTIN_SISYPHUS_ID
+            else None
+        )
+
+        return AgentRuntimeProfile(
+            selected_agent=selected_agent,
+            tenant_agent_config=tenant_agent_config,
+            available_skills=available_skills,
+            allow_tools=allow_tools,
+            deny_tools=deny_tools,
+            effective_model=effective_model,
+            effective_temperature=effective_temperature,
+            effective_max_tokens=effective_max_tokens,
+            effective_max_steps=effective_max_steps,
+            primary_agent_prompt=None,
+            agent_definition_prompt=agent_definition_prompt,
+        )
+
+    def _build_primary_agent_prompt(
+        self,
+        *,
+        runtime_profile: AgentRuntimeProfile,
+        selection_context: ToolSelectionContext,
+    ) -> str | None:
+        """Build a dynamic primary prompt when the selected agent is built-in Sisyphus."""
+        selected_agent = runtime_profile.selected_agent
+        if selected_agent is None or selected_agent.id != BUILTIN_SISYPHUS_ID:
+            return None
+        _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
+        return self._sisyphus_prompt_builder.build(
+            SisyphusPromptContext(
+                model_name=runtime_profile.effective_model,
+                max_steps=runtime_profile.effective_max_steps,
+                tools=current_tool_definitions,
+                skills=runtime_profile.available_skills,
+                subagents=list(self.subagents or []),
+            )
+        )
 
     async def _stream_detect_plan_mode(
         self,
@@ -1386,6 +1590,7 @@ class ReActAgent:
         self,
         processed_user_message: str,
         forced_skill_name: str | None,
+        available_skills: list[SkillProtocol] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Match skill and yield skill_matched event.
 
@@ -1400,7 +1605,7 @@ class ReActAgent:
             # Inline find_by_name: case-insensitive name lookup (Wave 5.1)
             name_lower = forced_skill_name.strip().lower()
             found_skill: SkillProtocol | None = None
-            for skill in cast("list[SkillProtocol]", self.skills or []):
+            for skill in available_skills or cast("list[SkillProtocol]", self.skills or []):
                 if skill.name.lower() == name_lower and skill.status.value == "active":
                     found_skill = skill
                     break
@@ -1420,9 +1625,15 @@ class ReActAgent:
                         ),
                     ).to_event_dict(),
                 )
-                matched_skill, skill_score = self._match_skill(processed_user_message)
+                matched_skill, skill_score = self._match_skill(
+                    processed_user_message,
+                    available_skills=available_skills,
+                )
         else:
-            matched_skill, skill_score = self._match_skill(processed_user_message)
+            matched_skill, skill_score = self._match_skill(
+                processed_user_message,
+                available_skills=available_skills,
+            )
 
         should_inject_prompt = matched_skill is not None and (
             is_forced or skill_score >= self.skill_match_threshold
@@ -1893,6 +2104,8 @@ class ReActAgent:
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
             plugin_registry=config.plugin_registry,
+            runtime_hook_overrides=[dict(item) for item in config.runtime_hook_overrides],
+            runtime_context=dict(config.runtime_context),
             tool_provider=tool_provider,
             forced_skill_name=config.forced_skill_name,
             forced_skill_tools=(
@@ -1901,6 +2114,8 @@ class ReActAgent:
             skill_names=list(config.skill_names),
             provider_options=dict(config.provider_options),
             message_bus=config.message_bus,
+            control_channel=config.control_channel,
+            run_id=config.run_id,
         )
         if tool_provider is not None:
             logger.debug(
@@ -2082,6 +2297,8 @@ class ReActAgent:
         project_id: str,
         processed_user_message: str,
         conversation_context: list[dict[str, str]],
+        allow_tools: list[str] | None = None,
+        deny_tools: list[str] | None = None,
     ) -> tuple[str, ToolSelectionContext]:
         """Resolve effective mode and build selection context.
 
@@ -2103,6 +2320,8 @@ class ReActAgent:
             conversation_context=conversation_context,
             effective_mode=effective_mode,
             routing_metadata=routing_metadata,
+            allow_tools=allow_tools,
+            deny_tools=deny_tools,
         )
         if effective_mode == "plan":
             self.permission_manager.set_mode(AgentPermissionMode.PLAN)
@@ -2162,6 +2381,7 @@ class ReActAgent:
         llm_overrides: dict[str, Any] | None = None,
         model_override: str | None = None,
         agent_id: str | None = None,
+        tenant_agent_config_data: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -2225,8 +2445,34 @@ class ReActAgent:
         # Phase 4b: Filesystem skill loading (lazy, once per agent instance)
         await self._load_filesystem_skills(tenant_id, project_id)
 
+        resolved_agent_id = agent_id or BUILTIN_SISYPHUS_ID
+        selected_agent = await self._load_selected_agent(
+            agent_id=resolved_agent_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        if selected_agent is None:
+            logger.warning(
+                "[ReActAgent] Falling back to built-in Sisyphus for missing agent %s",
+                resolved_agent_id,
+            )
+            selected_agent = build_builtin_sisyphus_agent(
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+        runtime_profile = self._build_runtime_profile(
+            tenant_id=tenant_id,
+            tenant_agent_config_data=tenant_agent_config_data,
+            selected_agent=selected_agent,
+        )
+        runtime_workspace_manager = self._build_runtime_workspace_manager(selected_agent)
+
         # Phase 5: Skill matching
-        for event in self._stream_match_skill(processed_user_message, forced_skill_name):
+        for event in self._stream_match_skill(
+            processed_user_message,
+            forced_skill_name,
+            available_skills=cast("list[SkillProtocol]", runtime_profile.available_skills),
+        ):
             yield event
         skill_state = self._stream_skill_state
         matched_skill: Skill | None = cast("Skill | None", skill_state["matched_skill"])
@@ -2317,6 +2563,8 @@ class ReActAgent:
             project_id=project_id,
             processed_user_message=processed_user_message,
             conversation_context=conversation_context,
+            allow_tools=runtime_profile.allow_tools,
+            deny_tools=runtime_profile.deny_tools,
         )
 
         # Phase 6b: Inject matched skill's declared tools into selection context
@@ -2342,10 +2590,11 @@ class ReActAgent:
                 heartbeat_prompt = hb_result.prompt
                 logger.info("[ReActAgent] Heartbeat due, injecting heartbeat prompt into context")
 
-        # Phase 7c: Agent definition lookup (custom system prompt injection)
-        agent_definition_prompt: str | None = None
-        if agent_id:
-            agent_definition_prompt = await self._load_agent_definition_prompt(agent_id)
+        # Phase 7c: Selected agent prompt resolution
+        primary_agent_prompt = self._build_primary_agent_prompt(
+            runtime_profile=runtime_profile,
+            selection_context=selection_context,
+        )
 
         # Phase 8: System prompt building
         system_prompt = await self._build_system_prompt(
@@ -2361,7 +2610,13 @@ class ReActAgent:
             memory_context=memory_context,
             selection_context=selection_context,
             heartbeat_prompt=heartbeat_prompt,
-            agent_definition_prompt=agent_definition_prompt,
+            agent_definition_prompt=runtime_profile.agent_definition_prompt,
+            primary_agent_prompt=primary_agent_prompt,
+            available_skills=runtime_profile.available_skills,
+            model_name=(model_override or runtime_profile.effective_model),
+            max_steps_override=runtime_profile.effective_max_steps,
+            workspace_manager=runtime_workspace_manager,
+            selected_agent_name=selected_agent.name,
         )
 
         # Phase 9: Context building
@@ -2406,6 +2661,23 @@ class ReActAgent:
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(self.config, selection_context)
+        config.model = runtime_profile.effective_model
+        config.temperature = runtime_profile.effective_temperature
+        config.max_tokens = runtime_profile.effective_max_tokens
+        config.max_steps = runtime_profile.effective_max_steps
+        config.skill_names = [skill.name for skill in runtime_profile.available_skills]
+        config.runtime_hook_overrides = [
+            runtime_hook.to_dict()
+            for runtime_hook in runtime_profile.tenant_agent_config.runtime_hooks
+        ]
+        config.runtime_context = {
+            **dict(config.runtime_context),
+            "selected_agent_id": selected_agent.id,
+            "selected_agent_name": selected_agent.name,
+            "allowed_skills": list(selected_agent.allowed_skills) if selected_agent.allowed_skills else [],
+            "route_id": selection_context.metadata.get("route_id"),
+            "trace_id": selection_context.metadata.get("trace_id"),
+        }
         # Set session_id for announce message polling (P0.5)
         config.session_id = conversation_id
         # Pass forced skill context to processor for loop reinforcement (Fix 4)
@@ -2601,6 +2873,7 @@ class ReActAgent:
             "project_id": project_id,
             "message_id": message_id,
             "sandbox_id": self._extract_sandbox_id_from_tools(),
+            "agent_name": selected_agent.name,
         }
 
         # Phase 13: Event processing

@@ -64,6 +64,22 @@ describe('TenantHeader', () => {
     );
   });
 
+  it('renders agent configuration entry in top navigation', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'Agent Configuration' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/agents'
+    );
+  });
+
   it('renders workspace entry in top navigation', () => {
     render(
       <TenantHeader

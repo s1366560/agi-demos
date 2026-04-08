@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 
 
 @pytest.fixture(autouse=True)
@@ -53,6 +54,12 @@ def conversation() -> SimpleNamespace:
     )
 
 
+@pytest.fixture
+def tenant_agent_config(conversation: SimpleNamespace) -> TenantAgentConfig:
+    """Provide a stable tenant config without touching the database."""
+    return TenantAgentConfig.create_default(tenant_id=conversation.tenant_id)
+
+
 def _build_provider_mocks() -> tuple[SimpleNamespace, MagicMock, MagicMock]:
     provider_config = SimpleNamespace(
         llm_model="qwen-plus",
@@ -76,7 +83,11 @@ def _build_fake_module(name: str, **attrs) -> ModuleType:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_start_chat_actor_local_mode_uses_local_only(bootstrapper, conversation):
+async def test_start_chat_actor_local_mode_uses_local_only(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
     """Should execute locally without Ray when AGENT_RUNTIME_MODE=local."""
     _, factory, encryption_service = _build_provider_mocks()
     settings = SimpleNamespace(
@@ -118,6 +129,12 @@ async def test_start_chat_actor_local_mode_uses_local_only(bootstrapper, convers
             "_register_project_local",
             new_callable=AsyncMock,
         ) as register_local_mock,
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
         patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock),
         patch("asyncio.create_task", side_effect=_capture_task) as create_task_mock,
     ):
@@ -136,7 +153,11 @@ async def test_start_chat_actor_local_mode_uses_local_only(bootstrapper, convers
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(bootstrapper, conversation):
+async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
     """Should fail fast instead of local fallback when AGENT_RUNTIME_MODE=ray."""
     _, factory, encryption_service = _build_provider_mocks()
     settings = SimpleNamespace(
@@ -178,6 +199,12 @@ async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(bootstra
             "_register_project_local",
             new_callable=AsyncMock,
         ) as register_local_mock,
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
         pytest.raises(RuntimeError, match="AGENT_RUNTIME_MODE=ray"),
     ):
         await bootstrapper.start_chat_actor(
@@ -194,7 +221,120 @@ async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(bootstra
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_start_chat_actor_auto_mode_falls_back_to_local(bootstrapper, conversation):
+async def test_bootstrap_agent_orchestrator_wires_shared_run_registry(bootstrapper):
+    """Multi-agent bootstrap should attach the shared SubAgent run registry."""
+    sentinel_registry = object()
+    settings = SimpleNamespace(
+        multi_agent_enabled=True,
+        agent_subagent_terminal_retention_seconds=321,
+        agent_subagent_run_registry_path="/tmp/runs.json",
+        agent_subagent_run_postgres_dsn="postgresql://example/db",
+        agent_subagent_run_sqlite_path="/tmp/runs.sqlite",
+        agent_subagent_run_redis_cache_url="redis://localhost:6379/0",
+        agent_subagent_run_redis_cache_ttl_seconds=45,
+    )
+    get_settings_mock = MagicMock(return_value=settings)
+    get_shared_registry_mock = MagicMock(return_value=sentinel_registry)
+    get_agent_orchestrator_mock = MagicMock(return_value=None)
+    set_agent_orchestrator_mock = MagicMock()
+    get_redis_client_mock = AsyncMock(return_value="redis-client")
+    async_session_factory_mock = MagicMock(return_value="db-session")
+    sql_agent_registry_ctor = MagicMock(return_value="agent-registry")
+    message_bus_ctor = MagicMock(return_value="message-bus")
+    session_registry_ctor = MagicMock(return_value="session-registry")
+    spawn_manager_ctor = MagicMock(return_value="spawn-manager")
+    agent_orchestrator_ctor = MagicMock(return_value="agent-orchestrator")
+
+    fake_config_module = _build_fake_module(
+        "src.configuration.config",
+        get_settings=get_settings_mock,
+    )
+    fake_database_module = _build_fake_module(
+        "src.infrastructure.adapters.secondary.persistence.database",
+        async_session_factory=async_session_factory_mock,
+    )
+    fake_registry_module = _build_fake_module(
+        "src.infrastructure.adapters.secondary.persistence.sql_agent_registry",
+        SqlAgentRegistryRepository=sql_agent_registry_ctor,
+    )
+    fake_message_bus_module = _build_fake_module(
+        "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus",
+        RedisAgentMessageBusAdapter=message_bus_ctor,
+    )
+    fake_orchestrator_module = _build_fake_module(
+        "src.infrastructure.agent.orchestration.orchestrator",
+        AgentOrchestrator=agent_orchestrator_ctor,
+    )
+    fake_session_registry_module = _build_fake_module(
+        "src.infrastructure.agent.orchestration.session_registry",
+        AgentSessionRegistry=session_registry_ctor,
+    )
+    fake_spawn_manager_module = _build_fake_module(
+        "src.infrastructure.agent.orchestration.spawn_manager",
+        SpawnManager=spawn_manager_ctor,
+    )
+    fake_run_registry_module = _build_fake_module(
+        "src.infrastructure.agent.subagent.run_registry",
+        get_shared_subagent_run_registry=get_shared_registry_mock,
+    )
+    fake_worker_state_module = _build_fake_module(
+        "src.infrastructure.agent.state.agent_worker_state",
+        get_agent_orchestrator=get_agent_orchestrator_mock,
+        set_agent_orchestrator=set_agent_orchestrator_mock,
+        get_redis_client=get_redis_client_mock,
+    )
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "src.configuration.config": fake_config_module,
+            "src.infrastructure.adapters.secondary.persistence.database": fake_database_module,
+            "src.infrastructure.adapters.secondary.persistence.sql_agent_registry": (
+                fake_registry_module
+            ),
+            "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus": (
+                fake_message_bus_module
+            ),
+            "src.infrastructure.agent.orchestration.orchestrator": fake_orchestrator_module,
+            "src.infrastructure.agent.orchestration.session_registry": (
+                fake_session_registry_module
+            ),
+            "src.infrastructure.agent.orchestration.spawn_manager": fake_spawn_manager_module,
+            "src.infrastructure.agent.subagent.run_registry": fake_run_registry_module,
+            "src.infrastructure.agent.state.agent_worker_state": fake_worker_state_module,
+        },
+    ):
+        await bootstrapper._bootstrap_agent_orchestrator()
+
+    get_shared_registry_mock.assert_called_once_with(
+        persistence_path="/tmp/runs.json",
+        postgres_persistence_dsn="postgresql://example/db",
+        sqlite_persistence_path="/tmp/runs.sqlite",
+        redis_cache_url="redis://localhost:6379/0",
+        redis_cache_ttl_seconds=45,
+        terminal_retention_seconds=321,
+    )
+    spawn_manager_ctor.assert_called_once_with(
+        session_registry="session-registry",
+        run_registry=sentinel_registry,
+    )
+    agent_orchestrator_ctor.assert_called_once()
+    spawn_executor = agent_orchestrator_ctor.call_args.kwargs["spawn_executor"]
+    assert getattr(spawn_executor, "__self__", None) is bootstrapper
+    assert (
+        getattr(spawn_executor, "__func__", None)
+        is AgentRuntimeBootstrapper.launch_spawned_agent_session
+    )
+    set_agent_orchestrator_mock.assert_called_once_with("agent-orchestrator")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_start_chat_actor_auto_mode_falls_back_to_local(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
     """Should fallback to local execution when AGENT_RUNTIME_MODE=auto and Ray actor is unavailable."""
     _, factory, encryption_service = _build_provider_mocks()
     settings = SimpleNamespace(
@@ -242,6 +382,12 @@ async def test_start_chat_actor_auto_mode_falls_back_to_local(bootstrapper, conv
             "_register_project_local",
             new_callable=AsyncMock,
         ) as register_local_mock,
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
         patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock),
         patch("asyncio.create_task", side_effect=_capture_task) as create_task_mock,
     ):

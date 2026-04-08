@@ -365,26 +365,26 @@ export const InstanceMembers: React.FC = () => {
               <div className="mt-2 border border-border-light dark:border-border-separator rounded-lg max-h-48 overflow-y-auto">
                 {userSearchResults.map((user) => (
                   <LazyButton
-                    key={user.user_id}
+                    key={user.id}
                     type="text"
                     block
                     onClick={() => {
-                      setSelectedUserId(user.user_id);
+                      setSelectedUserId(user.id);
                     }}
                     className={`w-full text-left px-3 py-2 hover:bg-surface-alt dark:hover:bg-surface-elevated flex items-center gap-2 transition-colors h-auto rounded-none border-0 ${
-                      selectedUserId === user.user_id ? 'bg-info-bg dark:bg-info-bg-dark' : ''
+                      selectedUserId === user.id ? 'bg-info-bg dark:bg-info-bg-dark' : ''
                     }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-surface-alt dark:bg-surface-elevated flex items-center justify-center text-xs font-medium">
-                      {(user.name || user.email).charAt(0).toUpperCase()}
+                      {(user.full_name || user.email).charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 text-left">
                       <p className="text-sm font-medium text-text-primary dark:text-text-inverse">
-                        {user.name || user.email}
+                        {user.full_name || user.email}
                       </p>
                       <p className="text-xs text-text-muted">{user.email}</p>
                     </div>
-                    {selectedUserId === user.user_id && (
+                    {selectedUserId === user.id && (
                       <CheckCircle size={16} className="text-info-dark ml-auto" />
                     )}
                   </LazyButton>

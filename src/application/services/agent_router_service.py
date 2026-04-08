@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.ports.agent.agent_registry import AgentRegistryPort
 from src.domain.ports.agent.binding_repository import AgentBindingRepositoryPort
+from src.infrastructure.agent.sisyphus.builtin_agent import build_builtin_sisyphus_agent
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,12 @@ class AgentRouterService:
         )
         if binding is None:
             return AgentResolutionResult(
-                agent=None,
+                agent=build_builtin_sisyphus_agent(tenant_id=tenant_id),
                 binding_matched=False,
-                reason="no_binding_match",
+                reason="builtin_default:no_binding_match",
             )
 
-        agent = await self._agent_registry.get_by_id(binding.agent_id)
+        agent = await self._agent_registry.get_by_id(binding.agent_id, tenant_id=tenant_id)
         if agent is None:
             logger.warning(
                 "Binding %s references non-existent agent %s",
@@ -63,9 +64,9 @@ class AgentRouterService:
                 binding.agent_id,
             )
             return AgentResolutionResult(
-                agent=None,
+                agent=build_builtin_sisyphus_agent(tenant_id=tenant_id),
                 binding_matched=True,
-                reason=f"agent_not_found:{binding.agent_id}",
+                reason=f"builtin_default:agent_not_found:{binding.agent_id}",
             )
 
         if not agent.is_enabled():
@@ -76,9 +77,9 @@ class AgentRouterService:
                 agent.name,
             )
             return AgentResolutionResult(
-                agent=None,
+                agent=build_builtin_sisyphus_agent(tenant_id=tenant_id),
                 binding_matched=True,
-                reason=f"agent_disabled:{agent.id}",
+                reason=f"builtin_default:agent_disabled:{agent.id}",
             )
 
         return AgentResolutionResult(

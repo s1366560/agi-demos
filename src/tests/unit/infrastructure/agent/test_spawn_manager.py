@@ -10,6 +10,7 @@ from src.infrastructure.agent.orchestration.spawn_manager import (
     SpawnDepthExceededError,
     SpawnManager,
 )
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 
 @pytest.fixture
@@ -85,6 +86,33 @@ class TestSpawnManager:
             mode=SpawnMode.SESSION,
         )
         assert record.mode is SpawnMode.SESSION
+
+    async def test_register_spawn_syncs_trace_context_and_requester_identity(self) -> None:
+        run_registry = SubAgentRunRegistry(sync_across_processes=False)
+        manager = SpawnManager(
+            session_registry=AgentSessionRegistry(),
+            run_registry=run_registry,
+            max_spawn_depth=3,
+        )
+
+        record = await manager.register_spawn(
+            parent_agent_id="agent-a",
+            child_agent_id="agent-b",
+            child_session_id="session-b",
+            project_id="proj-1",
+            parent_session_id="session-a",
+            conversation_id="conv-1",
+            task_summary="Investigate issue",
+            trace_id="trace-1",
+            span_id="span-1",
+        )
+
+        run = run_registry.get_run("conv-1", record.id)
+        assert run is not None
+        assert run.trace_id == "trace-1"
+        assert run.parent_span_id == "span-1"
+        assert run.metadata["requester_session_key"] == "session-a"
+        assert "parent_run_id" not in run.metadata
 
     async def test_register_spawn_depth_exceeded_raises(self, manager: SpawnManager) -> None:
         await manager.register_spawn(

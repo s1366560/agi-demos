@@ -43,6 +43,10 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
         return await self.list_all(cluster_id=cluster_id)
 
     @override
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        return await self.count(tenant_id=tenant_id)
+
+    @override
     def _to_domain(self, db_model: InstanceModel | None) -> Instance | None:
         if db_model is None:
             return None

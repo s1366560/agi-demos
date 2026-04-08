@@ -26,6 +26,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Tag,
+  Users,
   X,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
@@ -71,6 +72,10 @@ interface ConversationSidebarProps {
   headerExtra?: React.ReactNode | undefined;
   /** Status map for each conversation (conversationId -> status) */
   conversationStatuses?: Map<string, ConversationStatus> | undefined;
+  /** Callback when group chat is selected */
+  onGroupChat?: (() => void) | undefined;
+  /** Whether group chat view is currently active */
+  isGroupChatActive?: boolean | undefined;
 }
 
 interface ConversationItemProps {
@@ -490,6 +495,8 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   onToggleCollapse,
   headerExtra,
   conversationStatuses,
+  onGroupChat,
+  isGroupChatActive,
 }) => {
   const { t } = useTranslation();
   const [renamingConversation, setRenamingConversation] = useState<Conversation | null>(null);
@@ -641,6 +648,22 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
       `}
       >
         <div className={collapsed ? '' : 'space-y-1 py-2'}>
+          {onGroupChat && !collapsed && (
+            <button
+              type="button"
+              onClick={onGroupChat}
+              className={`group mx-2 mb-1 flex w-[calc(100%-16px)] items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all ${
+                isGroupChatActive
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-text-secondary hover:bg-surface-muted dark:text-text-muted dark:hover:bg-surface-elevated'
+              }`}
+            >
+              <Users className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate text-sm font-medium">
+                {t('agent.groupChat', 'Workspace Chat')}
+              </span>
+            </button>
+          )}
           {conversations.map((conv) => (
             <ConversationItem
               key={conv.id}

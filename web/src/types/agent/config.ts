@@ -8,6 +8,25 @@ import type { SkillResponse } from './execution';
  */
 export type ConfigType = 'default' | 'custom';
 
+export interface RuntimeHookConfig {
+  plugin_name: string;
+  hook_name: string;
+  enabled: boolean;
+  priority?: number | null | undefined;
+  settings: Record<string, unknown>;
+}
+
+export interface HookCatalogEntry {
+  plugin_name: string;
+  hook_name: string;
+  display_name: string;
+  description?: string | null | undefined;
+  default_priority: number;
+  default_enabled: boolean;
+  default_settings: Record<string, unknown>;
+  settings_schema: Record<string, unknown>;
+}
+
 /**
  * Tenant agent configuration (FR-021, FR-022)
  *
@@ -30,6 +49,8 @@ export interface TenantAgentConfig {
   tool_timeout_seconds: number;
   enabled_tools: string[];
   disabled_tools: string[];
+  runtime_hooks: RuntimeHookConfig[];
+  runtime_hook_settings_redacted?: boolean | undefined;
   /** Read-only system-level flag from MULTI_AGENT_ENABLED env var */
   multi_agent_enabled: boolean;
   created_at: string;
@@ -51,6 +72,7 @@ export interface UpdateTenantAgentConfigRequest {
   tool_timeout_seconds?: number | undefined;
   enabled_tools?: string[] | undefined;
   disabled_tools?: string[] | undefined;
+  runtime_hooks?: RuntimeHookConfig[] | undefined;
 }
 
 /**
@@ -71,6 +93,11 @@ export interface TenantAgentConfigService {
     tenantId: string,
     request: UpdateTenantAgentConfigRequest
   ): Promise<TenantAgentConfig>;
+
+  /**
+   * List runtime hooks that can be configured from the UI.
+   */
+  getHookCatalog(tenantId: string): Promise<HookCatalogEntry[]>;
 
   /**
    * Check if current user can modify tenant config

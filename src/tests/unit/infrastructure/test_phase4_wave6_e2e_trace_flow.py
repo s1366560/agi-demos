@@ -452,6 +452,7 @@ class TestApiRoundTripE2E:
 def mock_registry():
     registry = MagicMock()
     registry.list_runs.return_value = []
+    registry.list_trace_runs.return_value = []
     registry.get_run.return_value = None
     registry.list_descendant_runs.return_value = []
     registry.count_active_runs.return_value = 0
@@ -472,7 +473,7 @@ def app(mock_container: MagicMock):
     test_app.state.container = mock_container
 
     mock_user = SimpleNamespace(id="user-1", email="test@test.com", tenant_id="t-1")
-    mock_db = MagicMock()
+    mock_db = AsyncMock()
 
     test_app.dependency_overrides[get_current_user] = lambda: mock_user
     test_app.dependency_overrides[get_db] = lambda: mock_db
@@ -488,9 +489,15 @@ def client(app: FastAPI):
 
 @pytest.fixture(autouse=True)
 def _patch_container_helper(mock_container: MagicMock):
-    with patch(
-        "src.infrastructure.adapters.primary.web.routers.agent.trace_router.get_container_with_db",
-        return_value=mock_container,
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router.get_container_with_db",
+            return_value=mock_container,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.trace_router._get_accessible_conversation",
+            AsyncMock(return_value=SimpleNamespace(id="conv-e2e", tenant_id="t-1", user_id="user-1")),
+        ),
     ):
         yield
 
@@ -503,9 +510,8 @@ class TestApiEndpointE2E:
         mock_registry: MagicMock,
     ) -> None:
         run1 = _make_run(run_id="r1", trace_id="t-target", status=SubAgentRunStatus.COMPLETED)
-        run2 = _make_run(run_id="r2", trace_id="t-other", status=SubAgentRunStatus.COMPLETED)
         run3 = _make_run(run_id="r3", trace_id="t-target", status=SubAgentRunStatus.FAILED)
-        mock_registry.list_runs.return_value = [run1, run2, run3]
+        mock_registry.list_trace_runs.return_value = [run1, run3]
 
         resp = client.get("/api/v1/agent/trace/runs/conv-e2e?trace_id=t-target")
         assert resp.status_code == 200
@@ -531,10 +537,7 @@ class TestApiEndpointE2E:
             status=SubAgentRunStatus.COMPLETED,
             created_at=datetime(2026, 1, 1, 11, 0, 0, tzinfo=UTC),
         )
-        run_other = _make_run(
-            run_id="r-other", trace_id="other-t", status=SubAgentRunStatus.COMPLETED
-        )
-        mock_registry.list_runs.return_value = [run_late, run_other, run_early]
+        mock_registry.list_trace_runs.return_value = [run_early, run_late]
 
         resp = client.get("/api/v1/agent/trace/runs/conv-e2e/trace/chain-t")
         assert resp.status_code == 200

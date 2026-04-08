@@ -17,6 +17,7 @@ import { ApiError } from './client/ApiError';
 import { httpClient } from './client/httpClient';
 
 import type {
+  HookCatalogEntry,
   TenantAgentConfig,
   TenantAgentConfigService as ITenantAgentConfigService,
   UpdateTenantAgentConfigRequest,
@@ -87,6 +88,17 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
       });
     } catch (error) {
       this._handleError(error, 'Failed to update tenant agent configuration');
+    }
+  }
+
+  async getHookCatalog(tenantId: string): Promise<HookCatalogEntry[]> {
+    try {
+      const response = await api.get<{ hooks: HookCatalogEntry[] }>('/agent/config/hooks/catalog', {
+        params: { tenant_id: tenantId },
+      });
+      return response.hooks;
+    } catch (error) {
+      this._handleError(error, 'Failed to fetch runtime hook catalog');
     }
   }
 

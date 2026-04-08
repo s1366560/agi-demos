@@ -218,6 +218,45 @@ class ResetPatternsResponse(BaseModel):
 # === Tenant Config Schemas ===
 
 
+class RuntimeHookConfigResponse(BaseModel):
+    """Response model for a configured runtime hook override."""
+
+    plugin_name: str
+    hook_name: str
+    enabled: bool = True
+    priority: int | None = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class HookCatalogEntryResponse(BaseModel):
+    """Response model for a runtime hook available in the registry."""
+
+    plugin_name: str
+    hook_name: str
+    display_name: str
+    description: str | None = None
+    default_priority: int
+    default_enabled: bool = True
+    default_settings: dict[str, Any] = Field(default_factory=dict)
+    settings_schema: dict[str, Any] = Field(default_factory=dict)
+
+
+class HookCatalogResponse(BaseModel):
+    """Response model for the runtime hook catalog."""
+
+    hooks: list[HookCatalogEntryResponse]
+
+
+class RuntimeHookConfigRequest(BaseModel):
+    """Request model for a configured runtime hook override."""
+
+    plugin_name: str = Field(..., min_length=1, max_length=100)
+    hook_name: str = Field(..., min_length=1, max_length=100)
+    enabled: bool = True
+    priority: int | None = Field(default=None, ge=-1000, le=1000)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
 class TenantAgentConfigResponse(BaseModel):
     """Response model for tenant agent configuration."""
 
@@ -232,6 +271,8 @@ class TenantAgentConfigResponse(BaseModel):
     tool_timeout_seconds: int
     enabled_tools: list[str]
     disabled_tools: list[str]
+    runtime_hooks: list[RuntimeHookConfigResponse]
+    runtime_hook_settings_redacted: bool = False
     multi_agent_enabled: bool = False
     created_at: str
     updated_at: str
@@ -248,6 +289,7 @@ class UpdateTenantAgentConfigRequest(BaseModel):
     tool_timeout_seconds: int | None = None
     enabled_tools: list[str] | None = None
     disabled_tools: list[str] | None = None
+    runtime_hooks: list[RuntimeHookConfigRequest] | None = Field(default=None, max_length=32)
 
 
 # === Execution Stats Schemas ===
@@ -565,6 +607,14 @@ class SubAgentRunListResponse(BaseModel):
     total: int
 
 
+class TenantSubAgentRunListResponse(BaseModel):
+    """List of SubAgent runs aggregated for a tenant."""
+
+    tenant_id: str
+    runs: list[SubAgentRunResponse]
+    total: int
+
+
 class TraceChainResponse(BaseModel):
     """Execution chain grouped by trace_id."""
 
@@ -588,3 +638,10 @@ class ActiveRunCountResponse(BaseModel):
 
     active_count: int
     conversation_id: str | None = None
+
+
+class TenantActiveRunCountResponse(BaseModel):
+    """Active run count aggregated for a tenant."""
+
+    tenant_id: str
+    active_count: int

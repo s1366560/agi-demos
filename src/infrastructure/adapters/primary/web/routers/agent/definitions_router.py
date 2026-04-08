@@ -221,7 +221,7 @@ async def get_definition(
         container = get_container_with_db(request, db)
         registry = container.agent_registry()
 
-        agent = await registry.get_by_id(definition_id)
+        agent = await registry.get_by_id(definition_id, tenant_id=tenant_id)
         if agent is None:
             raise HTTPException(
                 status_code=404,
@@ -260,7 +260,7 @@ async def update_definition(
         container = get_container_with_db(request, db)
         registry = container.agent_registry()
 
-        existing = await registry.get_by_id(definition_id)
+        existing = await registry.get_by_id(definition_id, tenant_id=tenant_id)
         if existing is None:
             raise HTTPException(
                 status_code=404,

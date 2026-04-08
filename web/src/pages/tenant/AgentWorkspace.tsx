@@ -16,6 +16,7 @@ import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
+import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useAgentV3Store } from '../../stores/agentV3';
 import { useAuthStore } from '../../stores/auth';
@@ -47,17 +48,31 @@ export const AgentWorkspace: React.FC = () => {
     'agent:lastProjectId',
     null
   );
+  const { value: lastWorkspaceId, setValue: setLastWorkspaceId } = useLocalStorage<string | null>(
+    'agent:lastWorkspaceId',
+    null
+  );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const queryProjectId = searchParams.get('projectId');
   const queryWorkspaceId = searchParams.get('workspaceId');
+  // Persist workspace ID when present in URL; restore from localStorage otherwise
+  const effectiveWorkspaceId = queryWorkspaceId || lastWorkspaceId;
+  useEffect(() => {
+    if (queryWorkspaceId) {
+      setLastWorkspaceId(queryWorkspaceId);
+    }
+  }, [queryWorkspaceId, setLastWorkspaceId]);
   const navigationQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (queryProjectId) params.set('projectId', queryProjectId);
-    if (queryWorkspaceId) params.set('workspaceId', queryWorkspaceId);
+    if (effectiveWorkspaceId) params.set('workspaceId', effectiveWorkspaceId);
     const serialized = params.toString();
     return serialized.length > 0 ? serialized : undefined;
-  }, [queryProjectId, queryWorkspaceId]);
+  }, [queryProjectId, effectiveWorkspaceId]);
+
+  // Subscribe to workspace SSE events for real-time group chat updates
+  useBlackboardSSE(effectiveWorkspaceId);
 
   // Get effective tenant ID - memoized to prevent recalculation
   const tenantId = useMemo(

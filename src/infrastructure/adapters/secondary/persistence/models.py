@@ -295,6 +295,9 @@ class WorkspaceModel(Base):
     blackboard_posts: Mapped[list["BlackboardPostModel"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
     )
+    blackboard_files: Mapped[list["BlackboardFileModel"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
     tasks: Mapped[list["WorkspaceTaskModel"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
     )
@@ -431,6 +434,40 @@ class BlackboardReplyModel(Base):
     author: Mapped["User"] = relationship(foreign_keys=[author_id])
 
     __table_args__ = (Index("ix_blackboard_replies_post_created", "post_id", "created_at"),)
+
+
+class BlackboardFileModel(Base):
+    __tablename__ = "blackboard_files"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_path: Mapped[str] = mapped_column(String(1024), nullable=False, default="/")
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_directory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    uploader_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    uploader_id: Mapped[str] = mapped_column(String, nullable=False)
+    uploader_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="blackboard_files")
+
+    __table_args__ = (
+        Index(
+            "uq_blackboard_files_ws_path_name",
+            "workspace_id",
+            "parent_path",
+            "name",
+            unique=True,
+        ),
+        Index("ix_blackboard_files_workspace", "workspace_id"),
+    )
 
 
 class WorkspaceTaskModel(Base):
@@ -1121,6 +1158,7 @@ class TenantAgentConfig(Base):
     tool_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     enabled_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     disabled_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    runtime_hooks: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True

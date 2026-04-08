@@ -2,7 +2,7 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -18,6 +18,12 @@ class _FakeAgent:
     async def execute_chat(self, **kwargs):
         self.execute_chat_kwargs = kwargs
         yield {"type": "complete", "data": {"content": "done"}}
+
+
+class _FailingAgent(_FakeAgent):
+    async def execute_chat(self, **kwargs):
+        self.execute_chat_kwargs = kwargs
+        raise RuntimeError("boom")
 
 
 @pytest.mark.unit
@@ -53,6 +59,102 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
     assert result.is_error is False
     assert agent.execute_chat_kwargs is not None
     assert agent.execute_chat_kwargs["abort_signal"] is abort_signal
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_updates_spawn_status_for_child_session() -> None:
+    agent = _FakeAgent()
+    request = ProjectChatRequest(
+        conversation_id="child-conv",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+        agent_id="child-agent",
+        parent_session_id="parent-conv",
+    )
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_event_to_stream", new=AsyncMock()),
+        patch.object(execution, "_publish_announce_via_service", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_spawn_status,
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(
+            agent=agent,
+            request=request,
+            abort_signal=asyncio.Event(),
+        )
+
+    assert result.is_error is False
+    assert update_spawn_status.await_args_list == [
+        call(
+            child_session_id="child-conv",
+            status="running",
+            parent_session_id="parent-conv",
+        ),
+        call(
+            child_session_id="child-conv",
+            status="completed",
+            parent_session_id="parent-conv",
+        ),
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_project_chat_marks_failed_spawn_when_child_errors() -> None:
+    agent = _FailingAgent()
+    request = ProjectChatRequest(
+        conversation_id="child-conv",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        conversation_context=[],
+        agent_id="child-agent",
+        parent_session_id="parent-conv",
+    )
+
+    with (
+        patch.object(execution, "set_agent_running", new=AsyncMock()),
+        patch.object(execution, "clear_agent_running", new=AsyncMock()),
+        patch.object(execution, "_get_last_db_event_time", new=AsyncMock(return_value=(0, 0))),
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=object())),
+        patch.object(execution, "_publish_error_event", new=AsyncMock()),
+        patch.object(execution, "_publish_announce_via_service", new=AsyncMock()),
+        patch.object(execution, "_persist_events", new=AsyncMock()),
+        patch.object(execution, "_load_persisted_agent_config", new=AsyncMock(return_value=None)),
+        patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_spawn_status,
+        patch.object(execution.agent_metrics, "increment"),
+        patch.object(execution.agent_metrics, "observe"),
+    ):
+        result = await execution.execute_project_chat(
+            agent=agent,
+            request=request,
+            abort_signal=asyncio.Event(),
+        )
+
+    assert result.is_error is True
+    assert update_spawn_status.await_args_list == [
+        call(
+            child_session_id="child-conv",
+            status="running",
+            parent_session_id="parent-conv",
+        ),
+        call(
+            child_session_id="child-conv",
+            status="failed",
+            parent_session_id="parent-conv",
+        ),
+    ]
 
 
 @pytest.mark.unit

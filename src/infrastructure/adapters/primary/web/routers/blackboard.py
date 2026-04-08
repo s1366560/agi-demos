@@ -5,13 +5,26 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
 from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
+from src.domain.model.workspace.blackboard_file import BlackboardFile
 from src.domain.model.workspace.blackboard_post import BlackboardPost, BlackboardPostStatus
 from src.domain.model.workspace.blackboard_reply import BlackboardReply
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -309,6 +322,194 @@ async def delete_post(
         return {"success": deleted}
     except Exception as exc:
         await db.rollback()
+        raise _map_error(exc) from exc
+
+
+# --- Blackboard Files ---
+
+
+class BlackboardFileResponse(BaseModel):
+    id: str
+    workspace_id: str
+    parent_path: str
+    name: str
+    is_directory: bool
+    file_size: int
+    content_type: str
+    uploader_type: str
+    uploader_id: str
+    uploader_name: str
+    created_at: datetime
+
+
+class BlackboardFileListResponse(BaseModel):
+    items: list[BlackboardFileResponse]
+
+
+class MkdirRequest(BaseModel):
+    parent_path: str = Field("/", description="Parent directory path")
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+def _file_service_from_request(request: Request, db: AsyncSession) -> BlackboardFileService:
+    container = get_container_with_db(request, db)
+    return container.blackboard_file_service()
+
+
+def _to_file_response(f: BlackboardFile) -> BlackboardFileResponse:
+    return BlackboardFileResponse(
+        id=f.id,
+        workspace_id=f.workspace_id,
+        parent_path=f.parent_path,
+        name=f.name,
+        is_directory=f.is_directory,
+        file_size=f.file_size,
+        content_type=f.content_type,
+        uploader_type=f.uploader_type,
+        uploader_id=f.uploader_id,
+        uploader_name=f.uploader_name,
+        created_at=f.created_at,
+    )
+
+
+@router.get("/files", response_model=BlackboardFileListResponse)
+async def list_files(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    request: Request,
+    parent_path: str = Query("/"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BlackboardFileListResponse:
+    service = _file_service_from_request(request, db)
+    try:
+        files = await service.list_files(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            parent_path=parent_path,
+        )
+        return BlackboardFileListResponse(items=[_to_file_response(f) for f in files])
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post(
+    "/files/mkdir",
+    response_model=BlackboardFileResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_directory(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    payload: MkdirRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BlackboardFileResponse:
+    service = _file_service_from_request(request, db)
+    try:
+        directory = await service.create_directory(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            parent_path=payload.parent_path,
+            name=payload.name,
+        )
+        await db.commit()
+        return _to_file_response(directory)
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post(
+    "/files/upload",
+    response_model=BlackboardFileResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_file(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    parent_path: str = Form("/"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BlackboardFileResponse:
+    service = _file_service_from_request(request, db)
+    content = await file.read()
+    try:
+        bb_file = await service.upload_file(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            actor_user_name=current_user.full_name or current_user.email,
+            parent_path=parent_path,
+            filename=file.filename or "unnamed",
+            content=content,
+        )
+        await db.commit()
+        return _to_file_response(bb_file)
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get("/files/{file_id}/download")
+async def download_file(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    file_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    service = _file_service_from_request(request, db)
+    try:
+        content, content_type = await service.read_file(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            file_id=file_id,
+        )
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={"Content-Disposition": "attachment"},
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.delete("/files/{file_id}", status_code=status.HTTP_200_OK)
+async def delete_file(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    file_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    service = _file_service_from_request(request, db)
+    try:
+        deleted = await service.delete_file(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            file_id=file_id,
+        )
+        await db.commit()
+        return {"deleted": deleted}
+    except Exception as exc:
         raise _map_error(exc) from exc
 
 

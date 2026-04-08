@@ -13,7 +13,12 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import type { SubAgentRunDTO, TraceChainDTO, DescendantTreeDTO } from '../../../types/multiAgent';
+import type {
+  DescendantTreeDTO,
+  SubAgentRunDTO,
+  TraceChainDTO,
+  UntracedRunDetailsDTO,
+} from '../../../types/multiAgent';
 
 function formatDuration(ms: number | null): string {
   if (ms === null) return '-';
@@ -158,7 +163,7 @@ const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
 ChainNode.displayName = 'ChainNode';
 
 interface TraceChainViewProps {
-  data: TraceChainDTO | DescendantTreeDTO | null;
+  data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO | null;
   isLoading?: boolean;
   onSelectRun?: (run: SubAgentRunDTO) => void;
 }
@@ -184,14 +189,17 @@ const LoadingState: FC = memo(() => (
 ));
 LoadingState.displayName = 'LoadingState';
 
-function getChainRuns(data: TraceChainDTO | DescendantTreeDTO): SubAgentRunDTO[] {
+function getChainRuns(data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO): SubAgentRunDTO[] {
   if ('runs' in data) return data.runs;
   if ('descendants' in data) return data.descendants;
   return [];
 }
 
-function getChainLabel(data: TraceChainDTO | DescendantTreeDTO): string {
+function getChainLabel(data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO): string {
   if ('trace_id' in data && 'runs' in data) {
+    if (data.trace_id === null) {
+      return data.runs.length === 1 ? 'Run details' : 'Untraced runs';
+    }
     return `Trace: ${data.trace_id.slice(0, 12)}`;
   }
   if ('parent_run_id' in data) {

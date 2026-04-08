@@ -82,7 +82,7 @@ class SpawnManager:
     # Spawn Registration
     # ------------------------------------------------------------------
 
-    async def register_spawn(
+    async def register_spawn(  # noqa: PLR0913
         self,
         parent_agent_id: str,
         child_agent_id: str,
@@ -96,6 +96,9 @@ class SpawnManager:
         metadata: dict[str, Any] | None = None,
         trace_id: str = "",
         span_id: str = "",
+        requester_session_key: str | None = None,
+        parent_run_id: str | None = None,
+        lineage_root_run_id: str | None = None,
     ) -> SpawnRecord:
         """Register a new parent-child spawn relationship.
 
@@ -182,8 +185,17 @@ class SpawnManager:
                 task=task_summary,
                 metadata=run_metadata,
                 run_id=record.id,
-                parent_run_id=parent_session_id,
+                requester_session_key=requester_session_key or parent_session_id,
+                parent_run_id=parent_run_id,
+                lineage_root_run_id=lineage_root_run_id,
             )
+            if trace_id:
+                self._run_registry.set_trace_context(
+                    conversation_id=conversation_id,
+                    run_id=record.id,
+                    trace_id=trace_id,
+                    parent_span_id=span_id or None,
+                )
 
         return record
 
@@ -345,6 +357,8 @@ class SpawnManager:
                 mode=old.mode,
                 task_summary=old.task_summary,
                 status=new_status,
+                trace_id=old.trace_id,
+                span_id=old.span_id,
                 created_at=old.created_at,
             )
             self._records_by_child_session[child_session_id] = updated
@@ -574,17 +588,43 @@ class SpawnManager:
         if not self._run_registry:
             return
         try:
-            if status == "completed":
-                self._run_registry.mark_completed(
+            if status == "running":
+                self._run_registry.mark_running(
                     conversation_id=conversation_id,
                     run_id=run_id,
                 )
+            elif status == "completed":
+                completed = self._run_registry.mark_completed(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                )
+                if completed is None:
+                    running = self._run_registry.mark_running(
+                        conversation_id=conversation_id,
+                        run_id=run_id,
+                    )
+                    if running is not None:
+                        self._run_registry.mark_completed(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                        )
             elif status == "failed":
-                self._run_registry.mark_failed(
+                failed = self._run_registry.mark_failed(
                     conversation_id=conversation_id,
                     run_id=run_id,
                     error="Spawn failed",
                 )
+                if failed is None:
+                    running = self._run_registry.mark_running(
+                        conversation_id=conversation_id,
+                        run_id=run_id,
+                    )
+                    if running is not None:
+                        self._run_registry.mark_failed(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            error="Spawn failed",
+                        )
             elif status in ("stopped", "cancelled"):
                 self._run_registry.mark_cancelled(
                     conversation_id=conversation_id,

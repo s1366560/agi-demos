@@ -14,6 +14,7 @@ from src.domain.ports.agent.agent_registry import AgentRegistryPort
 from src.domain.ports.agent.binding_repository import AgentBindingRepositoryPort
 from src.infrastructure.agent.channels.channel_message import ChannelMessage
 from src.infrastructure.agent.channels.channel_router import ChannelRouter, RouteResult
+from src.infrastructure.agent.sisyphus.builtin_agent import build_builtin_sisyphus_agent
 
 logger = logging.getLogger(__name__)
 
@@ -82,21 +83,21 @@ class BindingRouter:
         )
         if binding is None:
             logger.debug(
-                "No binding found for tenant=%s channel=%s/%s",
+                "No binding found for tenant=%s channel=%s/%s, using built-in Sisyphus",
                 tenant_id,
                 channel_type,
                 channel_id,
             )
-            return None
+            return build_builtin_sisyphus_agent(tenant_id=tenant_id)
 
-        agent = await self._agent_registry.get_by_id(binding.agent_id)
+        agent = await self._agent_registry.get_by_id(binding.agent_id, tenant_id=tenant_id)
         if agent is None:
             logger.warning(
                 "Binding %s references non-existent agent %s",
                 binding.id,
                 binding.agent_id,
             )
-            return None
+            return build_builtin_sisyphus_agent(tenant_id=tenant_id)
 
         if not agent.is_enabled():
             logger.warning(
@@ -105,7 +106,7 @@ class BindingRouter:
                 agent.id,
                 agent.name,
             )
-            return None
+            return build_builtin_sisyphus_agent(tenant_id=tenant_id)
 
         logger.info(
             "Resolved agent %s (%s) for tenant=%s channel=%s/%s",

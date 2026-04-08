@@ -9,7 +9,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.agent.tenant_agent_config import ConfigType, TenantAgentConfig
+from src.domain.model.agent.tenant_agent_config import (
+    ConfigType,
+    RuntimeHookConfig,
+    TenantAgentConfig,
+)
 from src.domain.ports.repositories.tenant_agent_config_repository import (
     TenantAgentConfigRepositoryPort,
 )
@@ -75,6 +79,7 @@ class SqlTenantAgentConfigRepository(
             db_config.tool_timeout_seconds = config.tool_timeout_seconds
             db_config.enabled_tools = config.enabled_tools
             db_config.disabled_tools = config.disabled_tools
+            db_config.runtime_hooks = [item.to_dict() for item in config.runtime_hooks]
             db_config.updated_at = config.updated_at
         else:
             # Create new
@@ -89,6 +94,7 @@ class SqlTenantAgentConfigRepository(
                 tool_timeout_seconds=config.tool_timeout_seconds,
                 enabled_tools=config.enabled_tools,
                 disabled_tools=config.disabled_tools,
+                runtime_hooks=[item.to_dict() for item in config.runtime_hooks],
                 created_at=config.created_at,
                 updated_at=config.updated_at,
             )
@@ -140,6 +146,11 @@ class SqlTenantAgentConfigRepository(
             tool_timeout_seconds=db_config.tool_timeout_seconds,
             enabled_tools=db_config.enabled_tools or [],
             disabled_tools=db_config.disabled_tools or [],
+            runtime_hooks=[
+                RuntimeHookConfig.from_dict(item)
+                for item in (db_config.runtime_hooks or [])
+                if isinstance(item, dict)
+            ],
             created_at=db_config.created_at,
             updated_at=db_config.updated_at,
         )

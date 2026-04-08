@@ -93,6 +93,8 @@ class PromptContext:
 
     # Agent definition system prompt (when user selects a specific agent)
     agent_definition_prompt: str | None = None
+    primary_agent_prompt: str | None = None
+    selected_agent_name: str | None = None
 
     @property
     def is_last_step(self) -> bool:
@@ -251,13 +253,16 @@ class SystemPromptManager:
         loads the behavioral/personality prompt only when no custom SOUL
         exists (i.e. project or tenant SOUL.md overrides the default).
         """
-        base_prompt = await self._load_base_prompt(context.model_provider)
-        if base_prompt:
-            sections.append(base_prompt)
+        if context.primary_agent_prompt:
+            sections.append(context.primary_agent_prompt)
+        else:
+            base_prompt = await self._load_base_prompt(context.model_provider)
+            if base_prompt:
+                sections.append(base_prompt)
 
         # Conditionally load behavioral prompt (personality/tone/identity)
         # Only when no custom SOUL.md overrides it
-        if not self._has_custom_soul(context.persona):
+        if not context.primary_agent_prompt and not self._has_custom_soul(context.persona):
             behavioral = await self._load_behavioral_prompt(context.model_provider)
             if behavioral:
                 sections.append(behavioral)

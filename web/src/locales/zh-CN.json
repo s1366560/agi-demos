@@ -188,6 +188,7 @@
     "analytics": "分析",
     "tasks": "任务",
     "agents": "智能体管理",
+    "agentConfiguration": "智能体配置",
     "subagents": "Agents",
     "skills": "技能",
     "plugins": "插件",
@@ -631,6 +632,195 @@
         "pending": "待支付",
         "failed": "失败",
         "unavailable": "不可用"
+      }
+    },
+    "agentDashboard": {
+      "eyebrow": "租户运行时策略",
+      "activeRuns": "{{count}} 个活动运行",
+      "title": "智能体配置",
+      "description": "配置会影响当前租户内每一次 Sisyphus 对话的模型、执行护栏、工具边界与运行时 hook。",
+      "scopeTitle": "范围",
+      "scopeDescription": "这个页面只保留真实配置入口。定义、技能、绑定和插件通过关联入口进入，不再用 mock 仪表盘组件重复展示。",
+      "noTenantTitle": "请选择一个租户后再编辑智能体策略",
+      "noTenantDescription": "该配置页面按租户隔离。请从租户路由进入，以查看或编辑当前生效的运行时策略。",
+      "feedbackEyebrow": "运行反馈",
+      "feedbackTitle": "用真实运行验证策略变更",
+      "traceLoadErrorTitle": "无法加载运行轨迹",
+      "traceLoadErrorDescription": "请重试以拉取该租户最近的运行记录，再验证策略变更。",
+      "retryTraceLoad": "重试加载轨迹",
+      "traceChainLoadErrorTitle": "无法加载轨迹详情",
+      "traceChainLoadErrorDescription": "已选中的轨迹存在，但当前无法加载它的详情链路。",
+      "retryTraceChainLoad": "重试加载轨迹详情",
+      "loadingTracesTitle": "正在加载运行轨迹",
+      "loadingTracesDescription": "正在拉取该租户最近的运行记录，用于验证当前运行时策略。",
+      "noTracesTitle": "还没有运行轨迹",
+      "noTracesDescription": "前往智能体工作台发起一次真实对话，确认当前模型、工具策略与运行时 hook 的实际表现。",
+      "openWorkspace": "打开智能体工作台",
+      "selectedTrace": "已选中的轨迹",
+      "clearSelectedTrace": "清除已选轨迹",
+      "relatedSurfaces": "相关入口",
+      "editingModelTitle": "编辑原则",
+      "editingModelApplies": "租户策略会广泛生效，除非更窄的工作空间绑定覆盖它。",
+      "editingModelHooks": "只有偏离 catalog 默认值的 runtime hook 才会被持久化。",
+      "editingModelTraces": "请用真实轨迹验证策略改动是否真正改变了行为。",
+      "related": {
+        "agentWorkspaceDescription": "发起真实对话，观察当前运行时策略的表现。",
+        "skillsDescription": "管理运行时策略可能允许或限制的可复用技能包。",
+        "agentDefinitionsDescription": "更新当前租户可用的智能体提示词、边界与能力。",
+        "agentBindingsDescription": "决定哪些定义被绑定到项目或工作空间中。",
+        "pluginsDescription": "查看支撑当前策略的运行时插件与 hook 实现。",
+        "mcpServersDescription": "审查会影响智能体运行时执行面的 MCP 工具接入。"
+      }
+    },
+    "agentConfigView": {
+      "loading": "正在加载租户策略",
+      "loadError": "加载配置失败",
+      "errorTitle": "无法加载租户策略",
+      "emptyTitle": "未返回租户策略",
+      "emptyDescription": "运行时返回了空配置，请重新加载后重试。",
+      "title": "租户运行时策略",
+      "description": "除非被更窄范围的绑定覆盖，否则该租户下的所有对话都会继承此策略。模型选择、推理开关、工具边界与运行时 Hook 覆盖都在这里统一生效。",
+      "defaultBanner": "当前租户正在继承平台默认策略。保存任意修改后，将为该租户创建自定义策略。",
+      "actions": {
+        "reload": "重新加载配置",
+        "edit": "编辑配置"
+      },
+      "badges": {
+        "defaultPolicy": "使用默认策略",
+        "customPolicy": "自定义租户策略",
+        "multiAgentEnabled": "已启用多智能体",
+        "multiAgentDisabled": "已禁用多智能体"
+      },
+      "summary": {
+        "model": "模型",
+        "modelHint": "当前使用的带提供商前缀模型标识",
+        "temperature": "温度",
+        "temperatureHint": "值越低，输出越稳定",
+        "toolPolicy": "工具策略",
+        "toolPolicyInherited": "继承默认",
+        "toolPolicyOverrides": "{{count}} 项覆盖",
+        "toolPolicyHint": "该租户显式保存的允许 / 禁止规则",
+        "hookOverrides": "Hook 覆盖",
+        "hookOverridesDefault": "使用目录默认值",
+        "hookOverridesHint": "仅当租户偏离默认目录时，才会在这里展示 Hook 覆盖"
+      },
+      "sections": {
+        "modelReasoning": {
+          "title": "模型与推理",
+          "description": "定义 Sisyphus 在调用工具前如何规划与推理。",
+          "modelIdentifier": "模型标识",
+          "temperature": "温度",
+          "temperatureHint": "0 更偏确定性，2 更偏探索性。",
+          "patternLearning": "模式学习",
+          "multiLevelThinking": "多层级思考"
+        },
+        "executionGuardrails": {
+          "title": "执行护栏",
+          "description": "限制运行时的规划深度、工具执行边界以及最后一次持久化更新时间。",
+          "maxWorkPlanSteps": "最大工作计划步数",
+          "maxWorkPlanStepsValue": "{{count}} 步",
+          "maxWorkPlanStepsHint": "超过该上限后，规划器需要先简化计划。",
+          "toolTimeout": "工具超时",
+          "toolTimeoutValue": "{{count}} 秒",
+          "toolTimeoutHint": "工具执行的默认超时时间。",
+          "lastUpdated": "最后更新"
+        },
+        "toolPolicy": {
+          "title": "工具策略",
+          "description": "显式允许 / 禁止列表。列表为空时，运行时将继续使用默认工具边界。",
+          "enabledTools": "允许工具",
+          "enabledToolsEmpty": "未设置显式允许列表，运行时将使用默认启用工具。",
+          "disabledTools": "禁用工具",
+          "disabledToolsEmpty": "该租户未保存显式禁止列表。"
+        },
+        "runtimeHooks": {
+          "title": "运行时 Hook",
+          "description": "租户级运行时 Hook 覆盖。只有当租户偏离共享目录默认值时，Hook 才会出现在这里。",
+          "empty": "当前未保存显式 Hook 覆盖，租户正在继承内建运行时 Hook 目录默认值。",
+          "noCustomSettings": "没有自定义设置",
+          "settingsHidden": "Hook 设置仅对租户管理员可见。",
+          "priority": "优先级 {{value}}",
+          "inherit": "继承"
+        }
+      }
+    },
+    "agentConfigEditor": {
+      "eyebrow": "租户运行时策略",
+      "title": "编辑配置",
+      "description": "更新应用于整个租户的模型、执行护栏、工具策略和运行时 Hook 覆盖。",
+      "loadError": "加载配置失败",
+      "saveError": "保存配置失败",
+      "saveErrorToast": "无法保存租户策略，请稍后重试。",
+      "saveSuccess": "租户策略已保存。",
+      "validationError": "部分配置值无效，请检查高亮字段。",
+      "accessDenied": "你没有权限编辑该租户策略。",
+      "alertTitle": "无法保存租户策略",
+      "discardChangesTitle": "要放弃修改吗？",
+      "discardChangesDescription": "当前租户策略中仍有未保存的编辑。",
+      "actions": {
+        "save": "保存配置",
+        "close": "关闭",
+        "discard": "放弃修改",
+        "keepEditing": "继续编辑"
+      },
+      "sections": {
+        "modelReasoning": {
+          "title": "模型与推理",
+          "description": "设置主模型以及影响每次响应的推理能力。",
+          "modelIdentifier": "模型标识",
+          "modelIdentifierHint": "请输入运行时应调用的完整带提供商前缀模型名。",
+          "modelIdentifierRequired": "请输入模型标识。",
+          "modelIdentifierPlaceholder": "openai/gpt-5.4",
+          "temperature": "温度",
+          "temperatureHint": "值越低，响应越稳定。",
+          "temperatureRequired": "请设置温度值。",
+          "temperatureRange": "温度必须介于 0 到 2 之间。",
+          "patternLearning": "模式学习",
+          "patternLearningDescription": "让成功的工作流沉淀为可复用模式。",
+          "patternLearningToggle": "切换模式学习",
+          "multiLevelThinking": "多层级思考",
+          "multiLevelThinkingDescription": "允许规划器同时在工作计划和具体步骤两个层面推理。",
+          "multiLevelThinkingToggle": "切换多层级思考"
+        },
+        "executionGuardrails": {
+          "title": "执行护栏",
+          "description": "设置租户运行时的规划深度与执行超时。",
+          "maxWorkPlanSteps": "最大工作计划步数",
+          "maxWorkPlanStepsHint": "超过该上限后，规划器需要先简化计划。",
+          "maxWorkPlanStepsRequired": "请设置最大工作计划步数。",
+          "minValue": "值必须至少为 1。",
+          "toolTimeout": "工具超时（秒）",
+          "toolTimeoutHint": "工具执行的默认超时时间。",
+          "toolTimeoutRequired": "请设置工具超时。",
+          "toolTimeoutMin": "值必须至少为 1 秒。",
+          "multiAgentRouting": "多智能体路由",
+          "multiAgentRoutingDescription": "该项由系统级配置控制，通过"
+        },
+        "toolPolicy": {
+          "title": "工具策略",
+          "description": "当该租户需要比共享默认值更窄的工具边界时，使用显式允许 / 禁止列表。",
+          "enabledTools": "允许工具",
+          "enabledToolsHint": "用逗号分隔内部工具名。留空则继承运行时默认值。",
+          "disabledTools": "禁用工具",
+          "disabledToolsHint": "用逗号分隔要在该租户显式拒绝的内部工具名。",
+          "toolPlaceholder": "tool_name, another_tool"
+        }
+      },
+      "runtimeHooks": {
+        "title": "运行时 Hook",
+        "description": "只有当租户需要偏离共享目录默认值时，才保存 Hook 覆盖。",
+        "catalogUnavailableTitle": "运行时 Hook 目录不可用",
+        "catalogUnavailableDescription": "当前无法加载运行时 Hook 目录，但你仍然可以更新租户策略的其他部分。",
+        "override": "已覆盖",
+        "catalogDefault": "目录默认",
+        "defaultHookDescription": "该 Hook 会在执行过程中注入运行时提醒。",
+        "useDefaults": "恢复默认",
+        "useDefaultsAria": "将 {{name}} 恢复为默认值",
+        "priority": "优先级",
+        "priorityAria": "{{name}} 优先级",
+        "catalogDefaultPriority": "目录默认值：{{value}}",
+        "noExtraSettings": "该 Hook 除启用状态和优先级外，没有额外设置项。",
+        "empty": "当前没有可供租户自定义的运行时 Hook。"
       }
     },
     "agentBindings": {

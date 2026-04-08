@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
 from src.application.services.project_service import ProjectService
 from src.application.services.tenant_service import TenantService
@@ -13,6 +14,9 @@ from src.application.services.workspace_message_service import WorkspaceMessageS
 from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.tenant_repository import TenantRepository
 from src.domain.ports.repositories.user_repository import UserRepository
+from src.domain.ports.repositories.workspace.blackboard_file_repository import (
+    BlackboardFileRepository,
+)
 from src.domain.ports.repositories.workspace.blackboard_repository import (
     BlackboardRepository,
 )
@@ -39,6 +43,9 @@ from src.domain.ports.repositories.workspace.workspace_repository import (
 )
 from src.domain.ports.repositories.workspace.workspace_task_repository import (
     WorkspaceTaskRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_blackboard_file_repository import (
+    SqlBlackboardFileRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
     SqlBlackboardRepository,
@@ -136,6 +143,19 @@ class ProjectContainer:
         """Get BlackboardService for blackboard post/reply operations."""
         return BlackboardService(
             blackboard_repo=self.blackboard_repository(),
+            workspace_repo=self.workspace_repository(),
+            workspace_member_repo=self.workspace_member_repository(),
+        )
+
+    def blackboard_file_repository(self) -> BlackboardFileRepository:
+        """Get BlackboardFileRepository for workspace file persistence."""
+        assert self._db is not None
+        return SqlBlackboardFileRepository(self._db)
+
+    def blackboard_file_service(self) -> BlackboardFileService:
+        """Get BlackboardFileService for workspace file operations."""
+        return BlackboardFileService(
+            file_repo=self.blackboard_file_repository(),
             workspace_repo=self.workspace_repository(),
             workspace_member_repo=self.workspace_member_repository(),
         )

@@ -288,7 +288,7 @@ async def test_binding_match(
             )
 
         # Get agent details
-        agent = await agent_registry.get_by_id(binding.agent_id)
+        agent = await agent_registry.get_by_id(binding.agent_id, tenant_id=tenant_id)
         agent_name = agent.name if agent else None
 
         # Calculate confidence based on specificity score

@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 _orchestrator: AgentOrchestrator | None = None
 
 
+def _get_runtime_string(ctx: ToolContext, key: str) -> str:
+    """Read a normalized string value from runtime_context."""
+    value = ctx.runtime_context.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
 def configure_agent_spawn(orchestrator: AgentOrchestrator) -> None:
     """Inject orchestrator at agent startup."""
     global _orchestrator
@@ -72,15 +78,22 @@ async def agent_spawn_tool(
             output=json.dumps({"error": "Multi-agent not configured"}),
             is_error=True,
         )
+    parent_agent_id = _get_runtime_string(ctx, "selected_agent_id") or ctx.agent_name
+    trace_id = _get_runtime_string(ctx, "trace_id") or _get_runtime_string(ctx, "route_id")
+    span_id = _get_runtime_string(ctx, "span_id")
     try:
         spawn_result = await _orchestrator.spawn_agent(
-            parent_agent_id=ctx.agent_name,
+            parent_agent_id=parent_agent_id,
             target_agent_id=agent_id,
             message=message,
             mode=SpawnMode(mode),
             parent_session_id=ctx.session_id,
             project_id=ctx.project_id,
             conversation_id=ctx.conversation_id,
+            tenant_id=ctx.tenant_id,
+            user_id=ctx.user_id,
+            trace_id=trace_id,
+            span_id=span_id,
         )
         record = spawn_result.spawn_record
         agent = spawn_result.agent
@@ -88,7 +101,7 @@ async def agent_spawn_tool(
             AgentSpawnedEvent(
                 agent_id=agent_id,
                 agent_name=agent.display_name or agent.name,
-                parent_agent_id=ctx.agent_name,
+                parent_agent_id=parent_agent_id,
                 child_session_id=record.child_session_id,
                 mode=mode,
                 task_summary=message[:200],

@@ -78,6 +78,11 @@ class PluginSDK:
         handler: PluginHookHandler,
         *,
         priority: int = 100,
+        display_name: str | None = None,
+        description: str | None = None,
+        default_enabled: bool = True,
+        default_settings: dict[str, Any] | None = None,
+        settings_schema: dict[str, Any] | None = None,
         overwrite: bool = False,
     ) -> None:
         """Register a runtime hook handler."""
@@ -85,6 +90,11 @@ class PluginSDK:
             hook_name,
             handler,
             priority=priority,
+            display_name=display_name,
+            description=description,
+            default_enabled=default_enabled,
+            default_settings=default_settings,
+            settings_schema=settings_schema,
             overwrite=overwrite,
         )
 

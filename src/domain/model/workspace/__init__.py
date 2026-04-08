@@ -1,3 +1,4 @@
+from src.domain.model.workspace.blackboard_file import BlackboardFile
 from src.domain.model.workspace.blackboard_post import (
     BlackboardPost,
     BlackboardPostStatus,
@@ -36,6 +37,7 @@ from src.domain.model.workspace.workspace_task import (
 
 __all__ = [
     "WORKSPACE_PERMISSION_MATRIX",
+    "BlackboardFile",
     "BlackboardPost",
     "BlackboardPostStatus",
     "BlackboardReply",

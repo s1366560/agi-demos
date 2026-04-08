@@ -11,6 +11,7 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
+from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
 from src.application.services.cluster_service import ClusterService
 from src.application.services.cron_service import CronJobService
@@ -92,6 +93,9 @@ from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.tenant_repository import TenantRepository
 from src.domain.ports.repositories.user_repository import UserRepository
+from src.domain.ports.repositories.workspace.blackboard_file_repository import (
+    BlackboardFileRepository,
+)
 from src.domain.ports.repositories.workspace.blackboard_repository import (
     BlackboardRepository,
 )
@@ -357,6 +361,12 @@ class DIContainer:
 
     def blackboard_service(self) -> BlackboardService:
         return self._project.blackboard_service()
+
+    def blackboard_file_repository(self) -> BlackboardFileRepository:
+        return self._project.blackboard_file_repository()
+
+    def blackboard_file_service(self) -> BlackboardFileService:
+        return self._project.blackboard_file_service()
 
     def workspace_task_repository(self) -> WorkspaceTaskRepository:
         return self._project.workspace_task_repository()

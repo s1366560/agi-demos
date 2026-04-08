@@ -177,12 +177,16 @@ class SubAgentRun:
             raise ValueError(
                 f"Cannot set trace context in status {self.status.value}; must be pending"
             )
-        if not trace_id or not trace_id.strip():
+        normalized_trace_id = trace_id.strip()
+        if not normalized_trace_id:
             raise ValueError("trace_id cannot be empty")
+        normalized_parent_span_id = parent_span_id.strip() if parent_span_id else None
+        if normalized_parent_span_id == "":
+            normalized_parent_span_id = None
         return replace(
             self,
-            trace_id=trace_id,
-            parent_span_id=parent_span_id,
+            trace_id=normalized_trace_id,
+            parent_span_id=normalized_parent_span_id,
         )
 
     def to_event_data(self) -> dict[str, Any]:

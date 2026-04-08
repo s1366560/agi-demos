@@ -30,6 +30,51 @@ class ConfigType(Enum):
     CUSTOM = "custom"
 
 
+@dataclass(frozen=True)
+class RuntimeHookConfig:
+    """Tenant-scoped runtime hook override for a plugin hook handler."""
+
+    plugin_name: str
+    hook_name: str
+    enabled: bool = True
+    priority: int | None = None
+    settings: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.plugin_name.strip():
+            raise ValueError("plugin_name cannot be empty")
+        if not self.hook_name.strip():
+            raise ValueError("hook_name cannot be empty")
+
+    @property
+    def key(self) -> tuple[str, str]:
+        """Return normalized identity for this hook config."""
+        return (self.plugin_name.strip().lower(), self.hook_name.strip().lower())
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize config for API responses and persistence."""
+        return {
+            "plugin_name": self.plugin_name,
+            "hook_name": self.hook_name,
+            "enabled": self.enabled,
+            "priority": self.priority,
+            "settings": dict(self.settings),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RuntimeHookConfig":
+        """Deserialize a runtime hook config from stored JSON data."""
+        return cls(
+            plugin_name=str(data.get("plugin_name", "")).strip(),
+            hook_name=str(data.get("hook_name", "")).strip(),
+            enabled=bool(data.get("enabled", True)),
+            priority=int(data["priority"]) if data.get("priority") is not None else None,
+            settings=dict(data.get("settings", {}))
+            if isinstance(data.get("settings"), dict)
+            else {},
+        )
+
+
 @dataclass
 class TenantAgentConfig:
     """
@@ -51,6 +96,7 @@ class TenantAgentConfig:
         tool_timeout_seconds: Default timeout for tool execution
         enabled_tools: List of explicitly enabled tools
         disabled_tools: List of explicitly disabled tools
+        runtime_hooks: Hook overrides applied at execution time
         created_at: When this config was created
         updated_at: When this config was last modified
     """
@@ -66,6 +112,7 @@ class TenantAgentConfig:
     tool_timeout_seconds: int
     enabled_tools: list[str] = field(default_factory=list)
     disabled_tools: list[str] = field(default_factory=list)
+    runtime_hooks: list[RuntimeHookConfig] = field(default_factory=list)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -128,6 +175,7 @@ class TenantAgentConfig:
             tool_timeout_seconds=self.tool_timeout_seconds,
             enabled_tools=list(self.enabled_tools),
             disabled_tools=list(self.disabled_tools),
+            runtime_hooks=list(self.runtime_hooks),
             created_at=self.created_at,
             updated_at=datetime.now(UTC),
         )
@@ -154,6 +202,7 @@ class TenantAgentConfig:
             tool_timeout_seconds=self.tool_timeout_seconds,
             enabled_tools=list(self.enabled_tools),
             disabled_tools=list(self.disabled_tools),
+            runtime_hooks=list(self.runtime_hooks),
             created_at=self.created_at,
             updated_at=datetime.now(UTC),
         )
@@ -196,9 +245,44 @@ class TenantAgentConfig:
             disabled_tools=list(disabled_tools)
             if disabled_tools is not None
             else list(self.disabled_tools),
+            runtime_hooks=list(self.runtime_hooks),
             created_at=self.created_at,
             updated_at=datetime.now(UTC),
         )
+
+    def update_runtime_hooks(
+        self,
+        runtime_hooks: list[RuntimeHookConfig],
+    ) -> "TenantAgentConfig":
+        """Replace runtime hook configuration with a new ordered list."""
+        return TenantAgentConfig(
+            id=self.id,
+            tenant_id=self.tenant_id,
+            config_type=ConfigType.CUSTOM,
+            llm_model=self.llm_model,
+            llm_temperature=self.llm_temperature,
+            pattern_learning_enabled=self.pattern_learning_enabled,
+            multi_level_thinking_enabled=self.multi_level_thinking_enabled,
+            max_work_plan_steps=self.max_work_plan_steps,
+            tool_timeout_seconds=self.tool_timeout_seconds,
+            enabled_tools=list(self.enabled_tools),
+            disabled_tools=list(self.disabled_tools),
+            runtime_hooks=list(runtime_hooks),
+            created_at=self.created_at,
+            updated_at=datetime.now(UTC),
+        )
+
+    def get_runtime_hook(
+        self,
+        plugin_name: str,
+        hook_name: str,
+    ) -> RuntimeHookConfig | None:
+        """Return the configured runtime hook override for a plugin/hook pair."""
+        normalized_key = (plugin_name.strip().lower(), hook_name.strip().lower())
+        for runtime_hook in self.runtime_hooks:
+            if runtime_hook.key == normalized_key:
+                return runtime_hook
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -214,6 +298,7 @@ class TenantAgentConfig:
             "tool_timeout_seconds": self.tool_timeout_seconds,
             "enabled_tools": list(self.enabled_tools),
             "disabled_tools": list(self.disabled_tools),
+            "runtime_hooks": [item.to_dict() for item in self.runtime_hooks],
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -243,6 +328,7 @@ class TenantAgentConfig:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
+            runtime_hooks=[],
         )
 
     @classmethod
@@ -260,6 +346,11 @@ class TenantAgentConfig:
             tool_timeout_seconds=data.get("tool_timeout_seconds", 30),
             enabled_tools=data.get("enabled_tools", []),
             disabled_tools=data.get("disabled_tools", []),
+            runtime_hooks=[
+                RuntimeHookConfig.from_dict(item)
+                for item in data.get("runtime_hooks", [])
+                if isinstance(item, dict)
+            ],
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
             else datetime.now(UTC),

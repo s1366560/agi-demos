@@ -35,12 +35,20 @@ class AgentRegistryPort(ABC):
         """
 
     @abstractmethod
-    async def get_by_id(self, agent_id: str) -> Agent | None:
+    async def get_by_id(
+        self,
+        agent_id: str,
+        *,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> Agent | None:
         """
         Get an agent by its ID.
 
         Args:
             agent_id: Agent ID
+            tenant_id: Optional tenant context for built-in agents
+            project_id: Optional project context for built-in agents
 
         Returns:
             Agent if found, None otherwise

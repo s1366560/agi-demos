@@ -1,403 +1,495 @@
-import React, { useState, memo, useCallback, useEffect } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { Link, useParams } from 'react-router-dom';
 
 import {
-  Brain,
-  Terminal,
-  Globe,
-  Palette,
-  BarChart,
-  FileText,
-  Languages,
-  Table,
-  Mail,
-  CheckCircle,
-  Puzzle,
-  Plus,
   Activity,
+  ArrowUpRight,
+  Brain,
+  Cable,
+  Link2,
   Loader2,
+  Puzzle,
+  Wrench,
   X,
 } from 'lucide-react';
 
 import { TraceChainView } from '../../components/agent/multiAgent/TraceChainView';
 import { TraceTimeline } from '../../components/agent/multiAgent/TraceTimeline';
-import {
-  useTraceRuns,
-  useActiveRunCount,
-  useTraceLoading,
-  useTraceStore,
-  useTraceChain,
-  useTraceChainLoading,
-  useGetTraceChain,
-} from '../../stores/traceStore';
+import { TenantAgentConfigEditor } from '../../components/agent/TenantAgentConfigEditor';
+import { TenantAgentConfigView } from '../../components/agent/TenantAgentConfigView';
+import { agentConfigService } from '../../services/agentConfigService';
+import { traceAPI } from '../../services/traceService';
+import { useTenantStore } from '../../stores/tenant';
 
 import type { SubAgentRunDTO } from '../../types/multiAgent';
+import type { TraceChainDTO } from '../../types/multiAgent';
+import type { UntracedRunDetailsDTO } from '../../types/multiAgent';
 import type { LucideIcon } from 'lucide-react';
-
-interface SubAgent {
-  id: string;
-  title: string;
-  description: string;
-  tags: string[];
-  active: boolean;
-  icon: LucideIcon;
-  colorClass: string;
-  iconBgClass: string;
-}
-
-interface Skill {
-  id: string;
-  name: string;
-  version: string;
-  icon: LucideIcon;
-}
-
-const DEFAULT_SUB_AGENTS: SubAgent[] = [
-  {
-    id: 'code-architect',
-    title: 'Code Architect',
-    description: 'Expert in refactoring, debugging, and cross-language pattern detection.',
-    tags: ['Python', 'GitOps', 'CI/CD'],
-    active: true,
-    icon: Terminal,
-    colorClass: 'text-blue-600 dark:text-blue-400',
-    iconBgClass: 'bg-blue-100 dark:bg-blue-900/30',
-  },
-  {
-    id: 'deep-researcher',
-    title: 'Deep Researcher',
-    description: 'Synthesizes large datasets into structured executive summaries and reports.',
-    tags: ['Web Search', 'PDF Analysis', 'NLP'],
-    active: true,
-    icon: Globe,
-    colorClass: 'text-purple-600 dark:text-purple-400',
-    iconBgClass: 'bg-purple-100 dark:bg-purple-900/30',
-  },
-  {
-    id: 'creative-strategist',
-    title: 'Creative Strategist',
-    description: 'Generates marketing copy, UI concepts, and brand narratives.',
-    tags: ['Copywriting', 'Branding'],
-    active: false,
-    icon: Palette,
-    colorClass: 'text-orange-600 dark:text-orange-400',
-    iconBgClass: 'bg-orange-100 dark:bg-orange-900/30',
-  },
-  {
-    id: 'data-analyst',
-    title: 'Data Analyst',
-    description: 'Statistical modeling and anomaly detection from structured SQL sources.',
-    tags: ['SQL', 'Statistics'],
-    active: false,
-    icon: BarChart,
-    colorClass: 'text-teal-600 dark:text-teal-400',
-    iconBgClass: 'bg-teal-100 dark:bg-teal-900/30',
-  },
-];
-
-const SKILLS: Skill[] = [
-  { id: 'doc-sum', name: 'Document Summarizer', version: 'Core Logic Module v1.2', icon: FileText },
-  {
-    id: 'multi-lang',
-    name: 'Multi-Lingual Bridge',
-    version: 'Language Suite v4.0',
-    icon: Languages,
-  },
-  { id: 'excel-proc', name: 'Excel/CSV Processor', version: 'Data Utils v2.1', icon: Table },
-  { id: 'email-syn', name: 'Email Synthesizer', version: 'Comm Engine v1.0', icon: Mail },
-];
 
 type AgentDashboardProps = Record<string, never>;
 
-const SubAgentCard = memo<{
-  agent: SubAgent;
-  onToggle: (id: string) => void;
-}>(({ agent, onToggle }) => {
-  return (
-    <div
-      className={`rounded-xl p-5 relative overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform] border-2 ${
-        agent.active
-          ? 'bg-white dark:bg-slate-800 border-blue-600 shadow-lg shadow-blue-600/5'
-          : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-300 dark:hover:border-slate-600'
-      }`}
-    >
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-2 rounded-lg ${agent.iconBgClass} ${agent.colorClass}`}>
-          <agent.icon className="h-6 w-6" />
-        </div>
-        {agent.active ? (
-          <div className="bg-blue-600 text-white text-2xs font-bold px-2 py-0.5 rounded-full uppercase">
-            Active
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              onToggle(agent.id);
-            }}
-            className="text-blue-600 dark:text-blue-400 text-2xs font-bold uppercase tracking-tight hover:underline"
-          >
-            Activate
-          </button>
-        )}
-      </div>
-      <h4 className="font-bold text-lg mb-1 text-slate-900 dark:text-white">{agent.title}</h4>
-       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed min-h-10">
-         {agent.description}
-       </p>
+interface RelatedSurfaceLink {
+  title: string;
+  description: string;
+  path: string;
+  icon: LucideIcon;
+}
 
-      {agent.active && (
-        <div className="flex flex-wrap gap-2">
-          {agent.tags.map((tag) => (
-            <span
-              key={tag}
-              className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-2xs rounded font-medium"
-            >
-              {tag}
-            </span>
-          ))}
+function createSingleRunDetails(run: SubAgentRunDTO): UntracedRunDetailsDTO {
+  return {
+    trace_id: null,
+    conversation_id: run.conversation_id,
+    runs: [run],
+    total: 1,
+  };
+}
+
+function buildRelatedSurfaces(basePath: string, t: TFunction): RelatedSurfaceLink[] {
+  return [
+    {
+      title: t('nav.agentWorkspace'),
+      description: t('tenant.agentDashboard.related.agentWorkspaceDescription'),
+      path: `${basePath}/agent-workspace`,
+      icon: Activity,
+    },
+    {
+      title: t('nav.skills'),
+      description: t('tenant.agentDashboard.related.skillsDescription'),
+      path: `${basePath}/skills`,
+      icon: Puzzle,
+    },
+    {
+      title: t('nav.agentDefinitions'),
+      description: t('tenant.agentDashboard.related.agentDefinitionsDescription'),
+      path: `${basePath}/agent-definitions`,
+      icon: Brain,
+    },
+    {
+      title: t('nav.agentBindings'),
+      description: t('tenant.agentDashboard.related.agentBindingsDescription'),
+      path: `${basePath}/agent-bindings`,
+      icon: Link2,
+    },
+    {
+      title: t('nav.plugins'),
+      description: t('tenant.agentDashboard.related.pluginsDescription'),
+      path: `${basePath}/plugins`,
+      icon: Wrench,
+    },
+    {
+      title: t('nav.mcpServers'),
+      description: t('tenant.agentDashboard.related.mcpServersDescription'),
+      path: `${basePath}/mcp-servers`,
+      icon: Cable,
+    },
+  ];
+}
+
+function RelatedSurfaceCard({ title, description, path, icon: Icon }: RelatedSurfaceLink) {
+  return (
+    <Link
+      to={path}
+      className="group flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-4 transition-colors duration-150 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+    >
+      <div className="mt-0.5 rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+        <Icon size={16} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white">{title}</span>
+          <ArrowUpRight
+            size={14}
+            className="text-slate-400 transition-transform duration-150 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+          />
+        </div>
+        <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
+      </div>
+    </Link>
+  );
+}
+
+export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
+  const { t } = useTranslation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId: string }>();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id ?? null);
+  const tenantId = routeTenantId ?? currentTenantId ?? null;
+  const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
+  const relatedSurfaces = buildRelatedSurfaces(basePath, t);
+
+  const [canEditConfig, setCanEditConfig] = useState(false);
+  const [configEditorOpen, setConfigEditorOpen] = useState(false);
+  const [configRefreshKey, setConfigRefreshKey] = useState(0);
+
+  const [selectedRun, setSelectedRun] = useState<SubAgentRunDTO | null>(null);
+  const [runs, setRuns] = useState<SubAgentRunDTO[]>([]);
+  const [activeRunCount, setActiveRunCount] = useState(0);
+  const [isTraceLoading, setIsTraceLoading] = useState(false);
+  const [traceChain, setTraceChain] = useState<TraceChainDTO | UntracedRunDetailsDTO | null>(null);
+  const [isChainLoading, setIsChainLoading] = useState(false);
+  const [chainLoadError, setChainLoadError] = useState(false);
+  const [hasLoadedTraces, setHasLoadedTraces] = useState(false);
+  const [traceLoadError, setTraceLoadError] = useState(false);
+  const [traceRefreshKey, setTraceRefreshKey] = useState(0);
+  const traceRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
+
+    let cancelled = false;
+    void agentConfigService
+      .canModifyConfig(tenantId)
+      .then((allowed) => {
+        if (!cancelled) {
+          setCanEditConfig(allowed);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanEditConfig(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  useEffect(() => {
+    traceRequestRef.current += 1;
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      setSelectedRun(null);
+      setTraceChain(null);
+      setIsChainLoading(false);
+      setChainLoadError(false);
+      setRuns([]);
+      setActiveRunCount(0);
+      setTraceLoadError(false);
+      setHasLoadedTraces(false);
+      setIsTraceLoading(Boolean(tenantId));
+    });
+
+    if (!tenantId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void Promise.allSettled([
+      traceAPI.listTenantRuns(tenantId, { limit: 20 }),
+      traceAPI.getTenantActiveRunCount(tenantId),
+    ])
+      .then(([runsResult, activeRunResult]) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (runsResult.status === 'fulfilled') {
+          setRuns(runsResult.value.runs);
+          setTraceLoadError(false);
+        } else {
+          setRuns([]);
+          setTraceLoadError(true);
+        }
+
+        if (activeRunResult.status === 'fulfilled') {
+          setActiveRunCount(activeRunResult.value.active_count);
+        } else {
+          setActiveRunCount(0);
+        }
+
+        setHasLoadedTraces(true);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsTraceLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, traceRefreshKey]);
+
+  const handleSelectRun = useCallback((run: SubAgentRunDTO) => {
+    setSelectedRun(run);
+
+    traceRequestRef.current += 1;
+    const requestId = traceRequestRef.current;
+    setTraceChain(null);
+    setChainLoadError(false);
+
+    if (!run.trace_id) {
+      setTraceChain(createSingleRunDetails(run));
+      setIsChainLoading(false);
+      return;
+    }
+
+    setIsChainLoading(true);
+    void traceAPI
+      .getTraceChain(run.conversation_id, run.trace_id)
+      .then((chain) => {
+        if (traceRequestRef.current === requestId) {
+          setTraceChain(chain);
+        }
+      })
+      .catch(() => {
+        if (traceRequestRef.current === requestId) {
+          setTraceChain(null);
+          setChainLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (traceRequestRef.current === requestId) {
+          setIsChainLoading(false);
+        }
+      });
+  }, []);
+
+  return (
+    <div className="mx-auto flex max-w-[1440px] flex-col gap-10 pb-24">
+      <header className="grid gap-8 border-b border-slate-200/80 pb-10 dark:border-slate-800 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-end">
+        <div className="max-w-4xl space-y-4">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+            <span>{t('tenant.agentDashboard.eyebrow')}</span>
+            {activeRunCount > 0 ? (
+              <>
+                <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+                <span className="inline-flex items-center gap-1 text-slate-900 dark:text-slate-100">
+                  <Activity size={12} className="animate-pulse motion-reduce:animate-none" />
+                  {t('tenant.agentDashboard.activeRuns', { count: activeRunCount })}
+                </span>
+              </>
+            ) : null}
+          </div>
+          <div className="space-y-3">
+            <h1 className="text-4xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-white sm:text-5xl">
+              {t('tenant.agentDashboard.title')}
+            </h1>
+            <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-400 sm:text-base">
+              {t('tenant.agentDashboard.description')}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            {t('tenant.agentDashboard.scopeTitle')}
+          </p>
+          <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-400">
+            {t('tenant.agentDashboard.scopeDescription')}
+          </p>
+        </div>
+      </header>
+
+      {!tenantId ? (
+        <section className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-10 text-center dark:border-slate-700 dark:bg-slate-900/60">
+          <h2 className="text-xl font-semibold tracking-[-0.03em] text-slate-900 dark:text-white">
+            {t('tenant.agentDashboard.noTenantTitle')}
+          </h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+            {t('tenant.agentDashboard.noTenantDescription')}
+          </p>
+        </section>
+      ) : (
+        <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+          <div className="min-w-0 space-y-10">
+            <section className="min-w-0">
+              <TenantAgentConfigView
+                key={`${tenantId}:${String(configRefreshKey)}`}
+                tenantId={tenantId}
+                canEdit={canEditConfig}
+                onEdit={() => {
+                  setConfigEditorOpen(true);
+                }}
+              />
+              <TenantAgentConfigEditor
+                open={configEditorOpen}
+                tenantId={tenantId}
+                onClose={() => {
+                  setConfigEditorOpen(false);
+                }}
+                onSave={() => {
+                  setConfigRefreshKey((current) => current + 1);
+                }}
+              />
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t('tenant.agentDashboard.feedbackEyebrow')}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-white">
+                    {t('tenant.agentDashboard.feedbackTitle')}
+                  </h2>
+                </div>
+                {isTraceLoading ? (
+                  <Loader2
+                    size={16}
+                    className="text-slate-400 animate-spin motion-reduce:animate-none"
+                  />
+                ) : null}
+              </div>
+
+              {traceLoadError ? (
+                <div className="rounded-[28px] border border-rose-200 bg-rose-50/80 px-6 py-8 dark:border-rose-900 dark:bg-rose-950/40">
+                  <h3 className="text-lg font-semibold tracking-[-0.02em] text-rose-900 dark:text-rose-100">
+                    {t('tenant.agentDashboard.traceLoadErrorTitle')}
+                  </h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-rose-700 dark:text-rose-300">
+                    {t('tenant.agentDashboard.traceLoadErrorDescription')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTraceRefreshKey((current) => current + 1);
+                    }}
+                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-medium text-rose-800 transition-colors duration-150 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/60"
+                  >
+                    {t('tenant.agentDashboard.retryTraceLoad')}
+                  </button>
+                </div>
+              ) : !hasLoadedTraces ? (
+                <div className="rounded-[28px] border border-slate-200/80 bg-white px-6 py-8 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950">
+                  <p className="text-lg font-semibold tracking-[-0.02em] text-slate-900 dark:text-white">
+                    {t('tenant.agentDashboard.loadingTracesTitle')}
+                  </p>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+                    {t('tenant.agentDashboard.loadingTracesDescription')}
+                  </p>
+                </div>
+              ) : runs.length === 0 ? (
+                <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 dark:border-slate-700 dark:bg-slate-900/60">
+                  <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-900 dark:text-white">
+                    {t('tenant.agentDashboard.noTracesTitle')}
+                  </h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+                    {t('tenant.agentDashboard.noTracesDescription')}
+                  </p>
+                  <Link
+                    to={`${basePath}/agent-workspace`}
+                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-medium text-white transition-colors duration-150 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+                  >
+                    {t('tenant.agentDashboard.openWorkspace')}
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950">
+                    <TraceTimeline
+                      runs={runs}
+                      selectedRunId={selectedRun?.run_id ?? null}
+                      onSelectRun={handleSelectRun}
+                    />
+                  </div>
+
+                  {selectedRun ? (
+                    <div className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            {t('tenant.agentDashboard.selectedTrace')}
+                          </p>
+                          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-slate-900 dark:text-white">
+                            {selectedRun.run_id}
+                          </h3>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            traceRequestRef.current += 1;
+                            setSelectedRun(null);
+                            setTraceChain(null);
+                            setIsChainLoading(false);
+                            setChainLoadError(false);
+                          }}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors duration-150 hover:border-slate-300 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200"
+                          aria-label={t('tenant.agentDashboard.clearSelectedTrace')}
+                        >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        {chainLoadError ? (
+                          <div className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-5 dark:border-rose-900 dark:bg-rose-950/40">
+                            <h4 className="text-sm font-semibold text-rose-900 dark:text-rose-100">
+                              {t(
+                                'tenant.agentDashboard.traceChainLoadErrorTitle',
+                                'Failed to load trace details'
+                              )}
+                            </h4>
+                            <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-300">
+                              {t(
+                                'tenant.agentDashboard.traceChainLoadErrorDescription',
+                                'The selected trace exists, but its detail chain could not be loaded right now.'
+                              )}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectRun(selectedRun);
+                              }}
+                              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-medium text-rose-800 transition-colors duration-150 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/60"
+                            >
+                              {t(
+                                'tenant.agentDashboard.retryTraceChainLoad',
+                                'Retry loading trace'
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <TraceChainView
+                            data={traceChain}
+                            isLoading={isChainLoading}
+                            onSelectRun={handleSelectRun}
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+            </section>
+          </div>
+
+          <aside className="space-y-4 xl:sticky xl:top-6">
+            <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {t('tenant.agentDashboard.relatedSurfaces')}
+              </p>
+              <div className="mt-4 space-y-3">
+                {relatedSurfaces.map((surface) => (
+                  <RelatedSurfaceCard key={surface.title} {...surface} />
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {t('tenant.agentDashboard.editingModelTitle')}
+              </p>
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                <li>{t('tenant.agentDashboard.editingModelApplies')}</li>
+                <li>{t('tenant.agentDashboard.editingModelHooks')}</li>
+                <li>{t('tenant.agentDashboard.editingModelTraces')}</li>
+              </ul>
+            </section>
+          </aside>
         </div>
       )}
     </div>
   );
 });
-SubAgentCard.displayName = 'SubAgentCard';
 
-const SkillCard = memo<{ skill: Skill }>(({ skill }) => {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400">
-        <skill.icon className="h-4 w-4" />
-      </div>
-      <div className="flex-1">
-        <p className="text-sm font-semibold text-slate-900 dark:text-white">{skill.name}</p>
-        <p className="text-2xs text-slate-500">{skill.version}</p>
-      </div>
-      <CheckCircle className="text-green-500 h-4 w-4" />
-    </div>
-  );
-});
-SkillCard.displayName = 'SkillCard';
-
-interface EngineConfigCardProps {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}
-
-const EngineConfigCard = memo<EngineConfigCardProps>(
-  ({ label, description, checked, onChange }) => {
-    return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 flex items-start gap-4">
-        <div className="pt-1 flex-shrink-0">
-          <label className="inline-flex relative items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(e) => {
-                onChange(e.target.checked);
-              }}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-blue-600"></div>
-          </label>
-        </div>
-        <div>
-          <h4 className="font-bold text-sm text-slate-900 dark:text-white">{label}</h4>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>
-        </div>
-      </div>
-    );
-  }
-);
-EngineConfigCard.displayName = 'EngineConfigCard';
-
-export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
-  const { t: _t } = useTranslation();
-
-  const [subAgents, setSubAgents] = useState<SubAgent[]>(DEFAULT_SUB_AGENTS);
-  const [autoLearning, setAutoLearning] = useState(true);
-  const [browserAccess, setBrowserAccess] = useState(true);
-
-  const runs = useTraceRuns();
-  const activeRunCount = useActiveRunCount();
-  const isTraceLoading = useTraceLoading();
-
-  const traceChain = useTraceChain();
-  const isChainLoading = useTraceChainLoading();
-  const getTraceChain = useGetTraceChain();
-
-  const [selectedRun, setSelectedRun] = useState<SubAgentRunDTO | null>(null);
-
-  useEffect(() => {
-    void useTraceStore.getState().fetchActiveRunCount();
-  }, []);
-
-  const toggleAgent = useCallback((id: string) => {
-    setSubAgents((prev) =>
-      prev.map((agent) => (agent.id === id ? { ...agent, active: !agent.active } : agent))
-    );
-  }, []);
-
-  const handleSelectRun = useCallback(
-    (run: SubAgentRunDTO) => {
-      setSelectedRun(run);
-      if (run.trace_id) {
-        void getTraceChain(run.conversation_id, run.trace_id);
-      }
-    },
-    [getTraceChain]
-  );
-
-  return (
-    <div className="max-w-full mx-auto pb-24">
-      <header className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="bg-blue-600 rounded-lg p-2">
-            <Brain className="text-white h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-black tracking-tight uppercase text-slate-900 dark:text-white">
-            SubAgent Platform
-          </h1>
-          {activeRunCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-full">
-              <Activity size={12} className="animate-pulse motion-reduce:animate-none" />
-              {activeRunCount} active
-            </span>
-          )}
-        </div>
-        <div className="max-w-2xl">
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-            Configure Your Intelligence Core
-          </h2>
-          <p className="text-slate-500 dark:text-slate-400">
-            Activate your first SubAgents and define the foundational skills for your enterprise
-            tenant.
-          </p>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-12 gap-8">
-        <div className="col-span-12 lg:col-span-8 space-y-8">
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                Available SubAgents
-              </h3>
-              <span className="text-xs text-slate-500">
-                {subAgents.filter((a) => a.active).length} selected
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {subAgents.map((agent) => (
-                <SubAgentCard key={agent.id} agent={agent} onToggle={toggleAgent} />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                Execution Traces
-              </h3>
-              {isTraceLoading && (
-                <Loader2
-                  size={14}
-                  className="text-blue-500 animate-spin motion-reduce:animate-none"
-                />
-              )}
-            </div>
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-              <TraceTimeline
-                runs={runs}
-                selectedRunId={selectedRun?.run_id ?? null}
-                onSelectRun={handleSelectRun}
-              />
-            </div>
-          </section>
-
-          {selectedRun && (
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                  Trace Chain Details
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedRun(null);
-                  }}
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-                <TraceChainView
-                  data={traceChain}
-                  isLoading={isChainLoading}
-                  onSelectRun={handleSelectRun}
-                />
-              </div>
-            </section>
-          )}
-
-          <section className="space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-              Global Engine Configuration
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <EngineConfigCard
-                label="Auto-Learning Experience Engine"
-                description="Allow the platform to discover and optimize new workflow patterns from user interactions automatically."
-                checked={autoLearning}
-                onChange={setAutoLearning}
-              />
-              <EngineConfigCard
-                label="Universal Browser Access"
-                description="Enables agents to navigate the live web for real-time information retrieval and task execution."
-                checked={browserAccess}
-                onChange={setBrowserAccess}
-              />
-            </div>
-          </section>
-        </div>
-
-        <div className="col-span-12 lg:col-span-4">
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden sticky top-6">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
-              <h3 className="font-bold text-sm uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                Standard Skill Registry
-              </h3>
-              <Puzzle className="text-slate-400 h-5 w-5" />
-            </div>
-            <div className="p-5 space-y-5">
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                These basic skills will be available to all active SubAgents by default.
-              </p>
-              <div className="space-y-4">
-                {SKILLS.map((skill) => (
-                  <SkillCard key={skill.id} skill={skill} />
-                ))}
-              </div>
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  className="w-full py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2"
-                >
-                  <Plus className="h-3 w-3" />
-                  Add Custom Skills
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
 AgentDashboard.displayName = 'AgentDashboard';
 
-export { DEFAULT_SUB_AGENTS, SKILLS };
+export default AgentDashboard;

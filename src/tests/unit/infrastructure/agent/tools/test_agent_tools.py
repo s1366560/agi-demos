@@ -180,6 +180,59 @@ class TestAgentSpawnTool:
         assert data["mode"] == "run"
 
     @pytest.mark.asyncio
+    async def test_passes_trace_context_from_runtime_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """For traced requests, spawn registration receives the parent trace id."""
+        import src.infrastructure.agent.tools.agent_spawn as mod
+
+        mock_record = SpawnRecord(
+            parent_agent_id="test-agent",
+            child_agent_id="target-agent",
+            child_session_id="child-session-1",
+            project_id="proj-1",
+            mode=SpawnMode.RUN,
+            status="running",
+        )
+        mock_agent = Mock()
+        mock_agent.display_name = "Target Agent"
+        mock_agent.name = "target-agent"
+
+        mock_result = Mock()
+        mock_result.spawn_record = mock_record
+        mock_result.agent = mock_agent
+
+        orchestrator = Mock()
+        orchestrator.spawn_agent = AsyncMock(return_value=mock_result)
+        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+
+        ctx = _make_ctx(
+            runtime_context={
+                "selected_agent_id": "builtin:sisyphus",
+                "trace_id": "trace-123",
+                "route_id": "route-456",
+            }
+        )
+        result = await agent_spawn_tool.execute(
+            ctx, agent_id="target-agent", message="do task", mode="run"
+        )
+
+        assert result.is_error is False
+        orchestrator.spawn_agent.assert_awaited_once_with(
+            parent_agent_id="builtin:sisyphus",
+            target_agent_id="target-agent",
+            message="do task",
+            mode=SpawnMode.RUN,
+            parent_session_id="session-1",
+            project_id="proj-1",
+            conversation_id="conv-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            trace_id="trace-123",
+            span_id="",
+        )
+
+    @pytest.mark.asyncio
     async def test_value_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """ValueError from orchestrator is surfaced."""
         import src.infrastructure.agent.tools.agent_spawn as mod

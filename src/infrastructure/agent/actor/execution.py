@@ -77,6 +77,34 @@ async def _run_session_lifecycle(project_id: str) -> None:
         )
 
 
+async def _update_spawn_status(
+    *,
+    child_session_id: str,
+    status: str,
+    parent_session_id: str,
+) -> None:
+    """Best-effort mirror of spawned child execution status to the orchestrator."""
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+
+        orchestrator = get_agent_orchestrator()
+        if orchestrator is None:
+            return
+        await orchestrator.update_spawn_status(
+            child_session_id=child_session_id,
+            new_status=status,
+            conversation_id=parent_session_id,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to update spawn status: child_session=%s status=%s parent_session=%s",
+            child_session_id,
+            status,
+            parent_session_id,
+            exc_info=True,
+        )
+
+
 # Flush accumulated events to DB every N seconds during streaming,
 # so they survive service restarts.
 _PERSIST_INTERVAL_SECONDS = 30
@@ -286,6 +314,13 @@ async def _handle_chat_error(
             logger.warning(f"[ActorExecution] Failed to publish error event: {pub_error}")
 
     if agent_id and parent_session_id:
+        await _update_spawn_status(
+            child_session_id=conversation_id,
+            status="failed",
+            parent_session_id=parent_session_id,
+        )
+
+    if agent_id and parent_session_id:
         _task = asyncio.create_task(
             _publish_announce_via_service(
                 agent_id=agent_id,
@@ -440,7 +475,7 @@ async def _load_persisted_agent_config(conversation_id: str) -> dict[str, Any] |
     return None
 
 
-async def execute_project_chat(
+async def execute_project_chat(  # noqa: PLR0915
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
     abort_signal: asyncio.Event | None = None,
@@ -477,6 +512,13 @@ async def execute_project_chat(
     try:
         redis_client = await _get_redis_client()
 
+        if request.agent_id and request.parent_session_id:
+            await _update_spawn_status(
+                child_session_id=request.conversation_id,
+                status="running",
+                parent_session_id=request.parent_session_id,
+            )
+
         async for event in agent.execute_chat(
             conversation_id=request.conversation_id,
             user_message=request.user_message,
@@ -495,6 +537,7 @@ async def execute_project_chat(
             model_override=model_override,
             image_attachments=request.image_attachments,
             agent_id=request.agent_id,
+            tenant_agent_config_data=request.tenant_agent_config,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -553,6 +596,11 @@ async def execute_project_chat(
         _task.add_done_callback(_background_tasks.discard)
 
         if request.agent_id and request.parent_session_id:
+            await _update_spawn_status(
+                child_session_id=request.conversation_id,
+                status="failed" if ss.is_error else "completed",
+                parent_session_id=request.parent_session_id,
+            )
             _task2 = asyncio.create_task(
                 _publish_announce_via_service(
                     agent_id=request.agent_id,

@@ -524,6 +524,7 @@ const commonTranslations: Record<string, string> = {
   'nav.analytics': 'Analytics',
   'nav.tasks': 'Tasks',
   'nav.agents': 'Agent Management',
+  'nav.agentConfiguration': 'Agent Configuration',
   'nav.subagents': 'SubAgents',
   'nav.skills': 'Skills',
   'nav.plugins': 'Plugins',
@@ -535,6 +536,56 @@ const commonTranslations: Record<string, string> = {
   'nav.mcpServers': 'MCP Servers',
   'nav.agentDefinitions': 'Agent Definitions',
   'nav.agentBindings': 'Agent Bindings',
+  'tenant.agentDashboard.eyebrow': 'Tenant runtime policy',
+  'tenant.agentDashboard.activeRuns': '{{count}} active runs',
+  'tenant.agentDashboard.title': 'Agent Configuration',
+  'tenant.agentDashboard.description':
+    'Set the model, execution guardrails, tool boundaries, and runtime hooks that shape every Sisyphus turn in this tenant.',
+  'tenant.agentDashboard.scopeTitle': 'Scope',
+  'tenant.agentDashboard.scopeDescription':
+    'This page stays focused on live configuration surfaces. Definitions, skills, bindings, and plugins are linked as supporting systems instead of duplicated as mock dashboard widgets.',
+  'tenant.agentDashboard.noTenantTitle': 'Select a tenant to edit agent policy',
+  'tenant.agentDashboard.noTenantDescription':
+    'The configuration surface is scoped per tenant. Open it from a tenant route to review or edit the active runtime policy.',
+  'tenant.agentDashboard.feedbackEyebrow': 'Operational feedback',
+  'tenant.agentDashboard.feedbackTitle': 'Validate policy changes against live runs',
+  'tenant.agentDashboard.traceLoadErrorTitle': 'We could not load runtime traces',
+  'tenant.agentDashboard.traceLoadErrorDescription':
+    'Retry to fetch recent runs for this tenant before validating a policy change.',
+  'tenant.agentDashboard.retryTraceLoad': 'Retry trace load',
+  'tenant.agentDashboard.traceChainLoadErrorTitle': 'Failed to load trace details',
+  'tenant.agentDashboard.traceChainLoadErrorDescription':
+    'The selected trace exists, but its detail chain could not be loaded right now.',
+  'tenant.agentDashboard.retryTraceChainLoad': 'Retry loading trace',
+  'tenant.agentDashboard.loadingTracesTitle': 'Loading runtime traces',
+  'tenant.agentDashboard.loadingTracesDescription':
+    'Fetching recent runs for this tenant to validate the current runtime policy.',
+  'tenant.agentDashboard.noTracesTitle': 'No runtime traces yet',
+  'tenant.agentDashboard.noTracesDescription':
+    'Start a conversation in Agent Workspace to confirm how the current model, tool policy, and runtime hooks behave in practice.',
+  'tenant.agentDashboard.openWorkspace': 'Open Agent Workspace',
+  'tenant.agentDashboard.selectedTrace': 'Selected trace',
+  'tenant.agentDashboard.clearSelectedTrace': 'Clear selected trace',
+  'tenant.agentDashboard.relatedSurfaces': 'Related surfaces',
+  'tenant.agentDashboard.editingModelTitle': 'Editing model',
+  'tenant.agentDashboard.editingModelApplies':
+    'Tenant policy applies broadly unless a narrower workspace binding overrides it.',
+  'tenant.agentDashboard.editingModelHooks':
+    'Runtime hooks are stored only when they diverge from catalog defaults.',
+  'tenant.agentDashboard.editingModelTraces':
+    'Use live traces to verify that a policy change actually changes behavior.',
+  'tenant.agentDashboard.related.agentWorkspaceDescription':
+    'Run a conversation and inspect how the current runtime policy behaves.',
+  'tenant.agentDashboard.related.skillsDescription':
+    'Manage reusable skill packs that the runtime policy can allow or restrict.',
+  'tenant.agentDashboard.related.agentDefinitionsDescription':
+    'Update agent prompts, boundaries, and capabilities available to this tenant.',
+  'tenant.agentDashboard.related.agentBindingsDescription':
+    'Choose where definitions are attached across projects and workspaces.',
+  'tenant.agentDashboard.related.pluginsDescription':
+    'Review runtime plugins and the hook implementations backing this policy.',
+  'tenant.agentDashboard.related.mcpServersDescription':
+    'Audit connected tool surfaces that affect agent execution at runtime.',
 
   // Login
   'login.title': 'Welcome Back',

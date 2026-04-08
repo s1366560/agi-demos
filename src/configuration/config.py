@@ -195,6 +195,27 @@ class Settings(BaseSettings):
         alias="AGENT_SUBAGENT_ANNOUNCE_RETRY_DELAY_MS",
         ge=0,
     )
+    agent_subagent_run_registry_path: str | None = Field(
+        default=None,
+        alias="AGENT_SUBAGENT_RUN_REGISTRY_PATH",
+    )
+    agent_subagent_run_postgres_dsn: str | None = Field(
+        default=None,
+        alias="AGENT_SUBAGENT_RUN_POSTGRES_DSN",
+    )
+    agent_subagent_run_sqlite_path: str | None = Field(
+        default=None,
+        alias="AGENT_SUBAGENT_RUN_SQLITE_PATH",
+    )
+    agent_subagent_run_redis_cache_url: str | None = Field(
+        default=None,
+        alias="AGENT_SUBAGENT_RUN_REDIS_CACHE_URL",
+    )
+    agent_subagent_run_redis_cache_ttl_seconds: int = Field(
+        default=60,
+        alias="AGENT_SUBAGENT_RUN_REDIS_CACHE_TTL_SECONDS",
+        ge=1,
+    )
     agent_subagent_focus_ttl_seconds: float = Field(
         default=300.0,
         alias="AGENT_SUBAGENT_FOCUS_TTL_SECONDS",  # 5 minutes default

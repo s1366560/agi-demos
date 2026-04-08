@@ -1,20 +1,26 @@
 """Registry for SubAgent run lifecycle tracking with optional persistence."""
 
+import hashlib
 import json
 import logging
+import os
+import threading
 import uuid
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from heapq import heappush, heapreplace, nlargest, nsmallest
 from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import urlparse
 
 try:
     import fcntl
 except ImportError:  # pragma: no cover - non-Unix fallback
     fcntl: Any = None  # type: ignore[no-redef]
 
+from src.domain.model.agent.announce_config import AnnounceState
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_repository import (
     HybridSubAgentRunRepository,
@@ -34,6 +40,13 @@ class SubAgentRunRegistry:
         SubAgentRunStatus.PENDING,
         SubAgentRunStatus.RUNNING,
     }
+    _PROTECTED_METADATA_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "requester_session_key",
+            "parent_run_id",
+            "lineage_root_run_id",
+        }
+    )
     _PERSIST_VERSION = 1
 
     def __init__(
@@ -67,11 +80,7 @@ class SubAgentRunRegistry:
                 self._repository = HybridSubAgentRunRepository(db_repo, redis_cache)
             elif db_repo is not None:
                 self._repository = db_repo
-        self._lock_path = (
-            self._persistence_path.with_suffix(f"{self._persistence_path.suffix}.lock")
-            if self._persistence_path
-            else None
-        )
+        self._lock_path = self._resolve_lock_path()
         self._terminal_retention_seconds = max(0, terminal_retention_seconds)
         self._recover_inflight_on_boot = recover_inflight_on_boot
         self._sync_across_processes = bool(
@@ -91,13 +100,16 @@ class SubAgentRunRegistry:
         lineage_root_run_id: str | None = None,
     ) -> SubAgentRun:
         """Create and register a new pending run."""
-        run_metadata = dict(metadata or {})
+        run_metadata = self._strip_protected_metadata(
+            metadata or {},
+            context="create_run",
+        )
         if requester_session_key:
-            run_metadata.setdefault("requester_session_key", requester_session_key)
+            run_metadata["requester_session_key"] = requester_session_key
         if parent_run_id:
-            run_metadata.setdefault("parent_run_id", parent_run_id)
+            run_metadata["parent_run_id"] = parent_run_id
         if lineage_root_run_id:
-            run_metadata.setdefault("lineage_root_run_id", lineage_root_run_id)
+            run_metadata["lineage_root_run_id"] = lineage_root_run_id
 
         with self._with_registry_lock(exclusive=True):
             self._sync_from_disk_locked()
@@ -238,6 +250,7 @@ class SubAgentRunRegistry:
         expected_statuses: Sequence[SubAgentRunStatus] | None = None,
     ) -> SubAgentRun | None:
         """Merge metadata into a run."""
+        self._ensure_no_protected_metadata_updates(metadata)
 
         def _mutator(run: SubAgentRun) -> SubAgentRun:
             merged = dict(run.metadata)
@@ -251,24 +264,100 @@ class SubAgentRunRegistry:
             mutator=_mutator,
         )
 
+    def set_trace_context(
+        self,
+        conversation_id: str,
+        run_id: str,
+        trace_id: str,
+        parent_span_id: str | None = None,
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
+        """Attach distributed trace context to a run before execution starts."""
+        return self._mutate_run(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            expected_statuses=expected_statuses,
+            mutator=lambda run: run.with_trace_context(trace_id, parent_span_id),
+        )
+
     def get_run(self, conversation_id: str, run_id: str) -> SubAgentRun | None:
         """Get one run by conversation + run id."""
         self._sync_from_disk()
         return self._runs_by_conversation.get(conversation_id, {}).get(run_id)
 
+    @staticmethod
+    def _sorted_runs(
+        runs: Iterable[SubAgentRun],
+        *,
+        reverse: bool,
+        limit: int | None = None,
+    ) -> list[SubAgentRun]:
+        """Sort runs with an optional cap without materializing extra rows."""
+        if limit is not None:
+            capped_limit = max(limit, 0)
+            sorter = nlargest if reverse else nsmallest
+            limited = sorter(capped_limit, runs, key=lambda item: item.created_at)
+            limited.sort(key=lambda item: item.created_at, reverse=reverse)
+            return limited
+
+        items = list(runs)
+        items.sort(key=lambda item: item.created_at, reverse=reverse)
+        return items
+
     def list_runs(
         self,
         conversation_id: str,
         statuses: Sequence[SubAgentRunStatus] | None = None,
+        *,
+        limit: int | None = None,
     ) -> list[SubAgentRun]:
         """List runs for a conversation in reverse chronological order."""
         self._sync_from_disk()
-        runs = list(self._runs_by_conversation.get(conversation_id, {}).values())
-        if statuses:
-            allowed = set(statuses)
-            runs = [run for run in runs if run.status in allowed]
-        runs.sort(key=lambda item: item.created_at, reverse=True)
-        return runs
+        allowed = set(statuses) if statuses else None
+        runs = (
+            run
+            for run in self._runs_by_conversation.get(conversation_id, {}).values()
+            if allowed is None or run.status in allowed
+        )
+        return self._sorted_runs(runs, reverse=True, limit=limit)
+
+    def list_trace_runs(
+        self,
+        conversation_id: str,
+        trace_id: str,
+        *,
+        statuses: Sequence[SubAgentRunStatus] | None = None,
+        limit: int | None = None,
+        reverse: bool = True,
+    ) -> list[SubAgentRun]:
+        """List runs for one trace in the requested order."""
+        self._sync_from_disk()
+        normalized_trace_id = trace_id.strip()
+        allowed = set(statuses) if statuses else None
+        runs = (
+            run
+            for run in self._runs_by_conversation.get(conversation_id, {}).values()
+            if run.trace_id == normalized_trace_id and (allowed is None or run.status in allowed)
+        )
+        return self._sorted_runs(runs, reverse=reverse, limit=limit)
+
+    def list_runs_for_conversations(
+        self,
+        conversation_ids: Sequence[str],
+        *,
+        statuses: Sequence[SubAgentRunStatus] | None = None,
+        limit: int | None = None,
+    ) -> list[SubAgentRun]:
+        """List runs across multiple conversations with a single registry sync."""
+        self._sync_from_disk()
+        allowed = set(statuses) if statuses else None
+        runs = (
+            run
+            for conversation_id in dict.fromkeys(conversation_ids)
+            for run in self._runs_by_conversation.get(conversation_id, {}).values()
+            if allowed is None or run.status in allowed
+        )
+        return self._sorted_runs(runs, reverse=True, limit=limit)
 
     def list_runs_for_requester(
         self,
@@ -319,6 +408,7 @@ class SubAgentRunRegistry:
         parent_run_id: str,
         *,
         include_terminal: bool = True,
+        limit: int | None = None,
     ) -> list[SubAgentRun]:
         """List descendants of a run using metadata.parent_run_id."""
         self._sync_from_disk()
@@ -333,6 +423,10 @@ class SubAgentRunRegistry:
         queue = [parent_run_id]
         visited: set[str] = set()
         descendants: list[SubAgentRun] = []
+        limited_descendants: list[tuple[float, str, SubAgentRun]] = []
+        capped_limit = max(limit, 0) if limit is not None else None
+        if capped_limit == 0:
+            return []
         while queue:
             current = queue.pop(0)
             for child in children_by_parent.get(current, []):
@@ -341,10 +435,24 @@ class SubAgentRunRegistry:
                 visited.add(child.run_id)
                 queue.append(child.run_id)
                 if include_terminal or child.status in self._ACTIVE_STATUSES:
-                    descendants.append(child)
+                    if capped_limit is None:
+                        descendants.append(child)
+                        continue
 
-        descendants.sort(key=lambda run: run.created_at)
-        return descendants
+                    heap_item = (-child.created_at.timestamp(), child.run_id, child)
+                    if len(limited_descendants) < capped_limit:
+                        heappush(limited_descendants, heap_item)
+                        continue
+                    if heap_item > limited_descendants[0]:
+                        heapreplace(limited_descendants, heap_item)
+
+        if capped_limit is None:
+            descendants.sort(key=lambda run: run.created_at)
+            return descendants
+
+        selected_descendants = [item[2] for item in limited_descendants]
+        selected_descendants.sort(key=lambda run: run.created_at)
+        return selected_descendants
 
     def count_active_runs(self, conversation_id: str) -> int:
         """Count active (pending/running) runs for a conversation."""
@@ -360,9 +468,23 @@ class SubAgentRunRegistry:
     def count_all_active_runs(self) -> int:
         """Count total active runs across ALL conversations."""
         self._sync_from_disk()
+        return sum(
+            1
+            for runs_by_id in self._runs_by_conversation.values()
+            for run in runs_by_id.values()
+            if run.status in self._ACTIVE_STATUSES
+        )
+
+    def count_active_runs_for_conversations(self, conversation_ids: Sequence[str]) -> int:
+        """Count active runs across multiple conversations with a single registry sync."""
+        self._sync_from_disk()
         total = 0
-        for conversation_id in list(self._runs_by_conversation.keys()):
-            total += self.count_active_runs(conversation_id)
+        for conversation_id in dict.fromkeys(conversation_ids):
+            total += sum(
+                1
+                for run in self._runs_by_conversation.get(conversation_id, {}).values()
+                if run.status in self._ACTIVE_STATUSES
+            )
         return total
 
     def count_active_runs_for_lineage(
@@ -481,13 +603,28 @@ class SubAgentRunRegistry:
             yield
             return
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock_path.open("a+", encoding="utf-8") as lock_file:
-            lock_mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-            fcntl.flock(lock_file.fileno(), lock_mode)
-            try:
-                yield
-            finally:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        with suppress(OSError):
+            os.chmod(self._lock_path.parent, 0o700)
+
+        flags = os.O_RDWR | os.O_CREAT
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+
+        fd = os.open(self._lock_path, flags, 0o600)
+        try:
+            with os.fdopen(fd, "a+", encoding="utf-8") as lock_file:
+                fd = -1
+                lock_mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+                fcntl.flock(lock_file.fileno(), lock_mode)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            if fd >= 0:
+                with suppress(OSError):
+                    os.close(fd)
+            raise
 
     def _sync_from_disk(self) -> None:
         if not self._sync_across_processes:
@@ -502,7 +639,7 @@ class SubAgentRunRegistry:
         if not self._persistence_path and self._repository is None:
             return
         if self._sync_across_processes:
-            with self._with_registry_lock(exclusive=False):
+            with self._with_registry_lock(exclusive=self._recover_inflight_on_boot):
                 self._load_from_disk_unlocked(recover_inflight=self._recover_inflight_on_boot)
             return
         self._load_from_disk_unlocked(recover_inflight=self._recover_inflight_on_boot)
@@ -603,8 +740,29 @@ class SubAgentRunRegistry:
         }
         try:
             self._persistence_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self._persistence_path.with_suffix(f"{self._persistence_path.suffix}.tmp")
-            tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with suppress(OSError):
+                os.chmod(self._persistence_path.parent, 0o700)
+            tmp_path = self._persistence_path.with_name(
+                f".{self._persistence_path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            payload_text = json.dumps(payload, ensure_ascii=False)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(tmp_path, flags, 0o600)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+                    fd = -1
+                    tmp_file.write(payload_text)
+                    tmp_file.flush()
+                    os.fsync(tmp_file.fileno())
+            except Exception:
+                if fd >= 0:
+                    with suppress(OSError):
+                        os.close(fd)
+                with suppress(OSError):
+                    tmp_path.unlink()
+                raise
             tmp_path.replace(self._persistence_path)
         except Exception as exc:
             logger.warning(f"[SubAgentRunRegistry] Failed to persist runs: {exc}")
@@ -646,6 +804,9 @@ class SubAgentRunRegistry:
                 frozen_at=SubAgentRunRegistry._parse_datetime(payload.get("frozen_at")),
                 trace_id=SubAgentRunRegistry._optional_str(payload.get("trace_id")),
                 parent_span_id=SubAgentRunRegistry._optional_str(payload.get("parent_span_id")),
+                announce_state=SubAgentRunRegistry._parse_announce_state(
+                    payload.get("announce_state")
+                ),
             )
         except Exception:
             return None
@@ -679,6 +840,70 @@ class SubAgentRunRegistry:
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _parse_announce_state(value: Any) -> AnnounceState | None:
+        raw_value = SubAgentRunRegistry._optional_str(value)
+        if raw_value is None:
+            return None
+        try:
+            return AnnounceState(raw_value)
+        except ValueError:
+            return None
+
+    def _resolve_lock_path(self) -> Path | None:
+        if self._persistence_path is not None:
+            return self._persistence_path.with_suffix(f"{self._persistence_path.suffix}.lock")
+        if self._repository is None:
+            return None
+        return self._derive_repository_lock_path(self._repository)
+
+    def _derive_repository_lock_path(self, repository: Any) -> Path | None:
+        db_repository = getattr(repository, "_db_repository", None)
+        if db_repository is not None:
+            derived = self._derive_repository_lock_path(db_repository)
+            if derived is not None:
+                return derived
+
+        db_path = getattr(repository, "_db_path", None)
+        if isinstance(db_path, Path):
+            return db_path.with_suffix(f"{db_path.suffix}.lock")
+
+        postgres_dsn = getattr(repository, "_postgres_dsn", None)
+        if isinstance(postgres_dsn, str) and postgres_dsn.strip():
+            return self._derive_postgres_lock_path(postgres_dsn)
+
+        return None
+
+    def _derive_postgres_lock_path(self, postgres_dsn: str) -> Path:
+        normalized_dsn = postgres_dsn.strip()
+        parsed = urlparse(normalized_dsn)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        database = parsed.path.lstrip("/") or "default"
+        lock_identity = f"{host}:{port}/{database}"
+        digest = hashlib.sha256(lock_identity.encode("utf-8")).hexdigest()[:16]
+        lock_dir = Path.home() / ".cache" / "memstack" / "subagent-run-locks"
+        return lock_dir / f"postgres-{digest}.lock"
+
+    def _strip_protected_metadata(
+        self,
+        metadata: dict[str, object],
+        *,
+        context: str,
+    ) -> dict[str, object]:
+        sanitized = dict(metadata)
+        protected_keys = self._PROTECTED_METADATA_KEYS & sanitized.keys()
+        for key in protected_keys:
+            logger.warning("Ignoring protected metadata key %s during %s", key, context)
+            sanitized.pop(key, None)
+        return sanitized
+
+    def _ensure_no_protected_metadata_updates(self, metadata: dict[str, object]) -> None:
+        protected_keys = sorted(self._PROTECTED_METADATA_KEYS & metadata.keys())
+        if not protected_keys:
+            return
+        raise ValueError("Cannot update protected run metadata keys: " + ", ".join(protected_keys))
+
     def close(self) -> None:
         """Release resources held by the underlying repository."""
         if self._repository is None:
@@ -686,3 +911,85 @@ class SubAgentRunRegistry:
         close = getattr(self._repository, "close", None)
         if callable(close):
             close()
+
+
+_SHARED_RUN_REGISTRY_LOCK = threading.Lock()
+_SHARED_RUN_REGISTRIES: dict[
+    tuple[str | None, str | None, str | None, str | None, int, int],
+    SubAgentRunRegistry,
+] = {}
+
+
+def _normalize_registry_option(value: str | None) -> str | None:
+    """Normalize optional string settings used by the shared registry cache."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_registry_path(path: str | None) -> str | None:
+    """Normalize an optional registry path to an absolute string path."""
+    normalized = _normalize_registry_option(path)
+    if normalized is None:
+        return None
+    return str(Path(normalized).expanduser().resolve())
+
+
+def get_shared_subagent_run_registry(
+    *,
+    persistence_path: str | None = None,
+    postgres_persistence_dsn: str | None = None,
+    sqlite_persistence_path: str | None = None,
+    redis_cache_url: str | None = None,
+    redis_cache_ttl_seconds: int = 60,
+    terminal_retention_seconds: int = 86400,
+) -> SubAgentRunRegistry:
+    """Return a shared registry keyed by the effective persistence configuration."""
+    resolved_persistence_path = _normalize_registry_path(
+        persistence_path or os.getenv("AGENT_SUBAGENT_RUN_REGISTRY_PATH")
+    )
+    resolved_postgres_dsn = _normalize_registry_option(
+        postgres_persistence_dsn or os.getenv("AGENT_SUBAGENT_RUN_POSTGRES_DSN")
+    )
+    resolved_sqlite_path = _normalize_registry_path(
+        sqlite_persistence_path or os.getenv("AGENT_SUBAGENT_RUN_SQLITE_PATH")
+    )
+    resolved_redis_cache_url = _normalize_registry_option(
+        redis_cache_url or os.getenv("AGENT_SUBAGENT_RUN_REDIS_CACHE_URL")
+    )
+    cache_key = (
+        resolved_persistence_path,
+        resolved_postgres_dsn,
+        resolved_sqlite_path,
+        resolved_redis_cache_url,
+        int(redis_cache_ttl_seconds),
+        int(terminal_retention_seconds),
+    )
+
+    with _SHARED_RUN_REGISTRY_LOCK:
+        registry = _SHARED_RUN_REGISTRIES.get(cache_key)
+        if registry is None:
+            registry = SubAgentRunRegistry(
+                persistence_path=(
+                    resolved_persistence_path
+                    if not resolved_postgres_dsn and not resolved_sqlite_path
+                    else None
+                ),
+                postgres_persistence_dsn=resolved_postgres_dsn,
+                sqlite_persistence_path=resolved_sqlite_path,
+                redis_cache_url=resolved_redis_cache_url,
+                redis_cache_ttl_seconds=redis_cache_ttl_seconds,
+                terminal_retention_seconds=terminal_retention_seconds,
+            )
+            _SHARED_RUN_REGISTRIES[cache_key] = registry
+    return registry
+
+
+def clear_shared_subagent_run_registry_cache() -> None:
+    """Clear cached shared registries, closing any attached repositories."""
+    with _SHARED_RUN_REGISTRY_LOCK:
+        registries = list(_SHARED_RUN_REGISTRIES.values())
+        _SHARED_RUN_REGISTRIES.clear()
+    for registry in registries:
+        registry.close()

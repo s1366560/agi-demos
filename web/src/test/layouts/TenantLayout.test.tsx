@@ -51,6 +51,7 @@ vi.mock('react-i18next', () => ({
         'nav.analytics': 'Analytics',
         'nav.tasks': 'Tasks',
         'nav.agents': 'Agents',
+        'nav.agentConfiguration': 'Agent Configuration',
         'nav.subagents': 'Subagents',
         'nav.skills': 'Skills',
         'nav.plugins': 'Plugins',

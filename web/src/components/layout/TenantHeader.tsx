@@ -94,6 +94,12 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         icon: <Activity size={16} />,
       },
       {
+        id: 'agent-configuration',
+        label: t('nav.agentConfiguration', 'Agent Configuration'),
+        path: `${basePath}/agents`,
+        icon: <Settings size={16} />,
+      },
+      {
         id: 'projects',
         label: t('nav.projects', 'Projects'),
         path: `${basePath}/projects`,

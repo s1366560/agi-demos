@@ -242,8 +242,21 @@ export interface SubAgentRunListDTO {
   total: number;
 }
 
+export interface TenantSubAgentRunListDTO {
+  tenant_id: string;
+  runs: SubAgentRunDTO[];
+  total: number;
+}
+
 export interface TraceChainDTO {
   trace_id: string;
+  conversation_id: string;
+  runs: SubAgentRunDTO[];
+  total: number;
+}
+
+export interface UntracedRunDetailsDTO {
+  trace_id: null;
   conversation_id: string;
   runs: SubAgentRunDTO[];
   total: number;
@@ -259,4 +272,9 @@ export interface DescendantTreeDTO {
 export interface ActiveRunCountDTO {
   active_count: number;
   conversation_id: string | null;
+}
+
+export interface TenantActiveRunCountDTO {
+  tenant_id: string;
+  active_count: number;
 }

@@ -166,7 +166,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'analytics', icon: 'monitoring', label: 'nav.analytics', path: '/analytics' },
         { id: 'tasks', icon: 'task', label: 'nav.tasks', path: '/tasks' },
         { id: 'workspaces', icon: 'group_work', label: 'Workspaces', path: '/workspaces' },
-        { id: 'agents', icon: 'support_agent', label: 'nav.agents', path: '/agents' },
+        { id: 'agents', icon: 'tune', label: 'nav.agentConfiguration', path: '/agents' },
         { id: 'subagents', icon: 'smart_toy', label: 'nav.subagents', path: '/subagents' },
         { id: 'skills', icon: 'psychology', label: 'nav.skills', path: '/skills' },
         { id: 'plugins', icon: 'extension', label: 'nav.plugins', path: '/plugins' },

@@ -106,13 +106,8 @@ def _build_lifecycle_metadata(
     """Build normalized run metadata for control-plane lifecycle tracking."""
     metadata: dict[str, Any] = {
         "session_mode": session_mode,
-        "requester_session_key": requester_session_key,
         "control_plane_version": "v2",
     }
-    if lineage_root_run_id:
-        metadata["lineage_root_run_id"] = lineage_root_run_id
-    if parent_run_id:
-        metadata["parent_run_id"] = parent_run_id
     if delegation_depth is not None:
         metadata["delegation_depth"] = delegation_depth
     if extra:

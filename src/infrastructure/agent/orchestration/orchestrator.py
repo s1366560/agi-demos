@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent.agent_definition import Agent
@@ -54,12 +55,32 @@ class SendResult:
     session_id: str
 
 
+@dataclass(frozen=True)
+class SpawnExecutionRequest:
+    """Execution payload for launching a spawned child session."""
+
+    parent_agent_id: str
+    child_agent_id: str
+    child_agent_name: str
+    child_session_id: str
+    parent_session_id: str
+    project_id: str
+    tenant_id: str = ""
+    user_id: str = ""
+    message: str = ""
+    mode: SpawnMode = SpawnMode.RUN
+    conversation_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    trace_id: str = ""
+    span_id: str = ""
+
+
 class AgentOrchestrator:
     """Coordination hub for multi-agent lifecycle management.
 
     Provides a unified API over SpawnManager, AgentSessionRegistry,
-    AgentMessageBusPort, and AgentRegistryPort. Does NOT execute
-    agents -- only manages spawn records, sessions, and messaging.
+    AgentMessageBusPort, and AgentRegistryPort. When a spawn executor
+    is configured, spawned child sessions can also be launched here.
     """
 
     def __init__(
@@ -70,6 +91,7 @@ class AgentOrchestrator:
         message_bus: AgentMessageBusPort,
         spawn_validator: SpawnValidator | None = None,
         db_session: AsyncSession | None = None,
+        spawn_executor: Callable[[SpawnExecutionRequest], Awaitable[None]] | None = None,
     ) -> None:
         self._agent_registry = agent_registry
         self._session_registry = session_registry
@@ -77,6 +99,7 @@ class AgentOrchestrator:
         self._message_bus = message_bus
         self._spawn_validator = spawn_validator
         self._db_session = db_session
+        self._spawn_executor = spawn_executor
 
     async def spawn_agent(
         self,
@@ -91,11 +114,13 @@ class AgentOrchestrator:
         metadata: dict[str, Any] | None = None,
         trace_id: str = "",
         span_id: str = "",
+        tenant_id: str = "",
+        user_id: str = "",
     ) -> SpawnResult:
         """Spawn a child agent session.
 
         Sets up the spawn record, registers a session, and sends
-        the initial message. Does NOT execute the child agent.
+        the initial message. Optionally launches the child session.
         """
         agent = await self._agent_registry.get_by_id(target_agent_id)
         if agent is None:
@@ -141,6 +166,7 @@ class AgentOrchestrator:
             metadata=enriched_metadata,
             trace_id=trace_id,
             span_id=span_id,
+            requester_session_key=parent_session_id,
         )
 
         session = await self._session_registry.register(
@@ -156,6 +182,38 @@ class AgentOrchestrator:
             content=message,
             message_type=AgentMessageType.REQUEST,
         )
+
+        if self._spawn_executor is not None:
+            try:
+                await self._spawn_executor(
+                    SpawnExecutionRequest(
+                        parent_agent_id=parent_agent_id,
+                        child_agent_id=target_agent_id,
+                        child_agent_name=getattr(agent, "display_name", "") or agent.name,
+                        child_session_id=child_session_id,
+                        parent_session_id=parent_session_id,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        message=message,
+                        mode=mode,
+                        conversation_id=conversation_id,
+                        metadata=enriched_metadata,
+                        trace_id=trace_id,
+                        span_id=span_id,
+                    )
+                )
+            except Exception:
+                await self._spawn_manager.update_status(
+                    child_session_id,
+                    "failed",
+                    conversation_id=conversation_id,
+                )
+                await self._session_registry.unregister(
+                    conversation_id=child_session_id,
+                    project_id=project_id,
+                )
+                raise
 
         logger.info(
             "Spawned agent: parent=%s child=%s session=%s mode=%s",
@@ -229,6 +287,20 @@ class AgentOrchestrator:
             from_agent_id=from_agent_id,
             to_agent_id=to_agent_id,
             session_id=resolved_session_id,
+        )
+
+    async def update_spawn_status(
+        self,
+        child_session_id: str,
+        new_status: str,
+        *,
+        conversation_id: str | None = None,
+    ) -> SpawnRecord | None:
+        """Update lifecycle status for a spawned child session."""
+        return await self._spawn_manager.update_status(
+            child_session_id=child_session_id,
+            new_status=new_status,
+            conversation_id=conversation_id,
         )
 
     async def stop_agent(
