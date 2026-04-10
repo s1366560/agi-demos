@@ -37,6 +37,8 @@ def _make_conversation(
     project_id: str = "proj-1",
     title: str = "Test Session",
     status: ConversationStatus = ConversationStatus.ACTIVE,
+    message_count: int = 5,
+    updated_at: datetime | None = None,
 ) -> Conversation:
     return Conversation(
         id=conv_id,
@@ -45,8 +47,9 @@ def _make_conversation(
         user_id="user-1",
         title=title,
         status=status,
-        message_count=5,
+        message_count=message_count,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=updated_at or datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 
@@ -252,6 +255,105 @@ class TestSessionCommServiceSend:
 
         with pytest.raises(ValueError, match="not found"):
             await svc.send_to_session("proj-1", "missing-conv", "hello")
+
+    async def test_sends_message_and_increments_conversation_message_count(self) -> None:
+        """send_to_session persists an incremented Conversation so sessions_history reflects it."""
+        conv = _make_conversation(message_count=5)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        saved_msg = _make_message(msg_id="new-msg")
+        msg_repo = AsyncMock()
+        msg_repo.save.return_value = saved_msg
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
+
+        result = await svc.send_to_session(
+            "proj-1",
+            "conv-1",
+            "Hello peer!",
+            sender_conversation_id="my-conv",
+        )
+
+        assert result["status"] == "sent"
+        msg_repo.save.assert_awaited_once()
+        conv_repo.save.assert_awaited_once()
+        saved_conv = conv_repo.save.call_args[0][0]
+        assert saved_conv.message_count == 6
+
+    async def test_sends_message_and_updates_conversation_updated_at(self) -> None:
+        """send_to_session updates conversation.updated_at so sessions_history reflects recency."""
+        conv = _make_conversation()
+        original_updated_at = conv.updated_at
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        saved_msg = _make_message(msg_id="new-msg")
+        msg_repo = AsyncMock()
+        msg_repo.save.return_value = saved_msg
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
+
+        await svc.send_to_session("proj-1", "conv-1", "ping")
+
+        saved_conv = conv_repo.save.call_args[0][0]
+        assert saved_conv.updated_at is not None
+        assert saved_conv.updated_at != original_updated_at
+
+
+@pytest.mark.unit
+class TestSessionsHistoryMetadataConsistency:
+    """sessions_history() returns conversation metadata consistent with new session-comm writes."""
+
+    async def test_history_returns_message_count_in_conversation_metadata(self) -> None:
+        conv = _make_conversation(message_count=42)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = [_make_message(msg_id="m1")]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
+        configure_session_comm(svc)
+        ctx = _make_ctx()
+
+        result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
+
+        assert not result.is_error
+        data = json.loads(result.output)
+        assert data["conversation"]["message_count"] == 42
+
+    async def test_history_returns_updated_at_in_conversation_metadata(self) -> None:
+        conv = _make_conversation()
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = [_make_message(msg_id="m1")]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
+        configure_session_comm(svc)
+        ctx = _make_ctx()
+
+        result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
+
+        assert not result.is_error
+        data = json.loads(result.output)
+        assert data["conversation"]["updated_at"] is not None
+
+    async def test_history_after_send_reflects_incremented_count(self) -> None:
+        conv = _make_conversation(message_count=2)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        saved_msg = _make_message(msg_id="msg-new")
+        msg_repo = AsyncMock()
+        msg_repo.save.return_value = saved_msg
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
+
+        await svc.send_to_session("proj-1", "conv-1", "ping")
+
+        conv_repo.find_by_id.return_value = conv
+        msg_repo.list_by_conversation.return_value = [
+            _make_message(msg_id="m1"),
+            _make_message(msg_id="m2"),
+            _make_message(msg_id="msg-new"),
+        ]
+
+        history = await svc.get_session_history("proj-1", "conv-1")
+
+        assert history["conversation"]["message_count"] == 3
 
 
 # ---------------------------------------------------------------------------

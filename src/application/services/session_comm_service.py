@@ -197,6 +197,11 @@ class SessionCommService:
             target_conversation_id,
         )
 
+        # Persist the conversation projection so sessions_history() returns
+        # up-to-date message_count and updated_at.
+        conversation.increment_message_count()
+        await self._conversation_repo.save(conversation)
+
         return {
             "status": "sent",
             "message_id": saved.id,

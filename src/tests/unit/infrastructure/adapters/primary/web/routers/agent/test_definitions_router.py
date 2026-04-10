@@ -79,7 +79,7 @@ class TestDefinitionsRouterA2AConfig:
             )
 
     @pytest.mark.asyncio
-    async def test_create_definition_enabling_a2a_without_allowlist_uses_explicit_deny_all(self):
+    async def test_create_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(self):
         registry = _make_registry()
         db = _make_db()
         body = CreateDefinitionBody(
@@ -88,6 +88,41 @@ class TestDefinitionsRouterA2AConfig:
             system_prompt="Work carefully.",
             project_id="proj-1",
             agent_to_agent_enabled=True,
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=_make_container(registry),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            response = await create_definition(
+                body,
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        created_agent = registry.create.await_args.args[0]
+        assert created_agent.agent_to_agent_allowlist == ["builtin:sisyphus", "sisyphus"]
+        assert response["agent_to_agent_allowlist"] == ["builtin:sisyphus", "sisyphus"]
+
+    @pytest.mark.asyncio
+    async def test_create_definition_explicit_empty_a2a_allowlist_preserves_deny_all(self):
+        registry = _make_registry()
+        db = _make_db()
+        body = CreateDefinitionBody(
+            name="worker-agent",
+            display_name="Worker Agent",
+            system_prompt="Work carefully.",
+            project_id="proj-1",
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=[],
         )
 
         with (
@@ -148,7 +183,7 @@ class TestDefinitionsRouterA2AConfig:
         assert response["agent_to_agent_allowlist"] == ["sender-1", "sender-2"]
 
     @pytest.mark.asyncio
-    async def test_update_definition_enabling_a2a_without_allowlist_uses_explicit_deny_all(self):
+    async def test_update_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(self):
         registry = _make_registry()
         db = _make_db()
         existing = _make_agent(agent_to_agent_enabled=False, agent_to_agent_allowlist=None)
@@ -174,8 +209,8 @@ class TestDefinitionsRouterA2AConfig:
             )
 
         updated_agent = registry.update.await_args.args[0]
-        assert updated_agent.agent_to_agent_allowlist == []
-        assert response["agent_to_agent_allowlist"] == []
+        assert updated_agent.agent_to_agent_allowlist == ["builtin:sisyphus", "sisyphus"]
+        assert response["agent_to_agent_allowlist"] == ["builtin:sisyphus", "sisyphus"]
 
     @pytest.mark.asyncio
     async def test_update_definition_unrelated_change_preserves_legacy_open_policy(self):

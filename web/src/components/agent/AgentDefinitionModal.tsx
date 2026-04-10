@@ -133,6 +133,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           can_spawn: definition.can_spawn,
           max_spawn_depth: definition.max_spawn_depth,
           agent_to_agent_enabled: definition.agent_to_agent_enabled,
+          agent_to_agent_allowlist: definition.agent_to_agent_allowlist ?? undefined,
           discoverable: definition.discoverable,
           max_retries: definition.max_retries,
           workspace_config: definition.workspace_config ?? { type: 'shared' },
@@ -180,6 +181,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           can_spawn: values.can_spawn,
           max_spawn_depth: values.max_spawn_depth,
           agent_to_agent_enabled: values.agent_to_agent_enabled,
+          agent_to_agent_allowlist: values.agent_to_agent_allowlist,
           discoverable: values.discoverable,
           max_retries: values.max_retries,
           workspace_config: values.workspace_config,
@@ -212,6 +214,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           can_spawn: values.can_spawn,
           max_spawn_depth: values.max_spawn_depth,
           agent_to_agent_enabled: values.agent_to_agent_enabled,
+          agent_to_agent_allowlist: values.agent_to_agent_allowlist,
           discoverable: values.discoverable,
           max_retries: values.max_retries,
           workspace_config: values.workspace_config,
@@ -419,6 +422,23 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               <Switch />
             </Form.Item>
           </div>
+
+          <Form.Item
+            name="agent_to_agent_allowlist"
+            label={t('tenant.agentDefinitions.modal.agentToAgentAllowlist', 'A2A Allowlist')}
+            tooltip={t(
+              'tenant.agentDefinitions.modal.agentToAgentAllowlistTooltip',
+              'Allowed sender agent IDs or names. Leave untouched on create to use the default trusted built-in senders; use an empty list to deny all.'
+            )}
+          >
+            <Select
+              mode="tags"
+              placeholder={t(
+                'tenant.agentDefinitions.modal.agentToAgentAllowlistPlaceholder',
+                'Add agent IDs or names'
+              )}
+            />
+          </Form.Item>
 
           <div className="grid grid-cols-2 gap-4">
             <Form.Item

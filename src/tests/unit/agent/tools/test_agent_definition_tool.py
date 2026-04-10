@@ -306,6 +306,52 @@ class TestAgentDefinitionManageTool:
         created_call = orch.create_agent.call_args[0][0]
         assert created_call.model == AgentModel.GPT4O
 
+    async def test_create_with_a2a_allowlist_uses_explicit_values(self) -> None:
+        orch = _mock_orchestrator()
+        agent = _make_agent(
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=["sender-1", "sender-2"],
+        )
+        orch.create_agent.return_value = agent
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="create",
+            name="a2a-agent",
+            system_prompt="You collaborate with other agents.",
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=[" sender-1 ", "sender-2", "sender-1"],
+        )
+
+        assert result.is_error is False
+        created_call = orch.create_agent.call_args[0][0]
+        assert created_call.agent_to_agent_enabled is True
+        assert created_call.agent_to_agent_allowlist == ["sender-1", "sender-2"]
+
+    async def test_create_with_a2a_enabled_without_allowlist_uses_builtin_default(self) -> None:
+        orch = _mock_orchestrator()
+        agent = _make_agent(
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=["builtin:sisyphus", "sisyphus"],
+        )
+        orch.create_agent.return_value = agent
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="create",
+            name="a2a-agent",
+            system_prompt="You collaborate with other agents.",
+            agent_to_agent_enabled=True,
+        )
+
+        assert result.is_error is False
+        created_call = orch.create_agent.call_args[0][0]
+        assert created_call.agent_to_agent_allowlist == ["builtin:sisyphus", "sisyphus"]
+
     async def test_update_trigger_fields(self) -> None:
         orch = _mock_orchestrator()
         agent = _make_agent()
@@ -325,3 +371,94 @@ class TestAgentDefinitionManageTool:
         updated_call = orch.update_agent.call_args[0][0]
         assert updated_call.trigger.description == "new trigger"
         assert list(updated_call.trigger.keywords) == ["new", "keywords"]
+
+    async def test_update_with_a2a_allowlist_uses_explicit_values(self) -> None:
+        orch = _mock_orchestrator()
+        agent = _make_agent(agent_to_agent_enabled=True, agent_to_agent_allowlist=["old-sender"])
+        orch.get_agent.return_value = agent
+        orch.update_agent.return_value = agent
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="update",
+            agent_id="agent-123",
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=[" sender-1 ", "sender-2", "sender-1"],
+        )
+
+        assert result.is_error is False
+        updated_call = orch.update_agent.call_args[0][0]
+        assert updated_call.agent_to_agent_enabled is True
+        assert updated_call.agent_to_agent_allowlist == ["sender-1", "sender-2"]
+
+    # ------------------------------------------------------------------
+    # Partial-update semantics — PR1 acceptance criteria
+    # ------------------------------------------------------------------
+
+    async def test_update_changing_only_display_name_preserves_all_other_scalar_fields(
+        self,
+    ) -> None:
+        """Spec: update changing only display_name preserves all other scalar fields."""
+        orch = _mock_orchestrator()
+        existing = _make_agent(
+            can_spawn=False,
+            discoverable=True,
+            max_iterations=99,
+            temperature=0.9,
+            max_tokens=8192,
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=["peer-1"],
+        )
+        orch.get_agent.return_value = existing
+        orch.update_agent.return_value = existing
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="update",
+            agent_id="agent-123",
+            display_name="Renamed Agent",
+        )
+
+        assert result.is_error is False
+        updated_call = orch.update_agent.call_args[0][0]
+        assert updated_call.display_name == "Renamed Agent"
+        assert updated_call.can_spawn is False
+        assert updated_call.discoverable is True
+        assert updated_call.max_iterations == 99
+        assert updated_call.temperature == 0.9
+        assert updated_call.max_tokens == 8192
+        assert updated_call.agent_to_agent_enabled is True
+        assert updated_call.agent_to_agent_allowlist == ["peer-1"]
+
+    async def test_update_with_explicit_falsey_values_preserves_intent(self) -> None:
+        """Spec: explicit falsey updates (can_spawn=False, discoverable=False,
+        temperature=0.0) must be applied, not silently dropped."""
+        orch = _mock_orchestrator()
+        existing = _make_agent(
+            can_spawn=True,
+            discoverable=True,
+            temperature=0.7,
+        )
+        orch.get_agent.return_value = existing
+        orch.update_agent.return_value = existing
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="update",
+            agent_id="agent-123",
+            can_spawn=False,
+            discoverable=False,
+            temperature=0.0,
+        )
+
+        assert result.is_error is False
+        updated_call = orch.update_agent.call_args[0][0]
+        assert updated_call.can_spawn is False
+        assert updated_call.discoverable is False
+        assert updated_call.temperature == 0.0

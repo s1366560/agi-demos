@@ -797,6 +797,45 @@ class TestSendMessage:
                 session_id="sess-1",
             )
 
+    async def test_send_message_sender_in_target_default_allowlist_passes_after_pr1(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """After PR1, a sender present in the default allowlist (builtin:sisyphus)
+        passes the target's allowlist check even though allowlist is None.
+
+        Regression check: Router/Tool now set the default allowlist when enabling
+        A2A without an explicit list. The orchestrator must still honour that default
+        allowlist when evaluating accepts_messages_from."""
+        from_agent = _make_agent(id="builtin:sisyphus")
+        to_agent = _make_agent(
+            id="agent-b",
+            agent_to_agent_enabled=True,
+            agent_to_agent_allowlist=None,  # None = use default allowlist
+        )
+        # accepts_messages_from for a BUILTIN source with allowlist=None returns True
+        # (trusted-open policy), so this should not raise.
+        fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
+        fx.session_registry.get_session_for_conversation = AsyncMock(
+            side_effect=[
+                # 1. Resolve target session: session_id="sess-to-b" belongs to agent-b
+                AgentSession(agent_id="agent-b", conversation_id="sess-to-b", project_id="proj-1"),
+                # 2. Resolve sender session: sender_session_id="sess-from-sender" belongs to builtin:sisyphus
+                AgentSession(agent_id="builtin:sisyphus", conversation_id="sess-from-sender", project_id="proj-1"),
+            ],
+        )
+
+        result = await fx.orchestrator.send_message(
+            from_agent_id="builtin:sisyphus",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-to-b",
+            sender_session_id="sess-from-sender",
+            project_id="proj-1",
+        )
+
+        assert result.from_agent_id == "builtin:sisyphus"
+        assert result.to_agent_id == "agent-b"
+
     async def test_send_message_target_allowlist_rejects_sender(
         self, fx: _OrchestratorFixture
     ) -> None:

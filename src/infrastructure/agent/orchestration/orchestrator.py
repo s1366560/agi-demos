@@ -183,8 +183,21 @@ class AgentOrchestrator:
         if sender_agent_name and sender_agent_name != sender_agent_id:
             sender_refs.append(sender_agent_name)
         if not any(to_agent.accepts_messages_from(sender_ref) for sender_ref in sender_refs):
+            raw_allowlist = getattr(to_agent, "agent_to_agent_allowlist", None)
+            allowlist = (
+                list(raw_allowlist)
+                if isinstance(raw_allowlist, (list, tuple, set, frozenset))
+                else []
+            )
+            if allowlist:
+                allowlist_hint = f" Allowed senders: {', '.join(allowlist)}."
+            else:
+                allowlist_hint = (
+                    " Configure agent_to_agent_allowlist to permit additional senders."
+                )
             raise ValueError(
-                f"Target agent {to_agent.id} does not accept messages from sender: {sender_agent_id}"
+                f"Target agent {to_agent.id} does not accept messages from sender: "
+                f"{sender_agent_id}.{allowlist_hint}"
             )
         return to_agent
 

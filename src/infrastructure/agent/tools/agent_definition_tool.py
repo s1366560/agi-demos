@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_source import AgentSource
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
+from src.infrastructure.agent.tools._agent_definition_policy import (
+    normalize_new_agent_a2a,
+    normalize_updated_agent_a2a,
+)
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -25,6 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _orchestrator: AgentOrchestrator | None = None
+_UNSET = object()
 
 
 def configure_agent_definition_manage(orchestrator: AgentOrchestrator) -> None:
@@ -43,6 +48,18 @@ def _parse_model(value: str | None) -> AgentModel:
         return AgentModel.INHERIT
 
 
+def _resolve_bool(value: bool | object, *, default: bool) -> bool:
+    return default if value is _UNSET else bool(value)
+
+
+def _resolve_int(value: int | object, *, default: int) -> int:
+    return default if value is _UNSET else int(cast(int, value))
+
+
+def _resolve_float(value: float | object, *, default: float) -> float:
+    return default if value is _UNSET else float(cast(float, value))
+
+
 def _agent_summary(agent: Agent) -> dict[str, Any]:
     """Return a concise dict summary of an Agent for LLM consumption."""
     prompt_preview = agent.system_prompt[:200]
@@ -58,6 +75,8 @@ def _agent_summary(agent: Agent) -> dict[str, Any]:
         "enabled": agent.enabled,
         "discoverable": agent.discoverable,
         "can_spawn": agent.can_spawn,
+        "agent_to_agent_enabled": agent.agent_to_agent_enabled,
+        "agent_to_agent_allowlist": agent.agent_to_agent_allowlist,
         "allowed_tools": agent.allowed_tools,
         "trigger": {
             "description": agent.trigger.description,
@@ -87,6 +106,8 @@ async def _handle_create(  # noqa: PLR0913
     model: str | None,
     allowed_tools: list[str] | None,
     can_spawn: bool,
+    agent_to_agent_enabled: bool,
+    agent_to_agent_allowlist: list[str] | None,
     discoverable: bool,
     max_iterations: int,
     temperature: float,
@@ -106,6 +127,11 @@ async def _handle_create(  # noqa: PLR0913
             is_error=True,
         )
 
+    normalized_a2a_allowlist = normalize_new_agent_a2a(
+        enabled=agent_to_agent_enabled,
+        allowlist=agent_to_agent_allowlist,
+    )
+
     agent = Agent.create(
         tenant_id=ctx.tenant_id,
         name=name,
@@ -118,6 +144,8 @@ async def _handle_create(  # noqa: PLR0913
         model=_parse_model(model),
         allowed_tools=allowed_tools or ["*"],
         can_spawn=can_spawn,
+        agent_to_agent_enabled=agent_to_agent_enabled,
+        agent_to_agent_allowlist=normalized_a2a_allowlist,
         discoverable=discoverable,
         max_iterations=max_iterations,
         temperature=temperature,
@@ -148,6 +176,7 @@ def _apply_scalar_updates(
     model: str | None,
     allowed_tools: list[str] | None,
     can_spawn: bool | None,
+    agent_to_agent_enabled: bool | None,
     discoverable: bool | None,
     max_iterations: int | None,
     temperature: float | None,
@@ -167,6 +196,7 @@ def _apply_scalar_updates(
         agent.model = _parse_model(model)
     _bool_int_float: dict[str, bool | int | float | None] = {
         "can_spawn": can_spawn,
+        "agent_to_agent_enabled": agent_to_agent_enabled,
         "discoverable": discoverable,
         "max_iterations": max_iterations,
         "temperature": temperature,
@@ -200,6 +230,23 @@ def _apply_trigger_updates(
     )
 
 
+def _apply_a2a_update(
+    agent: Agent,
+    agent_to_agent_allowlist: list[str] | None,
+    agent_to_agent_enabled: bool | None,
+) -> None:
+    """Apply A2A allowlist changes using shared policy logic."""
+    updates: dict[str, Any] = {}
+    if agent_to_agent_allowlist is not None or agent_to_agent_enabled is not None:
+        if agent_to_agent_allowlist is not None:
+            updates["agent_to_agent_allowlist"] = agent_to_agent_allowlist
+        if agent_to_agent_enabled is not None:
+            updates["agent_to_agent_enabled"] = agent_to_agent_enabled
+        normalize_updated_agent_a2a(agent, updates)
+        if "agent_to_agent_allowlist" in updates:
+            agent.agent_to_agent_allowlist = updates["agent_to_agent_allowlist"]
+
+
 async def _handle_update(  # noqa: PLR0913
     ctx: ToolContext,
     *,
@@ -213,6 +260,8 @@ async def _handle_update(  # noqa: PLR0913
     model: str | None,
     allowed_tools: list[str] | None,
     can_spawn: bool | None,
+    agent_to_agent_enabled: bool | None,
+    agent_to_agent_allowlist: list[str] | None,
     discoverable: bool | None,
     max_iterations: int | None,
     temperature: float | None,
@@ -242,11 +291,13 @@ async def _handle_update(  # noqa: PLR0913
         model=model,
         allowed_tools=allowed_tools,
         can_spawn=can_spawn,
+        agent_to_agent_enabled=agent_to_agent_enabled,
         discoverable=discoverable,
         max_iterations=max_iterations,
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    _apply_a2a_update(existing, agent_to_agent_allowlist, agent_to_agent_enabled)
     _apply_trigger_updates(
         existing,
         trigger_description=trigger_description,
@@ -405,6 +456,18 @@ async def _handle_get(
                 "type": "boolean",
                 "description": "Whether this agent can spawn sub-agents. Default: false",
             },
+            "agent_to_agent_enabled": {
+                "type": "boolean",
+                "description": "Whether this agent can send and receive direct agent messages.",
+            },
+            "agent_to_agent_allowlist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Allowed sender agent IDs or names for inbound agent messages. "
+                    "Use [] to deny all."
+                ),
+            },
             "discoverable": {
                 "type": "boolean",
                 "description": "Whether this agent appears in agent_list. Default: true",
@@ -440,11 +503,13 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
     trigger_examples: list[str] | None = None,
     model: str | None = None,
     allowed_tools: list[str] | None = None,
-    can_spawn: bool = False,
-    discoverable: bool = True,
-    max_iterations: int = 10,
-    temperature: float = 0.7,
-    max_tokens: int = 4096,
+    can_spawn: bool | object = _UNSET,
+    agent_to_agent_enabled: bool | None = None,
+    agent_to_agent_allowlist: list[str] | None = None,
+    discoverable: bool | object = _UNSET,
+    max_iterations: int | object = _UNSET,
+    temperature: float | object = _UNSET,
+    max_tokens: int | object = _UNSET,
 ) -> ToolResult:
     """Manage agent definitions: create, update, delete, or get."""
     if _orchestrator is None:
@@ -466,11 +531,15 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
                 trigger_examples=trigger_examples,
                 model=model,
                 allowed_tools=allowed_tools,
-                can_spawn=can_spawn,
-                discoverable=discoverable,
-                max_iterations=max_iterations,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                can_spawn=_resolve_bool(can_spawn, default=False),
+                agent_to_agent_enabled=(
+                    agent_to_agent_enabled if agent_to_agent_enabled is not None else False
+                ),
+                agent_to_agent_allowlist=agent_to_agent_allowlist,
+                discoverable=_resolve_bool(discoverable, default=True),
+                max_iterations=_resolve_int(max_iterations, default=10),
+                temperature=_resolve_float(temperature, default=0.7),
+                max_tokens=_resolve_int(max_tokens, default=4096),
             )
         elif action == "update":
             result = await _handle_update(
@@ -484,11 +553,19 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
                 trigger_examples=trigger_examples,
                 model=model,
                 allowed_tools=allowed_tools,
-                can_spawn=can_spawn if name is not None or agent_id else None,
-                discoverable=discoverable if name is not None or agent_id else None,
-                max_iterations=max_iterations if name is not None or agent_id else None,
-                temperature=temperature if name is not None or agent_id else None,
-                max_tokens=max_tokens if name is not None or agent_id else None,
+                can_spawn=None if can_spawn is _UNSET else _resolve_bool(can_spawn, default=False),
+                agent_to_agent_enabled=agent_to_agent_enabled,
+                agent_to_agent_allowlist=agent_to_agent_allowlist,
+                discoverable=(
+                    None if discoverable is _UNSET else _resolve_bool(discoverable, default=True)
+                ),
+                max_iterations=(
+                    None if max_iterations is _UNSET else _resolve_int(max_iterations, default=10)
+                ),
+                temperature=(
+                    None if temperature is _UNSET else _resolve_float(temperature, default=0.7)
+                ),
+                max_tokens=None if max_tokens is _UNSET else _resolve_int(max_tokens, default=4096),
             )
         elif action == "delete":
             result = await _handle_delete(ctx, agent_id=agent_id)

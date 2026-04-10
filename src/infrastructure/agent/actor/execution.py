@@ -109,6 +109,33 @@ async def _update_spawn_status(
         )
 
 
+async def _resolve_chat_runtime_overrides(
+    request: ProjectChatRequest,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Resolve persisted and app-provided LLM overrides for a chat request."""
+    llm_overrides: dict[str, Any] | None = None
+    model_override: str | None = None
+
+    persisted_config = await _load_persisted_agent_config(request.conversation_id)
+    if persisted_config:
+        raw_persisted_model = persisted_config.get("llm_model_override")
+        if isinstance(raw_persisted_model, str) and raw_persisted_model.strip():
+            model_override = raw_persisted_model.strip()
+        raw_persisted_llm = persisted_config.get("llm_overrides")
+        if isinstance(raw_persisted_llm, dict):
+            llm_overrides = raw_persisted_llm
+
+    if request.app_model_context:
+        raw_llm_overrides = request.app_model_context.get("llm_overrides")
+        if isinstance(raw_llm_overrides, dict):
+            llm_overrides = raw_llm_overrides
+        raw_model_override = request.app_model_context.get("llm_model_override")
+        if isinstance(raw_model_override, str) and raw_model_override.strip():
+            model_override = raw_model_override.strip()
+
+    return llm_overrides, model_override
+
+
 # Flush accumulated events to DB every N seconds during streaming,
 # so they survive service restarts.
 _PERSIST_INTERVAL_SECONDS = 30
@@ -509,26 +536,7 @@ async def execute_project_chat(
 
     last_time_us, last_counter = await _get_last_db_event_time(request.conversation_id)
     time_gen = EventTimeGenerator(last_time_us, last_counter)
-
-    llm_overrides: dict[str, Any] | None = None
-    model_override: str | None = None
-
-    persisted_config = await _load_persisted_agent_config(request.conversation_id)
-    if persisted_config:
-        raw_persisted_model = persisted_config.get("llm_model_override")
-        if isinstance(raw_persisted_model, str) and raw_persisted_model.strip():
-            model_override = raw_persisted_model.strip()
-        raw_persisted_llm = persisted_config.get("llm_overrides")
-        if isinstance(raw_persisted_llm, dict):
-            llm_overrides = raw_persisted_llm
-
-    if request.app_model_context:
-        raw_llm_overrides = request.app_model_context.get("llm_overrides")
-        if isinstance(raw_llm_overrides, dict):
-            llm_overrides = raw_llm_overrides
-        raw_model_override = request.app_model_context.get("llm_model_override")
-        if isinstance(raw_model_override, str) and raw_model_override.strip():
-            model_override = raw_model_override.strip()
+    llm_overrides, model_override = await _resolve_chat_runtime_overrides(request)
 
     try:
         redis_client = await _get_redis_client()

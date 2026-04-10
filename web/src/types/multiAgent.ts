@@ -59,6 +59,7 @@ export interface AgentDefinition {
   can_spawn: boolean;
   max_spawn_depth: number;
   agent_to_agent_enabled: boolean;
+  agent_to_agent_allowlist: string[] | null;
   discoverable: boolean;
   source: AgentSource;
   enabled: boolean;
@@ -159,6 +160,7 @@ export interface CreateDefinitionRequest {
   can_spawn?: boolean | undefined;
   max_spawn_depth?: number | undefined;
   agent_to_agent_enabled?: boolean | undefined;
+  agent_to_agent_allowlist?: string[] | null | undefined;
   discoverable?: boolean | undefined;
   max_retries?: number | undefined;
   fallback_models?: string[] | undefined;
@@ -186,6 +188,7 @@ export interface UpdateDefinitionRequest {
   can_spawn?: boolean | undefined;
   max_spawn_depth?: number | undefined;
   agent_to_agent_enabled?: boolean | undefined;
+  agent_to_agent_allowlist?: string[] | null | undefined;
   discoverable?: boolean | undefined;
   max_retries?: number | undefined;
   fallback_models?: string[] | undefined;

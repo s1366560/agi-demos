@@ -145,6 +145,38 @@ def _infer_provider_from_model_name(model_name: str | None) -> str | None:
     return _normalize_model_provider(provider_part)
 
 
+async def _register_selected_agent_session(
+    *,
+    conversation_id: str,
+    project_id: str,
+    selected_agent_id: str,
+) -> None:
+    """Best-effort registration of the resolved agent owning a conversation."""
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+
+        orchestrator = get_agent_orchestrator()
+        if orchestrator is None:
+            return
+        session_registry = getattr(orchestrator, "_session_registry", None)
+        if session_registry is None:
+            return
+        await session_registry.register(
+            agent_id=selected_agent_id,
+            conversation_id=conversation_id,
+            project_id=project_id,
+        )
+    except Exception:
+        logger.warning(
+            "[ReActAgent] Failed to register selected agent session: agent=%s conversation=%s "
+            "project=%s",
+            selected_agent_id,
+            conversation_id,
+            project_id,
+            exc_info=True,
+        )
+
+
 class ReActAgent:
     """
     Self-developed ReAct Agent implementation.
@@ -2461,6 +2493,11 @@ class ReActAgent:
                 tenant_id=tenant_id,
                 project_id=project_id,
             )
+        await _register_selected_agent_session(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            selected_agent_id=selected_agent.id,
+        )
         runtime_profile = self._build_runtime_profile(
             tenant_id=tenant_id,
             tenant_agent_config_data=tenant_agent_config_data,

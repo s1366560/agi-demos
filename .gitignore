@@ -146,3 +146,4 @@ local-sandbox-app/
 .mypy_cache/
 .ruff_cache/
 .gitnexus
+.omx/

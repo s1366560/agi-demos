@@ -23,6 +23,10 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.agent.tools._agent_definition_policy import (
+    normalize_new_agent_a2a,
+    normalize_updated_agent_a2a,
+)
 
 from .access import require_tenant_access
 from .utils import get_container_with_db
@@ -96,47 +100,6 @@ class SetEnabledBody(BaseModel):
     enabled: bool
 
 
-def _normalize_new_agent_to_agent_allowlist(
-    *,
-    enabled: bool,
-    allowlist: list[str] | None,
-) -> list[str] | None:
-    """Normalize A2A config for new definitions with an explicit safe default."""
-    normalized_allowlist = Agent.normalize_agent_to_agent_allowlist(allowlist)
-    if enabled and normalized_allowlist is None:
-        return []
-    return normalized_allowlist
-
-
-def _normalize_updated_agent_to_agent_policy(
-    agent: Agent,
-    updates: dict[str, Any],
-) -> None:
-    """Normalize A2A config for updates without breaking untouched legacy agents."""
-    enabled_before = agent.agent_to_agent_enabled
-    allowlist_in_updates = "agent_to_agent_allowlist" in updates
-    if allowlist_in_updates:
-        updates["agent_to_agent_allowlist"] = Agent.normalize_agent_to_agent_allowlist(
-            updates["agent_to_agent_allowlist"]
-        )
-
-    enabled_after = updates.get("agent_to_agent_enabled", enabled_before)
-    if not enabled_after:
-        return
-
-    if allowlist_in_updates:
-        if updates["agent_to_agent_allowlist"] is None:
-            updates["agent_to_agent_allowlist"] = []
-        return
-
-    if (
-        updates.get("agent_to_agent_enabled") is True
-        and not enabled_before
-        and agent.agent_to_agent_allowlist is None
-    ):
-        updates["agent_to_agent_allowlist"] = []
-
-
 @router.post("/definitions")
 async def create_definition(
     body: CreateDefinitionBody,
@@ -157,7 +120,7 @@ async def create_definition(
         sp = SessionPolicy.from_dict(body.session_policy) if body.session_policy else None
 
         dc = DelegateConfig.from_dict(body.delegate_config) if body.delegate_config else None
-        agent_to_agent_allowlist = _normalize_new_agent_to_agent_allowlist(
+        agent_to_agent_allowlist = normalize_new_agent_a2a(
             enabled=body.agent_to_agent_enabled,
             allowlist=body.agent_to_agent_allowlist,
         )
@@ -323,7 +286,7 @@ async def update_definition(
             raise HTTPException(status_code=403, detail="Access denied")
 
         updates = body.model_dump(exclude_unset=True)
-        _normalize_updated_agent_to_agent_policy(existing, updates)
+        normalize_updated_agent_a2a(existing, updates)
         _apply_updates(existing, updates)
         existing.validate()
         existing.updated_at = datetime.now(UTC)

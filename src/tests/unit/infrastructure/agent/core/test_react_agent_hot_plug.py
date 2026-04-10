@@ -4,10 +4,13 @@ Tests that tools can be added/removed dynamically at runtime
 without restarting the agent.
 """
 
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import src.infrastructure.agent.core.react_agent as react_agent_module
 from src.infrastructure.agent.core.react_agent import ReActAgent
 
 
@@ -27,6 +30,27 @@ class MockTool:
 
 class TestReActAgentHotPlug:
     """Tests for hot-plug tool functionality."""
+
+    @pytest.mark.asyncio
+    async def test_register_selected_agent_session_uses_resolved_agent_id(self):
+        session_registry = SimpleNamespace(register=AsyncMock())
+        orchestrator = SimpleNamespace(_session_registry=session_registry)
+
+        with patch(
+            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            return_value=orchestrator,
+        ):
+            await react_agent_module._register_selected_agent_session(
+                conversation_id="conv-1",
+                project_id="proj-1",
+                selected_agent_id="builtin:sisyphus",
+            )
+
+        session_registry.register.assert_awaited_once_with(
+            agent_id="builtin:sisyphus",
+            conversation_id="conv-1",
+            project_id="proj-1",
+        )
 
     def test_agent_with_static_tools(self):
         """Should work with static tools dict (backward compatibility)."""
