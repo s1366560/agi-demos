@@ -71,3 +71,20 @@ class TestSqlAgentRegistryRepository:
 
         assert [agent.id for agent in first_page] == ["builtin:sisyphus", "custom-1"]
         assert [agent.id for agent in second_page] == ["custom-1", "custom-2"]
+
+    @pytest.mark.asyncio
+    async def test_list_by_project_prefers_builtin_when_legacy_db_name_collides(self) -> None:
+        repo = _make_repo()
+        repo._to_domain = MagicMock(  # type: ignore[method-assign]
+            side_effect=[
+                _build_custom_agent("custom-sisyphus", "sisyphus", "tenant-1"),
+                _build_custom_agent("custom-1", "custom-one", "tenant-1"),
+            ]
+        )
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = ["row-1", "row-2"]
+        repo._session.execute.return_value = result
+
+        agents = await repo.list_by_project("proj-1", tenant_id="tenant-1")
+
+        assert [agent.id for agent in agents] == ["builtin:sisyphus", "custom-1"]

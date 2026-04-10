@@ -38,7 +38,7 @@ def configure_agent_spawn(orchestrator: AgentOrchestrator) -> None:
     name="agent_spawn",
     description=(
         "Spawn a sub-agent to handle a delegated task. "
-        "Returns spawn info including session_id for tracking."
+        "Returns agent_id, session_id, spawn_id, run_id, and follow-up metadata for sessions_wait and trace run APIs."
     ),
     parameters={
         "type": "object",
@@ -111,8 +111,14 @@ async def agent_spawn_tool(
             "agent_id": record.child_agent_id,
             "agent_name": agent.display_name or agent.name,
             "session_id": record.child_session_id,
+            "child_session_id": record.child_session_id,
+            "parent_conversation_id": ctx.conversation_id,
+            "spawn_id": record.id,
+            "run_id": record.id,
+            "trace_id": record.trace_id,
             "mode": mode,
             "status": record.status,
+            "task_summary": message[:200],
         }
         return ToolResult(output=json.dumps(result, indent=2))
     except ValueError as exc:

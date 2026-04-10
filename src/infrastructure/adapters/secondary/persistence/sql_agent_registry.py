@@ -35,6 +35,19 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
 logger = logging.getLogger(__name__)
 
 
+def _dedupe_agents_by_name_prefer_builtin(agents: list[Agent]) -> list[Agent]:
+    """Collapse same-name agents while keeping builtin definitions canonical."""
+    deduped: list[Agent] = []
+    seen: set[str] = set()
+    for agent in agents:
+        key = agent.name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(agent)
+    return deduped
+
+
 class SqlAgentRegistryRepository(
     BaseRepository[Agent, object],
     AgentRegistryPort,
@@ -244,7 +257,7 @@ class SqlAgentRegistryRepository(
         db_agents = result.scalars().all()
 
         agents = [d for a in db_agents if (d := self._to_domain(a)) is not None]
-        return builtin_slice + agents
+        return _dedupe_agents_by_name_prefer_builtin(builtin_slice + agents)
 
     async def list_by_project(
         self,
@@ -286,7 +299,7 @@ class SqlAgentRegistryRepository(
             tenant_id=resolved_tenant_id,
             project_id=project_id,
         )
-        return builtin_agents + agents
+        return _dedupe_agents_by_name_prefer_builtin(builtin_agents + agents)
 
     async def set_enabled(
         self,

@@ -17,8 +17,12 @@ from src.domain.ports.services.agent_message_bus_port import (
 )
 from src.infrastructure.agent.orchestration.orchestrator import (
     AgentOrchestrator,
+    SendDenied,
     SendResult,
     SpawnResult,
+)
+from src.infrastructure.agent.orchestration.send_denied import (
+    SendDeniedCode,
 )
 from src.infrastructure.agent.orchestration.session_registry import (
     AgentSession,
@@ -675,7 +679,7 @@ class TestSendMessage:
     async def test_send_message_explicit_session_must_belong_to_target_agent(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Explicit session IDs are validated against the target agent binding."""
+        """Explicit session mismatches return a structured denial."""
         from_agent = _make_agent(id="agent-a")
         to_agent = _make_agent(id="agent-b")
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
@@ -687,22 +691,21 @@ class TestSendMessage:
             )
         )
 
-        with pytest.raises(
-            ValueError,
-            match="Session sess-explicit does not belong to target agent agent-b",
-        ):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-explicit",
-                project_id="proj-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-explicit",
+            project_id="proj-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.TARGET_SESSION_MISMATCH
 
     async def test_send_message_sender_session_must_belong_to_sender_agent(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Sender sessions are bound to the resolved sender identity."""
+        """Sender session mismatches return a structured denial."""
         from_agent = _make_agent(id="agent-a", name="sender-name")
         to_agent = _make_agent(id="agent-b")
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
@@ -721,32 +724,33 @@ class TestSendMessage:
             ]
         )
 
-        with pytest.raises(
-            ValueError,
-            match="Sender session sender-sess does not belong to sender agent agent-a",
-        ):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-explicit",
-                sender_session_id="sender-sess",
-                project_id="proj-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-explicit",
+            sender_session_id="sender-sess",
+            project_id="proj-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.SENDER_SESSION_MISMATCH
 
     async def test_send_message_unknown_sender_raises_value_error(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Unknown senders are rejected instead of being treated as trusted roots."""
+        """Unknown senders return a structured denial."""
         fx.agent_registry.get_by_id = AsyncMock(return_value=None)
 
-        with pytest.raises(ValueError, match="Sender agent not found: unknown-sender"):
-            await fx.orchestrator.send_message(
-                from_agent_id="unknown-sender",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="unknown-sender",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.SENDER_NOT_FOUND
 
     async def test_send_message_sender_with_a2a_disabled_raises_value_error(
         self, fx: _OrchestratorFixture
@@ -755,47 +759,49 @@ class TestSendMessage:
         from_agent = _make_agent(id="agent-a", agent_to_agent_enabled=False)
         fx.agent_registry.get_by_id = AsyncMock(return_value=from_agent)
 
-        with pytest.raises(
-            ValueError, match="Sender agent-to-agent messaging is disabled: agent-a"
-        ):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.SENDER_A2A_DISABLED
 
     async def test_send_message_disabled_sender_raises_value_error(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Disabled senders cannot initiate agent-to-agent messages."""
+        """Disabled senders return a structured denial."""
         from_agent = _make_agent(id="agent-a", enabled=False)
         fx.agent_registry.get_by_id = AsyncMock(return_value=from_agent)
 
-        with pytest.raises(ValueError, match="Sender agent is disabled: agent-a"):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.SENDER_DISABLED
 
     async def test_send_message_target_not_found_raises_value_error(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Target not found raises ValueError."""
-        # Arrange
+        """Target-not-found returns a structured denial."""
         from_agent = _make_agent(id="agent-a")
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, None])
 
-        # Act / Assert
-        with pytest.raises(ValueError, match="Target agent not found: unknown-target"):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="unknown-target",
-                message="hello",
-                session_id="sess-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="unknown-target",
+            message="hello",
+            session_id="sess-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.TARGET_NOT_FOUND
 
     async def test_send_message_sender_in_target_default_allowlist_passes_after_pr1(
         self, fx: _OrchestratorFixture
@@ -839,47 +845,44 @@ class TestSendMessage:
     async def test_send_message_target_allowlist_rejects_sender(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Target that rejects sender via accepts_messages_from raises ValueError."""
-        # Arrange
+        """Target allowlist rejection returns structured denial and allowlist."""
         from_agent = _make_agent(id="agent-a")
-        to_agent = _make_agent(id="agent-b")
+        to_agent = _make_agent(id="agent-b", agent_to_agent_allowlist=["allowed-sender"])
         to_agent.accepts_messages_from = Mock(return_value=False)
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
 
-        # Act / Assert
-        with pytest.raises(
-            ValueError,
-            match="does not accept messages from sender",
-        ):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.TARGET_NOT_ALLOWED
+        assert result.allowlist == ["allowed-sender"]
 
     async def test_send_message_no_session_and_no_project_raises_value_error(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """Both session_id and project_id are None raises ValueError."""
-        # Arrange
+        """Missing routing scope returns a structured denial."""
         from_agent = _make_agent(id="agent-a")
         to_agent = _make_agent(id="agent-b")
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
 
-        # Act / Assert
-        with pytest.raises(ValueError, match="Either session_id or project_id must be provided"):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.PROJECT_ID_REQUIRED
 
     async def test_send_message_no_matching_session_raises_value_error(
         self, fx: _OrchestratorFixture
     ) -> None:
-        """No matching session for the target agent raises ValueError."""
-        # Arrange
+        """No matching target session returns a structured denial."""
         from_agent = _make_agent(id="agent-a")
         to_agent = _make_agent(id="agent-b")
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
@@ -893,17 +896,15 @@ class TestSendMessage:
             ]
         )
 
-        # Act / Assert
-        with pytest.raises(
-            ValueError,
-            match="No active session found for agent agent-b in project proj-1",
-        ):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                project_id="proj-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            project_id="proj-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.TARGET_ACTIVE_SESSION_MISSING
 
     async def test_send_message_target_with_a2a_disabled_raises_value_error(
         self, fx: _OrchestratorFixture
@@ -913,15 +914,15 @@ class TestSendMessage:
         to_agent = _make_agent(id="agent-b", agent_to_agent_enabled=False)
         fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
 
-        with pytest.raises(
-            ValueError, match="Target agent-to-agent messaging is disabled: agent-b"
-        ):
-            await fx.orchestrator.send_message(
-                from_agent_id="agent-a",
-                to_agent_id="agent-b",
-                message="hello",
-                session_id="sess-1",
-            )
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="hello",
+            session_id="sess-1",
+        )
+
+        assert isinstance(result, SendDenied)
+        assert result.code == SendDeniedCode.TARGET_A2A_DISABLED
 
 
 # ---------------------------------------------------------------------------

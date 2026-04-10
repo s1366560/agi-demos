@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.agent_definition import Agent, AgentModel
@@ -111,7 +112,7 @@ async def create_definition(
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         container = get_container_with_db(request, db)
-        registry = container.agent_registry()
+        orchestrator = container.agent_orchestrator()
 
         ws_config = (
             WorkspaceConfig.from_dict(body.workspace_config) if body.workspace_config else None
@@ -156,12 +157,17 @@ async def create_definition(
             delegate_config=dc,
         )
 
-        created = await registry.create(agent)
-        await db.commit()
+        created = await orchestrator.create_agent(agent)
         return created.to_dict()
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        status_code = 409 if "already exists" in str(e) else 400
+        raise HTTPException(status_code=status_code, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent with name '{body.name}' already exists",
+        ) from e
     except HTTPException:
         raise
     except Exception as e:

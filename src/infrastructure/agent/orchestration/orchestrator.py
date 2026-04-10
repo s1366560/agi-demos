@@ -23,6 +23,10 @@ from src.domain.ports.services.agent_message_bus_port import (
     AgentMessageBusPort,
     AgentMessageType,
 )
+from src.infrastructure.agent.orchestration.send_denied import (
+    SendDenied,
+    denial_code_from_error,
+)
 from src.infrastructure.agent.orchestration.session_registry import (
     AgentSession,
     AgentSessionRegistry,
@@ -238,7 +242,9 @@ class AgentOrchestrator:
                 session_id,
                 project_id,
             )
-            if target_session is None or target_session.agent_id != target_agent_id:
+            if target_session is None:
+                raise ValueError(f"Session {session_id} was not found in project {project_id}")
+            if target_session.agent_id != target_agent_id:
                 raise ValueError(
                     f"Session {session_id} does not belong to target agent {target_agent_id}"
                 )
@@ -466,36 +472,115 @@ class AgentOrchestrator:
         sender_session_id: str | None = None,
         project_id: str | None = None,
         tenant_id: str = "",
-    ) -> SendResult:
+    ) -> SendResult | SendDenied:
         """Send a message from one agent to another.
 
         Sender and target must both resolve within the current tenant/project
         scope and explicitly opt in to agent-to-agent messaging.
+
+        Returns
+        -------
+        SendResult
+            On successful delivery.
+        SendDenied
+            On any validation failure. Callers should treat ``isinstance(result, SendDenied)``
+            as the denial branch; ``result`` is a frozen dataclass with a
+            machine-readable ``code`` enum and structured field set.
         """
         effective_project_id = project_id or None
-        from_agent = await self._resolve_message_sender(
-            from_agent_id,
-            tenant_id=tenant_id,
-            project_id=effective_project_id,
-        )
-        to_agent = await self._resolve_message_target(
-            to_agent_id,
-            sender_agent_id=from_agent.id,
-            sender_agent_name=from_agent.name,
-            tenant_id=tenant_id,
-            project_id=effective_project_id,
-        )
-        resolved_session_id = await self._resolve_message_session_id(
-            session_id=session_id,
-            project_id=effective_project_id,
-            target_agent_id=to_agent.id,
-        )
-        await self._validate_message_sender_session(
-            sender_session_id=sender_session_id,
-            project_id=effective_project_id,
-            sender_agent_id=from_agent.id,
-        )
 
+        # ── sender resolution ───────────────────────────────────────────
+        try:
+            from_agent = await self._resolve_message_sender(
+                from_agent_id,
+                tenant_id=tenant_id,
+                project_id=effective_project_id,
+            )
+        except ValueError as exc:
+            return denial_code_from_error(
+                exc,
+                from_agent_ref=from_agent_id,
+                to_agent_ref=to_agent_id,
+                sender_session_id=sender_session_id,
+                project_id=effective_project_id,
+                tenant_id=tenant_id,
+                resolved_from_agent_id=None,
+                resolved_to_agent_id=None,
+                target_session_id=None,
+            )
+
+        # ── target resolution ───────────────────────────────────────────
+        to_agent = None
+        try:
+            to_agent = await self._resolve_message_target(
+                to_agent_id,
+                sender_agent_id=from_agent.id,
+                sender_agent_name=from_agent.name,
+                tenant_id=tenant_id,
+                project_id=effective_project_id,
+            )
+        except ValueError as exc:
+            allowlist: list[str] | None = None
+            if "does not accept messages from sender" in str(exc):
+                message = str(exc)
+                marker = "Allowed senders:"
+                if marker in message:
+                    suffix = message.split(marker, 1)[1].strip().rstrip(".")
+                    allowlist = [entry.strip() for entry in suffix.split(",") if entry.strip()]
+            return denial_code_from_error(
+                exc,
+                from_agent_ref=from_agent_id,
+                to_agent_ref=to_agent_id,
+                sender_session_id=sender_session_id,
+                project_id=effective_project_id,
+                tenant_id=tenant_id,
+                resolved_from_agent_id=from_agent.id,
+                resolved_to_agent_id=None,
+                target_session_id=None,
+                allowlist=allowlist,
+            )
+
+        # ── session resolution ──────────────────────────────────────────
+        try:
+            resolved_session_id = await self._resolve_message_session_id(
+                session_id=session_id,
+                project_id=effective_project_id,
+                target_agent_id=to_agent.id,
+            )
+        except ValueError as exc:
+            return denial_code_from_error(
+                exc,
+                from_agent_ref=from_agent_id,
+                to_agent_ref=to_agent_id,
+                sender_session_id=sender_session_id,
+                project_id=effective_project_id,
+                tenant_id=tenant_id,
+                resolved_from_agent_id=from_agent.id,
+                resolved_to_agent_id=to_agent.id,
+                target_session_id=None,
+            )
+
+        # ── sender session validation ───────────────────────────────────
+        try:
+            await self._validate_message_sender_session(
+                sender_session_id=sender_session_id,
+                project_id=effective_project_id,
+                sender_agent_id=from_agent.id,
+            )
+        except ValueError as exc:
+            return denial_code_from_error(
+                exc,
+                from_agent_ref=from_agent_id,
+                to_agent_ref=to_agent_id,
+                sender_session_id=sender_session_id,
+                project_id=effective_project_id,
+                tenant_id=tenant_id,
+                resolved_from_agent_id=from_agent.id,
+                resolved_to_agent_id=to_agent.id,
+                target_session_id=resolved_session_id,
+            )
+
+        # ── deliver message ─────────────────────────────────────────────
         message_id = await self._message_bus.send_message(
             from_agent_id=from_agent.id,
             to_agent_id=to_agent.id,

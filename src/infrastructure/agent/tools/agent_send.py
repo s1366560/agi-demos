@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from src.domain.events.agent_events import AgentMessageSentEvent
+from src.infrastructure.agent.orchestration.orchestrator import (
+    AgentOrchestrator,
+    SendDenied,
+    SendResult,
+)
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 if TYPE_CHECKING:
-    from src.infrastructure.agent.orchestration.orchestrator import (
-        AgentOrchestrator,
-    )
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +81,9 @@ async def agent_send_tool(
         )
     sender_agent_ref = _get_runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _get_runtime_string(ctx, "selected_agent_name") or ctx.agent_name
+
     try:
-        send_result = await _orchestrator.send_message(
+        result = await _orchestrator.send_message(
             from_agent_id=sender_agent_ref,
             to_agent_id=agent_id,
             message=message,
@@ -88,30 +92,39 @@ async def agent_send_tool(
             project_id=ctx.project_id or None,
             tenant_id=ctx.tenant_id,
         )
-        await ctx.emit(
-            AgentMessageSentEvent(
-                from_agent_id=send_result.from_agent_id,
-                to_agent_id=send_result.to_agent_id,
-                from_agent_name=sender_agent_name,
-                to_agent_name=agent_id,
-                message_preview=message[:200],
-            ).to_event_dict()
-        )
-        result: dict[str, Any] = {
-            "message_id": send_result.message_id,
-            "from_agent_id": send_result.from_agent_id,
-            "to_agent_id": send_result.to_agent_id,
-            "session_id": send_result.session_id,
-        }
-        return ToolResult(output=json.dumps(result, indent=2))
-    except ValueError as exc:
-        return ToolResult(
-            output=json.dumps({"error": str(exc)}),
-            is_error=True,
-        )
     except Exception:
         logger.exception("agent_send failed")
         return ToolResult(
             output=json.dumps({"error": "Internal error in agent_send"}),
             is_error=True,
         )
+
+    # Denial branch — return structured denial payload, no event emitted.
+    if isinstance(result, SendDenied):
+        return ToolResult(
+            output=json.dumps(result.to_dict()),
+            is_error=True,
+        )
+
+    # Success branch.
+    assert isinstance(result, SendResult)
+    await ctx.emit(
+        AgentMessageSentEvent(
+            from_agent_id=result.from_agent_id,
+            to_agent_id=result.to_agent_id,
+            from_agent_name=sender_agent_name,
+            to_agent_name=agent_id,
+            message_preview=message[:200],
+        ).to_event_dict()
+    )
+    return ToolResult(
+        output=json.dumps(
+            {
+                "message_id": result.message_id,
+                "from_agent_id": result.from_agent_id,
+                "to_agent_id": result.to_agent_id,
+                "session_id": result.session_id,
+            },
+            indent=2,
+        ),
+    )

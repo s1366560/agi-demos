@@ -176,6 +176,12 @@ class TestAgentSpawnTool:
         data = json.loads(result.output)
         assert data["agent_id"] == "target-agent"
         assert data["session_id"] == "child-session-1"
+        assert data["child_session_id"] == "child-session-1"
+        assert data["parent_conversation_id"] == "conv-1"
+        assert data["spawn_id"] == mock_record.id
+        assert data["run_id"] == mock_record.id
+        assert data["trace_id"] == ""
+        assert data["task_summary"] == "do task"
         assert data["status"] == "running"
         assert data["mode"] == "run"
 
@@ -193,6 +199,7 @@ class TestAgentSpawnTool:
             project_id="proj-1",
             mode=SpawnMode.RUN,
             status="running",
+            trace_id="trace-123",
         )
         mock_agent = Mock()
         mock_agent.display_name = "Target Agent"
@@ -218,6 +225,13 @@ class TestAgentSpawnTool:
         )
 
         assert result.is_error is False
+        data = json.loads(result.output)
+        assert data["spawn_id"] == mock_record.id
+        assert data["run_id"] == mock_record.id
+        assert data["trace_id"] == "trace-123"
+        assert data["session_id"] == "child-session-1"
+        assert data["child_session_id"] == "child-session-1"
+        assert data["parent_conversation_id"] == "conv-1"
         orchestrator.spawn_agent.assert_awaited_once_with(
             parent_agent_id="builtin:sisyphus",
             target_agent_id="target-agent",
@@ -358,31 +372,77 @@ class TestAgentSendTool:
     ) -> None:
         """Denied sends should not emit a success event."""
         import src.infrastructure.agent.tools.agent_send as mod
+        from src.infrastructure.agent.orchestration.send_denied import (
+            SendDenied,
+            SendDeniedCode,
+        )
 
         orchestrator = Mock()
-        orchestrator.send_message = AsyncMock(side_effect=ValueError("not allowed"))
+        # Orchestrator now returns SendDenied instead of raising ValueError.
+        orchestrator.send_message = AsyncMock(
+            return_value=SendDenied(
+                ok=False,
+                code=SendDeniedCode.TARGET_NOT_ALLOWED,
+                message="not allowed",
+                from_agent_ref="agent-123",
+                to_agent_ref="target-agent",
+                resolved_from_agent_id="agent-123",
+                resolved_to_agent_id=None,
+                sender_session_id="session-1",
+                target_session_id=None,
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                allowlist=["allowed-sender"],
+            )
+        )
         monkeypatch.setattr(mod, "_orchestrator", orchestrator)
 
         ctx = _make_ctx(runtime_context={"selected_agent_id": "agent-123"})
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
 
         assert result.is_error is True
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert data["code"] == "target_not_allowed"
         assert ctx._pending_events == []
 
     @pytest.mark.asyncio
     async def test_value_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ValueError from orchestrator is surfaced."""
+        """ValueError from orchestrator surfaces as structured denial."""
         import src.infrastructure.agent.tools.agent_send as mod
+        from src.infrastructure.agent.orchestration.send_denied import (
+            SendDenied,
+            SendDeniedCode,
+        )
 
         orchestrator = Mock()
-        orchestrator.send_message = AsyncMock(side_effect=ValueError("Test error"))
+        # Orchestrator catches ValueError and returns SendDenied.
+        orchestrator.send_message = AsyncMock(
+            return_value=SendDenied(
+                ok=False,
+                code=SendDeniedCode.SENDER_NOT_FOUND,
+                message="Test error",
+                from_agent_ref="test-agent",
+                to_agent_ref="target-agent",
+                resolved_from_agent_id=None,
+                resolved_to_agent_id=None,
+                sender_session_id="session-1",
+                target_session_id=None,
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                allowlist=None,
+            )
+        )
         monkeypatch.setattr(mod, "_orchestrator", orchestrator)
 
         ctx = _make_ctx()
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
         assert result.is_error is True
         data = json.loads(result.output)
-        assert "Test error" in data["error"]
+        assert data["ok"] is False
+        assert data["code"] == "sender_not_found"
+        assert "Test error" in data["message"]
+        assert data["allowlist"] is None
 
     @pytest.mark.asyncio
     async def test_unexpected_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
