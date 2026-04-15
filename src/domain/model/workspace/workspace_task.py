@@ -15,6 +15,37 @@ class WorkspaceTaskStatus(str, Enum):
     DONE = "done"
 
 
+class WorkspaceTaskPriority(str, Enum):
+    """Canonical public priority contract for workspace tasks."""
+
+    NONE = ""
+    P1 = "P1"
+    P2 = "P2"
+    P3 = "P3"
+    P4 = "P4"
+
+    @property
+    def rank(self) -> int:
+        return {
+            WorkspaceTaskPriority.NONE: 0,
+            WorkspaceTaskPriority.P1: 1,
+            WorkspaceTaskPriority.P2: 2,
+            WorkspaceTaskPriority.P3: 3,
+            WorkspaceTaskPriority.P4: 4,
+        }[self]
+
+    @classmethod
+    def from_rank(cls, rank: int | None) -> "WorkspaceTaskPriority":
+        return {
+            None: cls.NONE,
+            0: cls.NONE,
+            1: cls.P1,
+            2: cls.P2,
+            3: cls.P3,
+            4: cls.P4,
+        }.get(rank, cls.NONE)
+
+
 @dataclass(kw_only=True)
 class WorkspaceTask(Entity):
     """Task tracked in a collaboration workspace."""
@@ -26,7 +57,7 @@ class WorkspaceTask(Entity):
     assignee_user_id: str | None = None
     assignee_agent_id: str | None = None
     status: WorkspaceTaskStatus = WorkspaceTaskStatus.TODO
-    priority: int = 0
+    priority: WorkspaceTaskPriority = WorkspaceTaskPriority.NONE
     estimated_effort: str | None = None
     blocker_reason: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -42,3 +73,7 @@ class WorkspaceTask(Entity):
             raise ValueError("title cannot be empty")
         if not self.created_by:
             raise ValueError("created_by cannot be empty")
+        if isinstance(self.priority, int):
+            self.priority = WorkspaceTaskPriority.from_rank(self.priority)
+        elif isinstance(self.priority, str):
+            self.priority = WorkspaceTaskPriority(self.priority)

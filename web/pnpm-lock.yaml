@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@ant-design/icons':
-        specifier: ^6.1.0
-        version: 6.1.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@copilotkit/a2ui-renderer':
         specifier: 1.53.0
         version: 1.53.0(@copilotkit/react-core@1.53.0(@ag-ui/core@0.0.47)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(graphql@16.13.1)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.2.1))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(signal-polyfill@0.2.2)

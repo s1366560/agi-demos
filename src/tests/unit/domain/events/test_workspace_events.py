@@ -253,13 +253,30 @@ class TestWorkspaceTaskEvents:
         event = WorkspaceTaskAssignedEvent(
             workspace_id="ws_1",
             task_id="task_1",
+            task={
+                "id": "task_1",
+                "workspace_id": "ws_1",
+                "status": "in_progress",
+                "metadata": {
+                    "goal_evidence": {
+                        "goal_task_id": "task_1",
+                    }
+                },
+            },
             assignee_id="agent_1",
+            assignee_agent_id="agent_1",
+            workspace_agent_id="wa_1",
+            status="in_progress",
             assigned_by="user_1",
         )
         assert event.event_type == AgentEventType.WORKSPACE_TASK_ASSIGNED
         d = event.to_event_dict()
         assert d["type"] == "workspace_task_assigned"
         assert d["data"]["assignee_id"] == "agent_1"
+        assert d["data"]["assignee_agent_id"] == "agent_1"
+        assert d["data"]["workspace_agent_id"] == "wa_1"
+        assert d["data"]["status"] == "in_progress"
+        assert d["data"]["task"]["metadata"]["goal_evidence"]["goal_task_id"] == "task_1"
         assert d["data"]["assigned_by"] == "user_1"
 
 

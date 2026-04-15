@@ -18,7 +18,7 @@ import { workspaceTaskService } from '@/services/workspaceService';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
 
-import type { WorkspaceTaskStatus } from '@/types/workspace';
+import type { WorkspaceTaskPriority, WorkspaceTaskStatus } from '@/types/workspace';
 
 interface TaskBoardProps {
   workspaceId: string;
@@ -99,7 +99,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
   const [showArchived, setShowArchived] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [title, setTitle] = useState('');
-  const [priority, setPriority] = useState<string>('');
+  const [priority, setPriority] = useState<WorkspaceTaskPriority>('');
   const [effort, setEffort] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -118,10 +118,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
     };
 
     workspaceTasks.forEach((task) => {
-      const col = grouped[task.status];
-      if (col) {
-        col.push(task);
-      }
+      grouped[task.status].push(task);
     });
 
     for (const status of Object.keys(grouped) as WorkspaceTaskStatus[]) {

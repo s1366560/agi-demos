@@ -2,26 +2,33 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
+from src.application.services.workspace_task_event_publisher import WorkspaceTaskEventPublisher
 from src.application.services.workspace_task_service import WorkspaceTaskService
 from src.configuration.di_container import DIContainer
-from src.domain.events.types import AgentEventType
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+
+logger = logging.getLogger(__name__)
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """Get a request-scoped container with DB session."""
-    return request.app.state.container.with_db(db)
+    return cast(DIContainer, request.app.state.container.with_db(db))
 
 
 def _get_workspace_task_service(request: Request, db: AsyncSession) -> WorkspaceTaskService:
@@ -35,7 +42,25 @@ def _get_workspace_task_service(request: Request, db: AsyncSession) -> Workspace
     )
 
 
+def _get_workspace_task_command_service(
+    request: Request, db: AsyncSession
+) -> WorkspaceTaskCommandService:
+    return WorkspaceTaskCommandService(_get_workspace_task_service(request, db))
+
+
+def _get_workspace_task_event_publisher(request: Request) -> WorkspaceTaskEventPublisher:
+    return WorkspaceTaskEventPublisher(request.app.state.container.redis())
+
+
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/tasks", tags=["workspace-tasks"])
+
+_INTERNAL_TO_PUBLIC_PRIORITY: dict[int, str] = {
+    0: "",
+    1: "P1",
+    2: "P2",
+    3: "P3",
+    4: "P4",
+}
 
 
 class WorkspaceTaskCreateRequest(BaseModel):
@@ -51,7 +76,7 @@ class WorkspaceTaskUpdateRequest(BaseModel):
     assignee_user_id: str | None = None
     status: WorkspaceTaskStatus | None = None
     metadata: dict[str, Any] | None = None
-    priority: str | None = None
+    priority: WorkspaceTaskPriority | None = None
     estimated_effort: str | None = None
     blocker_reason: str | None = None
     assignee_agent_id: str | None = None
@@ -73,7 +98,7 @@ class WorkspaceTaskResponse(BaseModel):
     metadata: dict[str, Any]
     created_at: datetime
     updated_at: datetime | None
-    priority: str | None = None
+    priority: WorkspaceTaskPriority | None = None
     estimated_effort: str | None = None
     blocker_reason: str | None = None
     completed_at: datetime | None = None
@@ -93,7 +118,7 @@ def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
         metadata=task.metadata,
         created_at=task.created_at,
         updated_at=task.updated_at,
-        priority=str(task.priority) if task.priority else None,
+        priority=task.priority if task.priority != WorkspaceTaskPriority.NONE else None,
         estimated_effort=task.estimated_effort,
         blocker_reason=task.blocker_reason,
         completed_at=task.completed_at,
@@ -114,23 +139,6 @@ def _to_http_error(exc: Exception) -> HTTPException:
     )
 
 
-async def _publish_task_assigned_event(request: Request, task: WorkspaceTask) -> None:
-    if not task.assignee_user_id and not task.assignee_agent_id:
-        return
-    await publish_workspace_event(
-        request.app.state.container.redis(),
-        workspace_id=task.workspace_id,
-        event_type=AgentEventType.WORKSPACE_TASK_ASSIGNED,
-        payload={
-            "workspace_id": task.workspace_id,
-            "task_id": task.id,
-            "assignee_user_id": task.assignee_user_id,
-            "assignee_agent_id": task.assignee_agent_id,
-            "status": task.status.value,
-        },
-    )
-
-
 @router.post("", response_model=WorkspaceTaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_workspace_task(
     workspace_id: str,
@@ -139,7 +147,8 @@ async def create_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.create_task(
             workspace_id=workspace_id,
@@ -150,19 +159,13 @@ async def create_workspace_task(
             metadata=body.metadata,
         )
         await db.commit()
-        if task.assignee_user_id:
-            await _publish_task_assigned_event(request, task)
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_CREATED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception("Failed to publish workspace task events", extra={"workspace_id": workspace_id})
     return _to_response(task)
 
 
@@ -219,7 +222,8 @@ async def update_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.update_task(
             workspace_id=workspace_id,
@@ -230,21 +234,19 @@ async def update_workspace_task(
             assignee_user_id=body.assignee_user_id,
             status=body.status,
             metadata=body.metadata,
+            priority=body.priority,
         )
         await db.commit()
-        if body.assignee_user_id is not None:
-            await _publish_task_assigned_event(request, task)
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_UPDATED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
 
 
@@ -256,7 +258,8 @@ async def delete_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         await service.delete_task(
             workspace_id=workspace_id,
@@ -264,15 +267,16 @@ async def delete_workspace_task(
             actor_user_id=current_user.id,
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_DELETED,
-            payload={"task_id": task_id},
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
 
 
 @router.post("/{task_id}/assign-agent", response_model=WorkspaceTaskResponse)
@@ -284,7 +288,8 @@ async def assign_workspace_task_to_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.assign_task_to_agent(
             workspace_id=workspace_id,
@@ -293,10 +298,16 @@ async def assign_workspace_task_to_agent(
             workspace_agent_id=body.workspace_agent_id,
         )
         await db.commit()
-        await _publish_task_assigned_event(request, task)
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
 
 
@@ -308,7 +319,8 @@ async def unassign_workspace_task_from_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.unassign_task_from_agent(
             workspace_id=workspace_id,
@@ -316,17 +328,16 @@ async def unassign_workspace_task_from_agent(
             actor_user_id=current_user.id,
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_UPDATED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
 
 
@@ -338,7 +349,8 @@ async def claim_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.claim_task(
             workspace_id=workspace_id,
@@ -346,17 +358,16 @@ async def claim_workspace_task(
             actor_user_id=current_user.id,
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_UPDATED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
 
 
@@ -368,7 +379,8 @@ async def start_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.start_task(
             workspace_id=workspace_id,
@@ -376,18 +388,16 @@ async def start_workspace_task(
             actor_user_id=current_user.id,
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_STATUS_CHANGED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-                "new_status": "in_progress",
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
 
 
@@ -399,7 +409,8 @@ async def block_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.block_task(
             workspace_id=workspace_id,
@@ -407,18 +418,16 @@ async def block_workspace_task(
             actor_user_id=current_user.id,
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_STATUS_CHANGED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-                "new_status": "blocked",
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
 
 
@@ -430,7 +439,8 @@ async def complete_workspace_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    service = _get_workspace_task_service(request, db)
+    service = _get_workspace_task_command_service(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
     try:
         task = await service.complete_task(
             workspace_id=workspace_id,
@@ -438,16 +448,14 @@ async def complete_workspace_task(
             actor_user_id=current_user.id,
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.WORKSPACE_TASK_STATUS_CHANGED,
-            payload={
-                "task": _to_response(task).model_dump(mode="json"),
-                "new_status": "done",
-            },
-        )
     except Exception as exc:
         await db.rollback()
         raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
     return _to_response(task)
