@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
@@ -25,6 +29,7 @@ def make_task(
     workspace_id: str = "workspace-1",
     title: str = "Task title",
     status: WorkspaceTaskStatus = WorkspaceTaskStatus.TODO,
+    priority: WorkspaceTaskPriority = WorkspaceTaskPriority.NONE,
 ) -> WorkspaceTask:
     return WorkspaceTask(
         id=task_id,
@@ -35,6 +40,7 @@ def make_task(
         assignee_user_id="user-2",
         assignee_agent_id=None,
         status=status,
+        priority=priority,
         metadata={"priority": "medium"},
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -54,6 +60,18 @@ class TestSqlWorkspaceTaskRepository:
         assert found.id == "wt-1"
         assert found.workspace_id == "workspace-1"
         assert found.status == WorkspaceTaskStatus.TODO
+        assert found.priority == WorkspaceTaskPriority.NONE
+
+    @pytest.mark.asyncio
+    async def test_save_and_find_by_id_round_trips_priority(
+        self, v2_workspace_task_repo: SqlWorkspaceTaskRepository
+    ) -> None:
+        task = make_task("wt-priority", priority=WorkspaceTaskPriority.P3)
+        await v2_workspace_task_repo.save(task)
+
+        found = await v2_workspace_task_repo.find_by_id("wt-priority")
+        assert found is not None
+        assert found.priority == WorkspaceTaskPriority.P3
 
     @pytest.mark.asyncio
     async def test_find_by_workspace_with_status_filter(

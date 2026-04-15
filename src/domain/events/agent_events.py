@@ -1644,7 +1644,12 @@ class WorkspaceTaskAssignedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.WORKSPACE_TASK_ASSIGNED
     workspace_id: str
     task_id: str
-    assignee_id: str
+    task: dict[str, Any] | None = None
+    assignee_id: str | None = None
+    assignee_user_id: str | None = None
+    assignee_agent_id: str | None = None
+    workspace_agent_id: str | None = None
+    status: str | None = None
     assigned_by: str | None = None
 
 

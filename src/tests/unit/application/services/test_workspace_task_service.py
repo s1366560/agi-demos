@@ -11,7 +11,11 @@ from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_role import WorkspaceRole
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 
 
 def _make_workspace(workspace_id: str = "ws-1") -> Workspace:
@@ -216,3 +220,27 @@ class TestWorkspaceTaskService:
 
         assert updated.status == WorkspaceTaskStatus.DONE
 
+    @pytest.mark.asyncio
+    async def test_update_task_applies_canonical_priority(
+        self,
+        workspace_task_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_task_repo: MagicMock,
+    ) -> None:
+        task = _make_task()
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1", WorkspaceRole.EDITOR
+        )
+        mock_task_repo.find_by_id.return_value = task
+        mock_task_repo.save.side_effect = lambda saved_task: saved_task
+
+        updated = await workspace_task_service.update_task(
+            workspace_id="ws-1",
+            task_id="wt-1",
+            actor_user_id="editor-1",
+            priority=WorkspaceTaskPriority.P2,
+        )
+
+        assert updated.priority == WorkspaceTaskPriority.P2

@@ -621,6 +621,44 @@ describe('workspace store', () => {
     expect(useWorkspaceStore.getState().agents).toEqual([]);
   });
 
+  it('handleTaskEvent upserts full task payloads from workspace_task_assigned events', () => {
+    useWorkspaceStore.setState({
+      tasks: [],
+    });
+
+    useWorkspaceStore.getState().handleTaskEvent({
+      type: 'workspace_task_assigned',
+      data: {
+        workspace_agent_id: 'binding-1',
+        task: {
+          id: 'task-1',
+          workspace_id: 'ws-1',
+          title: 'Execute root goal',
+          status: 'todo',
+          priority: 'P1',
+          metadata: {
+            goal_evidence: {
+              goal_task_id: 'task-1',
+            },
+          },
+          created_at: '2026-04-15T10:00:00Z',
+        },
+      },
+    });
+
+    expect(useWorkspaceStore.getState().tasks).toEqual([
+      expect.objectContaining({
+        id: 'task-1',
+        priority: 'P1',
+        metadata: {
+          goal_evidence: {
+            goal_task_id: 'task-1',
+          },
+        },
+      }),
+    ]);
+  });
+
   it('handleTopologyEvent applies node update deltas with connected edge sync', () => {
     useWorkspaceStore.setState({
       topologyNodes: [{ id: 'node-1', node_type: 'corridor', hex_q: 1, hex_r: 0 }] as any,

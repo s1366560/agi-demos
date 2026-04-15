@@ -3,6 +3,7 @@ export type WorkspaceMemberRole = 'owner' | 'editor' | 'viewer';
 export type BlackboardPostStatus = 'open' | 'archived';
 
 export type WorkspaceTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
+export type WorkspaceTaskPriority = '' | 'P1' | 'P2' | 'P3' | 'P4';
 
 export type TopologyNodeType =
   | 'user'
@@ -89,7 +90,7 @@ export interface WorkspaceTask {
   assignee_user_id?: string | undefined;
   assignee_agent_id?: string | undefined;
   status: WorkspaceTaskStatus;
-  priority?: string | undefined;
+  priority?: WorkspaceTaskPriority | undefined;
   estimated_effort?: string | undefined;
   blocker_reason?: string | undefined;
   completed_at?: string | undefined;

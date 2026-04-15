@@ -3,7 +3,11 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 from src.domain.ports.repositories.workspace.workspace_task_repository import (
     WorkspaceTaskRepository,
 )
@@ -49,7 +53,7 @@ class SqlWorkspaceTaskRepository(
             assignee_user_id=db_task.assignee_user_id,
             assignee_agent_id=db_task.assignee_agent_id,
             status=WorkspaceTaskStatus(db_task.status),
-            priority=db_task.priority,
+            priority=WorkspaceTaskPriority.from_rank(db_task.priority),
             estimated_effort=db_task.estimated_effort,
             blocker_reason=db_task.blocker_reason,
             metadata=db_task.metadata_json or {},
@@ -69,7 +73,7 @@ class SqlWorkspaceTaskRepository(
             assignee_user_id=domain_entity.assignee_user_id,
             assignee_agent_id=domain_entity.assignee_agent_id,
             status=domain_entity.status.value,
-            priority=domain_entity.priority,
+            priority=domain_entity.priority.rank,
             estimated_effort=domain_entity.estimated_effort,
             blocker_reason=domain_entity.blocker_reason,
             metadata_json=domain_entity.metadata,
@@ -85,7 +89,7 @@ class SqlWorkspaceTaskRepository(
         db_model.assignee_user_id = domain_entity.assignee_user_id
         db_model.assignee_agent_id = domain_entity.assignee_agent_id
         db_model.status = domain_entity.status.value
-        db_model.priority = domain_entity.priority
+        db_model.priority = domain_entity.priority.rank
         db_model.estimated_effort = domain_entity.estimated_effort
         db_model.blocker_reason = domain_entity.blocker_reason
         db_model.metadata_json = domain_entity.metadata

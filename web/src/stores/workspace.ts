@@ -899,7 +899,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const task = data.task as WorkspaceTask | undefined;
           if (task) {
             set((state) => ({
-              tasks: state.tasks.map((t) => (t.id === task.id ? task : t)),
+              tasks: state.tasks.some((t) => t.id === task.id)
+                ? state.tasks.map((t) => (t.id === task.id ? task : t))
+                : [...state.tasks, task],
             }));
           }
         }

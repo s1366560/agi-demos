@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import ClassVar
 
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_role import WorkspaceRole
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
 )
@@ -23,6 +28,14 @@ from src.domain.ports.repositories.workspace.workspace_task_repository import (
 
 class WorkspaceTaskService:
     """Orchestrates workspace task CRUD, assignment, and state transitions."""
+
+    _PUBLIC_PRIORITY_TO_INTERNAL: ClassVar[dict[str, int]] = {
+        "": 0,
+        "P1": 1,
+        "P2": 2,
+        "P3": 3,
+        "P4": 4,
+    }
 
     def __init__(
         self,
@@ -105,6 +118,7 @@ class WorkspaceTaskService:
         assignee_user_id: str | None = None,
         status: WorkspaceTaskStatus | None = None,
         metadata: Mapping[str, object] | None = None,
+        priority: WorkspaceTaskPriority | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -124,9 +138,11 @@ class WorkspaceTaskService:
             task.assignee_agent_id = None
         if metadata is not None:
             task.metadata = dict(metadata)
+        if priority is not None:
+            task.priority = priority
         if status is not None and status != task.status:
-            self._validate_transition(task.status, status)
-            task.status = status
+            self._apply_transition(task, status)
+            return await self._workspace_task_repo.save(task)
 
         task.updated_at = datetime.now(UTC)
         return await self._workspace_task_repo.save(task)
@@ -303,4 +319,14 @@ class WorkspaceTaskService:
     def _apply_transition(self, task: WorkspaceTask, target: WorkspaceTaskStatus) -> None:
         self._validate_transition(task.status, target)
         task.status = target
-        task.updated_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        task.updated_at = now
+        task.completed_at = now if target == WorkspaceTaskStatus.DONE else None
+
+    @classmethod
+    def _parse_public_priority(cls, priority: str) -> int:
+        normalized = priority.strip().upper()
+        if normalized not in cls._PUBLIC_PRIORITY_TO_INTERNAL:
+            allowed = ", ".join(repr(value) for value in cls._PUBLIC_PRIORITY_TO_INTERNAL)
+            raise ValueError(f"Unsupported priority {priority!r}. Expected one of: {allowed}")
+        return cls._PUBLIC_PRIORITY_TO_INTERNAL[normalized]

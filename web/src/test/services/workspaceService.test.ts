@@ -83,6 +83,24 @@ describe('workspaceService', () => {
     expect(result[0].title).toBe('Implement API');
   });
 
+  it('assigns workspace tasks using workspace_agent_id contract', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({ id: 'task-1', assignee_agent_id: 'agent-1', status: 'todo' }),
+    } as Response);
+
+    const result = await workspaceTaskService.assignToAgent('ws-1', 'task-1', 'binding-1');
+
+    expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/tasks/task-1/assign-agent', {
+      workspace_agent_id: 'binding-1',
+    });
+    expect(result.assignee_agent_id).toBe('agent-1');
+  });
+
   it('updates workspace agent binding via tenant/project/workspace route', async () => {
     const { apiFetch } = await import('@/services/client/urlUtils');
     vi.mocked(apiFetch.patch).mockResolvedValueOnce({

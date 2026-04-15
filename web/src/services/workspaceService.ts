@@ -419,10 +419,10 @@ export const workspaceTaskService = {
   assignToAgent: async (
     workspaceId: string,
     taskId: string,
-    agentId: string
+    workspaceAgentId: string
   ): Promise<WorkspaceTask> => {
     const response = await apiFetch.post(`${taskBase(workspaceId)}/${taskId}/assign-agent`, {
-      agent_id: agentId,
+      workspace_agent_id: workspaceAgentId,
     });
     return response.json() as Promise<WorkspaceTask>;
   },
