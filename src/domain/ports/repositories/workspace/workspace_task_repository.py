@@ -25,5 +25,21 @@ class WorkspaceTaskRepository(ABC):
         """List tasks in a workspace."""
 
     @abstractmethod
+    async def find_root_by_objective_id(
+        self,
+        workspace_id: str,
+        objective_id: str,
+    ) -> WorkspaceTask | None:
+        """Find an existing projected root goal task for a workspace objective."""
+
+    @abstractmethod
+    async def find_by_root_goal_task_id(
+        self,
+        workspace_id: str,
+        root_goal_task_id: str,
+    ) -> list[WorkspaceTask]:
+        """List execution tasks linked to a root goal task."""
+
+    @abstractmethod
     async def delete(self, task_id: str) -> bool:
         """Delete workspace task by ID."""

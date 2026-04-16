@@ -98,6 +98,35 @@ class TestDelegateSubAgentTool:
         assert callback.await_args.args == ("researcher", "Find info about X")
         assert "on_event" in callback.await_args.kwargs
 
+    async def test_execute_forwards_workspace_task_id_when_present(self, tool_ctx):
+        callback = self._make_callback("Research findings: ...")
+        self._configure(callback)
+        await delegate_subagent_tool.execute(
+            tool_ctx,
+            subagent_name="researcher",
+            task="Find info about X",
+            workspace_task_id="task-123",
+        )
+        assert callback.await_args.kwargs["workspace_task_id"] == "task-123"
+
+    async def test_execute_workspace_authority_requires_workspace_task_id(self, tool_ctx):
+        callback = self._make_callback("Research findings: ...")
+        self._configure(callback)
+        tool_ctx.runtime_context = {
+            "task_authority": "workspace",
+            "workspace_id": "ws-1",
+            "root_goal_task_id": "root-1",
+        }
+        result = await delegate_subagent_tool.execute(
+            tool_ctx,
+            subagent_name="researcher",
+            task="Find info about X",
+        )
+        assert result.is_error is True
+        assert "workspace_task_id" in result.output
+        assert "todoread" in result.output
+        callback.assert_not_awaited()
+
     async def test_execute_callback_without_on_event_called_once(self, tool_ctx):
         called = 0
 
@@ -452,6 +481,26 @@ class TestParallelDelegateSubAgentTool:
         assert "coder" in result.output
         assert "success" in result.output.lower()
         assert callback.call_count == 2
+
+    async def test_execute_parallel_workspace_authority_requires_workspace_task_id(self, tool_ctx):
+        callback = self._make_callback()
+        self._configure(callback)
+        tool_ctx.runtime_context = {
+            "task_authority": "workspace",
+            "workspace_id": "ws-1",
+            "root_goal_task_id": "root-1",
+        }
+        result = await parallel_delegate_subagent_tool.execute(
+            tool_ctx,
+            tasks=[
+                {"subagent_name": "researcher", "task": "Find info"},
+                {"subagent_name": "coder", "task": "Write code", "workspace_task_id": "task-2"},
+            ],
+        )
+        assert result.is_error is True
+        assert "workspace_task_id" in result.output
+        assert "todoread" in result.output
+        assert callback.await_count == 0
 
     async def test_execute_parallel_three_tasks(self, tool_ctx):
         callback = self._make_callback()

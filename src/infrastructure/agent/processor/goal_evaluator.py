@@ -14,6 +14,10 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+    SqlWorkspaceTaskRepository,
+)
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult
@@ -59,10 +63,12 @@ class GoalEvaluator:
         self,
         llm_client: Any | None,  # noqa: ANN401
         tools: dict[str, Any],
+        runtime_context: dict[str, Any] | None = None,
     ) -> None:
         self._llm_client = llm_client
         self._tools = tools
         self._current_message: Message | None = None
+        self._runtime_context = dict(runtime_context or {})
 
     # ------------------------------------------------------------------
     # Public API
@@ -82,6 +88,9 @@ class GoalEvaluator:
         messages: list[dict[str, Any]],
     ) -> GoalCheckResult:
         """Evaluate whether the current goal is complete."""
+        workspace_result = await self._evaluate_workspace_goal()
+        if workspace_result is not None:
+            return workspace_result
         if self.has_task_reader():
             try:
                 tasks = await self._load_session_tasks(session_id, strict=True)
@@ -98,6 +107,9 @@ class GoalEvaluator:
 
     async def evaluate_task_completion_gate(self, session_id: str) -> GoalCheckResult | None:
         """Evaluate only persisted task state for a final completion gate."""
+        workspace_result = await self._evaluate_workspace_goal()
+        if workspace_result is not None:
+            return workspace_result
         if not self.has_task_reader():
             return None
         try:
@@ -179,6 +191,78 @@ class GoalEvaluator:
     # ------------------------------------------------------------------
     # Task-based evaluation
     # ------------------------------------------------------------------
+
+    async def _evaluate_workspace_goal(self) -> GoalCheckResult | None:
+        if self._runtime_context.get("task_authority") != "workspace":
+            return None
+
+        workspace_id = self._runtime_context.get("workspace_id")
+        root_goal_task_id = self._runtime_context.get("root_goal_task_id")
+        if not isinstance(workspace_id, str) or not isinstance(root_goal_task_id, str):
+            marker_result = GoalCheckResult(
+                achieved=False,
+                should_stop=True,
+                reason="Workspace task authority markers are incomplete",
+                source="workspace_tasks",
+            )
+            return marker_result
+
+        async with async_session_factory() as db:
+            task = await SqlWorkspaceTaskRepository(db).find_by_id(root_goal_task_id)
+
+        if task is None or task.workspace_id != workspace_id:
+            return GoalCheckResult(
+                achieved=False,
+                should_stop=True,
+                reason="Workspace root goal task not found",
+                source="workspace_tasks",
+            )
+
+        remediation_status = task.metadata.get("remediation_status")
+        remediation_summary = str(task.metadata.get("remediation_summary", "")).strip()
+
+        result: GoalCheckResult
+        if remediation_status == "replan_required":
+            result = GoalCheckResult(
+                achieved=False,
+                should_stop=True,
+                reason=remediation_summary or "Workspace root goal requires replanning",
+                source="workspace_tasks",
+            )
+        elif task.status.value != "done":
+            if remediation_status == "ready_for_completion":
+                result = GoalCheckResult(
+                    achieved=False,
+                    should_stop=False,
+                    reason=(
+                        remediation_summary
+                        or "Workspace root goal is ready for completion evidence"
+                    ),
+                    source="workspace_tasks",
+                )
+            else:
+                result = GoalCheckResult(
+                    achieved=False,
+                    should_stop=False,
+                    reason="Workspace root goal task is not complete",
+                    source="workspace_tasks",
+                )
+        elif "goal_evidence" not in task.metadata:
+            result = GoalCheckResult(
+                achieved=False,
+                should_stop=True,
+                reason="Workspace root goal task is missing goal_evidence",
+                source="workspace_tasks",
+            )
+        else:
+            result = GoalCheckResult(
+                achieved=True,
+                should_stop=False,
+                reason="Workspace root goal task completed with on-ledger evidence",
+                source="workspace_tasks",
+            )
+
+        return result
 
     async def _load_session_tasks(
         self, session_id: str, *, strict: bool = False

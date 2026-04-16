@@ -16,6 +16,7 @@ from src.infrastructure.agent.processor.processor import (
     SessionProcessor,
     ToolDefinition,
 )
+from src.infrastructure.agent.tools.result import ToolResult
 
 
 class MockTool:
@@ -623,3 +624,365 @@ class TestProcessorPendingToolEvents:
         )
         assert toolset_changed_event["data"]["refresh_status"] == "skipped"
         assert "refreshed_tool_count" not in toolset_changed_event["data"]
+
+
+@pytest.mark.unit
+class TestWorkspaceDelegationRecoveryHint:
+    @pytest.mark.asyncio
+    async def test_delegate_guardrail_error_queues_recovery_hint(self):
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+
+        async def mock_execute(**kwargs):
+            return ToolResult(
+                output=(
+                    "Error: workspace-authority delegation requires workspace_task_id. "
+                    "Call todoread first, select the target child task's workspace_task_id, "
+                    "then retry delegate_to_subagent."
+                ),
+                is_error=True,
+            )
+
+        delegate_tool = ToolDefinition(
+            name="delegate_to_subagent",
+            description="Delegate to subagent",
+            parameters={},
+            execute=mock_execute,
+        )
+        processor.tools["delegate_to_subagent"] = delegate_tool
+
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        processor._pending_tool_calls["call-delegate-guardrail"] = ToolPart(
+            call_id="call-delegate-guardrail",
+            tool="delegate_to_subagent",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        async for _ in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-delegate-guardrail",
+            tool_name="delegate_to_subagent",
+            arguments={"subagent_name": "worker", "task": "do work"},
+        ):
+            pass
+
+        assert (
+            SessionProcessor._WORKSPACE_DELEGATION_RECOVERY_HINT
+            in processor._response_instructions
+        )
+
+    @pytest.mark.asyncio
+    async def test_todoread_success_clears_workspace_recovery_hint(self):
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+        processor._response_instructions = [
+            SessionProcessor._WORKSPACE_DELEGATION_RECOVERY_HINT,
+            f"{SessionProcessor._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX} stale snapshot",
+            f"{SessionProcessor._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX} stale retry",
+            "keep me",
+        ]
+
+        async def mock_execute(**kwargs):
+            return ToolResult(
+                output='{"todos": []}',
+                is_error=False,
+            )
+
+        todoread_tool = ToolDefinition(
+            name="todoread",
+            description="Read todos",
+            parameters={},
+            execute=mock_execute,
+        )
+        processor.tools["todoread"] = todoread_tool
+
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        processor._pending_tool_calls["call-todoread-success"] = ToolPart(
+            call_id="call-todoread-success",
+            tool="todoread",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        async for _ in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-todoread-success",
+            tool_name="todoread",
+            arguments={},
+        ):
+            pass
+
+        assert SessionProcessor._WORKSPACE_DELEGATION_RECOVERY_HINT not in processor._response_instructions
+        assert not any(
+            item.startswith(SessionProcessor._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX)
+            for item in processor._response_instructions
+        )
+        assert not any(
+            item.startswith(SessionProcessor._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX)
+            for item in processor._response_instructions
+        )
+        assert processor._response_instructions == ["keep me"]
+
+    @pytest.mark.asyncio
+    async def test_delegate_guardrail_error_injects_todoread_snapshot_hint(self):
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+
+        async def delegate_execute(**kwargs):
+            return ToolResult(
+                output=(
+                    "Error: workspace-authority delegation requires workspace_task_id. "
+                    "Call todoread first, select the target child task's workspace_task_id, "
+                    "then retry delegate_to_subagent."
+                ),
+                is_error=True,
+            )
+
+        async def todoread_execute(**kwargs):
+            return ToolResult(
+                output=(
+                    '{"todos":['
+                    '{"id":"t1","workspace_task_id":"wt-1","content":"Task A","status":"pending"},'
+                    '{"id":"t2","workspace_task_id":"wt-2","content":"Task B","status":"pending"}'
+                    ']}'
+                ),
+                is_error=False,
+            )
+
+        processor.tools["delegate_to_subagent"] = ToolDefinition(
+            name="delegate_to_subagent",
+            description="Delegate to subagent",
+            parameters={},
+            execute=delegate_execute,
+        )
+        processor.tools["todoread"] = ToolDefinition(
+            name="todoread",
+            description="Read todos",
+            parameters={},
+            execute=todoread_execute,
+        )
+
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        processor._pending_tool_calls["call-delegate-guardrail-snapshot"] = ToolPart(
+            call_id="call-delegate-guardrail-snapshot",
+            tool="delegate_to_subagent",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        async for _ in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-delegate-guardrail-snapshot",
+            tool_name="delegate_to_subagent",
+            arguments={"subagent_name": "worker", "task": "do work"},
+        ):
+            pass
+
+        assert any(
+            item.startswith(SessionProcessor._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX)
+            and "wt-1" in item
+            and "Available tasks" in item
+            for item in processor._response_instructions
+        )
+        assert not any(
+            item.startswith(SessionProcessor._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX)
+            for item in processor._response_instructions
+        )
+
+    @pytest.mark.asyncio
+    async def test_delegate_guardrail_error_auto_retries_single_candidate(self):
+        from src.domain.events.agent_events import AgentActEvent
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+
+        call_count = 0
+
+        async def delegate_execute(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ToolResult(
+                    output=(
+                        "Error: workspace-authority delegation requires workspace_task_id. "
+                        "Call todoread first, select the target child task's workspace_task_id, "
+                        "then retry delegate_to_subagent."
+                    ),
+                    is_error=True,
+                )
+            assert kwargs["workspace_task_id"] == "wt-1"
+            return ToolResult(output="delegated successfully", is_error=False)
+
+        async def todoread_execute(**kwargs):
+            return ToolResult(
+                output='{"todos":[{"id":"t1","workspace_task_id":"wt-1","content":"Task A","status":"pending"}]}',
+                is_error=False,
+            )
+
+        processor.tools["delegate_to_subagent"] = ToolDefinition(
+            name="delegate_to_subagent",
+            description="Delegate to subagent",
+            parameters={},
+            execute=delegate_execute,
+        )
+        processor.tools["todoread"] = ToolDefinition(
+            name="todoread",
+            description="Read todos",
+            parameters={},
+            execute=todoread_execute,
+        )
+
+        processor._pending_tool_calls["call-delegate-auto-retry"] = ToolPart(
+            call_id="call-delegate-auto-retry",
+            tool="delegate_to_subagent",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        events = []
+        async for event in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-delegate-auto-retry",
+            tool_name="delegate_to_subagent",
+            arguments={"subagent_name": "worker", "task": "do work"},
+        ):
+            events.append(event)
+
+        retry_act = next(
+            event
+            for event in events
+            if isinstance(event, AgentActEvent)
+            and event.call_id == "call-delegate-auto-retry-workspace-retry"
+        )
+        assert retry_act.tool_input["workspace_task_id"] == "wt-1"
+        assert call_count == 2
+
+    def test_workspace_todoread_snapshot_prefers_single_active_candidate(self):
+        output = (
+            '{"todos":['
+            '{"id":"t1","workspace_task_id":"wt-1","content":"Task A","status":"pending"},'
+            '{"id":"t2","workspace_task_id":"wt-2","content":"Task B","status":"completed"}'
+            "]}"
+        )
+
+        summary = SessionProcessor._summarize_workspace_todoread_output(output)
+
+        assert summary is not None
+        assert "Suggested workspace_task_id=wt-1" in summary
+        assert "Available tasks: wt-1:Task A:pending" in summary
+
+    def test_build_parallel_workspace_delegation_retry_hint(self):
+        hint = SessionProcessor._build_workspace_delegation_retry_hint(
+            tool_name="parallel_delegate_subagents",
+            tool_input={
+                "tasks": [
+                    {"subagent_name": "worker-a", "task": "done", "workspace_task_id": "wt-0"},
+                    {"subagent_name": "worker-b", "task": "next task"},
+                ]
+            },
+            workspace_task_id="wt-9",
+        )
+
+        assert hint is not None
+        assert "parallel_delegate_subagents" in hint
+        assert "workspace_task_id='wt-9'" in hint
+
+    def test_build_parallel_workspace_delegation_retry_arguments(self):
+        args = SessionProcessor._build_workspace_delegation_retry_arguments(
+            tool_name="parallel_delegate_subagents",
+            tool_input={
+                "tasks": [
+                    {"subagent_name": "worker-a", "task": "done", "workspace_task_id": "wt-0"},
+                    {"subagent_name": "worker-b", "task": "next task"},
+                ]
+            },
+            workspace_task_id="wt-9",
+        )
+
+        assert args == {
+            "tasks": [
+                {"subagent_name": "worker-a", "task": "done", "workspace_task_id": "wt-0"},
+                {"subagent_name": "worker-b", "task": "next task", "workspace_task_id": "wt-9"},
+            ]
+        }
+
+    @pytest.mark.asyncio
+    async def test_parallel_delegate_guardrail_error_auto_retries_single_missing_candidate(self):
+        from src.domain.events.agent_events import AgentActEvent
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+
+        call_count = 0
+
+        async def parallel_execute(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ToolResult(
+                    output=(
+                        "Error: workspace-authority delegation requires workspace_task_id. "
+                        "Call todoread first, select the target child task's workspace_task_id, "
+                        "then retry delegate_to_subagent."
+                    ),
+                    is_error=True,
+                )
+            tasks = kwargs["tasks"]
+            assert tasks[1]["workspace_task_id"] == "wt-1"
+            return ToolResult(output="parallel delegated successfully", is_error=False)
+
+        async def todoread_execute(**kwargs):
+            return ToolResult(
+                output='{"todos":[{"id":"t1","workspace_task_id":"wt-1","content":"Task A","status":"pending"}]}',
+                is_error=False,
+            )
+
+        processor.tools["parallel_delegate_subagents"] = ToolDefinition(
+            name="parallel_delegate_subagents",
+            description="Parallel delegate to subagents",
+            parameters={},
+            execute=parallel_execute,
+        )
+        processor.tools["todoread"] = ToolDefinition(
+            name="todoread",
+            description="Read todos",
+            parameters={},
+            execute=todoread_execute,
+        )
+
+        processor._pending_tool_calls["call-parallel-auto-retry"] = ToolPart(
+            call_id="call-parallel-auto-retry",
+            tool="parallel_delegate_subagents",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        events = []
+        async for event in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-parallel-auto-retry",
+            tool_name="parallel_delegate_subagents",
+            arguments={
+                "tasks": [
+                    {"subagent_name": "worker-a", "task": "done", "workspace_task_id": "wt-0"},
+                    {"subagent_name": "worker-b", "task": "do work"},
+                ]
+            },
+        ):
+            events.append(event)
+
+        retry_act = next(
+            event
+            for event in events
+            if isinstance(event, AgentActEvent)
+            and event.call_id == "call-parallel-auto-retry-workspace-retry"
+        )
+        assert retry_act.tool_name == "parallel_delegate_subagents"
+        assert retry_act.tool_input["tasks"][1]["workspace_task_id"] == "wt-1"
+        assert call_count == 2

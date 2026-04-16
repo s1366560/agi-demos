@@ -235,8 +235,10 @@ class SubAgentToolBuilder:
         async def _nested_delegate_callback(
             subagent_name: str,
             task: str,
+            workspace_task_id: str | None = None,
             on_event: Callable[[dict[str, Any]], None] | None = None,
         ) -> str:
+            del workspace_task_id
             target = nested_map.get(subagent_name)
             if not target:
                 return f"SubAgent '{subagent_name}' not found"

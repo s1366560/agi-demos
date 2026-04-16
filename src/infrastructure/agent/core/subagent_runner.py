@@ -839,6 +839,13 @@ class SubAgentSessionRunner:
             conversation_id,
             run_id,
         )
+        if final_run is not None:
+            await self._maybe_apply_workspace_task_report_from_run(
+                final_run=final_run,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                subagent=subagent,
+            )
         await self.emit_subagent_lifecycle_hook(
             {
                 "type": "subagent_ended",
@@ -856,6 +863,69 @@ class SubAgentSessionRunner:
             }
         )
         self.deps.subagent_session_tasks.pop(run_id, None)
+
+    async def _maybe_apply_workspace_task_report_from_run(
+        self,
+        *,
+        final_run: Any,
+        tenant_id: str,
+        project_id: str,
+        subagent: SubAgent,
+    ) -> None:
+        metadata = final_run.metadata if isinstance(final_run.metadata, dict) else {}
+        workspace_id = metadata.get("workspace_id")
+        root_goal_task_id = metadata.get("root_goal_task_id")
+        workspace_task_id = metadata.get("workspace_task_id")
+        actor_user_id = metadata.get("actor_user_id")
+        leader_agent_id = metadata.get("leader_agent_id")
+        if not all(isinstance(value, str) and value for value in (workspace_id, root_goal_task_id, workspace_task_id, actor_user_id)):
+            return
+        workspace_id_str = cast("str", workspace_id)
+        root_goal_task_id_str = cast("str", root_goal_task_id)
+        workspace_task_id_str = cast("str", workspace_task_id)
+        actor_user_id_str = cast("str", actor_user_id)
+
+        from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+            apply_workspace_worker_report,
+        )
+
+        status_value = getattr(final_run.status, "value", str(final_run.status))
+        report_type = "completed"
+        if status_value in {"failed", "timed_out", "killed", "cancelled"}:
+            report_type = "blocked"
+
+        summary = final_run.summary or final_run.error or f"SubAgent {subagent.name} finished"
+        artifacts_raw = metadata.get("artifacts")
+        artifacts = (
+            [str(item) for item in artifacts_raw if item]
+            if isinstance(artifacts_raw, list)
+            else None
+        )
+        try:
+            await apply_workspace_worker_report(
+                workspace_id=workspace_id_str,
+                root_goal_task_id=root_goal_task_id_str,
+                task_id=workspace_task_id_str,
+                actor_user_id=actor_user_id_str,
+                worker_agent_id=None,
+                report_type=report_type,
+                summary=summary,
+                artifacts=artifacts,
+                leader_agent_id=(leader_agent_id if isinstance(leader_agent_id, str) else None),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to apply workspace task report from subagent run",
+                extra={
+                    "conversation_id": final_run.conversation_id,
+                    "run_id": final_run.run_id,
+                    "workspace_id": workspace_id,
+                    "task_id": workspace_task_id,
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                },
+                exc_info=True,
+            )
 
     async def launch_emit_lifecycle_hooks(
         self,
@@ -1038,6 +1108,7 @@ class SubAgentSessionRunner:
         spawn_mode: str = "run",
         thread_requested: bool = False,
         cleanup: str = "keep",
+        run_metadata: dict[str, str] | None = None,
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
         if run_id in self.deps.subagent_session_tasks:
@@ -1065,6 +1136,20 @@ class SubAgentSessionRunner:
             )
             if rejected:
                 return
+
+        if run_metadata:
+            try:
+                self.deps.subagent_run_registry.attach_metadata(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    metadata=run_metadata,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to attach initial subagent run metadata",
+                    extra={"conversation_id": conversation_id, "run_id": run_id},
+                    exc_info=True,
+                )
 
         start_gate = asyncio.Event()
 

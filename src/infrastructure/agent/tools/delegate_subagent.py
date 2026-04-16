@@ -119,6 +119,13 @@ def configure_delegate_subagent(
                     "Include all relevant context the SubAgent needs."
                 ),
             },
+            "workspace_task_id": {
+                "type": "string",
+                "description": (
+                    "Optional explicit workspace execution task ID. "
+                    "Use when delegating a specific workspace child task."
+                ),
+            },
         },
         "required": ["subagent_name", "task"],
     },
@@ -131,6 +138,7 @@ async def delegate_subagent_tool(
     *,
     subagent_name: str = "",
     task: str = "",
+    workspace_task_id: str | None = None,
 ) -> ToolResult:
     """Delegate a task to a specialized SubAgent."""
     if _delegate_execute_callback is None:
@@ -142,6 +150,12 @@ async def delegate_subagent_tool(
     error = _validate_delegate_inputs(subagent_name, task)
     if error:
         return ToolResult(output=error, is_error=True)
+    workspace_guardrail_error = _validate_workspace_delegation_guardrail(
+        ctx,
+        workspace_task_id=workspace_task_id,
+    )
+    if workspace_guardrail_error:
+        return ToolResult(output=workspace_guardrail_error, is_error=True)
 
     started_at = time.time()
     run_id = await _register_single_run(ctx, subagent_name, task)
@@ -156,11 +170,13 @@ async def delegate_subagent_tool(
 
     try:
         if _supports_on_event_arg(callback):
-            result = await callback(
-                subagent_name, task, on_event=buffered_events.append
-            )
+            callback_kwargs: dict[str, Any] = {"on_event": buffered_events.append}
+            if workspace_task_id:
+                callback_kwargs["workspace_task_id"] = workspace_task_id
+            result = await callback(subagent_name, task, **callback_kwargs)
         else:
-            result = await callback(subagent_name, task)
+            callback_kwargs = {"workspace_task_id": workspace_task_id} if workspace_task_id else {}
+            result = await callback(subagent_name, task, **callback_kwargs)
         for ev in buffered_events:
             await ctx.emit(ev)
         await _finalize_success(ctx, run_id, result, started_at)
@@ -202,6 +218,10 @@ async def delegate_subagent_tool(
                             "type": "string",
                             "description": "Task description for this SubAgent.",
                         },
+                        "workspace_task_id": {
+                            "type": "string",
+                            "description": "Optional explicit workspace execution task ID.",
+                        },
                     },
                     "required": ["subagent_name", "task"],
                 },
@@ -229,6 +249,13 @@ async def parallel_delegate_subagent_tool(
     parsed_tasks, error = _parse_tasks(tasks)
     if error:
         return ToolResult(output=error, is_error=True)
+    for item in parsed_tasks:
+        workspace_guardrail_error = _validate_workspace_delegation_guardrail(
+            ctx,
+            workspace_task_id=item.get("workspace_task_id"),
+        )
+        if workspace_guardrail_error:
+            return ToolResult(output=workspace_guardrail_error, is_error=True)
 
     run_ids = await _register_parallel_runs_new(ctx, parsed_tasks)
     if isinstance(run_ids, str):
@@ -262,6 +289,23 @@ def _validate_delegate_inputs(subagent_name: str, task: str) -> str | None:
     if not task:
         return "Error: task description is required"
     return None
+
+
+def _validate_workspace_delegation_guardrail(
+    ctx: ToolContext,
+    *,
+    workspace_task_id: str | None = None,
+) -> str | None:
+    runtime_context = ctx.runtime_context if isinstance(ctx.runtime_context, dict) else {}
+    if runtime_context.get("task_authority") != "workspace":
+        return None
+    if isinstance(workspace_task_id, str) and workspace_task_id.strip():
+        return None
+    return (
+        "Error: workspace-authority delegation requires workspace_task_id. "
+        "Call todoread first, select the target child task's workspace_task_id, "
+        "then retry delegate_to_subagent."
+    )
 
 
 async def _register_single_run(
@@ -465,9 +509,15 @@ async def _run_single_parallel_task(
     buffered_events: list[dict[str, Any]] = []
     try:
         if supports_event:
-            result = await callback(name, task_desc, on_event=buffered_events.append)
+            callback_kwargs: dict[str, Any] = {"on_event": buffered_events.append}
+            workspace_task_id = item.get("workspace_task_id")
+            if workspace_task_id:
+                callback_kwargs["workspace_task_id"] = workspace_task_id
+            result = await callback(name, task_desc, **callback_kwargs)
         else:
-            result = await callback(name, task_desc)
+            workspace_task_id = item.get("workspace_task_id")
+            callback_kwargs = {"workspace_task_id": workspace_task_id} if workspace_task_id else {}
+            result = await callback(name, task_desc, **callback_kwargs)
         for ev in buffered_events:
             await ctx.emit(ev)
         await _finalize_success(ctx, run_ids.get(index), result, subtask_start)

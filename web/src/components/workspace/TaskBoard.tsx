@@ -24,6 +24,13 @@ interface TaskBoardProps {
   workspaceId: string;
 }
 
+interface RootGoalDisplayState {
+  isRootGoal: boolean;
+  goalHealth: string;
+  remediationStatus: string;
+  verificationGrade: string;
+}
+
 const PRIORITY_TONES: Record<string, string> = {
   P1: 'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
   P2: 'border-caution-border bg-caution-bg text-status-text-caution dark:border-caution-border-dark dark:bg-caution-bg-dark dark:text-status-text-caution-dark',
@@ -36,6 +43,26 @@ const PRIORITY_RANK: Record<string, number> = {
   P2: 3,
   P3: 2,
   P4: 1,
+};
+
+const GOAL_HEALTH_TONES: Record<string, string> = {
+  healthy:
+    'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
+  at_risk:
+    'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
+  blocked:
+    'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
+  achieved:
+    'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark',
+};
+
+const VERIFICATION_GRADE_TONES: Record<string, string> = {
+  pass:
+    'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
+  warn:
+    'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
+  fail:
+    'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
 };
 
 const EFFORT_OPTIONS = [
@@ -89,6 +116,30 @@ const COLUMN_CONFIG: {
     fallback: 'Blocked',
   },
 ];
+
+function getRootGoalDisplayState(metadata: Record<string, unknown> | undefined): RootGoalDisplayState {
+  const safeMetadata = metadata ?? {};
+  const taskRole = typeof safeMetadata.task_role === 'string' ? safeMetadata.task_role : '';
+  const goalEvidence =
+    safeMetadata.goal_evidence && typeof safeMetadata.goal_evidence === 'object'
+      ? (safeMetadata.goal_evidence as Record<string, unknown>)
+      : null;
+
+  return {
+    isRootGoal: taskRole === 'goal_root',
+    goalHealth: typeof safeMetadata.goal_health === 'string' ? safeMetadata.goal_health : '',
+    remediationStatus:
+      typeof safeMetadata.remediation_status === 'string' ? safeMetadata.remediation_status : '',
+    verificationGrade:
+      goalEvidence && typeof goalEvidence.verification_grade === 'string'
+        ? goalEvidence.verification_grade
+        : '',
+  };
+}
+
+function formatMetadataLabel(value: string): string {
+  return value.replace(/_/g, ' ');
+}
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
   const { t } = useTranslation();
@@ -306,6 +357,8 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                   colTasks.map((task) => {
                     const isDone = task.status === 'done';
                     const isBlocked = task.status === 'blocked';
+                    const { isRootGoal, goalHealth, remediationStatus, verificationGrade } =
+                      getRootGoalDisplayState(task.metadata as Record<string, unknown> | undefined);
                     const priorityTone =
                       PRIORITY_TONES[task.priority || ''] ??
                       'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary';
@@ -328,6 +381,31 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                           {task.estimated_effort && (
                             <span className="rounded-full border border-border-light bg-surface-muted px-2 py-0.5 text-[10px] font-medium text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-secondary">
                               {task.estimated_effort}
+                            </span>
+                          )}
+                          {isRootGoal && (
+                            <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+                              Root goal
+                            </span>
+                          )}
+                          {isRootGoal && goalHealth && (
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                GOAL_HEALTH_TONES[goalHealth] ??
+                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                              }`}
+                            >
+                              {goalHealth.replace('_', ' ')}
+                            </span>
+                          )}
+                          {isRootGoal && verificationGrade && (
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                VERIFICATION_GRADE_TONES[verificationGrade] ??
+                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                              }`}
+                            >
+                              Evidence {verificationGrade}
                             </span>
                           )}
                           {isBlocked && (
@@ -361,6 +439,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                         {isBlocked && task.blocker_reason && (
                           <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-status-text-error dark:text-status-text-error-dark">
                             {task.blocker_reason}
+                          </p>
+                        )}
+
+                        {isRootGoal && remediationStatus && (
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
+                            {formatMetadataLabel(remediationStatus)}
                           </p>
                         )}
 

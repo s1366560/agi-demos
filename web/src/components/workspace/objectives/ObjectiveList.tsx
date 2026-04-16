@@ -13,6 +13,7 @@ export interface ObjectiveListProps {
   objectives: CyberObjective[];
   onEdit?: ((objective: CyberObjective) => void) | undefined;
   onDelete?: ((objectiveId: string) => void) | undefined;
+  onProject?: ((objectiveId: string) => void) | undefined;
   onCreate?: (() => void) | undefined;
   loading?: boolean | undefined;
 }
@@ -21,6 +22,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
   objectives,
   onEdit,
   onDelete,
+  onProject,
   onCreate,
   loading = false,
 }) => {
@@ -98,7 +100,12 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
         <div className="space-y-2">
           {topLevel.map((parent) => (
             <div key={parent.id} className="space-y-2">
-              <ObjectiveCard objective={parent} onEdit={onEdit} onDelete={onDelete} />
+              <ObjectiveCard
+                objective={parent}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onProject={onProject}
+              />
 
               {childrenMap.has(parent.id) && (
                 <div className="ml-4 space-y-2 border-l-2 border-border-light pl-3 dark:border-border-dark">
@@ -108,6 +115,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
                       objective={child}
                       onEdit={onEdit}
                       onDelete={onDelete}
+                      onProject={onProject}
                     />
                   ))}
                 </div>

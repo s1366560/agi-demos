@@ -10,6 +10,7 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceMember,
   WorkspaceTask,
+  WorkspaceGoalCandidate,
   WorkspaceUpdateRequest,
 } from '@/types/workspace';
 
@@ -56,6 +57,7 @@ const blackboardBase = (tenantId: string, projectId: string, workspaceId: string
 const taskBase = (workspaceId: string) => `/workspaces/${workspaceId}/tasks`;
 
 const topologyBase = (workspaceId: string) => `/workspaces/${workspaceId}/topology`;
+const goalCandidateBase = (workspaceId: string) => `/workspaces/${workspaceId}/goal-candidates`;
 
 function normalizeListResponse<T>(
   payload: unknown,
@@ -405,7 +407,6 @@ export const workspaceTaskService = {
         | 'description'
         | 'status'
         | 'assignee_user_id'
-        | 'assignee_agent_id'
         | 'priority'
         | 'estimated_effort'
         | 'blocker_reason'
@@ -429,6 +430,21 @@ export const workspaceTaskService = {
 
   unassignAgent: async (workspaceId: string, taskId: string): Promise<WorkspaceTask> => {
     const response = await apiFetch.post(`${taskBase(workspaceId)}/${taskId}/unassign-agent`);
+    return response.json() as Promise<WorkspaceTask>;
+  },
+};
+
+export const workspaceGoalCandidateService = {
+  list: async (workspaceId: string): Promise<WorkspaceGoalCandidate[]> => {
+    const response = await apiFetch.get(goalCandidateBase(workspaceId));
+    return response.json() as Promise<WorkspaceGoalCandidate[]>;
+  },
+
+  materialize: async (
+    workspaceId: string,
+    candidate: WorkspaceGoalCandidate
+  ): Promise<WorkspaceTask> => {
+    const response = await apiFetch.post(`${goalCandidateBase(workspaceId)}/materialize`, candidate);
     return response.json() as Promise<WorkspaceTask>;
   },
 };
@@ -549,6 +565,18 @@ export const workspaceObjectiveService = {
     await apiFetch.delete(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}`
     );
+  },
+
+  projectToTask: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    objectiveId: string
+  ): Promise<WorkspaceTask> => {
+    const response = await apiFetch.post(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}/project-to-task`
+    );
+    return response.json() as Promise<WorkspaceTask>;
   },
 };
 

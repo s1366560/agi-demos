@@ -1963,6 +1963,9 @@ class ReActAgent:
         tenant_id: str,
         conversation_id: str,
         abort_signal: asyncio.Event | None,
+        workspace_root_task: Any | None = None,
+        leader_agent_id: str | None = None,
+        actor_user_id: str | None = None,
     ) -> list[ToolDefinition]:
         """Inject SubAgent-as-Tool delegation tools when enabled.
 
@@ -1981,20 +1984,92 @@ class ReActAgent:
             for sa in enabled_subagents
         }
 
+        async def _prepare_workspace_delegation(
+            *,
+            subagent_name: str,
+            subagent_id: str,
+            task: str,
+            workspace_task_id: str | None = None,
+        ) -> dict[str, str] | None:
+            if workspace_root_task is None or not actor_user_id:
+                return None
+            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+                prepare_workspace_subagent_delegation,
+            )
+
+            return await prepare_workspace_subagent_delegation(
+                workspace_id=getattr(workspace_root_task, "workspace_id", project_id),
+                root_goal_task_id=getattr(workspace_root_task, "id", ""),
+                actor_user_id=actor_user_id,
+                delegated_task_text=task,
+                subagent_name=subagent_name,
+                subagent_id=subagent_id,
+                leader_agent_id=leader_agent_id,
+                workspace_task_id=workspace_task_id,
+            )
+
+        def _decorate_workspace_delegate_task(
+            task: str,
+            task_binding: dict[str, str] | None,
+        ) -> str:
+            if not task_binding:
+                return task
+            return (
+                "[workspace-task-binding]\n"
+                f"workspace_task_id={task_binding['workspace_task_id']}\n"
+                f"root_goal_task_id={task_binding['root_goal_task_id']}\n"
+                f"workspace_id={task_binding['workspace_id']}\n"
+                "[/workspace-task-binding]\n\n"
+                f"{task}"
+            )
+
+        async def _finalize_workspace_delegation(
+            *,
+            task_binding: dict[str, str] | None,
+            report_type: str,
+            summary: str,
+            artifacts: list[str] | None = None,
+        ) -> None:
+            if not task_binding or not actor_user_id:
+                return
+            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+                apply_workspace_worker_report,
+            )
+
+            await apply_workspace_worker_report(
+                workspace_id=task_binding["workspace_id"],
+                root_goal_task_id=task_binding["root_goal_task_id"],
+                task_id=task_binding["workspace_task_id"],
+                actor_user_id=actor_user_id,
+                worker_agent_id=None,
+                report_type=report_type,
+                summary=summary,
+                artifacts=artifacts,
+                leader_agent_id=leader_agent_id,
+            )
+
         # Create delegation callback that captures stream-scoped context
         async def _delegate_callback(
             subagent_name: str,
             task: str,
+            workspace_task_id: str | None = None,
             on_event: Callable[[dict[str, Any]], None] | None = None,
         ) -> str:
             target = subagent_map.get(subagent_name)
             if not target:
                 return f"SubAgent '{subagent_name}' not found"
 
+            task_binding = await _prepare_workspace_delegation(
+                subagent_name=subagent_name,
+                subagent_id=target.id,
+                task=task,
+                workspace_task_id=workspace_task_id,
+            )
+            delegated_task = _decorate_workspace_delegate_task(task, task_binding)
             events = []
             async for evt in self._execute_subagent(
                 subagent=target,
-                user_message=task,
+                user_message=delegated_task,
                 conversation_context=conversation_context,
                 project_id=project_id,
                 tenant_id=tenant_id,
@@ -2018,13 +2093,28 @@ class ReActAgent:
                 if sa_result:
                     summary = sa_result.get("summary", content)
                     tokens = sa_result.get("tokens_used", 0)
+                    await _finalize_workspace_delegation(
+                        task_binding=task_binding,
+                        report_type=("completed" if sa_result.get("success", True) else "blocked"),
+                        summary=summary or content or f"SubAgent {subagent_name} finished",
+                    )
                     return (
                         f"[SubAgent '{subagent_name}' completed]\n"
                         f"Result: {summary}\n"
                         f"Tokens used: {tokens}"
                     )
+                await _finalize_workspace_delegation(
+                    task_binding=task_binding,
+                    report_type="completed",
+                    summary=content or f"SubAgent {subagent_name} completed",
+                )
                 return content or "SubAgent completed with no output"
 
+            await _finalize_workspace_delegation(
+                task_binding=task_binding,
+                report_type="blocked",
+                summary=f"SubAgent {subagent_name} execution completed but no result returned",
+            )
             return "SubAgent execution completed but no result returned"
 
         async def _spawn_callback(
@@ -2036,10 +2126,17 @@ class ReActAgent:
             target = subagent_map.get(subagent_name)
             if not target:
                 raise ValueError(f"SubAgent '{subagent_name}' not found")
+            task_binding = await _prepare_workspace_delegation(
+                subagent_name=subagent_name,
+                subagent_id=target.id,
+                task=task,
+                workspace_task_id=(str(spawn_options.get("workspace_task_id") or "").strip() or None),
+            )
+            delegated_task = _decorate_workspace_delegate_task(task, task_binding)
             await self._launch_subagent_session(
                 run_id=run_id,
                 subagent=target,
-                user_message=task,
+                user_message=delegated_task,
                 conversation_id=conversation_id,
                 conversation_context=conversation_context,
                 project_id=project_id,
@@ -2050,6 +2147,7 @@ class ReActAgent:
                 spawn_mode=str(spawn_options.get("spawn_mode") or "run"),
                 thread_requested=bool(spawn_options.get("thread_requested")),
                 cleanup=str(spawn_options.get("cleanup") or "keep"),
+                run_metadata=task_binding,
             )
             return run_id
 
@@ -2498,6 +2596,25 @@ class ReActAgent:
             project_id=project_id,
             selected_agent_id=selected_agent.id,
         )
+        if project_id and tenant_id and user_id:
+            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+                maybe_materialize_workspace_goal_candidate,
+                should_activate_workspace_authority,
+            )
+
+            if should_activate_workspace_authority(processed_user_message):
+                workspace_root_task = await maybe_materialize_workspace_goal_candidate(
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    leader_agent_id=selected_agent.id,
+                    task_decomposer=self._task_decomposer,
+                    user_query=processed_user_message,
+                )
+            else:
+                workspace_root_task = None
+        else:
+            workspace_root_task = None
         runtime_profile = self._build_runtime_profile(
             tenant_id=tenant_id,
             tenant_agent_config_data=tenant_agent_config_data,
@@ -2695,6 +2812,9 @@ class ReActAgent:
             tenant_id=tenant_id,
             conversation_id=conversation_id,
             abort_signal=abort_signal,
+            workspace_root_task=workspace_root_task,
+            leader_agent_id=selected_agent.id,
+            actor_user_id=user_id,
         )
 
         # Phase 12: Processor creation
@@ -2716,6 +2836,13 @@ class ReActAgent:
             "route_id": selection_context.metadata.get("route_id"),
             "trace_id": selection_context.metadata.get("trace_id"),
         }
+        if workspace_root_task is not None:
+            config.runtime_context = {
+                **dict(config.runtime_context),
+                "workspace_id": getattr(workspace_root_task, "workspace_id", project_id),
+                "root_goal_task_id": getattr(workspace_root_task, "id", ""),
+                "task_authority": "workspace",
+            }
         # Set session_id for announce message polling (P0.5)
         config.session_id = conversation_id
         # Pass forced skill context to processor for loop reinforcement (Fix 4)
@@ -3269,11 +3396,13 @@ class ReActAgent:
             started_at=started_at,
         )
 
-    async def _runner_finalize(
+    async def _runner_finalize(  # noqa: PLR0913
         self,
         *,
         conversation_id: str,
         run_id: str,
+        project_id: str,
+        tenant_id: str,
         subagent: SubAgent,
         cancelled_by_control: bool,
         summary: str,
@@ -3289,6 +3418,8 @@ class ReActAgent:
         await self._session_runner.runner_finalize(
             conversation_id=conversation_id,
             run_id=run_id,
+            project_id=project_id,
+            tenant_id=tenant_id,
             subagent=subagent,
             cancelled_by_control=cancelled_by_control,
             summary=summary,
@@ -3306,6 +3437,8 @@ class ReActAgent:
         *,
         conversation_id: str,
         run_id: str,
+        project_id: str,
+        tenant_id: str,
         subagent: SubAgent,
         normalized_spawn_mode: str,
         thread_requested: bool,
@@ -3317,6 +3450,8 @@ class ReActAgent:
         await self._session_runner.launch_emit_lifecycle_hooks(
             conversation_id=conversation_id,
             run_id=run_id,
+            project_id=project_id,
+            tenant_id=tenant_id,
             subagent=subagent,
             normalized_spawn_mode=normalized_spawn_mode,
             thread_requested=thread_requested,
@@ -3381,6 +3516,7 @@ class ReActAgent:
         spawn_mode: str = "run",
         thread_requested: bool = False,
         cleanup: str = "keep",
+        run_metadata: dict[str, str] | None = None,
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
         await self._session_runner.launch_subagent_session(
@@ -3397,6 +3533,7 @@ class ReActAgent:
             spawn_mode=spawn_mode,
             thread_requested=thread_requested,
             cleanup=cleanup,
+            run_metadata=run_metadata,
         )
 
     @staticmethod

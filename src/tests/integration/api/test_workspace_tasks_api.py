@@ -13,6 +13,8 @@ from src.application.services.workspace_task_event_publisher import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentDefinitionModel,
+    BlackboardPostModel,
+    CyberObjectiveModel,
     Project,
     Tenant,
     User,
@@ -20,6 +22,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
     WorkspaceAgentModel,
     WorkspaceMemberModel,
+    WorkspaceMessageModel,
     WorkspaceModel,
     WorkspaceTaskModel,
 )
@@ -446,7 +449,15 @@ async def test_assign_agent_emits_full_task_payload_with_workspace_binding(
             "goal_evidence": {
                 "goal_task_id": "root-5",
                 "summary": "proof on ledger",
-            }
+            },
+            "last_mutation_actor": {
+                "action": "assign_agent",
+                "actor_type": "human",
+                "actor_user_id": user.id,
+                "actor_agent_id": agent.id,
+                "workspace_agent_binding_id": binding.id,
+                "reason": "workspace_task.assign_agent",
+            },
         },
         "created_at": response.json()["created_at"],
         "updated_at": response.json()["updated_at"],
@@ -456,3 +467,869 @@ async def test_assign_agent_emits_full_task_payload_with_workspace_binding(
         "completed_at": None,
         "archived_at": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_project_objective_to_root_task(authenticated_async_client, test_db) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-objective@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-objective",
+        name="TenantObjective",
+        slug="tenant-ws-api-objective",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-objective",
+        tenant_id=tenant.id,
+        name="ProjectObjective",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-objective",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Objective",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-objective",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    objective = CyberObjectiveModel(
+        id="obj-api-1",
+        workspace_id=workspace.id,
+        title="Ship rollback checklist",
+        description="Make rollback deterministic",
+        obj_type="objective",
+        progress=0.5,
+        created_by=user.id,
+    )
+    user_tenant = UserTenant(
+        id="ut-api-objective",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-objective",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [user, tenant, project, workspace, membership, objective, user_tenant, user_project]
+    )
+    await test_db.commit()
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant.id}/projects/{project.id}/workspaces/{workspace.id}/objectives/{objective.id}/project-to-task"
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert payload["title"] == objective.title
+    assert payload["metadata"]["task_role"] == "goal_root"
+    assert payload["metadata"]["goal_origin"] == "existing_objective"
+    assert payload["metadata"]["objective_id"] == objective.id
+    assert payload["metadata"]["goal_source_refs"] == [f"objective:{objective.id}"]
+
+
+@pytest.mark.asyncio
+async def test_update_rejects_immutable_human_root_goal_title_change(
+    authenticated_async_client, test_db
+) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-root@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-root",
+        name="TenantRoot",
+        slug="tenant-ws-api-root",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-root",
+        tenant_id=tenant.id,
+        name="ProjectRoot",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-root",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Root",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-root",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    task = WorkspaceTaskModel(
+        id="task-api-root",
+        workspace_id=workspace.id,
+        title="Human goal",
+        description="Keep original wording",
+        created_by=user.id,
+        status="todo",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["task:task-api-root"],
+            "root_goal_policy": {
+                "mutable_by_agent": False,
+                "completion_requires_external_proof": True,
+            },
+        },
+    )
+    user_tenant = UserTenant(
+        id="ut-api-root",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-root",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all([user, tenant, project, workspace, membership, task, user_tenant, user_project])
+    await test_db.commit()
+
+    response = await client.patch(
+        f"/api/v1/workspaces/{workspace.id}/tasks/{task.id}",
+        json={"title": "Mutated human goal"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "immutable root goal title" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_complete_rejects_inferred_root_goal_without_artifact_proof(
+    authenticated_async_client, test_db
+) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-inferred@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-inferred",
+        name="TenantInferred",
+        slug="tenant-ws-api-inferred",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-inferred",
+        tenant_id=tenant.id,
+        name="ProjectInferred",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-inferred",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Inferred",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-inferred",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    task = WorkspaceTaskModel(
+        id="task-api-inferred",
+        workspace_id=workspace.id,
+        title="Prepare rollback checklist",
+        created_by=user.id,
+        status="in_progress",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "agent_inferred",
+            "goal_source_refs": ["message:msg-1"],
+            "goal_evidence_bundle": {
+                "score": 0.85,
+                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "formalized_at": "2026-04-16T03:00:00Z",
+            },
+            "goal_evidence": {
+                "goal_task_id": "task-api-inferred",
+                "goal_text_snapshot": "Prepare rollback checklist",
+                "outcome_status": "achieved",
+                "summary": "Checklist drafted",
+                "artifacts": [],
+                "verifications": ["workspace_file_uploaded"],
+                "generated_by_agent_id": "agent-7",
+                "recorded_at": "2026-04-16T04:10:00Z",
+                "verification_grade": "pass",
+            },
+        },
+    )
+    user_tenant = UserTenant(
+        id="ut-api-inferred",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-inferred",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all([user, tenant, project, workspace, membership, task, user_tenant, user_project])
+    await test_db.commit()
+
+    response = await client.post(f"/api/v1/workspaces/{workspace.id}/tasks/{task.id}/complete")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "proof artifacts before completion" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_patch_to_done_rejects_inferred_root_goal_without_artifact_proof(
+    authenticated_async_client, test_db
+) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-inferred-patch@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-inferred-patch",
+        name="TenantInferredPatch",
+        slug="tenant-ws-api-inferred-patch",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-inferred-patch",
+        tenant_id=tenant.id,
+        name="ProjectInferredPatch",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-inferred-patch",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Inferred Patch",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-inferred-patch",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    task = WorkspaceTaskModel(
+        id="task-api-inferred-patch",
+        workspace_id=workspace.id,
+        title="Prepare rollback checklist",
+        created_by=user.id,
+        status="in_progress",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "agent_inferred",
+            "goal_source_refs": ["message:msg-1"],
+            "goal_evidence_bundle": {
+                "score": 0.85,
+                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "formalized_at": "2026-04-16T03:00:00Z",
+            },
+            "goal_evidence": {
+                "goal_task_id": "task-api-inferred-patch",
+                "goal_text_snapshot": "Prepare rollback checklist",
+                "outcome_status": "achieved",
+                "summary": "Checklist drafted",
+                "artifacts": [],
+                "verifications": ["workspace_file_uploaded"],
+                "generated_by_agent_id": "agent-7",
+                "recorded_at": "2026-04-16T04:10:00Z",
+                "verification_grade": "pass",
+            },
+        },
+    )
+    user_tenant = UserTenant(
+        id="ut-api-inferred-patch",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-inferred-patch",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all([user, tenant, project, workspace, membership, task, user_tenant, user_project])
+    await test_db.commit()
+
+    response = await client.patch(
+        f"/api/v1/workspaces/{workspace.id}/tasks/{task.id}",
+        json={"status": "done"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "proof artifacts before completion" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_project_objective_to_existing_task_requires_membership(
+    authenticated_async_client, test_db
+) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    owner = User(
+        id="550e8400-e29b-41d4-a716-446655440020",
+        email="ws-api-objective-owner@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    outsider = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-objective-outsider@example.com",
+        hashed_password="hash",
+        full_name="Outsider",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-objective-auth",
+        name="TenantObjectiveAuth",
+        slug="tenant-ws-api-objective-auth",
+        description="tenant",
+        owner_id=owner.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-objective-auth",
+        tenant_id=tenant.id,
+        name="ProjectObjectiveAuth",
+        description="project",
+        owner_id=owner.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-objective-auth",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Objective Auth",
+        created_by=owner.id,
+        metadata_json={},
+    )
+    owner_membership = WorkspaceMemberModel(
+        id="wm-api-objective-owner",
+        workspace_id=workspace.id,
+        user_id=owner.id,
+        role="owner",
+        invited_by=owner.id,
+    )
+    objective = CyberObjectiveModel(
+        id="obj-api-auth",
+        workspace_id=workspace.id,
+        title="Ship rollback checklist",
+        description="Make rollback deterministic",
+        obj_type="objective",
+        progress=0.5,
+        created_by=owner.id,
+    )
+    projected_task = WorkspaceTaskModel(
+        id="task-api-objective-auth",
+        workspace_id=workspace.id,
+        title=objective.title,
+        created_by=owner.id,
+        status="todo",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "existing_objective",
+            "goal_source_refs": [f"objective:{objective.id}"],
+            "objective_id": objective.id,
+            "root_goal_policy": {
+                "mutable_by_agent": False,
+                "completion_requires_external_proof": True,
+            },
+        },
+    )
+    owner_tenant = UserTenant(
+        id="ut-api-objective-owner",
+        user_id=owner.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    owner_project = UserProject(
+        id="up-api-objective-owner",
+        user_id=owner.id,
+        project_id=project.id,
+        role="owner",
+    )
+    outsider_tenant = UserTenant(
+        id="ut-api-objective-outsider",
+        user_id=outsider.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    outsider_project = UserProject(
+        id="up-api-objective-outsider",
+        user_id=outsider.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [
+            owner,
+            outsider,
+            tenant,
+            project,
+            workspace,
+            owner_membership,
+            objective,
+            projected_task,
+            owner_tenant,
+            owner_project,
+            outsider_tenant,
+            outsider_project,
+        ]
+    )
+    await test_db.commit()
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant.id}/projects/{project.id}/workspaces/{workspace.id}/objectives/{objective.id}/project-to-task"
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "workspace member" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_list_workspace_goal_candidates(authenticated_async_client, test_db) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-candidates@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-candidates",
+        name="TenantCandidates",
+        slug="tenant-ws-api-candidates",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-candidates",
+        tenant_id=tenant.id,
+        name="ProjectCandidates",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-candidates",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Candidates",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-candidates",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    root_task = WorkspaceTaskModel(
+        id="task-api-candidates",
+        workspace_id=workspace.id,
+        title="Existing goal",
+        created_by=user.id,
+        status="todo",
+        metadata_json={"task_role": "goal_root", "goal_origin": "human_defined"},
+    )
+    objective = CyberObjectiveModel(
+        id="obj-api-candidates",
+        workspace_id=workspace.id,
+        title="Improve resilience",
+        description="Objective description",
+        obj_type="objective",
+        progress=0.2,
+        created_by=user.id,
+    )
+    post = BlackboardPostModel(
+        id="post-api-candidates",
+        workspace_id=workspace.id,
+        author_id=user.id,
+        title="Directive",
+        content="Please prepare rollback checklist",
+        status="open",
+        is_pinned=True,
+    )
+    message = WorkspaceMessageModel(
+        id="msg-api-candidates",
+        workspace_id=workspace.id,
+        sender_id=user.id,
+        sender_type="human",
+        content="Please prepare rollback checklist",
+        mentions_json=[],
+        metadata_json={},
+    )
+    user_tenant = UserTenant(
+        id="ut-api-candidates",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-candidates",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [
+            user,
+            tenant,
+            project,
+            workspace,
+            membership,
+            root_task,
+            objective,
+            post,
+            message,
+            user_tenant,
+            user_project,
+        ]
+    )
+    await test_db.commit()
+
+    response = await client.get(f"/api/v1/workspaces/{workspace.id}/goal-candidates")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    decisions = {item["candidate_text"]: item["decision"] for item in payload}
+    assert decisions["Existing goal"] == "adopt_existing_goal"
+    assert decisions["Improve resilience"] == "adopt_existing_goal"
+    assert decisions["Please prepare rollback checklist"] == "formalize_new_goal"
+
+
+@pytest.mark.asyncio
+async def test_materialize_workspace_goal_candidate(authenticated_async_client, test_db) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-materialize@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-materialize",
+        name="TenantMaterialize",
+        slug="tenant-ws-api-materialize",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-materialize",
+        tenant_id=tenant.id,
+        name="ProjectMaterialize",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-materialize",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Materialize",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-materialize",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    user_tenant = UserTenant(
+        id="ut-api-materialize",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-materialize",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [user, tenant, project, workspace, membership, user_tenant, user_project]
+    )
+    await test_db.commit()
+
+    response = await client.post(
+        f"/api/v1/workspaces/{workspace.id}/goal-candidates/materialize",
+        json={
+            "candidate_id": "cand-1",
+            "candidate_text": "Prepare rollback checklist",
+            "candidate_kind": "inferred",
+            "source_refs": ["message:msg-1"],
+            "evidence_strength": 0.85,
+            "source_breakdown": [
+                {"source_type": "message_signal", "score": 0.85, "ref": "message:msg-1"}
+            ],
+            "freshness": 1.0,
+            "urgency": 0.8,
+            "user_intent_confidence": 0.85,
+            "formalizable": True,
+            "decision": "formalize_new_goal",
+        },
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert payload["title"] == "Prepare rollback checklist"
+    assert payload["metadata"]["task_role"] == "goal_root"
+    assert payload["metadata"]["goal_origin"] == "agent_inferred"
+
+
+@pytest.mark.asyncio
+async def test_execution_task_mutations_reconcile_root_goal_progress(
+    authenticated_async_client, test_db
+) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-root-progress@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-root-progress",
+        name="TenantRootProgress",
+        slug="tenant-ws-api-root-progress",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-root-progress",
+        tenant_id=tenant.id,
+        name="ProjectRootProgress",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-root-progress",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Root Progress",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-root-progress",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    root_task = WorkspaceTaskModel(
+        id="root-api-progress",
+        workspace_id=workspace.id,
+        title="Root goal",
+        created_by=user.id,
+        status="todo",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["task:root-api-progress"],
+            "root_goal_policy": {
+                "mutable_by_agent": False,
+                "completion_requires_external_proof": True,
+            },
+        },
+    )
+    user_tenant = UserTenant(
+        id="ut-api-root-progress",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-root-progress",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+    test_db.add_all(
+        [user, tenant, project, workspace, membership, root_task, user_tenant, user_project]
+    )
+    await test_db.commit()
+
+    create_response = await client.post(
+        f"/api/v1/workspaces/{workspace.id}/tasks",
+        json={
+            "title": "Execution child",
+            "metadata": {
+                "autonomy_schema_version": 1,
+                "task_role": "execution_task",
+                "root_goal_task_id": root_task.id,
+                "lineage_source": "agent",
+            },
+        },
+    )
+
+    assert create_response.status_code == status.HTTP_201_CREATED
+    child_id = create_response.json()["id"]
+
+    refreshed_root = await test_db.get(WorkspaceTaskModel, root_task.id)
+    assert refreshed_root is not None
+    await test_db.refresh(refreshed_root)
+    assert refreshed_root.metadata_json["goal_health"] == "healthy"
+    assert refreshed_root.metadata_json["active_child_task_ids"] == [child_id]
+    assert refreshed_root.metadata_json["remediation_status"] == "none"
+
+    start_response = await client.post(f"/api/v1/workspaces/{workspace.id}/tasks/{child_id}/start")
+    assert start_response.status_code == status.HTTP_200_OK
+
+    await test_db.refresh(refreshed_root)
+    assert "1 in progress" in refreshed_root.metadata_json["goal_progress_summary"]
+    assert refreshed_root.metadata_json["remediation_status"] == "none"
+
+    block_response = await client.post(f"/api/v1/workspaces/{workspace.id}/tasks/{child_id}/block")
+    assert block_response.status_code == status.HTTP_200_OK
+
+    await test_db.refresh(refreshed_root)
+    assert refreshed_root.metadata_json["goal_health"] == "blocked"
+    assert refreshed_root.metadata_json["blocked_reason"] == "Execution child"
+    assert refreshed_root.metadata_json["blocked_child_task_ids"] == [child_id]
+    assert refreshed_root.metadata_json["remediation_status"] == "replan_required"
+    assert "requires replan" in refreshed_root.metadata_json["remediation_summary"]
+
+    complete_response = await client.post(
+        f"/api/v1/workspaces/{workspace.id}/tasks/{child_id}/complete"
+    )
+    assert complete_response.status_code == status.HTTP_200_OK
+
+    await test_db.refresh(refreshed_root)
+    assert refreshed_root.metadata_json["goal_health"] == "achieved"
+    assert refreshed_root.metadata_json["active_child_task_ids"] == []
+    assert refreshed_root.metadata_json["blocked_child_task_ids"] == []
+    assert refreshed_root.metadata_json["remediation_status"] == "ready_for_completion"
+    assert "validate completion evidence" in refreshed_root.metadata_json["remediation_summary"]

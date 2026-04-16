@@ -1,10 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Modal } from 'antd';
 
-import { useWorkspaceActions } from '@/stores/workspace';
+import {
+  useWorkspaceActions,
+  useWorkspaceGoalCandidates,
+  useWorkspaceGoalCandidatesError,
+  useWorkspaceGoalCandidatesLoading,
+} from '@/stores/workspace';
 
 import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
 
@@ -16,16 +21,15 @@ import { ObjectiveCreateModal } from '@/components/workspace/objectives/Objectiv
 
 import { BlackboardTabBar, BLACKBOARD_TABS } from './BlackboardTabBar';
 import { buildBlackboardNotes, buildBlackboardStats } from './blackboardUtils';
-import { DiscussionTab } from './tabs/DiscussionTab';
 import { CollaborationOverviewTab } from './tabs/CollaborationOverviewTab';
-import { SharedFileBrowser } from './tabs/SharedFileBrowser';
+import { DiscussionTab } from './tabs/DiscussionTab';
 import { GoalsTab } from './tabs/GoalsTab';
 import { NotesTab } from './tabs/NotesTab';
+import { SharedFileBrowser } from './tabs/SharedFileBrowser';
 import { StatusTab } from './tabs/StatusTab';
 import { TopologyTab } from './tabs/TopologyTab';
 import { useBlackboardModalActions } from './useBlackboardModalActions';
 
-import type { BlackboardTab } from './BlackboardTabBar';
 import type {
   BlackboardPost,
   BlackboardReply,
@@ -37,6 +41,7 @@ import type {
   WorkspaceAgent,
   WorkspaceTask,
 } from '@/types/workspace';
+import type { BlackboardTab } from './BlackboardTabBar';
 
 export interface CentralBlackboardModalProps {
   open: boolean;
@@ -97,6 +102,9 @@ export function CentralBlackboardModal({
   const { t } = useTranslation();
   const message = useLazyMessage();
   const workspaceActions = useWorkspaceActions();
+  const goalCandidates = useWorkspaceGoalCandidates();
+  const goalCandidatesLoading = useWorkspaceGoalCandidatesLoading();
+  const goalCandidatesError = useWorkspaceGoalCandidatesError();
   const tabListRef = useRef<HTMLDivElement | null>(null);
 
   const [activeTab, setActiveTab] = useState<BlackboardTab>('goals');
@@ -121,6 +129,13 @@ export function CentralBlackboardModal({
     message,
     t,
   });
+
+  useEffect(() => {
+    if (!open || activeTab !== 'goals') {
+      return;
+    }
+    void workspaceActions.loadGoalCandidates(workspaceId);
+  }, [activeTab, open, workspaceActions, workspaceId]);
 
   const stats = useMemo(
     () => buildBlackboardStats(tasks, posts, agents, topologyNodes),
@@ -196,14 +211,26 @@ export function CentralBlackboardModal({
             {activeTab === 'goals' && (
               <GoalsTab
                 objectives={objectives}
+                goalCandidates={goalCandidates}
+                goalCandidatesLoading={goalCandidatesLoading}
+                goalCandidatesError={goalCandidatesError}
                 tasks={tasks}
                 completionRatio={stats.completionRatio}
                 workspaceId={workspaceId}
                 onDeleteObjective={(objectiveId) => {
                   void actions.handleDeleteObjective(objectiveId);
                 }}
+                onProjectObjective={(objectiveId) => {
+                  void actions.handleProjectObjective(objectiveId);
+                }}
                 onCreateObjective={() => {
                   actions.setShowCreateObjective(true);
+                }}
+                onRefreshGoalCandidates={() => {
+                  void workspaceActions.loadGoalCandidates(workspaceId);
+                }}
+                onMaterializeGoalCandidate={(candidateId) => {
+                  void workspaceActions.materializeGoalCandidate(workspaceId, candidateId);
                 }}
               />
             )}

@@ -16,14 +16,23 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
+from src.application.services.workspace_goal_sensing_service import (
+    WorkspaceGoalSensingService,
+)
 from src.domain.model.workspace.blackboard_post import BlackboardPost
+from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_message import WorkspaceMessage
+from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
     SqlBlackboardRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_cyber_objective_repository import (
+    SqlCyberObjectiveRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
     SqlWorkspaceAgentRepository,
@@ -37,6 +46,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_rep
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
     SqlWorkspaceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+    SqlWorkspaceTaskRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +56,9 @@ _MAX_RECENT_MESSAGES = 20
 _MAX_BLACKBOARD_POSTS = 5
 _MAX_MEMBERS = 50
 _MAX_AGENTS = 20
+_MAX_TASKS = 20
+_MAX_OBJECTIVES = 10
+_MAX_GOAL_CANDIDATES = 5
 
 
 async def build_workspace_context(
@@ -83,6 +98,8 @@ async def build_workspace_context(
             agent_repo = SqlWorkspaceAgentRepository(db)
             message_repo = SqlWorkspaceMessageRepository(db)
             blackboard_repo = SqlBlackboardRepository(db)
+            task_repo = SqlWorkspaceTaskRepository(db)
+            objective_repo = SqlCyberObjectiveRepository(db)
 
             members = await member_repo.find_by_workspace(
                 workspace.id,
@@ -101,8 +118,31 @@ async def build_workspace_context(
                 workspace.id,
                 limit=_MAX_BLACKBOARD_POSTS,
             )
+            tasks = await task_repo.find_by_workspace(
+                workspace.id,
+                limit=_MAX_TASKS,
+            )
+            objectives = await objective_repo.find_by_workspace(
+                workspace.id,
+                limit=_MAX_OBJECTIVES,
+            )
+            goal_candidates = WorkspaceGoalSensingService().sense_candidates(
+                tasks=tasks,
+                objectives=objectives,
+                posts=posts,
+                messages=messages,
+            )[:_MAX_GOAL_CANDIDATES]
 
-        return format_workspace_context(workspace, members, agents, messages, posts)
+        return format_workspace_context(
+            workspace,
+            members,
+            agents,
+            messages,
+            posts,
+            tasks,
+            objectives,
+            goal_candidates,
+        )
     except Exception:
         logger.warning(
             "Failed to build workspace context for project %s", project_id, exc_info=True
@@ -116,58 +156,152 @@ def format_workspace_context(
     agents: list[WorkspaceAgent],
     messages: list[WorkspaceMessage],
     posts: list[BlackboardPost],
+    tasks: list[WorkspaceTask] | None = None,
+    objectives: list[CyberObjective] | None = None,
+    goal_candidates: list[GoalCandidateRecordModel] | None = None,
 ) -> str:
     """Format workspace data into an XML text block for prompt injection."""
     sections: list[str] = []
     sections.append(f'<cyber-workspace name="{workspace.name}" id="{workspace.id}">')
 
-    if members:
-        lines = ["  <members>"]
-        for m in members:
-            lines.append(f'    <member user_id="{m.user_id}" role="{m.role.value}" />')
-        lines.append("  </members>")
-        sections.append("\n".join(lines))
-
-    if agents:
-        lines = ["  <agents>"]
-        for a in agents:
-            name = a.display_name or a.agent_id
-            desc = f' description="{a.description}"' if a.description else ""
-            status = f' status="{a.status}"' if a.status != "idle" else ""
-            lines.append(f'    <agent id="{a.agent_id}" name="{name}"{desc}{status} />')
-        lines.append("  </agents>")
-        sections.append("\n".join(lines))
-
-    if messages:
-        lines = ["  <recent-messages>"]
-        for msg in messages:
-            ts = format_timestamp(msg.created_at)
-            sender_label = f"{msg.sender_type.value}:{msg.sender_id}"
-            content = truncate(msg.content, 200)
-            mentions_attr = ""
-            if msg.mentions:
-                mentions_attr = f' mentions="{",".join(msg.mentions)}"'
-            lines.append(
-                f'    <message from="{sender_label}" at="{ts}"{mentions_attr}>{content}</message>'
-            )
-        lines.append("  </recent-messages>")
-        sections.append("\n".join(lines))
-
-    if posts:
-        lines = ["  <blackboard>"]
-        for p in posts:
-            pinned = ' pinned="true"' if p.is_pinned else ""
-            ts = format_timestamp(p.created_at)
-            content = truncate(p.content, 300)
-            lines.append(
-                f'    <post title="{p.title}" author="{p.author_id}" '
-                + f'status="{p.status.value}" at="{ts}"{pinned}>{content}</post>'
-            )
-        lines.append("  </blackboard>")
-        sections.append("\n".join(lines))
+    _extend_section(sections, _format_members(members))
+    _extend_section(sections, _format_agents(agents))
+    _extend_section(sections, _format_messages(messages))
+    _extend_section(sections, _format_posts(posts))
+    _extend_section(sections, _format_objectives(objectives or []))
+    _extend_section(sections, _format_tasks(tasks or []))
+    _extend_section(sections, _format_goal_candidates(goal_candidates or []))
 
     sections.append("</cyber-workspace>")
     return "\n".join(sections)
+
+
+def _extend_section(sections: list[str], block: str | None) -> None:
+    if block:
+        sections.append(block)
+
+
+def _format_members(members: list[WorkspaceMember]) -> str | None:
+    if not members:
+        return None
+    lines = ["  <members>"]
+    for member in members:
+        lines.append(f'    <member user_id="{member.user_id}" role="{member.role.value}" />')
+    lines.append("  </members>")
+    return "\n".join(lines)
+
+
+def _format_agents(agents: list[WorkspaceAgent]) -> str | None:
+    if not agents:
+        return None
+    lines = ["  <agents>"]
+    for agent in agents:
+        name = agent.display_name or agent.agent_id
+        desc = f' description="{agent.description}"' if agent.description else ""
+        status = f' status="{agent.status}"' if agent.status != "idle" else ""
+        lines.append(f'    <agent id="{agent.agent_id}" name="{name}"{desc}{status} />')
+    lines.append("  </agents>")
+    return "\n".join(lines)
+
+
+def _format_messages(messages: list[WorkspaceMessage]) -> str | None:
+    if not messages:
+        return None
+    lines = ["  <recent-messages>"]
+    for msg in messages:
+        ts = format_timestamp(msg.created_at)
+        sender_label = f"{msg.sender_type.value}:{msg.sender_id}"
+        content = truncate(msg.content, 200)
+        mentions_attr = f' mentions="{",".join(msg.mentions)}"' if msg.mentions else ""
+        lines.append(f'    <message from="{sender_label}" at="{ts}"{mentions_attr}>{content}</message>')
+    lines.append("  </recent-messages>")
+    return "\n".join(lines)
+
+
+def _format_posts(posts: list[BlackboardPost]) -> str | None:
+    if not posts:
+        return None
+    lines = ["  <blackboard>"]
+    for post in posts:
+        pinned = ' pinned="true"' if post.is_pinned else ""
+        ts = format_timestamp(post.created_at)
+        content = truncate(post.content, 300)
+        lines.append(
+            f'    <post title="{post.title}" author="{post.author_id}" '
+            + f'status="{post.status.value}" at="{ts}"{pinned}>{content}</post>'
+        )
+    lines.append("  </blackboard>")
+    return "\n".join(lines)
+
+
+def _format_objectives(objectives: list[CyberObjective]) -> str | None:
+    if not objectives:
+        return None
+    lines = ["  <objectives>"]
+    for objective in objectives:
+        description_attr = f' description="{truncate(objective.description, 160)}"' if objective.description else ""
+        lines.append(
+            f'    <objective id="{objective.id}" type="{objective.obj_type.value}" '
+            + f'progress="{objective.progress:.2f}"{description_attr}>'
+            + f"{truncate(objective.title, 120)}</objective>"
+        )
+    lines.append("  </objectives>")
+    return "\n".join(lines)
+
+
+def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
+    if not tasks:
+        return None
+    lines = ["  <tasks>"]
+    for task in tasks:
+        role = str(task.metadata.get("task_role", "task"))
+        description_attr = f' description="{truncate(task.description, 160)}"' if task.description else ""
+        goal_health_attr = (
+            f' goal_health="{task.metadata.get("goal_health")}"'
+            if isinstance(task.metadata.get("goal_health"), str)
+            else ""
+        )
+        remediation_attr = (
+            f' remediation_status="{task.metadata.get("remediation_status")}"'
+            if isinstance(task.metadata.get("remediation_status"), str)
+            else ""
+        )
+        progress_summary_attr = (
+            f' progress_summary="{truncate(str(task.metadata.get("goal_progress_summary")), 160)}"'
+            if isinstance(task.metadata.get("goal_progress_summary"), str)
+            else ""
+        )
+        evidence_grade_attr = (
+            f' evidence_grade="{task.metadata.get("goal_evidence", {}).get("verification_grade")}"'
+            if isinstance(task.metadata.get("goal_evidence"), dict)
+            and isinstance(task.metadata.get("goal_evidence", {}).get("verification_grade"), str)
+            else ""
+        )
+        lines.append(
+            f'    <task id="{task.id}" status="{task.status.value}" role="{role}" '
+            + f'priority="{task.priority.value}"{description_attr}{goal_health_attr}'
+            + f'{remediation_attr}{progress_summary_attr}{evidence_grade_attr}>'
+            + f"{truncate(task.title, 120)}</task>"
+        )
+    lines.append("  </tasks>")
+    return "\n".join(lines)
+
+
+def _format_goal_candidates(candidates: list[GoalCandidateRecordModel]) -> str | None:
+    if not candidates:
+        return None
+    lines = ["  <goal-candidates>"]
+    for candidate in candidates:
+        refs = ",".join(candidate.source_refs)
+        lines.append(
+            f'    <goal-candidate id="{candidate.candidate_id}" '
+            + f'kind="{candidate.candidate_kind}" decision="{candidate.decision}" '
+            + f'evidence_strength="{candidate.evidence_strength:.2f}" '
+            + f'urgency="{candidate.urgency:.2f}" refs="{refs}">'
+            + f"{truncate(candidate.candidate_text, 160)}</goal-candidate>"
+        )
+    lines.append("  </goal-candidates>")
+    return "\n".join(lines)
 
 
 def format_timestamp(dt: datetime) -> str:

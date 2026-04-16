@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { Dropdown } from 'antd';
-import { Circle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Circle, MoreHorizontal, Pencil, PlayCircle, Trash2 } from 'lucide-react';
 
 import type { CyberObjective } from '@/types/workspace';
 
@@ -11,9 +11,15 @@ export interface ObjectiveCardProps {
   objective: CyberObjective;
   onEdit?: ((objective: CyberObjective) => void) | undefined;
   onDelete?: ((objectiveId: string) => void) | undefined;
+  onProject?: ((objectiveId: string) => void) | undefined;
 }
 
-export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({ objective, onEdit, onDelete }) => {
+export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
+  objective,
+  onEdit,
+  onDelete,
+  onProject,
+}) => {
   const isObjective = objective.obj_type === 'objective';
   const progressColor = isObjective ? 'bg-primary' : 'bg-success';
 
@@ -47,6 +53,18 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({ objective, onEdit,
             ),
             onClick: () => {
               onDelete(objective.id);
+            },
+          },
+        ]
+      : []),
+    ...(onProject
+      ? [
+          {
+            key: 'project',
+            icon: <PlayCircle size={14} />,
+            label: 'Start execution',
+            onClick: () => {
+              onProject(objective.id);
             },
           },
         ]

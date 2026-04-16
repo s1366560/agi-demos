@@ -21,6 +21,7 @@ from src.infrastructure.agent.prompts import (
     PromptMode,
     SystemPromptManager,
 )
+from src.infrastructure.agent.prompts.tool_summaries import TOOL_SUMMARIES
 
 
 @pytest.mark.unit
@@ -229,6 +230,29 @@ class TestSystemPromptManager:
 
         assert "MemoryAnalysis" in prompt
         assert "Analyze memories" in prompt
+
+    async def test_workspace_delegation_guidance_mentions_workspace_task_id(self, manager):
+        """Tool guidance should expose workspace_task_id for workspace child-task delegation."""
+        context = PromptContext(
+            model_provider=ModelProvider.DEFAULT,
+            mode=PromptMode.BUILD,
+            tool_definitions=[
+                {"name": "todoread", "description": TOOL_SUMMARIES["todoread"]},
+                {
+                    "name": "delegate_to_subagent",
+                    "description": TOOL_SUMMARIES["delegate_to_subagent"],
+                },
+            ],
+            project_id="test-project",
+            working_directory="/tmp/test",
+            conversation_history_length=3,
+        )
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "workspace_task_id" in prompt
+        assert "delegate_to_subagent" in prompt
+        assert "todoread" in prompt
 
     async def test_matched_skill_recommendation(self, manager, context):
         """Test matched skill recommendation appears."""

@@ -6,13 +6,26 @@ import { render, screen, within } from '@/test/utils';
 
 import type { CentralBlackboardModalProps } from '@/components/blackboard/CentralBlackboardModal';
 
+const workspaceActionsMock = {
+  createObjective: vi.fn(),
+  deleteObjective: vi.fn(),
+  projectObjectiveToTask: vi.fn(),
+  loadGoalCandidates: vi.fn(),
+  materializeGoalCandidate: vi.fn(),
+  deleteGene: vi.fn(),
+  updateGene: vi.fn(),
+};
+
 vi.mock('@/stores/workspace', () => ({
-  useWorkspaceActions: () => ({
-    createObjective: vi.fn(),
-    deleteObjective: vi.fn(),
-    deleteGene: vi.fn(),
-    updateGene: vi.fn(),
-  }),
+  useWorkspaceActions: () => workspaceActionsMock,
+  useWorkspaceGoalCandidates: () => [],
+  useWorkspaceGoalCandidatesLoading: () => false,
+  useWorkspaceGoalCandidatesError: () => null,
+  useWorkspaceStore: (selector: (state: any) => unknown) =>
+    selector({
+      chatMessages: [],
+      loadChatMessages: vi.fn(),
+    }),
 }));
 
 vi.mock('@/components/ui/lazyAntd', () => ({
@@ -27,6 +40,10 @@ vi.mock('@/pages/tenant/WorkspaceSettings', () => ({
 
 vi.mock('@/components/workspace/chat/ChatPanel', () => ({
   ChatPanel: () => <div>Chat panel</div>,
+}));
+
+vi.mock('@/components/blackboard/tabs/CollaborationOverviewTab', () => ({
+  CollaborationOverviewTab: () => <div>Collaboration overview</div>,
 }));
 
 vi.mock('@/components/workspace/genes/GeneList', () => ({
@@ -66,6 +83,10 @@ vi.mock('@/components/workspace/TaskBoard', () => ({
   TaskBoard: () => <div>Task board</div>,
 }));
 
+vi.mock('@/components/blackboard/tabs/SharedFileBrowser', () => ({
+  SharedFileBrowser: () => <div>Shared files browser</div>,
+}));
+
 function defaultProps(overrides: Partial<CentralBlackboardModalProps> = {}): CentralBlackboardModalProps {
   return {
     open: true,
@@ -102,6 +123,12 @@ function getTabByName(name: RegExp): HTMLElement {
 describe('CentralBlackboardModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('auto-loads goal candidates when goals tab is active', async () => {
+    render(<CentralBlackboardModal {...defaultProps()} />);
+
+    expect(workspaceActionsMock.loadGoalCandidates).toHaveBeenCalledWith('workspace-1');
   });
 
   it('renders a matching tabpanel element for every tab control', () => {
@@ -143,7 +170,7 @@ describe('CentralBlackboardModal', () => {
 
     fireEvent.click(getTabByName(/collaboration/i));
 
-    expect(screen.getByText('Chat panel')).toBeInTheDocument();
+    expect(screen.getByText('Collaboration overview')).toBeInTheDocument();
   });
 
   it('renders MemberPanel when members tab is selected', () => {
@@ -170,9 +197,7 @@ describe('CentralBlackboardModal', () => {
     const activePanel = document.getElementById('blackboard-panel-files');
     expect(activePanel).not.toBeNull();
     expect(activePanel!.hidden).toBe(false);
-    expect(
-      screen.getByText(/blackboard\.filesUnavailableTitle/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText('Shared files browser')).toBeInTheDocument();
   });
 
   it('renders StatusTab with PresenceBar when status tab is selected', () => {

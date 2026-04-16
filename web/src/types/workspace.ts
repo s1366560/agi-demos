@@ -162,6 +162,25 @@ export interface CyberObjective {
   updated_at?: string | undefined;
 }
 
+export type WorkspaceGoalCandidateDecision =
+  | 'adopt_existing_goal'
+  | 'formalize_new_goal'
+  | 'defer'
+  | 'reject_as_non_goal';
+
+export interface WorkspaceGoalCandidate {
+  candidate_id: string;
+  candidate_text: string;
+  candidate_kind: 'existing' | 'inferred';
+  source_refs: string[];
+  evidence_strength: number;
+  freshness: number;
+  urgency: number;
+  user_intent_confidence: number;
+  formalizable: boolean;
+  decision: WorkspaceGoalCandidateDecision;
+}
+
 export interface PresenceUser {
   user_id: string;
   display_name: string;

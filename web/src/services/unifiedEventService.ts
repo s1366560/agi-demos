@@ -281,6 +281,8 @@ class UnifiedEventServiceImpl {
     }
     this.subscriptions.get(topic)!.add(handler);
 
+    this.ensureConnected();
+
     // Send subscribe message to server
     const topicType = topic.split(':')[0] ?? '';
     this.sendSubscribeMessage(topicType, topic);
@@ -339,6 +341,8 @@ class UnifiedEventServiceImpl {
   subscribeSandbox(projectId: string, handler: EventHandler): () => void {
     const topic = `sandbox:${projectId}`;
 
+    this.ensureConnected();
+
     // Send specific sandbox subscription message
     this.sendOrQueue({
       type: 'subscribe_sandbox',
@@ -380,6 +384,8 @@ class UnifiedEventServiceImpl {
    */
   subscribeLifecycle(projectId: string, handler: EventHandler): () => void {
     const topic = `lifecycle:${projectId}`;
+
+    this.ensureConnected();
 
     this.sendOrQueue({
       type: 'subscribe_lifecycle_state',
@@ -573,6 +579,15 @@ class UnifiedEventServiceImpl {
         this.send(message);
       }
     }
+  }
+
+  private ensureConnected(): void {
+    if (this.isConnected() || this.connectingPromise) {
+      return;
+    }
+    void this.connect().catch((err: unknown) => {
+      logger.error('[UnifiedWS] Auto-connect failed:', err);
+    });
   }
 
   private resubscribeAll(): void {

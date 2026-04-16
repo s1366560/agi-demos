@@ -40,6 +40,39 @@ class SqlWorkspaceTaskRepository(
         rows = result.scalars().all()
         return [t for row in rows if (t := self._to_domain(row)) is not None]
 
+    async def find_root_by_objective_id(
+        self,
+        workspace_id: str,
+        objective_id: str,
+    ) -> WorkspaceTask | None:
+        query = (
+            select(WorkspaceTaskModel)
+            .where(WorkspaceTaskModel.workspace_id == workspace_id)
+            .where(WorkspaceTaskModel.metadata_json["task_role"].as_string() == "goal_root")
+            .where(WorkspaceTaskModel.metadata_json["objective_id"].as_string() == objective_id)
+            .where(WorkspaceTaskModel.archived_at.is_(None))
+            .order_by(WorkspaceTaskModel.created_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(query)
+        return self._to_domain(result.scalar_one_or_none())
+
+    async def find_by_root_goal_task_id(
+        self,
+        workspace_id: str,
+        root_goal_task_id: str,
+    ) -> list[WorkspaceTask]:
+        query = (
+            select(WorkspaceTaskModel)
+            .where(WorkspaceTaskModel.workspace_id == workspace_id)
+            .where(WorkspaceTaskModel.metadata_json["root_goal_task_id"].as_string() == root_goal_task_id)
+            .where(WorkspaceTaskModel.archived_at.is_(None))
+            .order_by(WorkspaceTaskModel.created_at.asc())
+        )
+        result = await self._session.execute(query)
+        rows = result.scalars().all()
+        return [t for row in rows if (t := self._to_domain(row)) is not None]
+
     def _to_domain(self, db_task: WorkspaceTaskModel | None) -> WorkspaceTask | None:
         if db_task is None:
             return None

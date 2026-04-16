@@ -6,6 +6,13 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from src.application.services.workspace_agent_autonomy import (
+    ensure_goal_completion_allowed,
+    ensure_root_goal_mutation_allowed,
+    merge_validated_metadata,
+    reconcile_root_goal_progress,
+    record_task_actor,
+)
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_role import WorkspaceRole
@@ -49,7 +56,7 @@ class WorkspaceTaskService:
         self._workspace_agent_repo = workspace_agent_repo
         self._workspace_task_repo = workspace_task_repo
 
-    async def create_task(
+    async def create_task(  # noqa: PLR0913
         self,
         workspace_id: str,
         actor_user_id: str,
@@ -57,6 +64,13 @@ class WorkspaceTaskService:
         description: str | None = None,
         assignee_user_id: str | None = None,
         metadata: Mapping[str, object] | None = None,
+        priority: WorkspaceTaskPriority | None = None,
+        estimated_effort: str | None = None,
+        blocker_reason: str | None = None,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -75,11 +89,25 @@ class WorkspaceTaskService:
             created_by=actor_user_id,
             assignee_user_id=assignee_user_id,
             status=WorkspaceTaskStatus.TODO,
-            metadata=dict(metadata or {}),
+            priority=priority or WorkspaceTaskPriority.NONE,
+            estimated_effort=estimated_effort,
+            blocker_reason=blocker_reason,
+            metadata=merge_validated_metadata({}, metadata),
             created_at=now,
             updated_at=now,
         )
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="create",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def list_tasks(
         self,
@@ -108,7 +136,21 @@ class WorkspaceTaskService:
         await self._require_membership(workspace.id, actor_user_id)
         return await self._require_task(workspace_id=workspace.id, task_id=task_id)
 
-    async def update_task(
+    async def get_root_goal_task_id(
+        self,
+        workspace_id: str,
+        task_id: str,
+        actor_user_id: str,
+    ) -> str | None:
+        task = await self.get_task(
+            workspace_id=workspace_id,
+            task_id=task_id,
+            actor_user_id=actor_user_id,
+        )
+        value = task.metadata.get("root_goal_task_id")
+        return value if isinstance(value, str) and value else None
+
+    async def update_task(  # noqa: PLR0913
         self,
         workspace_id: str,
         task_id: str,
@@ -119,6 +161,12 @@ class WorkspaceTaskService:
         status: WorkspaceTaskStatus | None = None,
         metadata: Mapping[str, object] | None = None,
         priority: WorkspaceTaskPriority | None = None,
+        estimated_effort: str | None = None,
+        blocker_reason: str | None = None,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -128,6 +176,12 @@ class WorkspaceTaskService:
             error_message="Insufficient permission to update workspace task",
         )
         task = await self._require_task(workspace_id=workspace.id, task_id=task_id)
+        ensure_root_goal_mutation_allowed(
+            task,
+            title=title,
+            description=description,
+            metadata=metadata,
+        )
 
         if title is not None:
             task.title = title
@@ -137,15 +191,34 @@ class WorkspaceTaskService:
             task.assignee_user_id = assignee_user_id
             task.assignee_agent_id = None
         if metadata is not None:
-            task.metadata = dict(metadata)
+            task.metadata = merge_validated_metadata(task.metadata, metadata)
         if priority is not None:
             task.priority = priority
+        if estimated_effort is not None:
+            task.estimated_effort = estimated_effort
+        if blocker_reason is not None:
+            task.blocker_reason = blocker_reason
+        record_task_actor(
+            task,
+            action="update",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
         if status is not None and status != task.status:
+            if status == WorkspaceTaskStatus.DONE:
+                ensure_goal_completion_allowed(task)
             self._apply_transition(task, status)
-            return await self._workspace_task_repo.save(task)
+            saved = await self._workspace_task_repo.save(task)
+            await self._reconcile_root_goal_if_needed(saved)
+            return saved
 
         task.updated_at = datetime.now(UTC)
-        return await self._workspace_task_repo.save(task)
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def delete_task(
         self,
@@ -161,7 +234,15 @@ class WorkspaceTaskService:
             error_message="Insufficient permission to delete workspace task",
         )
         task = await self._require_task(workspace_id=workspace.id, task_id=task_id)
-        return await self._workspace_task_repo.delete(task.id)
+        root_goal_task_id = self._root_goal_task_id(task)
+        deleted = await self._workspace_task_repo.delete(task.id)
+        if deleted and root_goal_task_id:
+            await reconcile_root_goal_progress(
+                task_repo=self._workspace_task_repo,
+                workspace_id=workspace.id,
+                root_goal_task_id=root_goal_task_id,
+            )
+        return deleted
 
     async def assign_task_to_agent(
         self,
@@ -169,6 +250,9 @@ class WorkspaceTaskService:
         task_id: str,
         actor_user_id: str,
         workspace_agent_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -189,13 +273,28 @@ class WorkspaceTaskService:
         task.assignee_agent_id = relation.agent_id
         task.assignee_user_id = None
         task.updated_at = datetime.now(UTC)
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="assign_agent",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id or relation.agent_id,
+            workspace_agent_binding_id=workspace_agent_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def unassign_task_from_agent(
         self,
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_minimum_role(
@@ -207,13 +306,28 @@ class WorkspaceTaskService:
         task = await self._require_task(workspace.id, task_id)
         task.assignee_agent_id = None
         task.updated_at = datetime.now(UTC)
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="unassign_agent",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def claim_task(
         self,
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_membership(workspace.id, actor_user_id)
@@ -226,43 +340,100 @@ class WorkspaceTaskService:
         task.assignee_user_id = actor_user_id
         task.assignee_agent_id = None
         task.updated_at = datetime.now(UTC)
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="claim",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def start_task(
         self,
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_membership(workspace.id, actor_user_id)
         task = await self._require_task(workspace.id, task_id)
         self._apply_transition(task, WorkspaceTaskStatus.IN_PROGRESS)
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="start",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def block_task(
         self,
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_membership(workspace.id, actor_user_id)
         task = await self._require_task(workspace.id, task_id)
         self._apply_transition(task, WorkspaceTaskStatus.BLOCKED)
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="block",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def complete_task(
         self,
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
         await self._require_membership(workspace.id, actor_user_id)
         task = await self._require_task(workspace.id, task_id)
+        ensure_goal_completion_allowed(task)
         self._apply_transition(task, WorkspaceTaskStatus.DONE)
-        return await self._workspace_task_repo.save(task)
+        record_task_actor(
+            task,
+            action="complete",
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
+        )
+        saved = await self._workspace_task_repo.save(task)
+        await self._reconcile_root_goal_if_needed(saved)
+        return saved
 
     async def _require_workspace(self, workspace_id: str) -> Workspace:
         workspace = await self._workspace_repo.find_by_id(workspace_id)
@@ -322,6 +493,20 @@ class WorkspaceTaskService:
         now = datetime.now(UTC)
         task.updated_at = now
         task.completed_at = now if target == WorkspaceTaskStatus.DONE else None
+
+    async def _reconcile_root_goal_if_needed(self, task: WorkspaceTask) -> None:
+        root_goal_task_id = self._root_goal_task_id(task)
+        if root_goal_task_id:
+            await reconcile_root_goal_progress(
+                task_repo=self._workspace_task_repo,
+                workspace_id=task.workspace_id,
+                root_goal_task_id=root_goal_task_id,
+            )
+
+    @staticmethod
+    def _root_goal_task_id(task: WorkspaceTask) -> str | None:
+        value = task.metadata.get("root_goal_task_id")
+        return value if isinstance(value, str) and value else None
 
     @classmethod
     def _parse_public_priority(cls, priority: str) -> int:

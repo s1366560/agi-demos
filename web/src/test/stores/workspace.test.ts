@@ -6,6 +6,7 @@ import {
   workspaceChatService,
   workspaceGeneService,
   workspaceObjectiveService,
+  workspaceGoalCandidateService,
   workspaceService,
   workspaceTaskService,
   workspaceTopologyService,
@@ -41,6 +42,11 @@ vi.mock('@/services/workspaceService', () => ({
   },
   workspaceObjectiveService: {
     list: vi.fn(),
+    projectToTask: vi.fn(),
+  },
+  workspaceGoalCandidateService: {
+    list: vi.fn(),
+    materialize: vi.fn(),
   },
   workspaceGeneService: {
     list: vi.fn(),
@@ -63,6 +69,9 @@ describe('workspace store', () => {
       loadedReplyPostIds: {},
       replyLoadingPostIds: {},
       tasks: [],
+      goalCandidates: [],
+      goalCandidatesLoading: false,
+      goalCandidatesError: null,
       topologyNodes: [],
       topologyEdges: [],
       objectives: [],
@@ -118,6 +127,20 @@ describe('workspace store', () => {
     vi.mocked(workspaceTaskService.list).mockResolvedValueOnce([
       { id: 'task-1', title: 'Ship v1', status: 'todo' },
     ] as any);
+    vi.mocked(workspaceGoalCandidateService.list).mockResolvedValueOnce([
+      {
+        candidate_id: 'cand-1',
+        candidate_text: 'Prepare rollback checklist',
+        candidate_kind: 'inferred',
+        source_refs: ['message:1'],
+        evidence_strength: 0.9,
+        freshness: 1,
+        urgency: 0.8,
+        user_intent_confidence: 0.9,
+        formalizable: true,
+        decision: 'formalize_new_goal',
+      },
+    ] as any);
     vi.mocked(workspaceTopologyService.listNodes).mockResolvedValueOnce([
       { id: 'node-1', node_type: 'task', title: 'Ship v1', position_x: 0, position_y: 0 },
     ] as any);
@@ -134,6 +157,7 @@ describe('workspace store', () => {
     expect(state.currentWorkspace?.id).toBe('ws-1');
     expect(state.posts[0].id).toBe('post-1');
     expect(state.tasks[0].id).toBe('task-1');
+    expect(state.goalCandidates[0].candidate_id).toBe('cand-1');
     expect(state.topologyNodes[0].id).toBe('node-1');
     expect(state.topologyEdges[0].id).toBe('edge-1');
     expect(state.repliesByPostId).toEqual({});
@@ -448,6 +472,7 @@ describe('workspace store', () => {
     vi.mocked(workspaceTopologyService.listNodes).mockResolvedValue([]);
     vi.mocked(workspaceTopologyService.listEdges).mockResolvedValue([]);
     vi.mocked(workspaceObjectiveService.list).mockResolvedValue([]);
+    vi.mocked(workspaceGoalCandidateService.list).mockResolvedValue([]);
     vi.mocked(workspaceGeneService.list).mockResolvedValue([]);
     vi.mocked(workspaceChatService.listMessages).mockResolvedValue([]);
 
@@ -469,6 +494,63 @@ describe('workspace store', () => {
     expect(state.currentWorkspace?.id).toBe('ws-2');
     expect(state.posts[0].id).toBe('post-2');
     expect(state.tasks[0].id).toBe('task-2');
+  });
+
+  it('materializeGoalCandidate promotes a candidate into tasks', async () => {
+    useWorkspaceStore.setState({
+      goalCandidates: [
+        {
+          candidate_id: 'cand-1',
+          candidate_text: 'Prepare rollback checklist',
+          candidate_kind: 'inferred',
+          source_refs: ['message:1'],
+          evidence_strength: 0.9,
+          freshness: 1,
+          urgency: 0.8,
+          user_intent_confidence: 0.9,
+          formalizable: true,
+          decision: 'formalize_new_goal',
+        },
+      ] as any,
+      tasks: [],
+    });
+    vi.mocked(workspaceGoalCandidateService.materialize).mockResolvedValueOnce({
+      id: 'task-root-1',
+      workspace_id: 'ws-1',
+      title: 'Prepare rollback checklist',
+      status: 'todo',
+      metadata: { task_role: 'goal_root' },
+      created_at: '',
+    } as any);
+
+    await useWorkspaceStore.getState().materializeGoalCandidate('ws-1', 'cand-1');
+
+    expect(useWorkspaceStore.getState().tasks[0].id).toBe('task-root-1');
+    expect(useWorkspaceStore.getState().goalCandidates).toHaveLength(0);
+  });
+
+  it('loadGoalCandidates updates loading and stores fetched candidates', async () => {
+    vi.mocked(workspaceGoalCandidateService.list).mockResolvedValueOnce([
+      {
+        candidate_id: 'cand-2',
+        candidate_text: 'Improve resilience',
+        candidate_kind: 'existing',
+        source_refs: ['objective:1'],
+        evidence_strength: 0.9,
+        freshness: 1,
+        urgency: 0.7,
+        user_intent_confidence: 0.9,
+        formalizable: false,
+        decision: 'adopt_existing_goal',
+      },
+    ] as any);
+
+    const promise = useWorkspaceStore.getState().loadGoalCandidates('ws-1');
+    expect(useWorkspaceStore.getState().goalCandidatesLoading).toBe(true);
+    await promise;
+
+    expect(useWorkspaceStore.getState().goalCandidatesLoading).toBe(false);
+    expect(useWorkspaceStore.getState().goalCandidates[0].candidate_id).toBe('cand-2');
   });
 
   it('useWorkspaceReplies returns stable empty array reference when post has no replies', () => {

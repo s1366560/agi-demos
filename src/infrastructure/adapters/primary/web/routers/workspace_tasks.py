@@ -68,6 +68,8 @@ class WorkspaceTaskCreateRequest(BaseModel):
     description: str | None = None
     assignee_user_id: str | None = None
     metadata: dict[str, Any] | None = None
+    estimated_effort: str | None = None
+    blocker_reason: str | None = None
 
 
 class WorkspaceTaskUpdateRequest(BaseModel):
@@ -79,7 +81,6 @@ class WorkspaceTaskUpdateRequest(BaseModel):
     priority: WorkspaceTaskPriority | None = None
     estimated_effort: str | None = None
     blocker_reason: str | None = None
-    assignee_agent_id: str | None = None
 
 
 class AssignAgentRequest(BaseModel):
@@ -157,6 +158,8 @@ async def create_workspace_task(
             description=body.description,
             assignee_user_id=body.assignee_user_id,
             metadata=body.metadata,
+            estimated_effort=body.estimated_effort,
+            blocker_reason=body.blocker_reason,
         )
         await db.commit()
     except Exception as exc:
@@ -235,6 +238,8 @@ async def update_workspace_task(
             status=body.status,
             metadata=body.metadata,
             priority=body.priority,
+            estimated_effort=body.estimated_effort,
+            blocker_reason=body.blocker_reason,
         )
         await db.commit()
     except Exception as exc:

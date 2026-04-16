@@ -27,6 +27,12 @@ export interface WorkspaceActionDeps {
     workspaceId: string,
     objectiveId: string,
   ) => Promise<void>;
+  projectObjectiveToTask: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    objectiveId: string,
+  ) => Promise<void>;
   deleteGene: (
     tenantId: string,
     projectId: string,
@@ -77,7 +83,8 @@ export function useBlackboardModalActions({
     onDeleteReply,
   } = callbacks;
 
-  const { createObjective, deleteObjective, deleteGene, updateGene } = workspaceActions;
+  const { createObjective, deleteObjective, projectObjectiveToTask, deleteGene, updateGene } =
+    workspaceActions;
 
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postTitle, setPostTitle] = useState('');
@@ -283,6 +290,14 @@ export function useBlackboardModalActions({
     }
   };
 
+  const handleProjectObjective = async (objectiveId: string) => {
+    try {
+      await projectObjectiveToTask(tenantId, projectId, workspaceId, objectiveId);
+    } catch {
+      message?.error(t('blackboard.errors.createObjective', 'Failed to create objective'));
+    }
+  };
+
   const handleDeleteGene = async (geneId: string) => {
     try {
       await deleteGene(tenantId, projectId, workspaceId, geneId);
@@ -332,6 +347,7 @@ export function useBlackboardModalActions({
     handleDeleteSelectedReply,
     handleCreateObjective,
     handleDeleteObjective,
+    handleProjectObjective,
     handleDeleteGene,
     handleToggleGeneActive,
   };

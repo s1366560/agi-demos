@@ -245,6 +245,13 @@ class SessionProcessor:
         "verification, or project changes, call the appropriate tool instead of "
         "producing another text-only reply."
     )
+    _WORKSPACE_DELEGATION_RECOVERY_HINT = (
+        "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
+        "Call todoread, choose the target child task's workspace_task_id, then retry "
+        "delegate_to_subagent or parallel_delegate_subagents with that workspace_task_id."
+    )
+    _WORKSPACE_TODOREAD_SNAPSHOT_PREFIX = "[WORKSPACE TODOREAD SNAPSHOT]"
+    _WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX = "[WORKSPACE DELEGATION RETRY]"
 
     def __init__(
         self,
@@ -352,6 +359,7 @@ class SessionProcessor:
         self._goal_evaluator = GoalEvaluator(
             llm_client=config.llm_client,
             tools=self.tools,
+            runtime_context=config.runtime_context,
         )
         self._artifact_handler = ArtifactHandler(
             artifact_service=artifact_service,
@@ -454,10 +462,243 @@ class SessionProcessor:
             item for item in self._response_instructions if item != self._TOOL_USAGE_REMINDER
         ]
 
+    def _queue_workspace_delegation_recovery_hint(self) -> None:
+        """Inject a temporary recovery hint after workspace delegation guardrail failures."""
+        if self._WORKSPACE_DELEGATION_RECOVERY_HINT not in self._response_instructions:
+            self._response_instructions.append(self._WORKSPACE_DELEGATION_RECOVERY_HINT)
+
+    def _clear_workspace_delegation_recovery_hint(self) -> None:
+        """Remove the workspace delegation recovery hint once corrective action starts."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_DELEGATION_RECOVERY_HINT
+        ]
+
+    def _queue_workspace_todoread_snapshot(self, snapshot: str) -> None:
+        """Inject a compact todoread snapshot to guide recovery after delegation guardrail errors."""
+        self._clear_workspace_todoread_snapshot()
+        self._response_instructions.append(
+            f"{self._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX} {snapshot}"
+        )
+
+    def _clear_workspace_todoread_snapshot(self) -> None:
+        """Remove any previously injected workspace todoread snapshot guidance."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if not item.startswith(self._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX)
+        ]
+
+    def _queue_workspace_delegation_retry_action(self, action_hint: str) -> None:
+        """Inject a precise retry action hint for single-candidate workspace delegation recovery."""
+        self._clear_workspace_delegation_retry_action()
+        self._response_instructions.append(
+            f"{self._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX} {action_hint}"
+        )
+
+    def _clear_workspace_delegation_retry_action(self) -> None:
+        """Remove any previously injected precise workspace delegation retry hint."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if not item.startswith(self._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX)
+        ]
+
     def _reset_tool_usage_reminder_streak(self) -> None:
         """Reset reminder streak state after progress resumes or processing restarts."""
         self._tool_reminder_issued_for_streak = False
         self._clear_tool_usage_reminder()
+        self._clear_workspace_delegation_recovery_hint()
+        self._clear_workspace_todoread_snapshot()
+        self._clear_workspace_delegation_retry_action()
+
+    async def _attempt_workspace_todoread_snapshot(self, session_id: str) -> str | None:
+        """Best-effort direct todoread call used only for recovery guidance injection."""
+        todoread = self.tools.get("todoread")
+        if todoread is None:
+            return None
+
+        _lctx = self._langfuse_context or {}
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        runtime_ctx = ToolContext(
+            session_id=session_id or "workspace-recovery",
+            message_id="workspace-recovery",
+            call_id="workspace-recovery",
+            agent_name=_lctx.get("agent_name", "main"),
+            conversation_id=_lctx.get("conversation_id") or session_id or "workspace-recovery",
+            abort_signal=self._abort_event or asyncio.Event(),
+            messages=[],
+            project_id=_lctx.get("project_id", ""),
+            tenant_id=_lctx.get("tenant_id", ""),
+            user_id=_lctx.get("user_id", ""),
+            runtime_context=dict(self.config.runtime_context),
+        )
+
+        tool_instance = getattr(todoread, "_tool_instance", None)
+        try:
+            if isinstance(tool_instance, ToolInfo):
+                raw_result = await tool_instance.execute(runtime_ctx)
+            elif tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
+                tool_instance.set_runtime_context(runtime_ctx)
+                raw_result = await todoread.execute()
+            else:
+                raw_result = await todoread.execute()
+        except Exception:
+            logger.warning("Workspace todoread recovery snapshot failed", exc_info=True)
+            return None
+
+        if isinstance(raw_result, ToolResult):
+            if raw_result.is_error:
+                return None
+            output = raw_result.output
+        else:
+            output = str(raw_result)
+
+        structured = self._summarize_workspace_todoread_output(output)
+        if structured:
+            return structured[:500]
+        compact = " ".join(output.split())
+        if not compact:
+            return None
+        return compact[:500]
+
+    @staticmethod
+    def _summarize_workspace_todoread_output(output: str) -> str | None:
+        """Convert todoread JSON into a compact recovery-oriented summary when possible."""
+        try:
+            payload = json.loads(output)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        todos = payload.get("todos")
+        if not isinstance(todos, list) or not todos:
+            return None
+
+        workspace_todos = [
+            todo
+            for todo in todos
+            if isinstance(todo, dict) and isinstance(todo.get("workspace_task_id"), str)
+        ]
+        if not workspace_todos:
+            return None
+
+        active = [
+            todo
+            for todo in workspace_todos
+            if str(todo.get("status", "")).lower() not in {"completed", "done"}
+        ]
+        candidate_pool = active or workspace_todos
+        suggested = candidate_pool[0] if len(candidate_pool) == 1 else None
+        summary_parts: list[str] = []
+        if suggested is not None:
+            summary_parts.append(
+                "Suggested workspace_task_id="
+                f"{suggested['workspace_task_id']} for '{suggested.get('content', '')}'"
+            )
+        preview = "; ".join(
+            f"{todo.get('workspace_task_id')}:{todo.get('content', '')}:{todo.get('status', '')}"
+            for todo in candidate_pool[:5]
+        )
+        summary_parts.append(f"Available tasks: {preview}")
+        return " | ".join(summary_parts)
+
+    @staticmethod
+    def _extract_suggested_workspace_task_id(snapshot: str | None) -> str | None:
+        if not snapshot:
+            return None
+        marker = "Suggested workspace_task_id="
+        if marker not in snapshot:
+            return None
+        trailing = snapshot.split(marker, 1)[1]
+        return trailing.split(" ", 1)[0].strip() or None
+
+    @staticmethod
+    def _build_workspace_delegation_retry_hint(
+        *,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        workspace_task_id: str,
+    ) -> str | None:
+        if tool_name == "delegate_to_subagent":
+            subagent_name = tool_input.get("subagent_name")
+            task = tool_input.get("task")
+            if isinstance(subagent_name, str) and isinstance(task, str):
+                return (
+                    f"Retry delegate_to_subagent with subagent_name={subagent_name!r}, "
+                    f"task={task!r}, workspace_task_id={workspace_task_id!r}."
+                )
+            return None
+
+        if tool_name == "parallel_delegate_subagents":
+            tasks = tool_input.get("tasks")
+            if not isinstance(tasks, list):
+                return None
+            missing_indices = [
+                idx
+                for idx, task in enumerate(tasks)
+                if isinstance(task, dict) and not task.get("workspace_task_id")
+            ]
+            if len(missing_indices) != 1:
+                return None
+            task = tasks[missing_indices[0]]
+            subagent_name = task.get("subagent_name")
+            task_text = task.get("task")
+            if isinstance(subagent_name, str) and isinstance(task_text, str):
+                return (
+                    f"Retry parallel_delegate_subagents after setting workspace_task_id="
+                    f"{workspace_task_id!r} on the task for subagent_name={subagent_name!r}, "
+                    f"task={task_text!r}."
+                )
+        return None
+
+    @staticmethod
+    def _build_workspace_delegation_retry_arguments(
+        *,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        workspace_task_id: str,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] | None = None
+        if tool_name == "parallel_delegate_subagents":
+            tasks = tool_input.get("tasks")
+            if isinstance(tasks, list):
+                missing_indices = [
+                    idx
+                    for idx, task in enumerate(tasks)
+                    if isinstance(task, dict) and not task.get("workspace_task_id")
+                ]
+                if len(missing_indices) == 1:
+                    next_tasks: list[dict[str, Any]] = []
+                    missing_index = missing_indices[0]
+                    for idx, task in enumerate(tasks):
+                        if not isinstance(task, dict):
+                            return None
+                        next_task = dict(task)
+                        if idx == missing_index:
+                            next_task["workspace_task_id"] = workspace_task_id
+                        next_tasks.append(next_task)
+                    result = {"tasks": next_tasks}
+        elif tool_name == "delegate_to_subagent":
+            subagent_name = tool_input.get("subagent_name")
+            task = tool_input.get("task")
+            if isinstance(subagent_name, str) and isinstance(task, str):
+                result = {
+                    "subagent_name": subagent_name,
+                    "task": task,
+                    "workspace_task_id": workspace_task_id,
+                }
+        return result
 
     def _get_hitl_coordinator(self) -> HITLCoordinator:
         """Get or create the HITL coordinator for current context."""
@@ -2538,6 +2779,71 @@ class SessionProcessor:
                 exc_info=True,
             )
 
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        if (
+            isinstance(result, ToolResult)
+            and result.is_error
+            and tool_name in {"delegate_to_subagent", "parallel_delegate_subagents"}
+            and "workspace-authority delegation requires workspace_task_id" in output_str
+        ):
+            self._queue_workspace_delegation_recovery_hint()
+            snapshot = await self._attempt_workspace_todoread_snapshot(session_id=session_id)
+            if snapshot:
+                self._queue_workspace_todoread_snapshot(snapshot)
+            suggested_task_id = self._extract_suggested_workspace_task_id(snapshot)
+            if suggested_task_id:
+                retry_hint = self._build_workspace_delegation_retry_hint(
+                    tool_name=tool_name,
+                    tool_input=tool_part.input,
+                    workspace_task_id=suggested_task_id,
+                )
+                if retry_hint:
+                    self._queue_workspace_delegation_retry_action(retry_hint)
+                retry_args = self._build_workspace_delegation_retry_arguments(
+                    tool_name=tool_name,
+                    tool_input=tool_part.input,
+                    workspace_task_id=suggested_task_id,
+                )
+                if retry_args:
+                    retry_call_id = f"{tool_part.call_id or 'retry'}-workspace-retry"
+                    if retry_call_id not in self._pending_tool_calls:
+                        retry_tool_part = ToolPart(
+                            call_id=retry_call_id,
+                            tool=tool_name,
+                            input=retry_args,
+                            status=ToolState.RUNNING,
+                            start_time=time.time(),
+                            tool_execution_id=f"exec_{uuid.uuid4().hex[:12]}",
+                        )
+                        self._pending_tool_calls[retry_call_id] = retry_tool_part
+                        yield AgentActEvent(
+                            tool_name=tool_name,
+                            tool_input=retry_args,
+                            call_id=retry_call_id,
+                            status="running",
+                            tool_execution_id=retry_tool_part.tool_execution_id,
+                        )
+                        async for retry_event in self._execute_tool(
+                            session_id,
+                            retry_call_id,
+                            tool_name,
+                            retry_args,
+                        ):
+                            yield retry_event
+        elif tool_name in {
+            "todoread",
+            "delegate_to_subagent",
+            "parallel_delegate_subagents",
+        } and not (
+            isinstance(result, ToolResult)
+            and result.is_error
+            and "workspace-authority delegation requires workspace_task_id" in output_str
+        ):
+            self._clear_workspace_delegation_recovery_hint()
+            self._clear_workspace_todoread_snapshot()
+            self._clear_workspace_delegation_retry_action()
+
         # Todowrite pending events
         # When ToolPipeline is active, events are bridged through ToolContext
         # and consumed by the pipeline's _execute_and_finalize step 8.
@@ -3155,6 +3461,8 @@ class SessionProcessor:
             self._state = ProcessorState.OBSERVING
             return
         tool_part, tool_def = resolved
+        if arguments:
+            tool_part.input = arguments
 
         # 2. Doom-loop
         doom_result = await self._check_doom_loop(

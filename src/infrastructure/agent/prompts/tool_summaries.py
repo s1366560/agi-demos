@@ -29,7 +29,10 @@ from __future__ import annotations
 
 TOOL_SUMMARIES: dict[str, str] = {
     # --- Core Task Management ---
-    "todoread": ("Read the current task list to check progress and pending items."),
+    "todoread": (
+        "Read the current task list; in workspace mode prefer each item's workspace_task_id when "
+        "delegating child tasks."
+    ),
     "todowrite": ("Create, update, or replace tasks in the task list to track work progress."),
     # --- Memory & Knowledge ---
     "memory_search": (
@@ -67,7 +70,10 @@ TOOL_SUMMARIES: dict[str, str] = {
     ),
     "plugin_manager": ("Manage agent plugins: list, install, enable, disable, or reload plugins."),
     # --- SubAgent Delegation ---
-    "delegate_to_subagent": ("Delegate a task to a specialized sub-agent with domain expertise."),
+    "delegate_to_subagent": (
+        "Delegate a task to a specialized sub-agent; pass workspace_task_id for workspace child-task "
+        "execution when available."
+    ),
     "parallel_delegate_subagents": (
         "Delegate multiple independent tasks to sub-agents for parallel execution."
     ),

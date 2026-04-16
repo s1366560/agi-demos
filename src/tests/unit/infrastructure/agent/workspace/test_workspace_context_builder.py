@@ -5,12 +5,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from src.application.services.workspace_goal_sensing_service import WorkspaceGoalSensingService
 from src.domain.model.workspace.blackboard_post import BlackboardPost, BlackboardPostStatus
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_message import MessageSenderType, WorkspaceMessage
 from src.domain.model.workspace.workspace_role import WorkspaceRole
+from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.infrastructure.agent.workspace.workspace_context_builder import (
     build_workspace_context,
     format_timestamp,
@@ -72,6 +74,27 @@ def _make_post(title: str = "Sprint Plan", pinned: bool = False) -> BlackboardPo
         status=BlackboardPostStatus.OPEN,
         is_pinned=pinned,
         created_at=_NOW,
+    )
+
+
+def _make_root_task(title: str = "Prepare rollback checklist") -> WorkspaceTask:
+    return WorkspaceTask(
+        id="task-1",
+        workspace_id="ws-1",
+        title=title,
+        description="Create a rollback runbook for the release",
+        created_by="user-1",
+        status=WorkspaceTaskStatus.TODO,
+        metadata={
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_health": "blocked",
+            "remediation_status": "replan_required",
+            "goal_progress_summary": "1/3 child tasks done; 1 blocked",
+            "goal_evidence": {"verification_grade": "warn"},
+        },
+        created_at=_NOW,
+        updated_at=_NOW,
     )
 
 
@@ -177,6 +200,33 @@ class TestFormatWorkspaceContext:
         assert "<recent-messages>" in result
         assert "<blackboard>" in result
 
+    def test_with_goal_candidates(self) -> None:
+        ws = _make_workspace()
+        candidates = WorkspaceGoalSensingService().sense_candidates(
+            tasks=[_make_root_task()],
+            objectives=[],
+            posts=[],
+            messages=[],
+            now=_NOW,
+        )
+        result = format_workspace_context(
+            ws,
+            [],
+            [],
+            [],
+            [],
+            [_make_root_task()],
+            [],
+            candidates,
+        )
+        assert "<goal-candidates>" in result
+        assert 'decision="adopt_existing_goal"' in result
+        assert "Prepare rollback checklist" in result
+        assert 'description="Create a rollback runbook for the release"' in result
+        assert 'goal_health="blocked"' in result
+        assert 'remediation_status="replan_required"' in result
+        assert 'evidence_grade="warn"' in result
+
 
 @pytest.mark.unit
 class TestBuildWorkspaceContext:
@@ -213,6 +263,9 @@ class TestBuildWorkspaceContext:
         agents = [_make_agent()]
         messages = [_make_message()]
         posts = [_make_post()]
+        tasks: list[object] = []
+        objectives: list[object] = []
+        tasks = [_make_root_task()]
 
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -238,12 +291,22 @@ class TestBuildWorkspaceContext:
             patch(
                 "src.infrastructure.agent.workspace.workspace_context_builder.SqlBlackboardRepository"
             ) as mock_bb_repo_cls,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceTaskRepository"
+            ) as mock_task_repo_cls,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_context_builder.SqlCyberObjectiveRepository"
+            ) as mock_objective_repo_cls,
         ):
             mock_ws_repo_cls.return_value.find_by_project = AsyncMock(return_value=[ws])
             mock_member_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=members)
             mock_agent_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=agents)
             mock_msg_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=messages)
             mock_bb_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=posts)
+            mock_task_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=tasks)
+            mock_objective_repo_cls.return_value.find_by_workspace = AsyncMock(
+                return_value=objectives
+            )
 
             result = await build_workspace_context("p-1", "t-1")
             assert result is not None

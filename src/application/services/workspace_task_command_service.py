@@ -29,7 +29,7 @@ class WorkspaceTaskCommandService:
         self._pending_events.clear()
         return pending_events
 
-    async def create_task(
+    async def create_task(  # noqa: PLR0913
         self,
         workspace_id: str,
         actor_user_id: str,
@@ -37,6 +37,13 @@ class WorkspaceTaskCommandService:
         description: str | None = None,
         assignee_user_id: str | None = None,
         metadata: Mapping[str, object] | None = None,
+        priority: WorkspaceTaskPriority | None = None,
+        estimated_effort: str | None = None,
+        blocker_reason: str | None = None,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.create_task(
             workspace_id=workspace_id,
@@ -45,13 +52,27 @@ class WorkspaceTaskCommandService:
             description=description,
             assignee_user_id=assignee_user_id,
             metadata=metadata,
+            priority=priority,
+            estimated_effort=estimated_effort,
+            blocker_reason=blocker_reason,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         if task.assignee_user_id or task.assignee_agent_id:
             self._queue_assigned(task)
         self._queue_task_snapshot(task, AgentEventType.WORKSPACE_TASK_CREATED)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
-    async def update_task(
+    async def update_task(  # noqa: PLR0913
         self,
         workspace_id: str,
         task_id: str,
@@ -62,6 +83,12 @@ class WorkspaceTaskCommandService:
         status: WorkspaceTaskStatus | None = None,
         metadata: Mapping[str, object] | None = None,
         priority: WorkspaceTaskPriority | None = None,
+        estimated_effort: str | None = None,
+        blocker_reason: str | None = None,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.update_task(
             workspace_id=workspace_id,
@@ -73,10 +100,23 @@ class WorkspaceTaskCommandService:
             status=status,
             metadata=metadata,
             priority=priority,
+            estimated_effort=estimated_effort,
+            blocker_reason=blocker_reason,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         if assignee_user_id is not None:
             self._queue_assigned(task)
         self._queue_task_snapshot(task, AgentEventType.WORKSPACE_TASK_UPDATED)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     async def delete_task(
@@ -85,6 +125,11 @@ class WorkspaceTaskCommandService:
         task_id: str,
         actor_user_id: str,
     ) -> bool:
+        root_goal_task_id = await self._task_service.get_root_goal_task_id(
+            workspace_id=workspace_id,
+            task_id=task_id,
+            actor_user_id=actor_user_id,
+        )
         deleted = await self._task_service.delete_task(
             workspace_id=workspace_id,
             task_id=task_id,
@@ -98,6 +143,7 @@ class WorkspaceTaskCommandService:
                     payload={"task_id": task_id},
                 )
             )
+            await self.queue_root_snapshot_async(workspace_id, actor_user_id, root_goal_task_id)
         return deleted
 
     async def assign_task_to_agent(
@@ -106,14 +152,27 @@ class WorkspaceTaskCommandService:
         task_id: str,
         actor_user_id: str,
         workspace_agent_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.assign_task_to_agent(
             workspace_id=workspace_id,
             task_id=task_id,
             actor_user_id=actor_user_id,
             workspace_agent_id=workspace_agent_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            reason=reason,
         )
         self._queue_assigned(task, workspace_agent_id=workspace_agent_id)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     async def unassign_task_from_agent(
@@ -121,13 +180,28 @@ class WorkspaceTaskCommandService:
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.unassign_task_from_agent(
             workspace_id=workspace_id,
             task_id=task_id,
             actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         self._queue_task_snapshot(task, AgentEventType.WORKSPACE_TASK_UPDATED)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     async def claim_task(
@@ -135,13 +209,28 @@ class WorkspaceTaskCommandService:
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.claim_task(
             workspace_id=workspace_id,
             task_id=task_id,
             actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         self._queue_task_snapshot(task, AgentEventType.WORKSPACE_TASK_UPDATED)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     async def start_task(
@@ -149,13 +238,28 @@ class WorkspaceTaskCommandService:
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.start_task(
             workspace_id=workspace_id,
             task_id=task_id,
             actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         self._queue_status_changed(task)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     async def block_task(
@@ -163,13 +267,28 @@ class WorkspaceTaskCommandService:
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.block_task(
             workspace_id=workspace_id,
             task_id=task_id,
             actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         self._queue_status_changed(task)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     async def complete_task(
@@ -177,13 +296,28 @@ class WorkspaceTaskCommandService:
         workspace_id: str,
         task_id: str,
         actor_user_id: str,
+        actor_type: str = "human",
+        actor_agent_id: str | None = None,
+        workspace_agent_binding_id: str | None = None,
+        reason: str | None = None,
     ) -> WorkspaceTask:
         task = await self._task_service.complete_task(
             workspace_id=workspace_id,
             task_id=task_id,
             actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            actor_agent_id=actor_agent_id,
+            workspace_agent_binding_id=workspace_agent_binding_id,
+            reason=reason,
         )
         self._queue_status_changed(task)
+        await self.queue_root_snapshot_async(
+            workspace_id,
+            actor_user_id,
+            task.metadata.get("root_goal_task_id")
+            if isinstance(task.metadata.get("root_goal_task_id"), str)
+            else None,
+        )
         return task
 
     def _queue_task_snapshot(self, task: WorkspaceTask, event_type: AgentEventType) -> None:
@@ -223,3 +357,21 @@ class WorkspaceTaskCommandService:
                 },
             )
         )
+
+    async def queue_root_snapshot_async(
+        self,
+        workspace_id: str,
+        actor_user_id: str,
+        root_goal_task_id: str | None,
+    ) -> None:
+        if not root_goal_task_id:
+            return
+        try:
+            root_task = await self._task_service.get_task(
+                workspace_id=workspace_id,
+                task_id=root_goal_task_id,
+                actor_user_id=actor_user_id,
+            )
+        except Exception:
+            return
+        self._queue_task_snapshot(root_task, AgentEventType.WORKSPACE_TASK_UPDATED)

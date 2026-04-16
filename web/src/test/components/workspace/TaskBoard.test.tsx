@@ -56,4 +56,32 @@ describe('TaskBoard', () => {
 
     expect(workspaceTaskService.create).toHaveBeenCalledWith('ws-1', { title: 'Build MVP' });
   });
+
+  it('renders root goal health, remediation, and evidence grade badges', async () => {
+    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+
+    vi.mocked(useWorkspaceTasks).mockReturnValue([
+      {
+        id: 'task-root-1',
+        title: 'Prepare rollback checklist',
+        status: 'blocked',
+        workspace_id: 'ws-1',
+        metadata: {
+          task_role: 'goal_root',
+          goal_health: 'blocked',
+          remediation_status: 'replan_required',
+          goal_evidence: { verification_grade: 'warn' },
+        },
+      },
+    ] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+
+    render(<TaskBoard workspaceId="ws-1" />);
+
+    expect(screen.getByText('Prepare rollback checklist')).toBeInTheDocument();
+    expect(screen.getByText(/Root goal/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/blocked/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Evidence warn/i)).toBeInTheDocument();
+    expect(screen.getByText(/replan required/i)).toBeInTheDocument();
+  });
 });

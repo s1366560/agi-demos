@@ -130,6 +130,16 @@ describe('unifiedEventService', () => {
   });
 
   describe('subscribe()', () => {
+    it('should auto-connect when subscribing while disconnected', async () => {
+      const handler = vi.fn();
+
+      unifiedEventService.subscribe('workspace:ws-123', handler);
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(unifiedEventService.isConnected()).toBe(true);
+    });
+
     it('should return unsubscribe function', async () => {
       await unifiedEventService.connect();
       const handler = vi.fn();

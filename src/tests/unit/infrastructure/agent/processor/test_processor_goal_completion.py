@@ -2,10 +2,11 @@
 
 import json
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.agent.processor.goal_evaluator import (
     GoalEvaluator,
@@ -336,6 +337,216 @@ class TestProcessorGoalCompletion:
         assert result.should_stop is True
         assert result.source == "tasks"
         assert result.reason == "Unable to verify task completion state"
+
+    @pytest.mark.asyncio
+    async def test_workspace_authority_uses_root_goal_task_instead_of_todoread(self) -> None:
+        task = WorkspaceTask(
+            id="root-1",
+            workspace_id="ws-1",
+            title="Root goal",
+            created_by="user-1",
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={"task_role": "goal_root"},
+        )
+
+        evaluator = GoalEvaluator(
+            llm_client=None,
+            tools={"todoread": create_todoread_tool([{"id": "t1", "status": "completed"}])},
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
+        )
+        session = AsyncMock()
+
+        class _Repo:
+            def __init__(self, db: Any) -> None:
+                del db
+
+            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+                assert task_id == "root-1"
+                return task
+
+        with (
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
+            ) as session_factory,
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
+                _Repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
+            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await evaluator.evaluate_goal_completion(
+                session_id="session-1",
+                messages=[{"role": "user", "content": "finish task"}],
+            )
+
+        assert result.achieved is False
+        assert result.source == "workspace_tasks"
+        assert result.reason == "Workspace root goal task is not complete"
+
+    @pytest.mark.asyncio
+    async def test_workspace_authority_requires_goal_evidence(self) -> None:
+        task = WorkspaceTask(
+            id="root-1",
+            workspace_id="ws-1",
+            title="Root goal",
+            created_by="user-1",
+            status=WorkspaceTaskStatus.DONE,
+            metadata={"task_role": "goal_root"},
+        )
+
+        evaluator = GoalEvaluator(
+            llm_client=None,
+            tools={},
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
+        )
+        session = AsyncMock()
+
+        class _Repo:
+            def __init__(self, db: Any) -> None:
+                del db
+
+            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+                assert task_id == "root-1"
+                return task
+
+        with (
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
+            ) as session_factory,
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
+                _Repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
+            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await evaluator.evaluate_goal_completion(
+                session_id="session-1",
+                messages=[{"role": "user", "content": "finish task"}],
+            )
+
+        assert result.achieved is False
+        assert result.should_stop is True
+        assert result.source == "workspace_tasks"
+
+    @pytest.mark.asyncio
+    async def test_workspace_authority_blocks_on_replan_required(self) -> None:
+        task = WorkspaceTask(
+            id="root-1",
+            workspace_id="ws-1",
+            title="Root goal",
+            created_by="user-1",
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={
+                "task_role": "goal_root",
+                "remediation_status": "replan_required",
+                "remediation_summary": "1 child task blocked; root goal requires replan or intervention",
+            },
+        )
+
+        evaluator = GoalEvaluator(
+            llm_client=None,
+            tools={},
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
+        )
+        session = AsyncMock()
+
+        class _Repo:
+            def __init__(self, db: Any) -> None:
+                del db
+
+            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+                assert task_id == "root-1"
+                return task
+
+        with (
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
+            ) as session_factory,
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
+                _Repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
+            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await evaluator.evaluate_goal_completion(
+                session_id="session-1",
+                messages=[{"role": "user", "content": "finish task"}],
+            )
+
+        assert result.achieved is False
+        assert result.should_stop is True
+        assert result.source == "workspace_tasks"
+        assert "requires replan" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_workspace_authority_ready_for_completion_keeps_loop_open(self) -> None:
+        task = WorkspaceTask(
+            id="root-1",
+            workspace_id="ws-1",
+            title="Root goal",
+            created_by="user-1",
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={
+                "task_role": "goal_root",
+                "remediation_status": "ready_for_completion",
+                "remediation_summary": "All child tasks are done; root goal should now validate completion evidence",
+            },
+        )
+
+        evaluator = GoalEvaluator(
+            llm_client=None,
+            tools={},
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
+        )
+        session = AsyncMock()
+
+        class _Repo:
+            def __init__(self, db: Any) -> None:
+                del db
+
+            async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+                assert task_id == "root-1"
+                return task
+
+        with (
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.async_session_factory"
+            ) as session_factory,
+            patch(
+                "src.infrastructure.agent.processor.goal_evaluator.SqlWorkspaceTaskRepository",
+                _Repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__ = AsyncMock(return_value=session)
+            session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await evaluator.evaluate_goal_completion(
+                session_id="session-1",
+                messages=[{"role": "user", "content": "finish task"}],
+            )
+
+        assert result.achieved is False
+        assert result.should_stop is False
+        assert result.source == "workspace_tasks"
+        assert "validate completion evidence" in result.reason
 
     @pytest.mark.asyncio
     async def test_no_tasks_uses_llm_self_check_true(self, evaluator_with_tasks):
