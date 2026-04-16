@@ -118,6 +118,7 @@ class WorkspaceMessageService:
 
         name_to_id: dict[str, str] = {}
         for agent in agents:
+            name_to_id[agent.agent_id.lower()] = agent.agent_id
             if agent.display_name:
                 name_to_id[agent.display_name.lower()] = agent.agent_id
 

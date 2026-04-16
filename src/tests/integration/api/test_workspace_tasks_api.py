@@ -26,6 +26,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceModel,
     WorkspaceTaskModel,
 )
+from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    should_activate_workspace_authority,
+)
 
 
 @pytest.mark.asyncio
@@ -554,6 +557,126 @@ async def test_project_objective_to_root_task(authenticated_async_client, test_d
     assert payload["metadata"]["goal_origin"] == "existing_objective"
     assert payload["metadata"]["objective_id"] == objective.id
     assert payload["metadata"]["goal_source_refs"] == [f"objective:{objective.id}"]
+
+
+@pytest.mark.asyncio
+async def test_create_objective_auto_triggers_workspace_agent_execution(
+    authenticated_async_client, test_db, monkeypatch
+) -> None:
+    client: AsyncClient = authenticated_async_client
+    triggered: dict[str, object] = {}
+
+    def _capture_fire(**kwargs: object) -> None:
+        triggered.update(kwargs)
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.routers.cyber_objectives._fire_mention_routing",
+        _capture_fire,
+    )
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-objective-trigger@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-objective-trigger",
+        name="TenantObjectiveTrigger",
+        slug="tenant-ws-api-objective-trigger",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-objective-trigger",
+        tenant_id=tenant.id,
+        name="ProjectObjectiveTrigger",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-objective-trigger",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Objective Trigger",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-objective-trigger",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    agent = AgentDefinitionModel(
+        id="agent-api-objective-trigger",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="leader-agent",
+        display_name="Leader Agent",
+        system_prompt="You lead execution.",
+        allowed_tools=[],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+    )
+    binding = WorkspaceAgentModel(
+        id="wa-api-objective-trigger",
+        workspace_id=workspace.id,
+        agent_id=agent.id,
+        display_name="Leader Agent",
+        description=None,
+        config_json={},
+        is_active=True,
+    )
+    user_tenant = UserTenant(
+        id="ut-api-objective-trigger",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-objective-trigger",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [user, tenant, project, workspace, membership, agent, binding, user_tenant, user_project]
+    )
+    await test_db.commit()
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant.id}/projects/{project.id}/workspaces/{workspace.id}/objectives",
+        json={"title": "Ship browser test objective", "obj_type": "objective"},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    message = (
+        await test_db.execute(
+            WorkspaceMessageModel.__table__.select().where(
+                WorkspaceMessageModel.workspace_id == workspace.id
+            )
+        )
+    ).mappings().first()
+    assert message is not None
+    assert "@\"Leader Agent\"" in message["content"]
+    assert "objective" in message["content"].lower()
+    assert "workspace task" in message["content"].lower()
+    assert should_activate_workspace_authority(message["content"]) is True
+    assert triggered["workspace_id"] == workspace.id
+    triggered_message = triggered["message"]
+    assert triggered_message.mentions == [agent.id]
+    assert triggered_message.metadata["conversation_scope"] == f"objective:{response.json()['id']}"
 
 
 @pytest.mark.asyncio

@@ -137,8 +137,18 @@ class WorkspaceMentionRouter:
 
         sender_name = message.metadata.get("sender_name", "someone")
         user_prompt = f"[Workspace Chat] {sender_name} mentioned you:\n\n{message.content}"
+        conversation_scope_raw = message.metadata.get("conversation_scope")
+        conversation_scope = (
+            conversation_scope_raw.strip()
+            if isinstance(conversation_scope_raw, str) and conversation_scope_raw.strip()
+            else None
+        )
 
-        conversation_id = self.workspace_conversation_id(workspace_id, agent.agent_id)
+        conversation_id = self.workspace_conversation_id(
+            workspace_id,
+            agent.agent_id,
+            conversation_scope=conversation_scope,
+        )
 
         async with self._db_session_factory() as db:
             conversation_repo = self._conversation_repo_factory(db)
@@ -374,6 +384,16 @@ class WorkspaceMentionRouter:
         )
 
     @staticmethod
-    def workspace_conversation_id(workspace_id: str, agent_id: str) -> str:
+    def workspace_conversation_id(
+        workspace_id: str,
+        agent_id: str,
+        conversation_scope: str | None = None,
+    ) -> str:
         """Generate a deterministic conversation ID for workspace+agent pair."""
-        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"workspace:{workspace_id}:agent:{agent_id}"))
+        scope_suffix = f":scope:{conversation_scope}" if conversation_scope else ""
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_DNS,
+                f"workspace:{workspace_id}:agent:{agent_id}{scope_suffix}",
+            )
+        )

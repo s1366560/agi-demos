@@ -22,9 +22,14 @@ from src.domain.model.workspace.cyber_objective import (
     CyberObjective,
     CyberObjectiveType,
 )
+from src.domain.model.workspace.workspace_message import MessageSenderType
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.utils import (
     get_container_with_db,
+)
+from src.infrastructure.adapters.primary.web.routers.workspace_chat import (
+    _fire_mention_routing,
+    get_message_service,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
     WorkspaceTaskResponse,
@@ -78,6 +83,58 @@ def _to_response(obj: CyberObjective) -> CyberObjectiveResponse:
     )
 
 
+def _format_agent_mention(display_name: str | None, agent_id: str) -> str:
+    handle = (display_name or "").strip() or agent_id
+    return f'@"{handle}"' if " " in handle else f"@{handle}"
+
+
+async def _auto_trigger_objective_execution(
+    *,
+    request: Request,
+    db: AsyncSession,
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    current_user: User,
+    objective: CyberObjective,
+) -> None:
+    container = get_container_with_db(request, db)
+    bindings = await container.workspace_agent_repository().find_by_workspace(
+        workspace_id=workspace_id,
+        active_only=True,
+        limit=1,
+        offset=0,
+    )
+    if not bindings:
+        return
+
+    leader_binding = bindings[0]
+    mention = _format_agent_mention(leader_binding.display_name, leader_binding.agent_id)
+    content = (
+        f"{mention} 中央黑板新增目标：{objective.title}。"
+        "请将这个 objective 转化为 workspace task，拆解并自主执行，直到完成。 "
+        "Please decompose this objective into child tasks, execute it, and complete it."
+    )
+    message_service = get_message_service(request, db)
+    message = await message_service.send_message(
+        workspace_id=workspace_id,
+        sender_id=current_user.id,
+        sender_type=MessageSenderType.HUMAN,
+        sender_name=current_user.email,
+        content=content,
+    )
+    message.metadata["conversation_scope"] = f"objective:{objective.id}"
+    await db.commit()
+    _fire_mention_routing(
+        request=request,
+        workspace_id=workspace_id,
+        message=message,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        user_id=current_user.id,
+    )
+
+
 @router.post(
     "",
     response_model=CyberObjectiveResponse,
@@ -105,6 +162,21 @@ async def create_objective(
     )
     saved = await repo.save(objective)
     await db.commit()
+    try:
+        await _auto_trigger_objective_execution(
+            request=request,
+            db=db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            current_user=current_user,
+            objective=saved,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to auto-trigger workspace objective execution",
+            extra={"workspace_id": workspace_id, "objective_id": saved.id},
+        )
     return _to_response(saved)
 
 

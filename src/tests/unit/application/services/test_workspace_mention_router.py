@@ -203,6 +203,46 @@ class TestRouterTriggerAgent:
         call_kwargs = mocks["message_service"].send_message.call_args.kwargs
         assert "[Error]" in call_kwargs["content"]
 
+    @patch(
+        "src.configuration.factories.create_llm_client",
+        new_callable=AsyncMock,
+    )
+    async def test_trigger_agent_uses_scoped_objective_conversation_and_activation_text(
+        self, mock_create_llm: AsyncMock
+    ) -> None:
+        from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+            should_activate_workspace_authority,
+        )
+
+        mock_create_llm.return_value = MagicMock()
+        agent = _make_agent("agent-1", "Leader Agent")
+        router, mocks = _build_router(agents=[agent], existing_conversation=None)
+        captured: dict[str, Any] = {}
+
+        async def _capturing_stream(**kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            captured.update(kwargs)
+            yield {"type": "complete", "data": {"content": "Agent response"}}
+
+        mocks["agent_service"].stream_chat_v2 = _capturing_stream
+        msg = _make_message(
+            mentions=["agent-1"],
+            content='@"Leader Agent" 中央黑板新增目标：Ship browser test objective。'
+            "请将这个 objective 转化为 workspace task，拆解并自主执行，直到完成。 "
+            "Please decompose this objective into child tasks, execute it, and complete it.",
+        )
+        msg.metadata["conversation_scope"] = "objective:obj-1"
+
+        await router.route_mentions(
+            workspace_id="ws-1", message=msg, tenant_id="t-1", project_id="p-1", user_id="user-1"
+        )
+
+        assert captured["conversation_id"] == WorkspaceMentionRouter.workspace_conversation_id(
+            "ws-1",
+            "agent-1",
+            conversation_scope="objective:obj-1",
+        )
+        assert should_activate_workspace_authority(captured["user_message"]) is True
+
 
 @pytest.mark.unit
 class TestFireAndForget:
@@ -228,6 +268,16 @@ class TestWorkspaceConversationId:
         id1 = WorkspaceMentionRouter.workspace_conversation_id("ws-1", "agent-1")
         id2 = WorkspaceMentionRouter.workspace_conversation_id("ws-1", "agent-2")
         assert id1 != id2
+
+    def test_conversation_scope_changes_workspace_conversation_id(self) -> None:
+        base = WorkspaceMentionRouter.workspace_conversation_id("ws-1", "agent-1")
+        scoped = WorkspaceMentionRouter.workspace_conversation_id(
+            "ws-1",
+            "agent-1",
+            conversation_scope="objective:obj-1",
+        )
+        assert base != scoped
+        uuid.UUID(scoped)
 
 
 @pytest.mark.unit
