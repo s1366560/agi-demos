@@ -227,8 +227,12 @@ async def _maybe_handle_root_remediation(
         attempts = attempts_raw if isinstance(attempts_raw, int) and attempts_raw >= 0 else 0
         if attempts >= _MAX_AUTO_REPLAN_ATTEMPTS:
             await _mark_root_human_review_required(
+                workspace_id=workspace_id,
+                actor_user_id=actor_user_id,
                 root_task=root_task,
                 task_repo=task_repo,
+                command_service=command_service,
+                leader_agent_id=leader_agent_id,
             )
             refreshed = await task_repo.find_by_id(root_task_id)
             return refreshed or root_task
@@ -325,10 +329,40 @@ async def _increment_root_replan_attempt(
     _ = await task_repo.save(effective_root)
 
 
+async def _ensure_root_task_started(
+    *,
+    workspace_id: str,
+    root_task: WorkspaceTask,
+    actor_user_id: str,
+    command_service: WorkspaceTaskCommandService,
+    leader_agent_id: str | None,
+    reason: str,
+) -> WorkspaceTask:
+    status_value = getattr(
+        getattr(root_task, "status", None), "value", getattr(root_task, "status", None)
+    )
+    root_task_id = getattr(root_task, "id", None)
+    if not isinstance(root_task_id, str) or status_value != "todo":
+        return root_task
+
+    return await command_service.start_task(
+        workspace_id=workspace_id,
+        task_id=root_task_id,
+        actor_user_id=actor_user_id,
+        actor_type="agent",
+        actor_agent_id=leader_agent_id,
+        reason=reason,
+    )
+
+
 async def _mark_root_human_review_required(
     *,
+    workspace_id: str,
+    actor_user_id: str,
     root_task: WorkspaceTask,
     task_repo: SqlWorkspaceTaskRepository,
+    command_service: WorkspaceTaskCommandService,
+    leader_agent_id: str | None,
 ) -> None:
     refreshed_root = await task_repo.find_by_id(root_task.id)
     effective_root = refreshed_root or root_task
@@ -340,7 +374,27 @@ async def _mark_root_human_review_required(
     )
     metadata["last_replan_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     effective_root.metadata = validate_autonomy_metadata(metadata)
-    _ = await task_repo.save(effective_root)
+    updated = await command_service.update_task(
+        workspace_id=workspace_id,
+        task_id=effective_root.id,
+        actor_user_id=actor_user_id,
+        metadata=effective_root.metadata,
+        actor_type="agent",
+        actor_agent_id=leader_agent_id,
+        reason="workspace_goal_runtime.human_review_required.metadata",
+    )
+    updated_status = getattr(
+        getattr(updated, "status", None), "value", getattr(updated, "status", None)
+    )
+    if updated_status != "blocked":
+        _ = await command_service.block_task(
+            workspace_id=workspace_id,
+            task_id=effective_root.id,
+            actor_user_id=actor_user_id,
+            actor_type="agent",
+            actor_agent_id=leader_agent_id,
+            reason="workspace_goal_runtime.human_review_required.block",
+        )
 
 
 async def _maybe_bootstrap_execution_tasks(
@@ -406,6 +460,15 @@ async def _maybe_bootstrap_execution_tasks(
         leader_agent_id=leader_agent_id,
         reason="workspace_goal_runtime.bootstrap_assign_execution_tasks",
     )
+    if created_tasks:
+        _ = await _ensure_root_task_started(
+            workspace_id=workspace_id,
+            root_task=root_task,
+            actor_user_id=actor_user_id,
+            command_service=command_service,
+            leader_agent_id=leader_agent_id,
+            reason="workspace_goal_runtime.bootstrap_execution_tasks.start_root",
+        )
 
 
 async def _replan_execution_tasks(
@@ -512,7 +575,9 @@ def _parse_worker_report_payload(
         payload_artifacts = payload.get("artifacts")
         if isinstance(payload_artifacts, list):
             merged_artifacts = list(
-                dict.fromkeys([*merged_artifacts, *[str(item) for item in payload_artifacts if item]])
+                dict.fromkeys(
+                    [*merged_artifacts, *[str(item) for item in payload_artifacts if item]]
+                )
             )
         payload_verifications = payload.get("verifications")
         if isinstance(payload_verifications, list):
@@ -552,7 +617,9 @@ async def _assign_execution_tasks_to_workers(
     if not active_bindings:
         return
 
-    worker_bindings = [binding for binding in active_bindings if binding.agent_id != leader_agent_id]
+    worker_bindings = [
+        binding for binding in active_bindings if binding.agent_id != leader_agent_id
+    ]
     if not worker_bindings:
         worker_bindings = list(active_bindings)
     if not worker_bindings:
@@ -628,10 +695,12 @@ async def apply_workspace_worker_report(
                 prior_verifications = [str(item) for item in existing_verifications if item]
             else:
                 prior_verifications = []
-            normalized_summary, merged_artifacts, report_verifications = _parse_worker_report_payload(
-                report_type=report_type,
-                summary=summary,
-                artifacts=merged_artifacts,
+            normalized_summary, merged_artifacts, report_verifications = (
+                _parse_worker_report_payload(
+                    report_type=report_type,
+                    summary=summary,
+                    artifacts=merged_artifacts,
+                )
             )
             metadata["evidence_refs"] = merged_artifacts
             metadata["execution_verifications"] = list(
@@ -681,7 +750,10 @@ async def apply_workspace_worker_report(
                     actor_agent_id=leader_agent_id,
                     reason="workspace_goal_runtime.worker_report.completed.complete",
                 )
-            elif report_type in {"blocked", "failed", "needs_replan"} and updated.status.value != "blocked":
+            elif (
+                report_type in {"blocked", "failed", "needs_replan"}
+                and updated.status.value != "blocked"
+            ):
                 updated = await command_service.block_task(
                     workspace_id=workspace_id,
                     task_id=task_id,
@@ -724,12 +796,16 @@ async def resolve_workspace_execution_task_for_delegate(
                     return task
 
             candidates = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-            open_candidates = [task for task in candidates if task.status != WorkspaceTaskStatus.DONE]
+            open_candidates = [
+                task for task in candidates if task.status != WorkspaceTaskStatus.DONE
+            ]
             if not open_candidates:
                 return None
 
             exact_title_matches = [
-                task for task in open_candidates if task.title.strip().lower() == normalized_text.lower()
+                task
+                for task in open_candidates
+                if task.title.strip().lower() == normalized_text.lower()
             ]
             if len(exact_title_matches) == 1:
                 return exact_title_matches[0]
@@ -806,6 +882,19 @@ async def prepare_workspace_subagent_delegation(
                     actor_agent_id=leader_agent_id,
                     reason="workspace_goal_runtime.prepare_subagent_delegation.start",
                 )
+            root_task = await task_service.get_task(
+                workspace_id=workspace_id,
+                task_id=root_goal_task_id,
+                actor_user_id=actor_user_id,
+            )
+            _ = await _ensure_root_task_started(
+                workspace_id=workspace_id,
+                root_task=root_task,
+                actor_user_id=actor_user_id,
+                command_service=command_service,
+                leader_agent_id=leader_agent_id,
+                reason="workspace_goal_runtime.prepare_subagent_delegation.start_root",
+            )
 
             await db.commit()
             publisher = WorkspaceTaskEventPublisher(await get_redis_client())

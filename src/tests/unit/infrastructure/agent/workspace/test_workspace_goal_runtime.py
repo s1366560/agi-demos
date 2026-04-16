@@ -124,7 +124,9 @@ class TestWorkspaceGoalRuntime:
             session.commit.assert_awaited_once()
             publisher.publish_pending_events.assert_awaited_once()
 
-    async def test_bootstraps_execution_tasks_from_decomposer_when_root_has_no_children(self) -> None:
+    async def test_bootstraps_execution_tasks_from_decomposer_when_root_has_no_children(
+        self,
+    ) -> None:
         workspace = MagicMock()
         workspace.id = "ws-1"
         root_task = MagicMock()
@@ -224,6 +226,7 @@ class TestWorkspaceGoalRuntime:
         workspace.id = "ws-1"
         root_task = MagicMock()
         root_task.id = "root-1"
+        root_task.status = MagicMock(value="todo")
         root_task.title = "Prepare rollback checklist"
 
         session = AsyncMock()
@@ -303,6 +306,7 @@ class TestWorkspaceGoalRuntime:
 
             create_calls: list[dict[str, object]] = []
             assign_calls: list[dict[str, object]] = []
+            start_calls: list[dict[str, object]] = []
 
             async def create_task(**kwargs: object) -> object:
                 create_calls.append(dict(kwargs))
@@ -325,6 +329,13 @@ class TestWorkspaceGoalRuntime:
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.assign_task_to_agent",
                     new=AsyncMock(side_effect=assign_task_to_agent),
                 ),
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.start_task",
+                    new=AsyncMock(
+                        side_effect=lambda **kwargs: start_calls.append(dict(kwargs))
+                        or MagicMock(id="root-1", status=MagicMock(value="in_progress"))
+                    ),
+                ),
             ):
                 await maybe_materialize_workspace_goal_candidate(
                     "p-1",
@@ -342,6 +353,10 @@ class TestWorkspaceGoalRuntime:
                 "bind-worker-b",
             ]
             assert all(call["actor_agent_id"] == "leader-agent" for call in assign_calls)
+            assert start_calls[0]["task_id"] == "root-1"
+            assert start_calls[0]["reason"] == (
+                "workspace_goal_runtime.bootstrap_execution_tasks.start_root"
+            )
 
     async def test_apply_worker_report_uses_leader_side_task_mutations(self) -> None:
         task = MagicMock()
@@ -560,7 +575,9 @@ class TestWorkspaceGoalRuntime:
                 "workspace_goal_runtime.worker_report.completed.complete"
             )
 
-    async def test_prepare_workspace_subagent_delegation_marks_matching_task_in_progress(self) -> None:
+    async def test_prepare_workspace_subagent_delegation_marks_matching_task_in_progress(
+        self,
+    ) -> None:
         task = MagicMock()
         task.id = "child-1"
         task.workspace_id = "ws-1"
@@ -600,9 +617,7 @@ class TestWorkspaceGoalRuntime:
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"
             ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ),
+            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"),
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
             ) as publisher_cls,
@@ -620,14 +635,30 @@ class TestWorkspaceGoalRuntime:
             started_task.id = "child-1"
             started_task.status = WorkspaceTaskStatus.IN_PROGRESS
 
+            root_task = MagicMock()
+            root_task.id = "root-1"
+            root_task.status = MagicMock(value="todo")
+
+            workspace_task_service = MagicMock()
+            workspace_task_service.get_task = AsyncMock(return_value=root_task)
+
             with (
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService",
+                    return_value=workspace_task_service,
+                ),
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
                     new=AsyncMock(return_value=updated_task),
                 ) as update_mock,
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.start_task",
-                    new=AsyncMock(return_value=started_task),
+                    new=AsyncMock(
+                        side_effect=[
+                            started_task,
+                            MagicMock(id="root-1", status=MagicMock(value="in_progress")),
+                        ]
+                    ),
                 ) as start_mock,
             ):
                 binding = await prepare_workspace_subagent_delegation(
@@ -650,8 +681,13 @@ class TestWorkspaceGoalRuntime:
             metadata = update_mock.await_args.kwargs["metadata"]
             assert metadata["delegated_subagent_name"] == "worker-subagent"
             assert metadata["delegated_subagent_id"] == "sa-1"
-            assert start_mock.await_args.kwargs["reason"] == (
+            child_start_call, root_start_call = start_mock.await_args_list
+            assert child_start_call.kwargs["reason"] == (
                 "workspace_goal_runtime.prepare_subagent_delegation.start"
+            )
+            assert root_start_call.kwargs["task_id"] == "root-1"
+            assert root_start_call.kwargs["reason"] == (
+                "workspace_goal_runtime.prepare_subagent_delegation.start_root"
             )
 
     async def test_resolve_workspace_execution_task_prefers_explicit_task_id_marker(self) -> None:
@@ -668,12 +704,15 @@ class TestWorkspaceGoalRuntime:
         async def fake_session_factory():
             yield session
 
-        with patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-            fake_session_factory,
-        ), patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-        ) as task_repo_cls:
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+                fake_session_factory,
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
+            ) as task_repo_cls,
+        ):
             task_repo_cls.return_value.find_by_id = AsyncMock(return_value=task)
 
             resolved = await resolve_workspace_execution_task_for_delegate(
@@ -689,7 +728,9 @@ class TestWorkspaceGoalRuntime:
 
         assert resolved is task
 
-    async def test_resolve_workspace_execution_task_prefers_explicit_argument_over_title(self) -> None:
+    async def test_resolve_workspace_execution_task_prefers_explicit_argument_over_title(
+        self,
+    ) -> None:
         task = MagicMock()
         task.id = "child-99"
         task.workspace_id = "ws-1"
@@ -703,12 +744,15 @@ class TestWorkspaceGoalRuntime:
         async def fake_session_factory():
             yield session
 
-        with patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-            fake_session_factory,
-        ), patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-        ) as task_repo_cls:
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+                fake_session_factory,
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
+            ) as task_repo_cls,
+        ):
             task_repo_cls.return_value.find_by_id = AsyncMock(return_value=task)
 
             resolved = await resolve_workspace_execution_task_for_delegate(
@@ -734,7 +778,9 @@ class TestWorkspaceGoalRuntime:
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "remediation_status": "replan_required",
@@ -802,7 +848,9 @@ class TestWorkspaceGoalRuntime:
                 title="Prepare rollback checklist",
                 metadata=dict(root_task.metadata),
             )
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(side_effect=[[old_child], [old_child]])
+            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(
+                side_effect=[[old_child], [old_child]]
+            )
             task_repo_cls.return_value.find_by_id = AsyncMock(return_value=refreshed_root)
             task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
             sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
@@ -857,7 +905,9 @@ class TestWorkspaceGoalRuntime:
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "remediation_status": "ready_for_completion",
@@ -965,7 +1015,9 @@ class TestWorkspaceGoalRuntime:
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "remediation_status": "ready_for_completion",
@@ -1034,7 +1086,9 @@ class TestWorkspaceGoalRuntime:
             objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
             blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
             message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(return_value=[child_done])
+            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(
+                return_value=[child_done]
+            )
             task_repo_cls.return_value.find_by_id = AsyncMock(return_value=root_task)
             task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
             sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
@@ -1053,7 +1107,10 @@ class TestWorkspaceGoalRuntime:
             with (
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.start_task",
-                    new=AsyncMock(side_effect=lambda **kwargs: start_calls.append(dict(kwargs)) or MagicMock(id="root-1", status=MagicMock(value="in_progress"))),
+                    new=AsyncMock(
+                        side_effect=lambda **kwargs: start_calls.append(dict(kwargs))
+                        or MagicMock(id="root-1", status=MagicMock(value="in_progress"))
+                    ),
                 ),
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.complete_task",
@@ -1064,12 +1121,14 @@ class TestWorkspaceGoalRuntime:
 
             saved_root = task_repo_cls.return_value.save.await_args.args[0]
             assert saved_root.metadata["goal_evidence"]["artifacts"] == ["artifact:file-1"]
-            assert "browser_assert:rollback_check" in saved_root.metadata["goal_evidence"][
-                "verifications"
-            ]
-            assert "actor_reason:workspace_task.complete" in saved_root.metadata["goal_evidence"][
-                "verifications"
-            ]
+            assert (
+                "browser_assert:rollback_check"
+                in saved_root.metadata["goal_evidence"]["verifications"]
+            )
+            assert (
+                "actor_reason:workspace_task.complete"
+                in saved_root.metadata["goal_evidence"]["verifications"]
+            )
             assert saved_root.metadata["goal_evidence"]["verification_grade"] == "pass"
             assert start_calls == []
             assert complete_calls[0]["task_id"] == "root-1"
@@ -1088,7 +1147,9 @@ class TestWorkspaceGoalRuntime:
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "remediation_status": "ready_for_completion",
@@ -1153,7 +1214,9 @@ class TestWorkspaceGoalRuntime:
             objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
             blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
             message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(return_value=[child_done])
+            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(
+                return_value=[child_done]
+            )
             task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
             sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
             materializer = materializer_cls.return_value
@@ -1184,7 +1247,9 @@ class TestWorkspaceGoalRuntime:
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "remediation_status": "replan_required",
@@ -1252,6 +1317,8 @@ class TestWorkspaceGoalRuntime:
 
             create_calls: list[dict[str, object]] = []
             delete_calls: list[dict[str, object]] = []
+            update_calls: list[dict[str, object]] = []
+            block_calls: list[dict[str, object]] = []
 
             with (
                 patch(
@@ -1262,10 +1329,24 @@ class TestWorkspaceGoalRuntime:
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.delete_task",
                     new=AsyncMock(side_effect=lambda **kwargs: delete_calls.append(dict(kwargs))),
                 ),
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
+                    new=AsyncMock(
+                        side_effect=lambda **kwargs: update_calls.append(dict(kwargs)) or root_task
+                    ),
+                ),
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.block_task",
+                    new=AsyncMock(
+                        side_effect=lambda **kwargs: block_calls.append(dict(kwargs))
+                        or MagicMock(id="root-1", status=MagicMock(value="blocked"))
+                    ),
+                ),
             ):
                 await maybe_materialize_workspace_goal_candidate("p-1", "t-1", "u-1")
 
             assert create_calls == []
             assert delete_calls == []
-            saved_task = task_repo_cls.return_value.save.await_args.args[0]
-            assert "requires human review" in saved_task.metadata["remediation_summary"]
+            assert "requires human review" in update_calls[0]["metadata"]["remediation_summary"]
+            assert block_calls[0]["task_id"] == "root-1"
+            assert block_calls[0]["reason"] == "workspace_goal_runtime.human_review_required.block"

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import status
@@ -26,13 +28,17 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceModel,
     WorkspaceTaskModel,
 )
+from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    maybe_materialize_workspace_goal_candidate,
     should_activate_workspace_authority,
 )
 
 
 @pytest.mark.asyncio
-async def test_assign_agent_rejects_cross_workspace_binding(authenticated_async_client, test_db) -> None:
+async def test_assign_agent_rejects_cross_workspace_binding(
+    authenticated_async_client, test_db
+) -> None:
     client: AsyncClient = authenticated_async_client
 
     user = User(
@@ -154,7 +160,9 @@ async def test_assign_agent_rejects_cross_workspace_binding(authenticated_async_
 
 
 @pytest.mark.asyncio
-async def test_state_transition_validation_for_complete(authenticated_async_client, test_db) -> None:
+async def test_state_transition_validation_for_complete(
+    authenticated_async_client, test_db
+) -> None:
     client: AsyncClient = authenticated_async_client
 
     user = User(
@@ -423,7 +431,18 @@ async def test_assign_agent_emits_full_task_payload_with_workspace_binding(
     )
 
     test_db.add_all(
-        [user, tenant, project, workspace, membership, agent, binding, task, user_tenant, user_project]
+        [
+            user,
+            tenant,
+            project,
+            workspace,
+            membership,
+            agent,
+            binding,
+            task,
+            user_tenant,
+            user_project,
+        ]
     )
     await test_db.commit()
 
@@ -434,7 +453,9 @@ async def test_assign_agent_emits_full_task_payload_with_workspace_binding(
 
     assert response.status_code == status.HTTP_200_OK
     assigned_event = next(
-        payload for event_type, payload in published_events if event_type == "workspace_task_assigned"
+        payload
+        for event_type, payload in published_events
+        if event_type == "workspace_task_assigned"
     )
     assert assigned_event["workspace_agent_id"] == binding.id
     assert assigned_event["assignee_agent_id"] == agent.id
@@ -662,14 +683,18 @@ async def test_create_objective_auto_triggers_workspace_agent_execution(
 
     assert response.status_code == status.HTTP_201_CREATED
     message = (
-        await test_db.execute(
-            WorkspaceMessageModel.__table__.select().where(
-                WorkspaceMessageModel.workspace_id == workspace.id
+        (
+            await test_db.execute(
+                WorkspaceMessageModel.__table__.select().where(
+                    WorkspaceMessageModel.workspace_id == workspace.id
+                )
             )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     assert message is not None
-    assert "@\"Leader Agent\"" in message["content"]
+    assert '@"Leader Agent"' in message["content"]
     assert "objective" in message["content"].lower()
     assert "workspace task" in message["content"].lower()
     assert should_activate_workspace_authority(message["content"]) is True
@@ -832,7 +857,9 @@ async def test_complete_rejects_inferred_root_goal_without_artifact_proof(
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "goal_evidence": {
@@ -932,7 +959,9 @@ async def test_patch_to_done_rejects_inferred_root_goal_without_artifact_proof(
             "goal_source_refs": ["message:msg-1"],
             "goal_evidence_bundle": {
                 "score": 0.85,
-                "signals": [{"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}],
+                "signals": [
+                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
+                ],
                 "formalized_at": "2026-04-16T03:00:00Z",
             },
             "goal_evidence": {
@@ -1291,9 +1320,7 @@ async def test_materialize_workspace_goal_candidate(authenticated_async_client, 
         role="owner",
     )
 
-    test_db.add_all(
-        [user, tenant, project, workspace, membership, user_tenant, user_project]
-    )
+    test_db.add_all([user, tenant, project, workspace, membership, user_tenant, user_project])
     await test_db.commit()
 
     response = await client.post(
@@ -1456,3 +1483,403 @@ async def test_execution_task_mutations_reconcile_root_goal_progress(
     assert refreshed_root.metadata_json["blocked_child_task_ids"] == []
     assert refreshed_root.metadata_json["remediation_status"] == "ready_for_completion"
     assert "validate completion evidence" in refreshed_root.metadata_json["remediation_summary"]
+
+
+@pytest.mark.asyncio
+async def test_blackboard_triggered_runtime_starts_root_task_when_execution_begins(test_db) -> None:
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440100",
+        email="ws-api-runtime-start@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-runtime-start",
+        name="TenantRuntimeStart",
+        slug="tenant-ws-runtime-start",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-runtime-start",
+        tenant_id=tenant.id,
+        name="ProjectRuntimeStart",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-runtime-start",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Runtime Start",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-runtime-start",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    blackboard_post = BlackboardPostModel(
+        id="post-runtime-start",
+        workspace_id=workspace.id,
+        author_id=user.id,
+        title="Directive",
+        content="Please prepare rollback checklist",
+        status="open",
+        is_pinned=True,
+    )
+    user_tenant = UserTenant(
+        id="ut-runtime-start",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-runtime-start",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+    test_db.add_all(
+        [user, tenant, project, workspace, membership, blackboard_post, user_tenant, user_project]
+    )
+    await test_db.commit()
+
+    task_decomposer = AsyncMock()
+    task_decomposer.decompose.return_value = DecompositionResult(
+        subtasks=(SubTask(id="t1", description="Draft checklist"),),
+        is_decomposed=True,
+    )
+
+    @asynccontextmanager
+    async def fake_session_factory():
+        yield test_db
+
+    with (
+        patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+            fake_session_factory,
+        ),
+        patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        root_task = await maybe_materialize_workspace_goal_candidate(
+            project.id,
+            tenant.id,
+            user.id,
+            task_decomposer=task_decomposer,
+            user_query="Please prepare rollback checklist",
+        )
+
+    assert root_task is not None
+    refreshed_root = await test_db.get(WorkspaceTaskModel, root_task.id)
+    assert refreshed_root is not None
+    await test_db.refresh(refreshed_root)
+    assert refreshed_root.status == "in_progress"
+    assert refreshed_root.metadata_json["task_role"] == "goal_root"
+    assert refreshed_root.metadata_json["goal_origin"] == "agent_inferred"
+    assert len(refreshed_root.metadata_json["active_child_task_ids"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_blackboard_triggered_runtime_completes_root_on_ready_for_completion(test_db) -> None:
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440101",
+        email="ws-api-runtime-complete@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-runtime-complete",
+        name="TenantRuntimeComplete",
+        slug="tenant-ws-runtime-complete",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-runtime-complete",
+        tenant_id=tenant.id,
+        name="ProjectRuntimeComplete",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-runtime-complete",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Runtime Complete",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-runtime-complete",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    root_task = WorkspaceTaskModel(
+        id="root-runtime-complete",
+        workspace_id=workspace.id,
+        title="Prepare rollback checklist",
+        created_by=user.id,
+        status="in_progress",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "agent_inferred",
+            "goal_source_refs": ["blackboard:post-runtime-complete"],
+            "goal_evidence_bundle": {
+                "score": 0.85,
+                "signals": [
+                    {
+                        "source_type": "blackboard_signal",
+                        "ref": "blackboard:post-runtime-complete",
+                        "score": 0.85,
+                    }
+                ],
+                "formalized_at": "2026-04-16T03:00:00Z",
+            },
+            "remediation_status": "ready_for_completion",
+        },
+    )
+    child_task = WorkspaceTaskModel(
+        id="child-runtime-complete",
+        workspace_id=workspace.id,
+        title="Draft checklist",
+        created_by=user.id,
+        status="done",
+        completed_at=datetime.now(UTC),
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": root_task.id,
+            "lineage_source": "agent",
+            "evidence_refs": ["artifact:file-1"],
+            "execution_verifications": ["browser_assert:rollback_check"],
+        },
+    )
+    blackboard_post = BlackboardPostModel(
+        id="post-runtime-complete",
+        workspace_id=workspace.id,
+        author_id=user.id,
+        title="Directive",
+        content="Please prepare rollback checklist",
+        status="open",
+        is_pinned=True,
+    )
+    user_tenant = UserTenant(
+        id="ut-runtime-complete",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-runtime-complete",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+    test_db.add_all(
+        [
+            user,
+            tenant,
+            project,
+            workspace,
+            membership,
+            root_task,
+            child_task,
+            blackboard_post,
+            user_tenant,
+            user_project,
+        ]
+    )
+    await test_db.commit()
+
+    @asynccontextmanager
+    async def fake_session_factory():
+        yield test_db
+
+    with (
+        patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+            fake_session_factory,
+        ),
+        patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        result = await maybe_materialize_workspace_goal_candidate(
+            project.id,
+            tenant.id,
+            user.id,
+            user_query="Please prepare rollback checklist",
+        )
+
+    assert result is not None
+    refreshed_root = await test_db.get(WorkspaceTaskModel, root_task.id)
+    assert refreshed_root is not None
+    await test_db.refresh(refreshed_root)
+    assert refreshed_root.status == "done"
+    assert "goal_evidence" in refreshed_root.metadata_json
+    assert refreshed_root.metadata_json["goal_evidence"]["verification_grade"] in {"pass", "warn"}
+
+
+@pytest.mark.asyncio
+async def test_blackboard_triggered_runtime_blocks_root_only_for_human_review_escalation(
+    test_db,
+) -> None:
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440102",
+        email="ws-api-runtime-block@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-runtime-block",
+        name="TenantRuntimeBlock",
+        slug="tenant-ws-runtime-block",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-runtime-block",
+        tenant_id=tenant.id,
+        name="ProjectRuntimeBlock",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-runtime-block",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Runtime Block",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-runtime-block",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    root_task = WorkspaceTaskModel(
+        id="root-runtime-block",
+        workspace_id=workspace.id,
+        title="Prepare rollback checklist",
+        created_by=user.id,
+        status="in_progress",
+        metadata_json={
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "agent_inferred",
+            "goal_source_refs": ["blackboard:post-runtime-block"],
+            "goal_evidence_bundle": {
+                "score": 0.85,
+                "signals": [
+                    {
+                        "source_type": "blackboard_signal",
+                        "ref": "blackboard:post-runtime-block",
+                        "score": 0.85,
+                    }
+                ],
+                "formalized_at": "2026-04-16T03:00:00Z",
+            },
+            "remediation_status": "replan_required",
+            "replan_attempt_count": 2,
+        },
+    )
+    blackboard_post = BlackboardPostModel(
+        id="post-runtime-block",
+        workspace_id=workspace.id,
+        author_id=user.id,
+        title="Directive",
+        content="Please prepare rollback checklist",
+        status="open",
+        is_pinned=True,
+    )
+    user_tenant = UserTenant(
+        id="ut-runtime-block",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-runtime-block",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+    test_db.add_all(
+        [
+            user,
+            tenant,
+            project,
+            workspace,
+            membership,
+            root_task,
+            blackboard_post,
+            user_tenant,
+            user_project,
+        ]
+    )
+    await test_db.commit()
+
+    @asynccontextmanager
+    async def fake_session_factory():
+        yield test_db
+
+    with (
+        patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+            fake_session_factory,
+        ),
+        patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        result = await maybe_materialize_workspace_goal_candidate(
+            project.id,
+            tenant.id,
+            user.id,
+            user_query="Please prepare rollback checklist",
+        )
+
+    assert result is not None
+    refreshed_root = await test_db.get(WorkspaceTaskModel, root_task.id)
+    assert refreshed_root is not None
+    await test_db.refresh(refreshed_root)
+    assert refreshed_root.status == "blocked"
+    assert "requires human review" in refreshed_root.metadata_json["remediation_summary"]
