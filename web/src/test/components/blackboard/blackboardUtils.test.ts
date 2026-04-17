@@ -113,11 +113,32 @@ describe('blackboardUtils', () => {
     expect(stats.totalTasks).toBe(3);
     expect(stats.completedTasks).toBe(1);
     expect(stats.blockedTasks).toBe(1);
+    expect(stats.pendingAdjudicationTasks).toBe(0);
     expect(stats.activeAgents).toBe(2);
     expect(stats.humanSeats).toBe(1);
     expect(stats.discussions).toBe(2);
     expect(stats.pinnedPosts).toBe(1);
     expect(stats.completionRatio).toBe(33);
+  });
+
+  it('counts pending leader adjudication tasks', () => {
+    const stats = buildBlackboardStats(
+      [
+        {
+          ...BASE_TASK,
+          id: 'pending-task',
+          status: 'in_progress',
+          metadata: {
+            pending_leader_adjudication: true,
+          },
+        },
+      ],
+      [],
+      [],
+      []
+    );
+
+    expect(stats.pendingAdjudicationTasks).toBe(1);
   });
 
   it('assigns fallback actor coordinates without colliding with the central blackboard', () => {

@@ -10,6 +10,7 @@ from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecord
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
     maybe_materialize_workspace_goal_candidate,
     prepare_workspace_subagent_delegation,
@@ -464,7 +465,9 @@ class TestWorkspaceGoalRuntime:
                 == "workspace_goal_runtime.worker_report.progress.start"
             )
 
-    async def test_apply_worker_report_parses_structured_browser_verdict(self) -> None:
+    async def test_apply_worker_report_parses_structured_browser_verdict_as_candidate_evidence(
+        self,
+    ) -> None:
         task = MagicMock()
         task.id = "child-browser-1"
         task.workspace_id = "ws-1"
@@ -527,10 +530,6 @@ class TestWorkspaceGoalRuntime:
             publisher = publisher_cls.return_value
             publisher.publish_pending_events = AsyncMock(return_value=None)
 
-            completed_task = MagicMock()
-            completed_task.id = "child-browser-1"
-            completed_task.status = MagicMock(value="done")
-
             with (
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
@@ -538,7 +537,7 @@ class TestWorkspaceGoalRuntime:
                 ) as update_mock,
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.complete_task",
-                    new=AsyncMock(return_value=completed_task),
+                    new=AsyncMock(),
                 ) as complete_mock,
             ):
                 result = await apply_workspace_worker_report(
@@ -557,7 +556,7 @@ class TestWorkspaceGoalRuntime:
                     leader_agent_id="leader-agent",
                 )
 
-            assert result is completed_task
+            assert result is task
             metadata = update_mock.await_args.kwargs["metadata"]
             assert metadata["evidence_refs"] == [
                 "artifact:existing",
@@ -571,9 +570,239 @@ class TestWorkspaceGoalRuntime:
                 "worker_verdict:pass",
                 "verification_grade:pass",
             ]
-            assert complete_mock.await_args.kwargs["reason"] == (
-                "workspace_goal_runtime.worker_report.completed.complete"
+            assert metadata["pending_leader_adjudication"] is True
+            assert metadata["last_worker_report_type"] == "completed"
+            assert metadata["execution_state"]["phase"] == "pending_adjudication"
+            complete_mock.assert_not_awaited()
+
+    async def test_apply_worker_report_is_idempotent_for_duplicate_terminal_reports(self) -> None:
+        task = MagicMock()
+        task.id = "child-dup-1"
+        task.workspace_id = "ws-1"
+        task.assignee_agent_id = "worker-a"
+        task.status = MagicMock(value="in_progress")
+        task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "derived_from_internal_plan_step": "dup-step",
+            "execution_state": {
+                "phase": "in_progress",
+                "last_agent_reason": "workspace_goal_runtime.prepare_subagent_delegation.start",
+                "last_agent_action": "start",
+                "updated_by_actor_type": "agent",
+                "updated_by_actor_id": "leader-agent",
+                "updated_at": "2026-04-16T03:00:00Z",
+            },
+            "evidence_refs": [],
+        }
+
+        session = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session_factory():
+            yield session
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+                fake_session_factory,
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
+            ) as task_service_cls,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
+            ) as publisher_cls,
+        ):
+            task_service = task_service_cls.return_value
+            task_service.get_task = AsyncMock(return_value=task)
+            publisher = publisher_cls.return_value
+            publisher.publish_pending_events = AsyncMock(return_value=None)
+
+            async def update_task_side_effect(**kwargs: object) -> object:
+                task.metadata = dict(kwargs["metadata"])
+                return task
+
+            with patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
+                new=AsyncMock(side_effect=update_task_side_effect),
+            ) as update_mock:
+                first = await apply_workspace_worker_report(
+                    workspace_id="ws-1",
+                    root_goal_task_id="root-1",
+                    task_id="child-dup-1",
+                    actor_user_id="u-1",
+                    worker_agent_id="worker-a",
+                    report_type="completed",
+                    summary='{"summary":"Done","artifacts":["artifact:one"]}',
+                    artifacts=[],
+                    leader_agent_id="leader-agent",
+                    report_id="run-1",
+                )
+                second = await apply_workspace_worker_report(
+                    workspace_id="ws-1",
+                    root_goal_task_id="root-1",
+                    task_id="child-dup-1",
+                    actor_user_id="u-1",
+                    worker_agent_id="worker-a",
+                    report_type="completed",
+                    summary='{"summary":"Done","artifacts":["artifact:one"]}',
+                    artifacts=[],
+                    leader_agent_id="leader-agent",
+                    report_id="run-1",
+                )
+
+            assert first is task
+            assert second is task
+            assert update_mock.await_count == 1
+
+    @pytest.mark.parametrize(
+        ("status", "updated_status_value", "expected_method", "expected_reason"),
+        [
+            (
+                WorkspaceTaskStatus.IN_PROGRESS,
+                "todo",
+                "start_task",
+                "workspace_goal_runtime.leader_adjudication.in_progress.start",
+            ),
+            (
+                WorkspaceTaskStatus.DONE,
+                "in_progress",
+                "complete_task",
+                "workspace_goal_runtime.leader_adjudication.completed.complete",
+            ),
+            (
+                WorkspaceTaskStatus.BLOCKED,
+                "in_progress",
+                "block_task",
+                "workspace_goal_runtime.leader_adjudication.blocked.block",
+            ),
+        ],
+    )
+    async def test_adjudicate_worker_report_applies_direct_leader_decision(
+        self,
+        status: WorkspaceTaskStatus,
+        updated_status_value: str,
+        expected_method: str,
+        expected_reason: str,
+    ) -> None:
+        task = MagicMock()
+        task.id = "child-adjudicate-1"
+        task.workspace_id = "ws-1"
+        task.title = "Draft checklist"
+        task.status = MagicMock(value="in_progress")
+        task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "derived_from_internal_plan_step": "adj-step",
+            "pending_leader_adjudication": True,
+            "last_worker_report_summary": "Checklist drafted",
+            "execution_state": {
+                "phase": "pending_adjudication",
+                "last_agent_reason": "workspace_goal_runtime.worker_report.completed:Checklist drafted",
+                "last_agent_action": "await_leader_adjudication",
+                "updated_by_actor_type": "agent",
+                "updated_by_actor_id": "leader-agent",
+                "updated_at": "2026-04-16T03:00:00Z",
+            },
+        }
+
+        session = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session_factory():
+            yield session
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+                fake_session_factory,
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
+            ) as task_service_cls,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
+            ) as publisher_cls,
+        ):
+            task_service = task_service_cls.return_value
+            task_service.get_task = AsyncMock(return_value=task)
+            publisher = publisher_cls.return_value
+            publisher.publish_pending_events = AsyncMock(return_value=None)
+
+            updated_task = MagicMock()
+            updated_task.id = "child-adjudicate-1"
+            updated_task.status = MagicMock(value=updated_status_value)
+            updated_task.metadata = dict(task.metadata)
+
+            final_task = MagicMock()
+            final_task.id = "child-adjudicate-1"
+            final_task.status = status
+
+            with (
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
+                    new=AsyncMock(return_value=updated_task),
+                ) as update_mock,
+                patch(
+                    f"src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.{expected_method}",
+                    new=AsyncMock(return_value=final_task),
+                ) as terminal_mock,
+            ):
+                result = await adjudicate_workspace_worker_report(
+                    workspace_id="ws-1",
+                    task_id="child-adjudicate-1",
+                    actor_user_id="u-1",
+                    status=status,
+                    leader_agent_id="leader-agent",
+                )
+
+            assert result is final_task
+            metadata = update_mock.await_args.kwargs["metadata"]
+            assert metadata["pending_leader_adjudication"] is False
+            assert metadata["last_leader_adjudication_status"] == status.value
+            assert metadata["execution_state"]["updated_by_actor_id"] == "leader-agent"
+            assert (
+                update_mock.await_args.kwargs["reason"]
+                == f"workspace_goal_runtime.leader_adjudication.{status.value}.metadata"
             )
+            assert terminal_mock.await_args.kwargs["reason"] == expected_reason
 
     async def test_prepare_workspace_subagent_delegation_marks_matching_task_in_progress(
         self,

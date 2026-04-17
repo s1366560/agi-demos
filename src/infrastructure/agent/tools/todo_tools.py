@@ -79,13 +79,29 @@ def _todo_priority_to_workspace(priority: str | None) -> WorkspaceTaskPriority:
 
 def _workspace_task_to_todo(task: WorkspaceTask) -> dict[str, Any]:
     step_id = task.metadata.get("derived_from_internal_plan_step")
-    return {
+    todo: dict[str, Any] = {
         "id": step_id if isinstance(step_id, str) and step_id else task.id,
         "workspace_task_id": task.id,
         "content": task.title,
         "status": _workspace_status_to_todo(task.status),
         "priority": _workspace_priority_from_task(task.priority),
     }
+    if task.metadata.get("pending_leader_adjudication") is True:
+        todo["pending_leader_adjudication"] = True
+    for key in (
+        "last_worker_report_type",
+        "last_worker_report_summary",
+        "last_worker_report_id",
+        "last_worker_report_fingerprint",
+    ):
+        value = task.metadata.get(key)
+        if isinstance(value, str) and value:
+            todo[key] = value
+    for key in ("last_worker_report_artifacts", "last_worker_report_verifications"):
+        value = task.metadata.get(key)
+        if isinstance(value, list):
+            todo[key] = [str(item) for item in value if item]
+    return todo
 
 
 # =============================================================================
@@ -692,40 +708,67 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                         }
                     else:
                         todo_patch = todos_list[0] if todos_list else {}
-                        updated = await command_service.update_task(
-                            workspace_id=workspace_id,
-                            task_id=existing_task.id,
-                            actor_user_id=ctx.user_id,
-                            title=todo_patch.get("content"),
-                            status=(
-                                _todo_status_to_workspace(todo_patch.get("status"))
-                                if todo_patch.get("status") is not None
-                                else None
-                            ),
-                            priority=(
-                                _todo_priority_to_workspace(todo_patch.get("priority"))
-                                if todo_patch.get("priority") is not None
-                                else None
-                            ),
-                            actor_type="agent",
-                            reason="todowrite.workspace_authority",
+                        next_status = (
+                            _todo_status_to_workspace(todo_patch.get("status"))
+                            if todo_patch.get("status") is not None
+                            else None
                         )
-                        await session.commit()
-                        await ctx.emit(
-                            {
-                                "type": "task_updated",
-                                "conversation_id": conversation_id,
-                                "task_id": todo_id,
-                                "status": _workspace_status_to_todo(updated.status),
-                                "content": updated.title,
+                        next_priority = (
+                            _todo_priority_to_workspace(todo_patch.get("priority"))
+                            if todo_patch.get("priority") is not None
+                            else None
+                        )
+                        if (
+                            next_status is not None
+                            and existing_task.metadata.get("pending_leader_adjudication") is True
+                        ):
+                            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+                                adjudicate_workspace_worker_report,
+                            )
+
+                            updated = await adjudicate_workspace_worker_report(
+                                workspace_id=workspace_id,
+                                task_id=existing_task.id,
+                                actor_user_id=ctx.user_id,
+                                status=next_status,
+                                title=todo_patch.get("content"),
+                                priority=next_priority,
+                            )
+                        else:
+                            updated = await command_service.update_task(
+                                workspace_id=workspace_id,
+                                task_id=existing_task.id,
+                                actor_user_id=ctx.user_id,
+                                title=todo_patch.get("content"),
+                                status=next_status,
+                                priority=next_priority,
+                                actor_type="agent",
+                                reason="todowrite.workspace_authority",
+                            )
+                        if updated is None:
+                            result = {
+                                "success": False,
+                                "action": "update",
+                                "todo_id": todo_id,
+                                "message": f"Workspace task {todo_id} adjudication failed",
                             }
-                        )
-                        result = {
-                            "success": True,
-                            "action": "update",
-                            "todo_id": todo_id,
-                            "message": f"Updated workspace task {todo_id}",
-                        }
+                        else:
+                            await session.commit()
+                            await ctx.emit(
+                                {
+                                    "type": "task_updated",
+                                    "conversation_id": conversation_id,
+                                    "task_id": todo_id,
+                                    "status": _workspace_status_to_todo(updated.status),
+                                    "content": updated.title,
+                                }
+                            )
+                            result = {
+                                "success": True,
+                                "action": "update",
+                                "todo_id": todo_id,
+                                "message": f"Updated workspace task {todo_id}",
+                            }
 
     logger.info("todowrite: %s completed for %s", action, conversation_id)
     return ToolResult(output=json.dumps(result, indent=2))

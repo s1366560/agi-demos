@@ -157,6 +157,42 @@ class TestCheckSpawnLimits:
         assert "timestamp" in events[0]
 
 
+@pytest.mark.unit
+class TestWorkspaceTaskReportFromRun:
+    async def test_spawned_run_reports_include_run_id_for_idempotency(self) -> None:
+        runner = _make_runner()
+        final_run = Mock()
+        final_run.metadata = {
+            "workspace_id": "ws-1",
+            "root_goal_task_id": "root-1",
+            "workspace_task_id": "child-1",
+            "actor_user_id": "user-1",
+            "leader_agent_id": "leader-agent",
+            "artifacts": ["artifact:trace-1"],
+        }
+        final_run.status = Mock(value="completed")
+        final_run.summary = "Checklist drafted"
+        final_run.error = None
+        final_run.run_id = "run-1"
+        final_run.conversation_id = "conv-1"
+        subagent = Mock()
+        subagent.name = "researcher"
+
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime.apply_workspace_worker_report",
+            new=AsyncMock(),
+        ) as apply_mock:
+            await runner._maybe_apply_workspace_task_report_from_run(
+                final_run=final_run,
+                tenant_id="tenant-1",
+                project_id="proj-1",
+                subagent=subagent,
+            )
+
+        assert apply_mock.await_args.kwargs["report_id"] == "run-1"
+        assert apply_mock.await_args.kwargs["report_type"] == "completed"
+
+
 # =============================================================================
 # Test Group 2: BackgroundExecutor orphan sweep
 # =============================================================================

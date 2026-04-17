@@ -254,33 +254,80 @@ def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
         return None
     lines = ["  <tasks>"]
     for task in tasks:
-        role = str(task.metadata.get("task_role", "task"))
+        metadata = task.metadata
+        role = str(metadata.get("task_role", "task"))
+        goal_health = metadata.get("goal_health")
+        remediation_status = metadata.get("remediation_status")
+        goal_progress_summary = metadata.get("goal_progress_summary")
+        last_worker_report_type = metadata.get("last_worker_report_type")
+        last_worker_report_summary = metadata.get("last_worker_report_summary")
+        last_worker_report_artifacts = metadata.get("last_worker_report_artifacts")
+        last_worker_report_verifications = metadata.get("last_worker_report_verifications")
+        last_worker_report_id = metadata.get("last_worker_report_id")
+        last_worker_report_fingerprint = metadata.get("last_worker_report_fingerprint")
+        goal_evidence = metadata.get("goal_evidence")
         description_attr = f' description="{truncate(task.description, 160)}"' if task.description else ""
         goal_health_attr = (
-            f' goal_health="{task.metadata.get("goal_health")}"'
-            if isinstance(task.metadata.get("goal_health"), str)
-            else ""
+            f' goal_health="{goal_health}"' if isinstance(goal_health, str) else ""
         )
         remediation_attr = (
-            f' remediation_status="{task.metadata.get("remediation_status")}"'
-            if isinstance(task.metadata.get("remediation_status"), str)
+            f' remediation_status="{remediation_status}"'
+            if isinstance(remediation_status, str)
             else ""
         )
         progress_summary_attr = (
-            f' progress_summary="{truncate(str(task.metadata.get("goal_progress_summary")), 160)}"'
-            if isinstance(task.metadata.get("goal_progress_summary"), str)
+            f' progress_summary="{truncate(str(goal_progress_summary), 160)}"'
+            if isinstance(goal_progress_summary, str)
+            else ""
+        )
+        pending_adjudication_attr = (
+            ' pending_leader_adjudication="true"'
+            if metadata.get("pending_leader_adjudication") is True
+            else ""
+        )
+        worker_report_attr = (
+            f' last_worker_report_type="{last_worker_report_type}"'
+            if isinstance(last_worker_report_type, str)
+            else ""
+        )
+        worker_summary_attr = (
+            f' last_worker_report_summary="{truncate(str(last_worker_report_summary), 120)}"'
+            if isinstance(last_worker_report_summary, str)
+            else ""
+        )
+        worker_artifacts_attr = (
+            f' last_worker_report_artifacts="{truncate(",".join(last_worker_report_artifacts), 120)}"'
+            if isinstance(last_worker_report_artifacts, list)
+            else ""
+        )
+        worker_verifications_attr = (
+            f' last_worker_report_verifications="{truncate(",".join(last_worker_report_verifications), 120)}"'
+            if isinstance(last_worker_report_verifications, list)
+            else ""
+        )
+        worker_report_id_attr = (
+            f' last_worker_report_id="{last_worker_report_id}"'
+            if isinstance(last_worker_report_id, str)
+            else ""
+        )
+        worker_report_fingerprint_attr = (
+            f' last_worker_report_fingerprint="{truncate(str(last_worker_report_fingerprint), 24)}"'
+            if isinstance(last_worker_report_fingerprint, str)
             else ""
         )
         evidence_grade_attr = (
-            f' evidence_grade="{task.metadata.get("goal_evidence", {}).get("verification_grade")}"'
-            if isinstance(task.metadata.get("goal_evidence"), dict)
-            and isinstance(task.metadata.get("goal_evidence", {}).get("verification_grade"), str)
+            f' evidence_grade="{goal_evidence.get("verification_grade")}"'
+            if isinstance(goal_evidence, dict)
+            and isinstance(goal_evidence.get("verification_grade"), str)
             else ""
         )
         lines.append(
             f'    <task id="{task.id}" status="{task.status.value}" role="{role}" '
             + f'priority="{task.priority.value}"{description_attr}{goal_health_attr}'
-            + f'{remediation_attr}{progress_summary_attr}{evidence_grade_attr}>'
+            + f'{remediation_attr}{progress_summary_attr}{pending_adjudication_attr}'
+            + f'{worker_report_attr}{worker_summary_attr}{worker_artifacts_attr}'
+            + f'{worker_verifications_attr}{worker_report_id_attr}{worker_report_fingerprint_attr}'
+            + f"{evidence_grade_attr}>"
             + f"{truncate(task.title, 120)}</task>"
         )
     lines.append("  </tasks>")

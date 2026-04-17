@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -25,7 +26,11 @@ from src.application.services.workspace_task_event_publisher import (
 )
 from src.application.services.workspace_task_service import WorkspaceTaskService
 from src.domain.events.types import AgentEventType
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
     SqlBlackboardRepository,
@@ -66,6 +71,7 @@ _WORKSPACE_TASK_ID_PATTERN = re.compile(
     r"(?:workspace_task_id|task_id|child_task_id)\s*[:=]\s*([A-Za-z0-9._-]+)",
     re.IGNORECASE,
 )
+_WORKER_TERMINAL_REPORT_TYPES = frozenset({"completed", "failed", "blocked", "needs_replan"})
 
 
 def should_activate_workspace_authority(user_query: str) -> bool:
@@ -595,6 +601,25 @@ def _parse_worker_report_payload(
     return normalized_summary, merged_artifacts, list(dict.fromkeys(verifications))
 
 
+def _build_worker_report_fingerprint(
+    *,
+    report_type: str,
+    summary: str,
+    artifacts: list[str],
+    verifications: list[str],
+    report_id: str | None,
+) -> str:
+    payload = {
+        "report_id": report_id or "",
+        "report_type": report_type,
+        "summary": summary,
+        "artifacts": list(artifacts),
+        "verifications": list(verifications),
+    }
+    serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
 async def _assign_execution_tasks_to_workers(
     *,
     workspace_id: str,
@@ -647,7 +672,7 @@ async def _assign_execution_tasks_to_workers(
         )
 
 
-async def apply_workspace_worker_report(
+async def apply_workspace_worker_report(  # noqa: PLR0915
     *,
     workspace_id: str,
     root_goal_task_id: str,
@@ -658,8 +683,9 @@ async def apply_workspace_worker_report(
     summary: str,
     artifacts: list[str] | None = None,
     leader_agent_id: str | None = None,
+    report_id: str | None = None,
 ) -> WorkspaceTask | None:
-    """Apply a worker execution report via leader-mediated workspace task mutations."""
+    """Record a worker execution report as candidate evidence for later leader adjudication."""
     artifacts = [artifact for artifact in (artifacts or []) if artifact]
     try:
         async with async_session_factory() as db:
@@ -702,18 +728,34 @@ async def apply_workspace_worker_report(
                     artifacts=merged_artifacts,
                 )
             )
+            report_fingerprint = _build_worker_report_fingerprint(
+                report_type=report_type,
+                summary=normalized_summary,
+                artifacts=merged_artifacts,
+                verifications=report_verifications,
+                report_id=report_id,
+            )
+            if metadata.get("last_worker_report_fingerprint") == report_fingerprint:
+                return task
             metadata["evidence_refs"] = merged_artifacts
             metadata["execution_verifications"] = list(
                 dict.fromkeys([*prior_verifications, *report_verifications])
             )
-            action_map = {
-                "progress": ("in_progress", "start"),
-                "completed": ("done", "completed"),
-                "failed": ("blocked", "blocked"),
-                "blocked": ("blocked", "blocked"),
-                "needs_replan": ("blocked", "blocked"),
-            }
-            phase, action = action_map.get(report_type, ("in_progress", "start"))
+            reported_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+            pending_adjudication = report_type in _WORKER_TERMINAL_REPORT_TYPES
+            metadata["last_worker_report_type"] = report_type
+            metadata["last_worker_report_summary"] = normalized_summary
+            metadata["last_worker_report_artifacts"] = list(merged_artifacts)
+            metadata["last_worker_report_verifications"] = list(
+                dict.fromkeys(report_verifications)
+            )
+            metadata["last_worker_reported_at"] = reported_at
+            metadata["last_worker_report_fingerprint"] = report_fingerprint
+            metadata["pending_leader_adjudication"] = pending_adjudication
+            if report_id:
+                metadata["last_worker_report_id"] = report_id
+            phase = "pending_adjudication" if pending_adjudication else "in_progress"
+            action = "await_leader_adjudication" if pending_adjudication else "start"
             metadata["execution_state"] = _build_execution_state(
                 phase=phase,
                 reason=f"workspace_goal_runtime.worker_report.{report_type}:{normalized_summary}",
@@ -726,41 +768,20 @@ async def apply_workspace_worker_report(
                 task_id=task_id,
                 actor_user_id=actor_user_id,
                 metadata=metadata,
-                blocker_reason=normalized_summary if phase == "blocked" else None,
+                blocker_reason=None,
                 actor_type="agent",
                 actor_agent_id=leader_agent_id,
                 reason=f"workspace_goal_runtime.worker_report.{report_type}.metadata",
             )
 
-            if report_type == "progress" and updated.status.value == "todo":
+            if updated.status.value == "todo":
                 updated = await command_service.start_task(
                     workspace_id=workspace_id,
                     task_id=task_id,
                     actor_user_id=actor_user_id,
                     actor_type="agent",
                     actor_agent_id=leader_agent_id,
-                    reason="workspace_goal_runtime.worker_report.progress.start",
-                )
-            elif report_type == "completed" and updated.status.value != "done":
-                updated = await command_service.complete_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason="workspace_goal_runtime.worker_report.completed.complete",
-                )
-            elif (
-                report_type in {"blocked", "failed", "needs_replan"}
-                and updated.status.value != "blocked"
-            ):
-                updated = await command_service.block_task(
-                    workspace_id=workspace_id,
-                    task_id=task_id,
-                    actor_user_id=actor_user_id,
-                    actor_type="agent",
-                    actor_agent_id=leader_agent_id,
-                    reason=f"workspace_goal_runtime.worker_report.{report_type}.block",
+                    reason=f"workspace_goal_runtime.worker_report.{report_type}.start",
                 )
 
             await db.commit()
@@ -769,6 +790,110 @@ async def apply_workspace_worker_report(
             return updated
     except Exception:
         logger.warning("Workspace worker report application failed", exc_info=True)
+        return None
+
+
+async def adjudicate_workspace_worker_report(
+    *,
+    workspace_id: str,
+    task_id: str,
+    actor_user_id: str,
+    status: WorkspaceTaskStatus,
+    leader_agent_id: str | None = None,
+    title: str | None = None,
+    priority: WorkspaceTaskPriority | None = None,
+) -> WorkspaceTask | None:
+    """Apply a leader decision to a previously ingested worker report."""
+    try:
+        async with async_session_factory() as db:
+            workspace_repo = SqlWorkspaceRepository(db)
+            task_repo = SqlWorkspaceTaskRepository(db)
+            task_service = WorkspaceTaskService(
+                workspace_repo=workspace_repo,
+                workspace_member_repo=SqlWorkspaceMemberRepository(db),
+                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+                workspace_task_repo=task_repo,
+            )
+            command_service = WorkspaceTaskCommandService(task_service)
+
+            task = await task_service.get_task(
+                workspace_id=workspace_id,
+                task_id=task_id,
+                actor_user_id=actor_user_id,
+            )
+            metadata = dict(task.metadata)
+            summary = str(metadata.get("last_worker_report_summary") or "").strip()
+            if metadata.get("pending_leader_adjudication") is True:
+                metadata["pending_leader_adjudication"] = False
+            metadata["last_leader_adjudication_status"] = status.value
+            metadata["last_leader_adjudicated_at"] = datetime.now(UTC).isoformat().replace(
+                "+00:00",
+                "Z",
+            )
+            phase_map = {
+                WorkspaceTaskStatus.TODO: "todo",
+                WorkspaceTaskStatus.IN_PROGRESS: "in_progress",
+                WorkspaceTaskStatus.BLOCKED: "blocked",
+                WorkspaceTaskStatus.DONE: "done",
+            }
+            action_map = {
+                WorkspaceTaskStatus.TODO: "reprioritized",
+                WorkspaceTaskStatus.IN_PROGRESS: "start",
+                WorkspaceTaskStatus.BLOCKED: "blocked",
+                WorkspaceTaskStatus.DONE: "completed",
+            }
+            metadata["execution_state"] = _build_execution_state(
+                phase=phase_map[status],
+                reason=f"workspace_goal_runtime.leader_adjudication.{status.value}:{summary or task.title}",
+                action=action_map[status],
+                actor_id=leader_agent_id or actor_user_id,
+            )
+
+            updated = await command_service.update_task(
+                workspace_id=workspace_id,
+                task_id=task_id,
+                actor_user_id=actor_user_id,
+                title=title,
+                priority=priority,
+                metadata=metadata,
+                actor_type="agent",
+                actor_agent_id=leader_agent_id,
+                reason=f"workspace_goal_runtime.leader_adjudication.{status.value}.metadata",
+            )
+            if status == WorkspaceTaskStatus.IN_PROGRESS and updated.status.value == "todo":
+                updated = await command_service.start_task(
+                    workspace_id=workspace_id,
+                    task_id=task_id,
+                    actor_user_id=actor_user_id,
+                    actor_type="agent",
+                    actor_agent_id=leader_agent_id,
+                    reason="workspace_goal_runtime.leader_adjudication.in_progress.start",
+                )
+            elif status == WorkspaceTaskStatus.DONE and updated.status.value != "done":
+                updated = await command_service.complete_task(
+                    workspace_id=workspace_id,
+                    task_id=task_id,
+                    actor_user_id=actor_user_id,
+                    actor_type="agent",
+                    actor_agent_id=leader_agent_id,
+                    reason="workspace_goal_runtime.leader_adjudication.completed.complete",
+                )
+            elif status == WorkspaceTaskStatus.BLOCKED and updated.status.value != "blocked":
+                updated = await command_service.block_task(
+                    workspace_id=workspace_id,
+                    task_id=task_id,
+                    actor_user_id=actor_user_id,
+                    actor_type="agent",
+                    actor_agent_id=leader_agent_id,
+                    reason="workspace_goal_runtime.leader_adjudication.blocked.block",
+                )
+
+            await db.commit()
+            publisher = WorkspaceTaskEventPublisher(await get_redis_client())
+            await publisher.publish_pending_events(command_service.consume_pending_events())
+            return updated
+    except Exception:
+        logger.warning("Workspace worker report adjudication failed", exc_info=True)
         return None
 
 

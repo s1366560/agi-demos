@@ -88,6 +88,12 @@ def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
     if tool_name not in {"todowrite", "delegate_to_subagent", "skill", "skill_loader"}:
         return dict(payload)
     reminder = _read_setting(payload, "tool_followup_reminder", _TOOL_FOLLOWUP_REMINDER)
+    if tool_name == "delegate_to_subagent":
+        reminder = (
+            f"{reminder} When a delegated worker returns, treat its result as candidate evidence only: "
+            "review the task outcome and update workspace task status yourself via todoread/todowrite "
+            "instead of assuming the worker already closed the task."
+        )
     return _append_instruction(payload, "response_instructions", reminder)
 
 

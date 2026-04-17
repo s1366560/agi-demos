@@ -5,12 +5,18 @@ import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
 import { EmptyState } from '../EmptyState';
 import { StatBadge } from '../StatBadge';
 
-import type { TopologyEdge, WorkspaceAgent } from '@/types/workspace';
+import type { TopologyEdge, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
 
 export interface StatusTabProps {
-  stats: { completionRatio: number; discussions: number; activeAgents: number };
+  stats: {
+    completionRatio: number;
+    discussions: number;
+    activeAgents: number;
+    pendingAdjudicationTasks: number;
+  };
   topologyEdges: TopologyEdge[];
   agents: WorkspaceAgent[];
+  tasks: WorkspaceTask[];
   workspaceId: string;
   statusBadgeTone: (status: string | undefined) => string;
 }
@@ -19,10 +25,14 @@ export function StatusTab({
   stats,
   topologyEdges,
   agents,
+  tasks,
   workspaceId,
   statusBadgeTone,
 }: StatusTabProps) {
   const { t } = useTranslation();
+  const pendingAdjudicationTasks = tasks.filter(
+    (task) => task.metadata.pending_leader_adjudication === true
+  );
 
   return (
     <div className="space-y-5">
@@ -39,6 +49,11 @@ export function StatusTab({
                 key: 'progress',
                 label: t('blackboard.metrics.completion', 'Task completion'),
                 value: `${String(stats.completionRatio)}%`,
+              },
+              {
+                key: 'pending-adjudication',
+                label: t('blackboard.metrics.pendingAdjudication', 'Pending adjudication'),
+                value: String(stats.pendingAdjudicationTasks),
               },
               {
                 key: 'threads',
@@ -60,6 +75,96 @@ export function StatusTab({
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
+              {t('blackboard.pendingAdjudicationTitle', 'Pending leader adjudication')}
+            </h3>
+              <p className="mt-1 text-xs text-text-secondary dark:text-text-muted">
+              {t(
+                'blackboard.pendingAdjudicationDescription',
+                'Worker-reported results that still require Sisyphus to make the final task decision.'
+              )}
+            </p>
+          </div>
+          <span className="rounded-full border border-info-border bg-info-bg px-3 py-1 text-xs font-semibold text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+            {String(stats.pendingAdjudicationTasks)}
+          </span>
+        </div>
+
+        {pendingAdjudicationTasks.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {pendingAdjudicationTasks.map((task) => {
+              const reportType =
+                typeof task.metadata.last_worker_report_type === 'string'
+                  ? task.metadata.last_worker_report_type
+                  : '';
+              const reportSummary =
+                typeof task.metadata.last_worker_report_summary === 'string'
+                  ? task.metadata.last_worker_report_summary
+                  : '';
+              const reportArtifacts = Array.isArray(task.metadata.last_worker_report_artifacts)
+                ? task.metadata.last_worker_report_artifacts
+                    .filter((item): item is string => typeof item === 'string' && item.length > 0)
+                    .slice(0, 3)
+                : [];
+              const reportVerifications = Array.isArray(task.metadata.last_worker_report_verifications)
+                ? task.metadata.last_worker_report_verifications
+                    .filter((item): item is string => typeof item === 'string' && item.length > 0)
+                    .slice(0, 3)
+                : [];
+
+              return (
+                <article
+                  key={task.id}
+                  className="rounded-lg border border-info-border/60 bg-info-bg/60 p-3 dark:border-info-border-dark/60 dark:bg-info-bg-dark/30"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-semibold text-text-primary dark:text-text-inverse">
+                      {task.title}
+                    </div>
+                    <span className="rounded-full border border-info-border bg-surface-light px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-surface-dark dark:text-status-text-info-dark">
+                      {reportType
+                        ? reportType.replace(/_/g, ' ')
+                        : t('blackboard.pendingAdjudicationFallback', 'candidate result')}
+                    </span>
+                  </div>
+                  {reportSummary && (
+                    <p className="mt-2 text-xs leading-5 text-text-secondary dark:text-text-muted">
+                      {reportSummary}
+                    </p>
+                  )}
+                  <div className="mt-2 space-y-1 text-[11px] text-text-secondary dark:text-text-muted">
+                    {reportArtifacts.length > 0 && (
+                      <p>
+                        {t('blackboard.pendingAdjudicationArtifacts', 'Artifacts')}:{' '}
+                        {reportArtifacts.join(', ')}
+                      </p>
+                    )}
+                    {reportVerifications.length > 0 && (
+                      <p>
+                        {t('blackboard.pendingAdjudicationChecks', 'Checks')}:{' '}
+                        {reportVerifications.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <EmptyState>
+              {t(
+                'blackboard.pendingAdjudicationEmpty',
+                'No worker-reported tasks are waiting on leader adjudication.'
+              )}
+            </EmptyState>
+          </div>
+        )}
       </section>
 
       <PresenceBar workspaceId={workspaceId} />

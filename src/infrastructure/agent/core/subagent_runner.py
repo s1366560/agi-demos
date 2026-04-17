@@ -912,6 +912,7 @@ class SubAgentSessionRunner:
                 summary=summary,
                 artifacts=artifacts,
                 leader_agent_id=(leader_agent_id if isinstance(leader_agent_id, str) else None),
+                report_id=final_run.run_id,
             )
         except Exception:
             logger.warning(

@@ -208,6 +208,40 @@ describe('CentralBlackboardModal', () => {
     expect(screen.getByText('Presence bar')).toBeInTheDocument();
   });
 
+  it('renders pending adjudication details in the status tab', () => {
+    render(
+      <CentralBlackboardModal
+        {...defaultProps({
+          tasks: [
+            {
+              id: 'task-1',
+              workspace_id: 'workspace-1',
+              title: 'Draft checklist',
+              status: 'in_progress',
+              metadata: {
+                pending_leader_adjudication: true,
+                last_worker_report_type: 'completed',
+                last_worker_report_summary: 'Checklist drafted successfully',
+                last_worker_report_artifacts: ['artifact:checklist'],
+                last_worker_report_verifications: ['worker_report:completed'],
+              },
+              created_at: '2026-04-17T00:00:00Z',
+            },
+          ] as any,
+        })}
+      />
+    );
+
+    fireEvent.click(getTabByName(/status/i));
+
+    expect(screen.getByText(/blackboard\.pendingAdjudicationTitle/i)).toBeInTheDocument();
+    expect(screen.getByText(/Checklist drafted successfully/i)).toBeInTheDocument();
+    expect(screen.getByText(/blackboard\.pendingAdjudicationArtifacts: artifact:checklist/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/blackboard\.pendingAdjudicationChecks: worker_report:completed/i)
+    ).toBeInTheDocument();
+  });
+
   it('renders NotesTab when notes tab is selected', () => {
     render(<CentralBlackboardModal {...defaultProps()} />);
 

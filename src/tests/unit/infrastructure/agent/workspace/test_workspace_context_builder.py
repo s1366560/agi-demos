@@ -98,6 +98,31 @@ def _make_root_task(title: str = "Prepare rollback checklist") -> WorkspaceTask:
     )
 
 
+def _make_pending_execution_task(title: str = "Draft checklist") -> WorkspaceTask:
+    return WorkspaceTask(
+        id="task-child-1",
+        workspace_id="ws-1",
+        title=title,
+        description="Child execution task awaiting leader adjudication",
+        created_by="user-1",
+        status=WorkspaceTaskStatus.IN_PROGRESS,
+        metadata={
+            "task_role": "execution_task",
+            "root_goal_task_id": "task-1",
+            "lineage_source": "agent",
+            "pending_leader_adjudication": True,
+            "last_worker_report_type": "completed",
+            "last_worker_report_summary": "Checklist drafted",
+            "last_worker_report_artifacts": ["artifact:checklist"],
+            "last_worker_report_verifications": ["worker_report:completed"],
+            "last_worker_report_id": "run-1",
+            "last_worker_report_fingerprint": "abc123fingerprint",
+        },
+        created_at=_NOW,
+        updated_at=_NOW,
+    )
+
+
 @pytest.mark.unit
 class TestFormatTimestamp:
     def test_formats_compact_iso(self) -> None:
@@ -226,6 +251,26 @@ class TestFormatWorkspaceContext:
         assert 'goal_health="blocked"' in result
         assert 'remediation_status="replan_required"' in result
         assert 'evidence_grade="warn"' in result
+
+    def test_execution_task_surfaces_pending_leader_adjudication_details(self) -> None:
+        ws = _make_workspace()
+        result = format_workspace_context(
+            ws,
+            [],
+            [],
+            [],
+            [],
+            [_make_pending_execution_task()],
+            [],
+            [],
+        )
+        assert 'pending_leader_adjudication="true"' in result
+        assert 'last_worker_report_type="completed"' in result
+        assert 'last_worker_report_summary="Checklist drafted"' in result
+        assert 'last_worker_report_artifacts="artifact:checklist"' in result
+        assert 'last_worker_report_verifications="worker_report:completed"' in result
+        assert 'last_worker_report_id="run-1"' in result
+        assert 'last_worker_report_fingerprint="abc123fingerprint"' in result
 
 
 @pytest.mark.unit

@@ -5,7 +5,7 @@
  * Tests both the new explicit variant components and compound components pattern.
  */
 
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -27,6 +27,11 @@ vi.mock('@/stores/auth', () => ({
     user: { name: 'Test User', email: 'test@example.com' },
     logout: vi.fn(),
   }),
+}));
+
+vi.mock('@/stores/workspace', () => ({
+  useCurrentWorkspace: () => ({ id: 'ws-current' }),
+  useWorkspaces: () => [{ id: 'ws-current' }],
 }));
 
 vi.mock('react-i18next', () => ({
@@ -73,6 +78,7 @@ vi.mock('@/config/navigation', () => ({
         items: [
           { id: 'memories', icon: 'database', label: 'Memories', path: '/memories' },
           { id: 'entities', icon: 'category', label: 'Entities', path: '/entities' },
+          { id: 'blackboard', icon: 'forum', label: 'Blackboard', path: '/blackboard' },
         ],
       },
     ],
@@ -417,6 +423,27 @@ describe('ProjectSidebar', () => {
 
       expect(container.querySelector('[data-testid="nav-memories"]')).toBeInTheDocument();
       expect(container.querySelector('[data-testid="nav-entities"]')).toBeInTheDocument();
+    });
+
+    it('should render blackboard navigation with workspace query context', () => {
+      const { container } = render(
+        <MemoryRouter initialEntries={['/tenant/tenant-1/project/test-project']}>
+          <Routes>
+            <Route
+              path="/tenant/:tenantId/project/:projectId"
+              element={<ProjectSidebar projectId="test-project" />}
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+      const blackboardLink = container.querySelector(
+        '[data-testid="nav-blackboard"]'
+      ) as HTMLAnchorElement | null;
+
+      expect(blackboardLink).toBeInTheDocument();
+      expect(blackboardLink?.getAttribute('href')).toBe(
+        '/tenant/tenant-1/project/test-project/blackboard?workspaceId=ws-current&open=1'
+      );
     });
   });
 });

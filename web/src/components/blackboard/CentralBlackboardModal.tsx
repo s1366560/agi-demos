@@ -14,10 +14,10 @@ import {
 import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
-
 import { GeneList } from '@/components/workspace/genes/GeneList';
 import { MemberPanel } from '@/components/workspace/MemberPanel';
 import { ObjectiveCreateModal } from '@/components/workspace/objectives/ObjectiveCreateModal';
+
 
 import { BlackboardTabBar, BLACKBOARD_TABS } from './BlackboardTabBar';
 import { buildBlackboardNotes, buildBlackboardStats } from './blackboardUtils';
@@ -41,6 +41,7 @@ import type {
   WorkspaceAgent,
   WorkspaceTask,
 } from '@/types/workspace';
+
 import type { BlackboardTab } from './BlackboardTabBar';
 
 export interface CentralBlackboardModalProps {
@@ -305,6 +306,7 @@ export function CentralBlackboardModal({
                 stats={stats}
                 topologyEdges={topologyEdges}
                 agents={agents}
+                tasks={tasks}
                 workspaceId={workspaceId}
                 statusBadgeTone={statusBadgeTone}
               />

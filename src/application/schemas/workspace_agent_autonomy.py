@@ -10,8 +10,15 @@ GoalOrigin = Literal["human_defined", "agent_inferred", "existing_objective", "e
 TaskRole = Literal["goal_root", "execution_task"]
 GoalHealth = Literal["healthy", "at_risk", "blocked", "achieved"]
 RemediationStatus = Literal["none", "replan_required", "ready_for_completion"]
-ExecutionPhase = Literal["todo", "in_progress", "blocked", "done"]
-ExecutionAction = Literal["created", "reprioritized", "blocked", "completed", "start"]
+ExecutionPhase = Literal["todo", "in_progress", "pending_adjudication", "blocked", "done"]
+ExecutionAction = Literal[
+    "created",
+    "reprioritized",
+    "await_leader_adjudication",
+    "blocked",
+    "completed",
+    "start",
+]
 OutcomeStatus = Literal["achieved", "blocked", "partial", "failed"]
 VerificationGrade = Literal["pass", "warn", "fail"]
 SignalSourceType = Literal[
@@ -142,6 +149,14 @@ class ExecutionTaskMetadataModel(ContractModel):
     execution_state: ExecutionStateModel | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     execution_verifications: list[str] = Field(default_factory=list)
+    last_worker_report_type: str | None = None
+    last_worker_report_summary: str | None = None
+    last_worker_report_artifacts: list[str] = Field(default_factory=list)
+    last_worker_report_verifications: list[str] = Field(default_factory=list)
+    last_worker_reported_at: str | None = None
+    last_worker_report_fingerprint: str | None = None
+    last_worker_report_id: str | None = None
+    pending_leader_adjudication: bool | None = None
     last_mutation_actor: LastMutationActorModel | None = None
 
 

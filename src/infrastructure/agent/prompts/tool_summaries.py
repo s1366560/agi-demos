@@ -72,7 +72,9 @@ TOOL_SUMMARIES: dict[str, str] = {
     # --- SubAgent Delegation ---
     "delegate_to_subagent": (
         "Delegate a task to a specialized sub-agent; pass workspace_task_id for workspace child-task "
-        "execution when available."
+        "execution when available. In workspace authority mode, the worker result is only candidate "
+        "evidence: after delegation returns, use todoread/todowrite to adjudicate the task state "
+        "yourself."
     ),
     "parallel_delegate_subagents": (
         "Delegate multiple independent tasks to sub-agents for parallel execution."

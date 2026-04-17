@@ -1977,7 +1977,7 @@ class ReActAgent:
 
         self._stream_tools_to_use = tools_to_use
 
-    def _stream_inject_subagent_tools(
+    def _stream_inject_subagent_tools(  # noqa: PLR0915
         self,
         tools_to_use: list[ToolDefinition],
         conversation_context: list[dict[str, str]],
@@ -2051,14 +2051,14 @@ class ReActAgent:
             report_type: str,
             summary: str,
             artifacts: list[str] | None = None,
-        ) -> None:
+        ) -> Any:
             if not task_binding or not actor_user_id:
-                return
+                return None
             from src.infrastructure.agent.workspace.workspace_goal_runtime import (
                 apply_workspace_worker_report,
             )
 
-            await apply_workspace_worker_report(
+            return await apply_workspace_worker_report(
                 workspace_id=task_binding["workspace_id"],
                 root_goal_task_id=task_binding["root_goal_task_id"],
                 task_id=task_binding["workspace_task_id"],
@@ -2069,6 +2069,28 @@ class ReActAgent:
                 artifacts=artifacts,
                 leader_agent_id=leader_agent_id,
             )
+
+        def _format_workspace_delegate_result(
+            *,
+            subagent_name: str,
+            task_binding: dict[str, str] | None,
+            report_type: str,
+            summary: str,
+            tokens: int | None = None,
+        ) -> str:
+            if not task_binding:
+                return summary
+
+            lines = [
+                f"[SubAgent '{subagent_name}' completed]",
+                f"Candidate worker report stored for workspace_task_id={task_binding['workspace_task_id']}",
+                f"Suggested report_type={report_type}",
+                "Leader adjudication required: review the worker evidence, then use todoread/todowrite to decide whether this task should become completed, failed, remain in_progress, or be replanned.",
+                f"Result: {summary}",
+            ]
+            if isinstance(tokens, int):
+                lines.append(f"Tokens used: {tokens}")
+            return "\n".join(lines)
 
         # Create delegation callback that captures stream-scoped context
         async def _delegate_callback(
@@ -2113,31 +2135,45 @@ class ReActAgent:
                 content = data.get("content", "")
                 sa_result = data.get("subagent_result")
                 if sa_result:
+                    report_type = "completed" if sa_result.get("success", True) else "blocked"
                     summary = sa_result.get("summary", content)
+                    result_summary = summary or content or f"SubAgent {subagent_name} finished"
                     tokens = sa_result.get("tokens_used", 0)
                     await _finalize_workspace_delegation(
                         task_binding=task_binding,
-                        report_type=("completed" if sa_result.get("success", True) else "blocked"),
-                        summary=summary or content or f"SubAgent {subagent_name} finished",
+                        report_type=report_type,
+                        summary=result_summary,
                     )
-                    return (
-                        f"[SubAgent '{subagent_name}' completed]\n"
-                        f"Result: {summary}\n"
-                        f"Tokens used: {tokens}"
+                    return _format_workspace_delegate_result(
+                        subagent_name=subagent_name,
+                        task_binding=task_binding,
+                        report_type=report_type,
+                        summary=result_summary,
+                        tokens=tokens,
                     )
                 await _finalize_workspace_delegation(
                     task_binding=task_binding,
                     report_type="completed",
                     summary=content or f"SubAgent {subagent_name} completed",
                 )
-                return content or "SubAgent completed with no output"
+                return _format_workspace_delegate_result(
+                    subagent_name=subagent_name,
+                    task_binding=task_binding,
+                    report_type="completed",
+                    summary=content or "SubAgent completed with no output",
+                )
 
             await _finalize_workspace_delegation(
                 task_binding=task_binding,
                 report_type="blocked",
                 summary=f"SubAgent {subagent_name} execution completed but no result returned",
             )
-            return "SubAgent execution completed but no result returned"
+            return _format_workspace_delegate_result(
+                subagent_name=subagent_name,
+                task_binding=task_binding,
+                report_type="blocked",
+                summary="SubAgent execution completed but no result returned",
+            )
 
         async def _spawn_callback(
             subagent_name: str,

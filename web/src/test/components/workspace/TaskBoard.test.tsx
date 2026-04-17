@@ -84,4 +84,36 @@ describe('TaskBoard', () => {
     expect(screen.getByText(/Evidence warn/i)).toBeInTheDocument();
     expect(screen.getByText(/replan required/i)).toBeInTheDocument();
   });
+
+  it('renders pending leader adjudication details for worker-reported tasks', async () => {
+    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+
+    vi.mocked(useWorkspaceTasks).mockReturnValue([
+      {
+        id: 'task-child-1',
+        title: 'Draft checklist',
+        status: 'in_progress',
+        workspace_id: 'ws-1',
+        metadata: {
+          pending_leader_adjudication: true,
+          last_worker_report_type: 'completed',
+          last_worker_report_summary: 'Checklist drafted successfully',
+          last_worker_report_artifacts: ['artifact:checklist'],
+          last_worker_report_verifications: ['worker_report:completed'],
+        },
+      },
+    ] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+
+    render(<TaskBoard workspaceId="ws-1" />);
+
+    expect(screen.getByText(/Pending adjudication/i)).toBeInTheDocument();
+    expect(screen.getByText(/workspaceDetail\.taskBoard\.pendingLeaderAdjudication/i)).toBeInTheDocument();
+    expect(screen.getByText(/workspaceDetail\.taskBoard\.workerReportType: completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Checklist drafted successfully/i)).toBeInTheDocument();
+    expect(screen.getByText(/workspaceDetail\.taskBoard\.reportArtifacts: artifact:checklist/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/workspaceDetail\.taskBoard\.reportVerifications: worker_report:completed/i)
+    ).toBeInTheDocument();
+  });
 });

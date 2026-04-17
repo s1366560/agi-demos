@@ -145,7 +145,17 @@ class TestTodoReadTool:
                         created_by="user-1",
                         status=WorkspaceTaskStatus.IN_PROGRESS,
                         priority=WorkspaceTaskPriority.P3,
-                        metadata={"task_role": "execution_task", "root_goal_task_id": "root-1"},
+                        metadata={
+                            "task_role": "execution_task",
+                            "root_goal_task_id": "root-1",
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "completed",
+                            "last_worker_report_summary": "Checklist drafted",
+                            "last_worker_report_artifacts": ["artifact:checklist"],
+                            "last_worker_report_verifications": ["worker_report:completed"],
+                            "last_worker_report_id": "run-1",
+                            "last_worker_report_fingerprint": "fp-1",
+                        },
                     )
                 ]
 
@@ -174,6 +184,13 @@ class TestTodoReadTool:
                 "content": "Execution task",
                 "status": "in_progress",
                 "priority": "medium",
+                "pending_leader_adjudication": True,
+                "last_worker_report_type": "completed",
+                "last_worker_report_summary": "Checklist drafted",
+                "last_worker_report_artifacts": ["artifact:checklist"],
+                "last_worker_report_verifications": ["worker_report:completed"],
+                "last_worker_report_id": "run-1",
+                "last_worker_report_fingerprint": "fp-1",
             }
         ]
 
@@ -723,3 +740,126 @@ class TestTodoWriteTool:
 
         assert payload["success"] is True
         assert updated[0]["task_id"] == "wt-real-1"
+
+    @pytest.mark.asyncio
+    async def test_update_uses_leader_adjudication_path_for_pending_worker_report(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+        class _DummySession:
+            async def __aenter__(self) -> _DummySession:
+                return self
+
+            async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+                return False
+
+            async def commit(self) -> None:
+                return None
+
+        adjudicated: list[dict[str, Any]] = []
+        updated: list[dict[str, Any]] = []
+
+        class _FakeCommandService:
+            def __init__(self, task_service: Any) -> None:
+                _ = task_service
+
+            async def update_task(self, **kwargs: Any) -> WorkspaceTask:
+                updated.append(kwargs)
+                return WorkspaceTask(
+                    id="wt-real-1",
+                    workspace_id=kwargs["workspace_id"],
+                    title=kwargs["title"] or "Task A",
+                    created_by=kwargs["actor_user_id"],
+                    status=kwargs["status"] or WorkspaceTaskStatus.TODO,
+                    priority=kwargs["priority"] or WorkspaceTaskPriority.NONE,
+                    metadata={
+                        "task_role": "execution_task",
+                        "root_goal_task_id": "root-1",
+                        "derived_from_internal_plan_step": "step-1",
+                    },
+                )
+
+        class _FakeWorkspaceRepo:
+            def __init__(self, session: Any) -> None:
+                _ = session
+
+            async def find_by_id(self, task_id: str) -> Any:
+                return WorkspaceTask(
+                    id=task_id,
+                    workspace_id="ws-1",
+                    title="Task A",
+                    created_by="user-1",
+                    status=WorkspaceTaskStatus.IN_PROGRESS,
+                    priority=WorkspaceTaskPriority.P3,
+                    metadata={
+                        "task_role": "execution_task",
+                        "root_goal_task_id": "root-1",
+                        "derived_from_internal_plan_step": "step-1",
+                        "pending_leader_adjudication": True,
+                    },
+                )
+
+            async def find_by_root_goal_task_id(
+                self, workspace_id: str, root_goal_task_id: str
+            ) -> list[Any]:
+                _ = workspace_id
+                _ = root_goal_task_id
+                return []
+
+        async def _fake_adjudicate(**kwargs: Any) -> WorkspaceTask:
+            adjudicated.append(kwargs)
+            return WorkspaceTask(
+                id=kwargs["task_id"],
+                workspace_id=kwargs["workspace_id"],
+                title=kwargs["title"] or "Task A",
+                created_by=kwargs["actor_user_id"],
+                status=kwargs["status"],
+                priority=kwargs["priority"] or WorkspaceTaskPriority.NONE,
+                metadata={
+                    "task_role": "execution_task",
+                    "root_goal_task_id": "root-1",
+                    "derived_from_internal_plan_step": "step-1",
+                    "pending_leader_adjudication": False,
+                },
+            )
+
+        monkeypatch.setattr(todo_tools_module, "_todowrite_session_factory", lambda: _DummySession())
+        monkeypatch.setattr(todo_tools_module, "WorkspaceTaskService", lambda **kwargs: object())
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
+            _FakeCommandService,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository."
+            "SqlWorkspaceTaskRepository",
+            _FakeWorkspaceRepo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime."
+            "adjudicate_workspace_worker_report",
+            _fake_adjudicate,
+        )
+
+        ctx = _make_ctx(
+            conversation_id="conv-persisted",
+            user_id="user-1",
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
+        )
+        result = await todowrite_tool.execute(
+            ctx,
+            action="update",
+            todo_id="wt-real-1",
+            todos=[{"content": "Task A", "status": "completed", "priority": "high"}],
+        )
+        payload = json.loads(result.output)
+
+        assert payload["success"] is True
+        assert adjudicated[0]["task_id"] == "wt-real-1"
+        assert adjudicated[0]["status"] == WorkspaceTaskStatus.DONE
+        assert updated == []

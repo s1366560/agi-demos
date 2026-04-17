@@ -232,7 +232,7 @@ class TestSystemPromptManager:
         assert "Analyze memories" in prompt
 
     async def test_workspace_delegation_guidance_mentions_workspace_task_id(self, manager):
-        """Tool guidance should expose workspace_task_id for workspace child-task delegation."""
+        """Tool guidance should expose workspace_task_id and leader adjudication guidance."""
         context = PromptContext(
             model_provider=ModelProvider.DEFAULT,
             mode=PromptMode.BUILD,
@@ -253,6 +253,8 @@ class TestSystemPromptManager:
         assert "workspace_task_id" in prompt
         assert "delegate_to_subagent" in prompt
         assert "todoread" in prompt
+        assert "candidate evidence" in prompt
+        assert "todoread/todowrite" in prompt
 
     async def test_matched_skill_recommendation(self, manager, context):
         """Test matched skill recommendation appears."""

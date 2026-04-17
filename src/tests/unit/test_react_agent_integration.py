@@ -310,3 +310,77 @@ class TestReActAgentBackgroundExecutor:
         from src.infrastructure.agent.subagent.template_registry import TemplateRegistry
 
         assert isinstance(agent._template_registry, TemplateRegistry)
+
+
+@pytest.mark.unit
+class TestReActAgentWorkspaceDelegation:
+    async def test_delegate_callback_returns_candidate_report_for_leader_adjudication(self):
+        researcher = _make_subagent("researcher")
+        agent = _make_react_agent(
+            subagents=[researcher],
+            enable_subagent_as_tool=True,
+        )
+        workspace_root_task = MagicMock(id="root-1", workspace_id="ws-1")
+        captured: dict[str, object] = {}
+
+        def capture_build(**kwargs):
+            captured.update(kwargs)
+            return kwargs["tools_to_use"]
+
+        async def fake_execute_subagent(**kwargs):
+            del kwargs
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "Draft complete",
+                    "subagent_result": {
+                        "summary": "Checklist drafted",
+                        "success": True,
+                        "tokens_used": 42,
+                    },
+                },
+            }
+
+        with (
+            patch.object(agent, "_build_subagent_tool_definitions", side_effect=capture_build),
+            patch.object(agent, "_execute_subagent", side_effect=fake_execute_subagent),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.prepare_workspace_subagent_delegation",
+                new=AsyncMock(
+                    return_value={
+                        "workspace_task_id": "child-1",
+                        "workspace_id": "ws-1",
+                        "root_goal_task_id": "root-1",
+                        "actor_user_id": "u-1",
+                        "leader_agent_id": "leader-agent",
+                    }
+                ),
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.apply_workspace_worker_report",
+                new=AsyncMock(return_value=MagicMock(id="child-1")),
+            ) as apply_mock,
+        ):
+            agent._stream_inject_subagent_tools(
+                tools_to_use=[],
+                conversation_context=[],
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                conversation_id="conv-1",
+                abort_signal=None,
+                workspace_root_task=workspace_root_task,
+                leader_agent_id="leader-agent",
+                actor_user_id="u-1",
+            )
+
+            delegate_callback = captured["delegate_callback"]
+            result = await delegate_callback(  # type: ignore[misc]
+                subagent_name="researcher",
+                task="Draft checklist",
+                workspace_task_id="child-1",
+            )
+
+        assert apply_mock.await_args.kwargs["report_type"] == "completed"
+        assert "workspace_task_id=child-1" in result
+        assert "Leader adjudication required" in result
+        assert "Tokens used: 42" in result

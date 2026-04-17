@@ -30,6 +30,7 @@ export interface BlackboardStats {
   totalTasks: number;
   completedTasks: number;
   blockedTasks: number;
+  pendingAdjudicationTasks: number;
   activeAgents: number;
   humanSeats: number;
   discussions: number;
@@ -126,6 +127,9 @@ export function buildBlackboardStats(
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((task) => task.status === 'done').length;
   const blockedTasks = tasks.filter((task) => task.status === 'blocked').length;
+  const pendingAdjudicationTasks = tasks.filter(
+    (task) => task.metadata.pending_leader_adjudication === true
+  ).length;
   const activeAgents = agents.filter(
     (agent) => agent.is_active || agent.status === 'running' || agent.status === 'busy'
   ).length;
@@ -138,6 +142,7 @@ export function buildBlackboardStats(
     totalTasks,
     completedTasks,
     blockedTasks,
+    pendingAdjudicationTasks,
     activeAgents,
     humanSeats,
     discussions,

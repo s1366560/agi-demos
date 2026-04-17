@@ -31,6 +31,14 @@ interface RootGoalDisplayState {
   verificationGrade: string;
 }
 
+interface PendingLeaderAdjudicationDetails {
+  pending: boolean;
+  reportType: string;
+  reportSummary: string;
+  reportArtifacts: string[];
+  reportVerifications: string[];
+}
+
 const PRIORITY_TONES: Record<string, string> = {
   P1: 'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
   P2: 'border-caution-border bg-caution-bg text-status-text-caution dark:border-caution-border-dark dark:bg-caution-bg-dark dark:text-status-text-caution-dark',
@@ -139,6 +147,33 @@ function getRootGoalDisplayState(metadata: Record<string, unknown> | undefined):
 
 function formatMetadataLabel(value: string): string {
   return value.replace(/_/g, ' ');
+}
+
+function getPendingLeaderAdjudicationDetails(
+  metadata: Record<string, unknown> | undefined
+): PendingLeaderAdjudicationDetails {
+  const safeMetadata = metadata ?? {};
+  return {
+    pending: safeMetadata.pending_leader_adjudication === true,
+    reportType:
+      typeof safeMetadata.last_worker_report_type === 'string'
+        ? safeMetadata.last_worker_report_type
+        : '',
+    reportSummary:
+      typeof safeMetadata.last_worker_report_summary === 'string'
+        ? safeMetadata.last_worker_report_summary
+        : '',
+    reportArtifacts: Array.isArray(safeMetadata.last_worker_report_artifacts)
+      ? safeMetadata.last_worker_report_artifacts
+          .filter((item): item is string => typeof item === 'string' && item.length > 0)
+          .slice(0, 3)
+      : [],
+    reportVerifications: Array.isArray(safeMetadata.last_worker_report_verifications)
+      ? safeMetadata.last_worker_report_verifications
+          .filter((item): item is string => typeof item === 'string' && item.length > 0)
+          .slice(0, 3)
+      : [],
+  };
 }
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
@@ -359,6 +394,15 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                     const isBlocked = task.status === 'blocked';
                     const { isRootGoal, goalHealth, remediationStatus, verificationGrade } =
                       getRootGoalDisplayState(task.metadata as Record<string, unknown> | undefined);
+                    const {
+                      pending,
+                      reportType,
+                      reportSummary,
+                      reportArtifacts,
+                      reportVerifications,
+                    } = getPendingLeaderAdjudicationDetails(
+                      task.metadata as Record<string, unknown> | undefined
+                    );
                     const priorityTone =
                       PRIORITY_TONES[task.priority || ''] ??
                       'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary';
@@ -408,6 +452,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                               Evidence {verificationGrade}
                             </span>
                           )}
+                          {pending && (
+                            <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+                              Pending adjudication
+                            </span>
+                          )}
                           {isBlocked && (
                             <Tooltip
                               title={
@@ -446,6 +495,36 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                           <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
                             {formatMetadataLabel(remediationStatus)}
                           </p>
+                        )}
+
+                        {pending && (
+                          <div className="mt-2 rounded-md border border-info-border/60 bg-info-bg/70 px-2 py-2 text-[11px] leading-4 text-status-text-info dark:border-info-border-dark/60 dark:bg-info-bg-dark/40 dark:text-status-text-info-dark">
+                            <p className="font-medium">
+                              {t(
+                                'workspaceDetail.taskBoard.pendingLeaderAdjudication',
+                                'Waiting for Sisyphus to review the worker result.'
+                              )}
+                            </p>
+                            {reportType && (
+                              <p className="mt-1">
+                                {t('workspaceDetail.taskBoard.workerReportType', 'Worker report')}:{' '}
+                                {formatMetadataLabel(reportType)}
+                              </p>
+                            )}
+                            {reportSummary && <p className="mt-1 line-clamp-3">{reportSummary}</p>}
+                            {reportArtifacts.length > 0 && (
+                              <p className="mt-1 line-clamp-2">
+                                {t('workspaceDetail.taskBoard.reportArtifacts', 'Artifacts')}:{' '}
+                                {reportArtifacts.join(', ')}
+                              </p>
+                            )}
+                            {reportVerifications.length > 0 && (
+                              <p className="mt-1 line-clamp-2">
+                                {t('workspaceDetail.taskBoard.reportVerifications', 'Checks')}:{' '}
+                                {reportVerifications.join(', ')}
+                              </p>
+                            )}
+                          </div>
                         )}
 
                         <div className="mt-2 flex items-center gap-1.5">
