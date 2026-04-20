@@ -183,6 +183,18 @@ async def create_workspace_task(
                 exc_info=True,
                 extra={"workspace_id": tick_workspace_id},
             )
+    try:
+        from src.infrastructure.agent.workspace.worker_launch_drain import (
+            drain_pending_worker_launches,
+        )
+
+        drain_pending_worker_launches(service)
+    except Exception:
+        logger.warning(
+            "worker_launch drain failed after direct workspace task creation",
+            exc_info=True,
+            extra={"workspace_id": workspace_id},
+        )
     return _to_response(task)
 
 
@@ -325,6 +337,18 @@ async def assign_workspace_task_to_agent(
     except Exception:
         logger.exception(
             "Failed to publish workspace task events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
+    try:
+        from src.infrastructure.agent.workspace.worker_launch_drain import (
+            drain_pending_worker_launches,
+        )
+
+        drain_pending_worker_launches(service)
+    except Exception:
+        logger.warning(
+            "worker_launch drain failed after direct workspace task assign",
+            exc_info=True,
             extra={"workspace_id": workspace_id, "task_id": task_id},
         )
     return _to_response(task)

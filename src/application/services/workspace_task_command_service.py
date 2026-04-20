@@ -37,6 +37,14 @@ class WorkspaceTaskCommandService:
         # ``schedule_autonomy_tick`` opens its own session and must see the
         # persisted root — mirrors the pattern in ``apply_workspace_worker_report``.
         self._pending_autonomy_ticks: list[tuple[str, str]] = []
+        # (task, actor_user_id, leader_agent_id) entries for execution tasks
+        # that just received an assignee. Drained by callers AFTER db.commit()
+        # via ``consume_pending_worker_launches`` because
+        # ``worker_launch.schedule_worker_session`` opens its own session and
+        # must see the committed assignee. Without the drain, execution tasks
+        # sit in TODO with ``assignee_agent_id`` set but zero running
+        # conversations / session attempts.
+        self._pending_worker_launches: list[tuple[WorkspaceTask, str, str | None]] = []
 
     def consume_pending_events(self) -> list[PendingWorkspaceTaskEvent]:
         pending_events = list(self._pending_events)
@@ -56,21 +64,36 @@ class WorkspaceTaskCommandService:
         self._pending_autonomy_ticks.clear()
         return pending
 
-    def _maybe_schedule_worker_session(
+    def consume_pending_worker_launches(
+        self,
+    ) -> list[tuple[WorkspaceTask, str, str | None]]:
+        """Return and clear queued ``(task, actor_user_id, leader_agent_id)`` launches.
+
+        Callers MUST drain this after ``await db.commit()`` and fire
+        ``worker_launch.schedule_worker_session`` for each entry. Failing to
+        drain is what left workspace ``2c11849d-…`` stuck: every execution
+        task had ``assignee_agent_id`` set but no worker conversation was ever
+        started and ``workspace_task_session_attempts`` stayed empty.
+        """
+        pending = list(self._pending_worker_launches)
+        self._pending_worker_launches.clear()
+        return pending
+
+    def _maybe_enqueue_worker_launch(
         self,
         *,
         task: WorkspaceTask,
         actor_user_id: str,
-        actor_agent_id: str | None,
+        leader_agent_id: str | None,
     ) -> None:
-        """Fire a worker session launch when the task is an assigned execution step.
+        """Queue a worker session launch for an assigned execution task.
 
-        Accepts both the canonical ``execution_task`` role and the legacy ``execution``
-        alias. ``goal_root`` tasks are intentionally skipped — root tasks have their
-        own leader-owned launch path (see ``_maybe_enqueue_root_autonomy_tick``).
+        Accepts both the canonical ``execution_task`` role and the legacy
+        ``execution`` alias. ``goal_root`` tasks are intentionally skipped —
+        root tasks are driven by the autonomy-tick path (see
+        ``_maybe_enqueue_root_autonomy_tick``). Drain via
+        ``consume_pending_worker_launches`` after ``db.commit()``.
         """
-        from src.infrastructure.agent.workspace import worker_launch as worker_launch_mod
-
         metadata = dict(getattr(task, "metadata", {}) or {})
         task_role = metadata.get(TASK_ROLE)
         if task_role not in {"execution", "execution_task"}:
@@ -78,10 +101,18 @@ class WorkspaceTaskCommandService:
         worker_agent_id = getattr(task, "assignee_agent_id", None)
         if not worker_agent_id:
             return
-        worker_launch_mod.schedule_worker_session(
-            workspace_id=task.workspace_id,
+        self._pending_worker_launches.append((task, actor_user_id, leader_agent_id))
+
+    def _maybe_schedule_worker_session(
+        self,
+        *,
+        task: WorkspaceTask,
+        actor_user_id: str,
+        actor_agent_id: str | None,
+    ) -> None:
+        """Backwards-compatible shim — delegates to ``_maybe_enqueue_worker_launch``."""
+        self._maybe_enqueue_worker_launch(
             task=task,
-            worker_agent_id=worker_agent_id,
             actor_user_id=actor_user_id,
             leader_agent_id=actor_agent_id,
         )
@@ -142,6 +173,11 @@ class WorkspaceTaskCommandService:
             self._queue_assigned(task)
         self._queue_task_snapshot(task, AgentEventType.WORKSPACE_TASK_CREATED)
         self._maybe_enqueue_root_autonomy_tick(task=task, actor_user_id=actor_user_id)
+        self._maybe_enqueue_worker_launch(
+            task=task,
+            actor_user_id=actor_user_id,
+            leader_agent_id=actor_agent_id,
+        )
         await self.queue_root_snapshot_async(
             workspace_id,
             actor_user_id,
@@ -251,6 +287,11 @@ class WorkspaceTaskCommandService:
             authority=authority,
         )
         self._queue_assigned(task, workspace_agent_id=workspace_agent_id)
+        self._maybe_enqueue_worker_launch(
+            task=task,
+            actor_user_id=actor_user_id,
+            leader_agent_id=actor_agent_id,
+        )
         await self.queue_root_snapshot_async(
             workspace_id,
             actor_user_id,

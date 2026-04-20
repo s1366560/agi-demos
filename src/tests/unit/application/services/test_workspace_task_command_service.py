@@ -204,22 +204,22 @@ class TestWorkspaceTaskCommandService:
 
 @pytest.mark.unit
 class TestMaybeScheduleWorkerSession:
-    """Regression tests for _maybe_schedule_worker_session task_role guard."""
+    """Regression tests for _maybe_schedule_worker_session task_role guard.
+
+    After the worker-launch drain refactor, ``_maybe_schedule_worker_session``
+    became a backcompat shim that enqueues onto
+    ``_pending_worker_launches`` instead of firing directly. These tests
+    assert the queue contents; draining is covered separately in the
+    ``create_task`` / ``assign_task_to_agent`` tests below.
+    """
 
     @pytest.mark.parametrize(
         "task_role",
         ["execution", "execution_task"],
         ids=["legacy_execution", "canonical_execution_task"],
     )
-    def test_accepts_both_execution_role_variants(
-        self, monkeypatch: pytest.MonkeyPatch, task_role: str
-    ) -> None:
-        """Both 'execution' and 'execution_task' must trigger worker launch.
-
-        Production code writes 'execution_task' (todowrite + bootstrap paths);
-        only legacy tests used 'execution'. Before the P5a fix, the guard
-        `task_role != "execution"` silently skipped worker launch in production.
-        """
+    def test_accepts_both_execution_role_variants(self, task_role: str) -> None:
+        """Both 'execution' and 'execution_task' must enqueue a worker launch."""
         task = _make_task(
             task_id="wt-role",
             status=WorkspaceTaskStatus.TODO,
@@ -227,15 +227,6 @@ class TestMaybeScheduleWorkerSession:
         )
         task.metadata = {"task_role": task_role}
 
-        launch_calls: list[dict] = []
-
-        def _fake_schedule(**kwargs: object) -> None:
-            launch_calls.append(dict(kwargs))
-
-        import src.infrastructure.agent.workspace.worker_launch as worker_launch_mod
-
-        monkeypatch.setattr(worker_launch_mod, "schedule_worker_session", _fake_schedule)
-
         command_service = WorkspaceTaskCommandService(AsyncMock())
         command_service._maybe_schedule_worker_session(
             task=task,
@@ -243,11 +234,16 @@ class TestMaybeScheduleWorkerSession:
             actor_agent_id="leader-1",
         )
 
-        assert len(launch_calls) == 1
-        assert launch_calls[0]["worker_agent_id"] == "agent-x"
+        pending = command_service.consume_pending_worker_launches()
+        assert len(pending) == 1
+        queued_task, actor_user_id, leader_agent_id = pending[0]
+        assert queued_task is task
+        assert actor_user_id == "user-1"
+        assert leader_agent_id == "leader-1"
+        assert command_service.consume_pending_worker_launches() == []
 
-    def test_skips_goal_root_role(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """goal_root role must NOT trigger worker launch (root has its own path)."""
+    def test_skips_goal_root_role(self) -> None:
+        """goal_root role must NOT enqueue a worker launch."""
         task = _make_task(
             task_id="wt-root",
             status=WorkspaceTaskStatus.TODO,
@@ -255,15 +251,6 @@ class TestMaybeScheduleWorkerSession:
         )
         task.metadata = {"task_role": "goal_root"}
 
-        launch_calls: list[dict] = []
-
-        def _fake_schedule(**kwargs: object) -> None:
-            launch_calls.append(dict(kwargs))
-
-        import src.infrastructure.agent.workspace.worker_launch as worker_launch_mod
-
-        monkeypatch.setattr(worker_launch_mod, "schedule_worker_session", _fake_schedule)
-
         command_service = WorkspaceTaskCommandService(AsyncMock())
         command_service._maybe_schedule_worker_session(
             task=task,
@@ -271,4 +258,83 @@ class TestMaybeScheduleWorkerSession:
             actor_agent_id="leader-1",
         )
 
-        assert launch_calls == []
+        assert command_service.consume_pending_worker_launches() == []
+
+    def test_skips_missing_assignee(self) -> None:
+        """Execution task with no assignee must NOT enqueue a launch."""
+        task = _make_task(task_id="wt-noassign", status=WorkspaceTaskStatus.TODO)
+        task.metadata = {"task_role": "execution_task"}
+
+        command_service = WorkspaceTaskCommandService(AsyncMock())
+        command_service._maybe_schedule_worker_session(
+            task=task,
+            actor_user_id="user-1",
+            actor_agent_id=None,
+        )
+
+        assert command_service.consume_pending_worker_launches() == []
+
+    @pytest.mark.asyncio
+    async def test_create_task_with_assignee_enqueues_worker_launch(self) -> None:
+        """Creating an execution task WITH assignee must enqueue a worker launch.
+
+        Regression: before this fix, ``_maybe_schedule_worker_session`` was
+        defined but never called from ``create_task``. Execution tasks were
+        created with assignees but no worker conversations ever started,
+        leaving workspaces stuck with zero ``workspace_task_session_attempts``.
+        """
+        created = _make_task(
+            task_id="wt-created",
+            status=WorkspaceTaskStatus.TODO,
+            assignee_agent_id="agent-x",
+        )
+        created.metadata = {"task_role": "execution_task"}
+        task_service = AsyncMock()
+        task_service.create_task.return_value = created
+        command_service = WorkspaceTaskCommandService(task_service)
+
+        await command_service.create_task(
+            workspace_id="ws-1",
+            actor_user_id="user-1",
+            title="Execute",
+            metadata={"task_role": "execution_task"},
+            actor_agent_id="leader-1",
+        )
+
+        pending = command_service.consume_pending_worker_launches()
+        assert len(pending) == 1
+        assert pending[0][0] is created
+        assert pending[0][1] == "user-1"
+        assert pending[0][2] == "leader-1"
+
+    @pytest.mark.asyncio
+    async def test_assign_task_to_agent_enqueues_worker_launch(self) -> None:
+        """Assigning an agent to an execution task must enqueue a worker launch.
+
+        Regression: ``assign_task_to_agent`` only flipped ``assignee_agent_id``
+        and queued the ASSIGNED event; it did not fire a worker session.
+        Without this enqueue, HTTP /assign-agent and the autonomy-tick's
+        orphan sweep left execution tasks in TODO with no running worker.
+        """
+        assigned = _make_task(
+            task_id="wt-assigned",
+            status=WorkspaceTaskStatus.TODO,
+            assignee_agent_id="agent-x",
+        )
+        assigned.metadata = {"task_role": "execution_task"}
+        task_service = AsyncMock()
+        task_service.assign_task_to_agent.return_value = assigned
+        command_service = WorkspaceTaskCommandService(task_service)
+
+        await command_service.assign_task_to_agent(
+            workspace_id="ws-1",
+            task_id="wt-assigned",
+            actor_user_id="user-1",
+            workspace_agent_id="agent-x",
+            actor_agent_id="leader-1",
+        )
+
+        pending = command_service.consume_pending_worker_launches()
+        assert len(pending) == 1
+        assert pending[0][0] is assigned
+        assert pending[0][2] == "leader-1"

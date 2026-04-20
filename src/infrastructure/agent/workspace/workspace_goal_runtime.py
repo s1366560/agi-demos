@@ -76,6 +76,22 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_sessio
 )
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    AUTONOMY_SCHEMA_VERSION_KEY,
+    CURRENT_ATTEMPT_ID,
+    DERIVED_FROM_INTERNAL_PLAN_STEP,
+    EXECUTION_STATE,
+    LAST_LEADER_ADJUDICATION_STATUS,
+    LAST_REPLAN_AT,
+    LAST_WORKER_REPORT_SUMMARY,
+    LINEAGE_SOURCE,
+    PENDING_LEADER_ADJUDICATION,
+    REMEDIATION_STATUS,
+    REMEDIATION_SUMMARY,
+    REPLAN_ATTEMPT_COUNT,
+    ROOT_GOAL_TASK_ID,
+    TASK_ROLE,
+)
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -96,7 +112,21 @@ _WORKSPACE_TASK_ID_PATTERN = re.compile(
 _WORKER_TERMINAL_REPORT_TYPES = frozenset({"completed", "failed", "blocked", "needs_replan"})
 
 
-def should_activate_workspace_authority(user_query: str) -> bool:
+def should_activate_workspace_authority(
+    user_query: str,
+    *,
+    has_workspace_binding: bool = False,
+    has_open_root: bool = False,
+) -> bool:
+    """Return True when workspace-autonomy authority should activate.
+
+    Activation signals (any of):
+    - English keyword regex matches the user query.
+    - Caller has an existing workspace binding (agent already scoped to a workspace).
+    - Caller has an open root goal task in the workspace.
+    """
+    if has_workspace_binding or has_open_root:
+        return True
     return bool(_WORKSPACE_AUTONOMY_INTENT.search(user_query))
 
 
@@ -276,7 +306,7 @@ async def maybe_materialize_workspace_goal_candidate(
                 task_decomposer=task_decomposer,
                 user_query=user_query,
             )
-            if getattr(task, "metadata", {}).get("task_role") == "goal_root":
+            if getattr(task, "metadata", {}).get(TASK_ROLE) == "goal_root":
                 extra_events.append(
                     PendingWorkspaceTaskEvent(
                         workspace_id=workspace.id,
@@ -290,6 +320,17 @@ async def maybe_materialize_workspace_goal_candidate(
             await publisher.publish_pending_events(
                 [*command_service.consume_pending_events(), *extra_events]
             )
+            try:
+                from src.infrastructure.agent.workspace.worker_launch_drain import (
+                    drain_pending_worker_launches,
+                )
+
+                drain_pending_worker_launches(command_service)
+            except Exception:
+                logger.warning(
+                    "workspace_goal_runtime.worker_launch_drain_failed",
+                    exc_info=True,
+                )
             return task
     except Exception:
         logger.warning("Workspace goal runtime materialization failed", exc_info=True)
@@ -308,13 +349,13 @@ async def _maybe_handle_root_remediation(
     task_decomposer: TaskDecomposerProtocol | None,
     user_query: str,
 ) -> WorkspaceTask:
-    remediation_status = getattr(root_task, "metadata", {}).get("remediation_status")
+    remediation_status = getattr(root_task, "metadata", {}).get(REMEDIATION_STATUS)
     root_task_id = getattr(root_task, "id", None)
     if not isinstance(root_task_id, str) or not root_task_id:
         return root_task
 
     if remediation_status == "replan_required":
-        attempts_raw = getattr(root_task, "metadata", {}).get("replan_attempt_count", 0)
+        attempts_raw = getattr(root_task, "metadata", {}).get(REPLAN_ATTEMPT_COUNT, 0)
         attempts = attempts_raw if isinstance(attempts_raw, int) and attempts_raw >= 0 else 0
         if attempts >= _MAX_AUTO_REPLAN_ATTEMPTS:
             await _mark_root_human_review_required(
@@ -417,9 +458,9 @@ async def _increment_root_replan_attempt(
     refreshed_root = await task_repo.find_by_id(root_task.id)
     effective_root = refreshed_root or root_task
     metadata = dict(getattr(effective_root, "metadata", {}) or {})
-    metadata.setdefault("autonomy_schema_version", AUTONOMY_SCHEMA_VERSION)
-    metadata["replan_attempt_count"] = next_attempt_count
-    metadata["last_replan_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    metadata.setdefault(AUTONOMY_SCHEMA_VERSION_KEY, AUTONOMY_SCHEMA_VERSION)
+    metadata[REPLAN_ATTEMPT_COUNT] = next_attempt_count
+    metadata[LAST_REPLAN_AT] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     effective_root.metadata = validate_autonomy_metadata(metadata)
     _ = await task_repo.save(effective_root)
 
@@ -463,12 +504,12 @@ async def _mark_root_human_review_required(
     refreshed_root = await task_repo.find_by_id(root_task.id)
     effective_root = refreshed_root or root_task
     metadata = dict(getattr(effective_root, "metadata", {}) or {})
-    metadata.setdefault("autonomy_schema_version", AUTONOMY_SCHEMA_VERSION)
-    attempts = metadata.get("replan_attempt_count", _MAX_AUTO_REPLAN_ATTEMPTS)
-    metadata["remediation_summary"] = (
+    metadata.setdefault(AUTONOMY_SCHEMA_VERSION_KEY, AUTONOMY_SCHEMA_VERSION)
+    attempts = metadata.get(REPLAN_ATTEMPT_COUNT, _MAX_AUTO_REPLAN_ATTEMPTS)
+    metadata[REMEDIATION_SUMMARY] = (
         f"Auto-replan limit reached after {attempts} attempts; root goal requires human review"
     )
-    metadata["last_replan_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    metadata[LAST_REPLAN_AT] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     effective_root.metadata = validate_autonomy_metadata(metadata)
     updated = await command_service.update_task(
         workspace_id=workspace_id,
@@ -495,6 +536,53 @@ async def _mark_root_human_review_required(
         )
 
 
+async def auto_complete_ready_root(
+    *,
+    workspace_id: str,
+    actor_user_id: str,
+    root_task: WorkspaceTask,
+    task_repo: SqlWorkspaceTaskRepository,
+    command_service: WorkspaceTaskCommandService,
+    leader_agent_id: str | None,
+) -> WorkspaceTask | None:
+    """Complete the root goal task when all its execution children are DONE.
+
+    Returns the updated root task if completion occurred, otherwise ``None``.
+    Best-effort: swallows exceptions and logs a warning so caller sites
+    (e.g. autonomy ticks) remain resilient.
+    """
+    try:
+        children = await task_repo.list_children(root_task.id)
+    except Exception:
+        logger.warning("auto_complete_ready_root: list_children failed", exc_info=True)
+        return None
+    execution_children = [
+        c
+        for c in children
+        if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) in {"execution", "execution_task"}
+    ]
+    if not execution_children:
+        return None
+    if not all(getattr(c.status, "value", c.status) == "done" for c in execution_children):
+        return None
+    current_status = getattr(root_task.status, "value", root_task.status)
+    if current_status == "done":
+        return None
+    try:
+        return await command_service.complete_task(
+            workspace_id=workspace_id,
+            task_id=root_task.id,
+            actor_user_id=actor_user_id,
+            actor_type="agent",
+            actor_agent_id=leader_agent_id,
+            reason="workspace_goal_runtime.auto_complete_ready_root",
+            authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
+        )
+    except Exception:
+        logger.warning("auto_complete_ready_root: complete_task failed", exc_info=True)
+        return None
+
+
 async def _maybe_bootstrap_execution_tasks(
     *,
     workspace_id: str,
@@ -512,7 +600,7 @@ async def _maybe_bootstrap_execution_tasks(
     if not isinstance(root_task_id, str) or not root_task_id:
         return
 
-    remediation_status = getattr(root_task, "metadata", {}).get("remediation_status")
+    remediation_status = getattr(root_task, "metadata", {}).get(REMEDIATION_STATUS)
     if remediation_status in {"replan_required", "ready_for_completion"}:
         return
 
@@ -533,12 +621,12 @@ async def _maybe_bootstrap_execution_tasks(
                 actor_user_id=actor_user_id,
                 title=description,
                 metadata={
-                    "autonomy_schema_version": 1,
-                    "task_role": "execution_task",
-                    "root_goal_task_id": root_task_id,
-                    "lineage_source": "agent",
-                    "derived_from_internal_plan_step": step_id or f"bootstrap-{index}",
-                    "execution_state": _build_execution_state(
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: root_task_id,
+                    LINEAGE_SOURCE: "agent",
+                    DERIVED_FROM_INTERNAL_PLAN_STEP: step_id or f"bootstrap-{index}",
+                    EXECUTION_STATE: _build_execution_state(
                         phase="todo",
                         reason="workspace_goal_runtime.bootstrap_execution_tasks",
                         action="created",
@@ -609,12 +697,12 @@ async def _replan_execution_tasks(
                 actor_user_id=actor_user_id,
                 title=description,
                 metadata={
-                    "autonomy_schema_version": 1,
-                    "task_role": "execution_task",
-                    "root_goal_task_id": root_task_id,
-                    "lineage_source": "agent",
-                    "derived_from_internal_plan_step": step_id or f"replan-{index}",
-                    "execution_state": _build_execution_state(
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: root_task_id,
+                    LINEAGE_SOURCE: "agent",
+                    DERIVED_FROM_INTERNAL_PLAN_STEP: step_id or f"replan-{index}",
+                    EXECUTION_STATE: _build_execution_state(
                         phase="todo",
                         reason="workspace_goal_runtime.replan_execution_tasks",
                         action="created",
@@ -793,7 +881,9 @@ async def _launch_workspace_retry_attempt(
                     workspace_id,
                 )
                 return
-            conversation_repo = DIContainer(db=db, redis_client=redis_client).conversation_repository()
+            conversation_repo = DIContainer(
+                db=db, redis_client=redis_client
+            ).conversation_repository()
             conversation = await conversation_repo.find_by_id(conversation_id)
             if conversation is None:
                 conversation = Conversation(
@@ -808,7 +898,7 @@ async def _launch_workspace_retry_attempt(
                         "workspace_id": workspace_id,
                         "agent_id": leader_agent_id,
                         "workspace_task_id": workspace_task_id,
-                        "root_goal_task_id": root_goal_task_id,
+                        ROOT_GOAL_TASK_ID: root_goal_task_id,
                         "attempt_id": attempt_id,
                         "conversation_scope": conversation_scope,
                         "retry_launch": True,
@@ -856,7 +946,7 @@ async def _ensure_execution_attempt(
         return existing_attempt
     attempt = await attempt_service.create_attempt(
         workspace_task_id=task.id,
-        root_goal_task_id=str(task.metadata.get("root_goal_task_id") or ""),
+        root_goal_task_id=str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
         workspace_id=task.workspace_id,
         worker_agent_id=task.assignee_agent_id,
         leader_agent_id=leader_agent_id,
@@ -952,7 +1042,7 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                 task_id=task_id,
                 actor_user_id=actor_user_id,
             )
-            if task.metadata.get("root_goal_task_id") != root_goal_task_id:
+            if task.metadata.get(ROOT_GOAL_TASK_ID) != root_goal_task_id:
                 raise ValueError("Worker report task does not belong to the provided root goal")
             resolved_attempt: WorkspaceTaskSessionAttempt
             if attempt_id:
@@ -1006,15 +1096,15 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
             )
             reported_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
             metadata["last_worker_report_type"] = report_type
-            metadata["last_worker_report_summary"] = normalized_summary
+            metadata[LAST_WORKER_REPORT_SUMMARY] = normalized_summary
             metadata["last_worker_report_artifacts"] = list(merged_artifacts)
             metadata["last_worker_report_verifications"] = list(dict.fromkeys(report_verifications))
             metadata["last_worker_reported_at"] = reported_at
             metadata["last_worker_report_fingerprint"] = report_fingerprint
-            metadata["pending_leader_adjudication"] = report_type in _WORKER_TERMINAL_REPORT_TYPES
+            metadata[PENDING_LEADER_ADJUDICATION] = report_type in _WORKER_TERMINAL_REPORT_TYPES
             if report_id:
                 metadata["last_worker_report_id"] = report_id
-            metadata["current_attempt_id"] = resolved_attempt.id
+            metadata[CURRENT_ATTEMPT_ID] = resolved_attempt.id
             metadata["last_attempt_id"] = resolved_attempt.id
             metadata["current_attempt_number"] = resolved_attempt.attempt_number
             phase = "in_progress"
@@ -1028,7 +1118,7 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                 if report_type in _WORKER_TERMINAL_REPORT_TYPES
                 else WorkspaceTaskSessionAttemptStatus.RUNNING.value
             )
-            metadata["execution_state"] = _build_execution_state(
+            metadata[EXECUTION_STATE] = _build_execution_state(
                 phase=phase,
                 reason=f"workspace_goal_runtime.worker_report.{report_type}:{normalized_summary}",
                 action=action,
@@ -1039,18 +1129,18 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
             worker_metadata_patch = {
                 key: metadata[key]
                 for key in (
-                    "execution_state",
+                    EXECUTION_STATE,
                     "evidence_refs",
                     "execution_verifications",
                     "last_worker_report_type",
-                    "last_worker_report_summary",
+                    LAST_WORKER_REPORT_SUMMARY,
                     "last_worker_report_artifacts",
                     "last_worker_report_verifications",
                     "last_worker_reported_at",
                     "last_worker_report_fingerprint",
                     "last_worker_report_id",
-                    "pending_leader_adjudication",
-                    "current_attempt_id",
+                    PENDING_LEADER_ADJUDICATION,
+                    CURRENT_ATTEMPT_ID,
                     "last_attempt_id",
                     "current_attempt_number",
                     "last_attempt_status",
@@ -1101,7 +1191,9 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     resolved_attempt.id,
                     summary=normalized_summary,
                     artifacts=merged_artifacts,
-                    verifications=list(dict.fromkeys([*prior_verifications, *report_verifications])),
+                    verifications=list(
+                        dict.fromkeys([*prior_verifications, *report_verifications])
+                    ),
                     conversation_id=conversation_id,
                 )
             elif resolved_attempt.status == WorkspaceTaskSessionAttemptStatus.PENDING:
@@ -1110,6 +1202,15 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
             await db.commit()
             publisher = WorkspaceTaskEventPublisher(await get_redis_client())
             await publisher.publish_pending_events(command_service.consume_pending_events())
+            if report_type in _WORKER_TERMINAL_REPORT_TYPES:
+                try:
+                    from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
+                        schedule_autonomy_tick,
+                    )
+
+                    schedule_autonomy_tick(workspace_id, actor_user_id)
+                except Exception:
+                    logger.warning("schedule_autonomy_tick failed", exc_info=True)
             return updated
     except Exception:
         logger.warning("Workspace worker report application failed", exc_info=True)
@@ -1149,12 +1250,14 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
             metadata = dict(task.metadata)
             current_attempt_id = attempt_id
             if current_attempt_id is None:
-                maybe_attempt = metadata.get("current_attempt_id")
-                current_attempt_id = maybe_attempt if isinstance(maybe_attempt, str) and maybe_attempt else None
-            summary = str(metadata.get("last_worker_report_summary") or "").strip()
-            if metadata.get("pending_leader_adjudication") is True:
-                metadata["pending_leader_adjudication"] = False
-            metadata["last_leader_adjudication_status"] = status.value
+                maybe_attempt = metadata.get(CURRENT_ATTEMPT_ID)
+                current_attempt_id = (
+                    maybe_attempt if isinstance(maybe_attempt, str) and maybe_attempt else None
+                )
+            summary = str(metadata.get(LAST_WORKER_REPORT_SUMMARY) or "").strip()
+            if metadata.get(PENDING_LEADER_ADJUDICATION) is True:
+                metadata[PENDING_LEADER_ADJUDICATION] = False
+            metadata[LAST_LEADER_ADJUDICATION_STATUS] = status.value
             metadata["last_leader_adjudicated_at"] = (
                 datetime.now(UTC)
                 .isoformat()
@@ -1175,7 +1278,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                 WorkspaceTaskStatus.BLOCKED: "blocked",
                 WorkspaceTaskStatus.DONE: "completed",
             }
-            metadata["execution_state"] = _build_execution_state(
+            metadata[EXECUTION_STATE] = _build_execution_state(
                 phase=phase_map[status],
                 reason=f"workspace_goal_runtime.leader_adjudication.{status.value}:{summary or task.title}",
                 action=action_map[status],
@@ -1203,7 +1306,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     )
                     metadata["last_attempt_status"] = accepted_attempt.status.value
                     metadata["last_attempt_id"] = accepted_attempt.id
-                    metadata["current_attempt_id"] = accepted_attempt.id
+                    metadata[CURRENT_ATTEMPT_ID] = accepted_attempt.id
                 elif status == WorkspaceTaskStatus.BLOCKED:
                     blocked_attempt = await attempt_service.block(
                         current_attempt_id,
@@ -1212,7 +1315,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     )
                     metadata["last_attempt_status"] = blocked_attempt.status.value
                     metadata["last_attempt_id"] = blocked_attempt.id
-                    metadata["current_attempt_id"] = blocked_attempt.id
+                    metadata[CURRENT_ATTEMPT_ID] = blocked_attempt.id
                 elif status == WorkspaceTaskStatus.IN_PROGRESS:
                     rejected_attempt = await attempt_service.reject(
                         current_attempt_id,
@@ -1221,19 +1324,19 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     )
                     new_attempt = await attempt_service.create_attempt(
                         workspace_task_id=task.id,
-                        root_goal_task_id=str(task.metadata.get("root_goal_task_id") or ""),
+                        root_goal_task_id=str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
                         workspace_id=workspace_id,
                         worker_agent_id=task.assignee_agent_id,
                         leader_agent_id=leader_agent_id,
                     )
                     metadata["last_attempt_status"] = rejected_attempt.status.value
                     metadata["last_attempt_id"] = rejected_attempt.id
-                    metadata["current_attempt_id"] = new_attempt.id
+                    metadata[CURRENT_ATTEMPT_ID] = new_attempt.id
                     metadata["current_attempt_number"] = new_attempt.attempt_number
                     if leader_agent_id and task.assignee_agent_id:
                         retry_launch_request = {
                             "workspace_id": workspace_id,
-                            "root_goal_task_id": str(task.metadata.get("root_goal_task_id") or ""),
+                            ROOT_GOAL_TASK_ID: str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
                             "workspace_task_id": task.id,
                             "attempt_id": new_attempt.id,
                             "actor_user_id": actor_user_id,
@@ -1251,7 +1354,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
                 )
             if status == WorkspaceTaskStatus.IN_PROGRESS and updated.status.value == "todo":
-                root_goal_task_id = task.metadata.get("root_goal_task_id")
+                root_goal_task_id = task.metadata.get(ROOT_GOAL_TASK_ID)
                 if isinstance(root_goal_task_id, str) and root_goal_task_id:
                     root_task = await task_service.get_task(
                         workspace_id=workspace_id,
@@ -1326,7 +1429,7 @@ async def resolve_workspace_execution_task_for_delegate(
                 if (
                     task is not None
                     and task.workspace_id == workspace_id
-                    and task.metadata.get("root_goal_task_id") == root_goal_task_id
+                    and task.metadata.get(ROOT_GOAL_TASK_ID) == root_goal_task_id
                 ):
                     return task
 
@@ -1404,7 +1507,7 @@ async def prepare_workspace_subagent_delegation(
             if subagent_id:
                 metadata["delegated_subagent_id"] = subagent_id
             metadata["delegated_task_text"] = delegated_task_text.strip()
-            metadata["current_attempt_id"] = attempt.id
+            metadata[CURRENT_ATTEMPT_ID] = attempt.id
             metadata["last_attempt_id"] = attempt.id
             metadata["current_attempt_number"] = attempt.attempt_number
             metadata["last_attempt_status"] = attempt.status.value
@@ -1451,7 +1554,7 @@ async def prepare_workspace_subagent_delegation(
                 "attempt_id": attempt.id,
                 "worker_agent_id": attempt.worker_agent_id or "",
                 "workspace_id": workspace_id,
-                "root_goal_task_id": root_goal_task_id,
+                ROOT_GOAL_TASK_ID: root_goal_task_id,
                 "actor_user_id": actor_user_id,
                 "leader_agent_id": leader_agent_id or "",
             }
