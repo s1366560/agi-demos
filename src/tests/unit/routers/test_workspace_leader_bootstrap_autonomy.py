@@ -1,0 +1,324 @@
+"""Unit tests for P0 autonomy helpers in workspace_leader_bootstrap."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import pytest
+
+from src.infrastructure.adapters.primary.web.routers import (
+    workspace_leader_bootstrap as bootstrap,
+)
+
+
+@dataclass
+class _FakeRootTask:
+    id: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class _FakeTaskRepo:
+    def __init__(self, children_map: dict[str, list[Any]]) -> None:
+        self._children_map = children_map
+
+    async def find_by_root_goal_task_id(
+        self, workspace_id: str, root_task_id: str
+    ) -> list[Any]:
+        return self._children_map.get(root_task_id, [])
+
+
+@pytest.mark.unit
+class TestRootTaskSortKey:
+    def test_ready_for_completion_has_highest_priority(self) -> None:
+        ready = _FakeRootTask(id="r1", metadata={"remediation_status": "ready_for_completion"})
+        replan = _FakeRootTask(id="r2", metadata={"remediation_status": "replan_required"})
+        none = _FakeRootTask(id="r3", metadata={"remediation_status": "none"})
+        sorted_tasks = sorted(
+            [none, replan, ready], key=bootstrap._root_task_sort_key
+        )
+        assert [t.id for t in sorted_tasks] == ["r1", "r2", "r3"]
+
+    def test_missing_metadata_defaults_to_lowest_priority(self) -> None:
+        a = _FakeRootTask(id="r1", metadata={})
+        b = _FakeRootTask(id="r2", metadata={"remediation_status": "replan_required"})
+        sorted_tasks = sorted([a, b], key=bootstrap._root_task_sort_key)
+        assert [t.id for t in sorted_tasks] == ["r2", "r1"]
+
+
+@pytest.mark.unit
+class TestSelectRootTaskNeedingProgress:
+    async def test_prefers_root_without_children(self) -> None:
+        with_kids = _FakeRootTask(id="r-kids", metadata={"remediation_status": "none"})
+        no_kids = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
+        repo = _FakeTaskRepo({"r-kids": [object()], "r-empty": []})
+
+        task, has_children = await bootstrap._select_root_task_needing_progress(
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_tasks=[with_kids, no_kids],
+        )
+        assert task is not None and task.id == "r-empty"
+        assert has_children is False
+
+    async def test_ready_for_completion_beats_empty_root(self) -> None:
+        ready = _FakeRootTask(
+            id="r-ready", metadata={"remediation_status": "ready_for_completion"}
+        )
+        empty = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
+        repo = _FakeTaskRepo({"r-ready": [object()], "r-empty": []})
+
+        task, has_children = await bootstrap._select_root_task_needing_progress(
+            task_repo=repo, workspace_id="ws-1", root_tasks=[empty, ready]
+        )
+        assert task is not None and task.id == "r-ready"
+        assert has_children is True
+
+    async def test_returns_none_when_all_stable(self) -> None:
+        stable_a = _FakeRootTask(id="a", metadata={"remediation_status": "none"})
+        stable_b = _FakeRootTask(id="b", metadata={"remediation_status": "none"})
+        repo = _FakeTaskRepo({"a": [object()], "b": [object()]})
+
+        task, has_children = await bootstrap._select_root_task_needing_progress(
+            task_repo=repo, workspace_id="ws-1", root_tasks=[stable_a, stable_b]
+        )
+        assert task is None
+        assert has_children is False
+
+
+@pytest.mark.unit
+class TestCooldownHelpers:
+    async def test_cooldown_read_and_write_roundtrip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        store: dict[str, str] = {}
+
+        class _FakeRedis:
+            async def exists(self, key: str) -> int:
+                return 1 if key in store else 0
+
+            async def set(self, key: str, value: str, ex: int | None = None) -> None:
+                store[key] = value
+
+        async def _fake_get_redis_client() -> _FakeRedis:
+            return _FakeRedis()
+
+        monkeypatch.setattr(bootstrap, "get_redis_client", _fake_get_redis_client)
+
+        assert await bootstrap._is_on_cooldown("ws-1", "root-1") is False
+        await bootstrap._mark_cooldown("ws-1", "root-1")
+        assert await bootstrap._is_on_cooldown("ws-1", "root-1") is True
+        assert await bootstrap._is_on_cooldown("ws-1", "root-2") is False
+
+    async def test_cooldown_fails_open_when_redis_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def _boom() -> Any:
+            raise RuntimeError("redis unavailable")
+
+        monkeypatch.setattr(bootstrap, "get_redis_client", _boom)
+
+        # Should not raise, and must report not-on-cooldown so autonomy can proceed
+        assert await bootstrap._is_on_cooldown("ws-1", "root-1") is False
+        await bootstrap._mark_cooldown("ws-1", "root-1")  # must not raise
+
+
+@pytest.mark.unit
+class TestSweepOrphanExecutionTasks:
+    """P5b safety net — orphan execution tasks get self-healed by autonomy tick."""
+
+    async def _run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        children: list[Any],
+        leader_agent_id: str | None = "leader-1",
+    ) -> tuple[int, list[dict[str, Any]]]:
+        class _Repo:
+            async def find_by_root_goal_task_id(
+                self, workspace_id: str, root_task_id: str
+            ) -> list[Any]:
+                return list(children)
+
+        captured: list[dict[str, Any]] = []
+
+        async def _fake_assign(**kwargs: Any) -> None:
+            captured.append(kwargs)
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "_assign_execution_tasks_to_workers", _fake_assign)
+
+        dispatched = await bootstrap._sweep_orphan_execution_tasks(
+            task_repo=_Repo(),
+            workspace_agent_repo=object(),
+            command_service=object(),
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id=leader_agent_id,
+            actor_user_id="user-1",
+        )
+        return dispatched, captured
+
+    async def test_dispatches_only_unassigned_todo_execution_tasks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.domain.model.workspace.workspace_task import (
+            WorkspaceTask,
+            WorkspaceTaskPriority,
+            WorkspaceTaskStatus,
+        )
+
+        def _task(
+            *,
+            tid: str,
+            role: str | None,
+            assignee: str | None,
+            status: WorkspaceTaskStatus,
+            archived: bool = False,
+        ) -> WorkspaceTask:
+            from datetime import UTC, datetime
+
+            return WorkspaceTask(
+                id=tid,
+                workspace_id="ws-1",
+                title=f"t-{tid}",
+                created_by="user-1",
+                assignee_agent_id=assignee,
+                status=status,
+                priority=WorkspaceTaskPriority.NONE,
+                metadata={"task_role": role} if role else {},
+                archived_at=(datetime.now(UTC) if archived else None),
+            )
+
+        orphan1 = _task(
+            tid="orph-1",
+            role="execution_task",
+            assignee=None,
+            status=WorkspaceTaskStatus.TODO,
+        )
+        orphan2 = _task(
+            tid="orph-2",
+            role="execution",
+            assignee=None,
+            status=WorkspaceTaskStatus.TODO,
+        )
+        already_assigned = _task(
+            tid="assigned",
+            role="execution_task",
+            assignee="agent-a",
+            status=WorkspaceTaskStatus.TODO,
+        )
+        done = _task(
+            tid="done-1",
+            role="execution_task",
+            assignee=None,
+            status=WorkspaceTaskStatus.DONE,
+        )
+        archived = _task(
+            tid="arch",
+            role="execution_task",
+            assignee=None,
+            status=WorkspaceTaskStatus.TODO,
+            archived=True,
+        )
+        goal_root = _task(
+            tid="root-child",
+            role="goal_root",
+            assignee=None,
+            status=WorkspaceTaskStatus.TODO,
+        )
+        no_role = _task(
+            tid="no-role",
+            role=None,
+            assignee=None,
+            status=WorkspaceTaskStatus.TODO,
+        )
+
+        dispatched, captured = await self._run(
+            monkeypatch,
+            children=[orphan1, orphan2, already_assigned, done, archived, goal_root, no_role],
+        )
+
+        assert dispatched == 2
+        assert len(captured) == 1
+        call = captured[0]
+        assert call["leader_agent_id"] == "leader-1"
+        assert call["workspace_id"] == "ws-1"
+        assert call["reason"] == "autonomy_tick.orphan_sweep"
+        assert [t.id for t in call["created_tasks"]] == ["orph-1", "orph-2"]
+
+    async def test_noop_when_no_orphans(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        dispatched, captured = await self._run(monkeypatch, children=[])
+        assert dispatched == 0
+        assert captured == []
+
+    async def test_skips_when_leader_agent_id_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from datetime import UTC, datetime  # noqa: F401
+
+        from src.domain.model.workspace.workspace_task import (
+            WorkspaceTask,
+            WorkspaceTaskPriority,
+            WorkspaceTaskStatus,
+        )
+
+        orphan = WorkspaceTask(
+            id="orph",
+            workspace_id="ws-1",
+            title="t",
+            created_by="user-1",
+            assignee_agent_id=None,
+            status=WorkspaceTaskStatus.TODO,
+            priority=WorkspaceTaskPriority.NONE,
+            metadata={"task_role": "execution_task"},
+        )
+
+        dispatched, captured = await self._run(
+            monkeypatch, children=[orphan], leader_agent_id=None
+        )
+        assert dispatched == 0
+        assert captured == []
+
+    async def test_dispatch_failure_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.domain.model.workspace.workspace_task import (
+            WorkspaceTask,
+            WorkspaceTaskPriority,
+            WorkspaceTaskStatus,
+        )
+
+        orphan = WorkspaceTask(
+            id="orph",
+            workspace_id="ws-1",
+            title="t",
+            created_by="user-1",
+            assignee_agent_id=None,
+            status=WorkspaceTaskStatus.TODO,
+            priority=WorkspaceTaskPriority.NONE,
+            metadata={"task_role": "execution_task"},
+        )
+
+        class _Repo:
+            async def find_by_root_goal_task_id(
+                self, workspace_id: str, root_task_id: str
+            ) -> list[Any]:
+                return [orphan]
+
+        async def _boom(**kwargs: Any) -> None:
+            raise RuntimeError("dispatch broken")
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "_assign_execution_tasks_to_workers", _boom)
+
+        dispatched = await bootstrap._sweep_orphan_execution_tasks(
+            task_repo=_Repo(),
+            workspace_agent_repo=object(),
+            command_service=object(),
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+        assert dispatched == 0

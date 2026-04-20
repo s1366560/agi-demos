@@ -41,6 +41,37 @@ def listener(mock_redis, registry):
     )
 
 
+@pytest.fixture
+def patch_persisted_hitl(monkeypatch):
+    """Stub persisted HITL request loader so delivery tests don't hit DB.
+
+    The listener's _handle_message performs a trusted-type lookup against the
+    persisted request before delivering. These unit tests exercise delivery
+    semantics with an in-memory waiter only, so we return a synthetic request
+    carrying a trusted type.
+    """
+
+    class _StubRequest:
+        status = "pending"
+
+    async def _load(_request_id):  # pragma: no cover - trivial stub
+        return _StubRequest()
+
+    def _resolve(_request):  # pragma: no cover - trivial stub
+        return "clarification"
+
+    import src.infrastructure.agent.hitl.utils as _utils
+
+    monkeypatch.setattr(_utils, "load_persisted_hitl_request", _load)
+    monkeypatch.setattr(_utils, "resolve_trusted_hitl_type", _resolve)
+    monkeypatch.setattr(
+        _utils,
+        "deserialize_hitl_stream_response",
+        lambda data, expected_hitl_type=None: data.get("response_data", {}),
+    )
+    return monkeypatch
+
+
 @pytest.fixture(autouse=True)
 def cleanup():
     """Reset global registry after each test."""
@@ -91,7 +122,9 @@ class TestHITLResponseListener:
         await listener.stop()
         assert listener._running is False
 
-    async def test_handle_message_delivery(self, listener, registry, mock_redis):
+    async def test_handle_message_delivery(
+        self, listener, registry, mock_redis, patch_persisted_hitl
+    ):
         """Test message handling with successful delivery."""
         # Register a waiter
         await registry.register_waiter(
@@ -119,7 +152,7 @@ class TestHITLResponseListener:
         assert listener._messages_delivered == 1
         mock_redis.xack.assert_called_once()
 
-    async def test_handle_message_no_waiter(self, listener, mock_redis):
+    async def test_handle_message_no_waiter(self, listener, mock_redis, patch_persisted_hitl):
         """Test message handling when no waiter exists."""
         message_data = {
             "request_id": "nonexistent",
@@ -197,7 +230,9 @@ class TestListenLoop:
         # Should have looped but done nothing
         assert listener._running is False
 
-    async def test_listen_loop_processes_messages(self, listener, mock_redis, registry):
+    async def test_listen_loop_processes_messages(
+        self, listener, mock_redis, registry, patch_persisted_hitl
+    ):
         """Test listen loop processes messages correctly."""
         # Register waiter before adding project
         await registry.register_waiter(

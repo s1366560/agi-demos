@@ -66,6 +66,8 @@ class TestProcessorCompletionGate:
             {
                 "session_id": "session-1",
                 "step_count": 1,
+                "tenant_id": None,
+                "project_id": None,
                 "result": "STOP",
             },
         )
