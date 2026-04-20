@@ -33,6 +33,7 @@ from src.infrastructure.adapters.primary.web.routers.workspace_chat import (
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
     ensure_workspace_leader_binding,
+    schedule_autonomy_tick,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
     WorkspaceTaskResponse,
@@ -122,6 +123,18 @@ async def _ensure_objective_root_task(
             "Failed to publish auto-projected objective workspace task events",
             extra={"workspace_id": workspace_id, "objective_id": objective.id, "task_id": task.id},
         )
+    # Belt-and-suspenders: even though ``_auto_trigger_objective_execution``
+    # posts an @leader mention below, we also schedule an autonomy tick so the
+    # root gets picked up if mention routing fails silently.
+    for tick_workspace_id, tick_actor_user_id in command_service.consume_pending_autonomy_ticks():
+        try:
+            schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
+        except Exception:
+            logger.warning(
+                "schedule_autonomy_tick failed after objective root creation",
+                exc_info=True,
+                extra={"workspace_id": tick_workspace_id, "objective_id": objective.id},
+            )
 
 
 async def _auto_trigger_objective_execution(
@@ -404,4 +417,13 @@ async def project_objective_to_task(
             "Failed to publish projected objective workspace task events",
             extra={"workspace_id": workspace_id, "objective_id": objective_id},
         )
+    for tick_workspace_id, tick_actor_user_id in command_service.consume_pending_autonomy_ticks():
+        try:
+            schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
+        except Exception:
+            logger.warning(
+                "schedule_autonomy_tick failed after manual objective projection",
+                exc_info=True,
+                extra={"workspace_id": tick_workspace_id, "objective_id": objective_id},
+            )
     return _task_to_response(task)

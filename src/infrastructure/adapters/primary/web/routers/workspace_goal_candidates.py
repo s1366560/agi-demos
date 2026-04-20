@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import suppress
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -18,9 +19,11 @@ from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
     maybe_auto_trigger_existing_root_execution,
+    schedule_autonomy_tick,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
     WorkspaceTaskResponse,
+    _get_workspace_task_event_publisher,
     _to_response as _task_to_response,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -33,6 +36,7 @@ router = APIRouter(
     prefix="/api/v1/workspaces/{workspace_id}/goal-candidates",
     tags=["workspace-goal-candidates"],
 )
+logger = logging.getLogger(__name__)
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -81,12 +85,20 @@ async def list_workspace_goal_candidates(
     blackboard_repo = container.blackboard_repository()
     message_repo = SqlWorkspaceMessageRepository(db)
     with suppress(Exception):
-        await maybe_auto_trigger_existing_root_execution(
-            request=request,
-            db=db,
-            workspace_id=workspace_id,
-            current_user=current_user,
-        )
+        try:
+            await maybe_auto_trigger_existing_root_execution(
+                request=request,
+                db=db,
+                workspace_id=workspace_id,
+                current_user=current_user,
+            )
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "Failed to auto-trigger existing workspace root execution during goal candidate sensing",
+                extra={"workspace_id": workspace_id, "user_id": current_user.id},
+            )
+            raise
 
     objectives = await objective_repo.find_by_workspace(workspace_id, limit=50)
     posts = await blackboard_repo.list_posts_by_workspace(workspace_id, limit=20)
@@ -110,11 +122,12 @@ async def materialize_workspace_goal_candidate(
 ) -> WorkspaceTaskResponse:
     container = get_container_with_db(request, db)
     task_service = _get_workspace_task_service(request, db)
+    command_service = _get_workspace_task_command_service(request, db)
     materialization_service = WorkspaceGoalMaterializationService(
         objective_repo=container.cyber_objective_repository(),
         task_repo=container.workspace_task_repository(),
         task_service=task_service,
-        task_command_service=_get_workspace_task_command_service(request, db),
+        task_command_service=command_service,
     )
 
     try:
@@ -138,5 +151,25 @@ async def materialize_workspace_goal_candidate(
     except ValueError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    event_publisher = _get_workspace_task_event_publisher(request)
+    try:
+        await event_publisher.publish_pending_events(command_service.consume_pending_events())
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events for materialized candidate",
+            extra={"workspace_id": workspace_id},
+        )
+    # Fire autonomy tick(s) for newly-created goal_root tasks so the leader
+    # agent starts decomposing without waiting for the opt-in idle waker.
+    for tick_workspace_id, tick_actor_user_id in command_service.consume_pending_autonomy_ticks():
+        try:
+            schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
+        except Exception:
+            logger.warning(
+                "schedule_autonomy_tick failed after candidate materialization",
+                exc_info=True,
+                extra={"workspace_id": tick_workspace_id},
+            )
 
     return _task_to_response(task)

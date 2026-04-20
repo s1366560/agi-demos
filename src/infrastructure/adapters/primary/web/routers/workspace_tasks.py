@@ -169,6 +169,20 @@ async def create_workspace_task(
         await event_publisher.publish_pending_events(service.consume_pending_events())
     except Exception:
         logger.exception("Failed to publish workspace task events", extra={"workspace_id": workspace_id})
+    for tick_workspace_id, tick_actor_user_id in service.consume_pending_autonomy_ticks():
+        try:
+            # Lazy import: ``workspace_leader_bootstrap`` imports from this module.
+            from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
+                schedule_autonomy_tick,
+            )
+
+            schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
+        except Exception:
+            logger.warning(
+                "schedule_autonomy_tick failed after direct workspace task creation",
+                exc_info=True,
+                extra={"workspace_id": tick_workspace_id},
+            )
     return _to_response(task)
 
 
