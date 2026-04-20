@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
 import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
+import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
 import { EmptyState } from '../EmptyState';
 import { StatBadge } from '../StatBadge';
@@ -17,6 +19,8 @@ export interface StatusTabProps {
   topologyEdges: TopologyEdge[];
   agents: WorkspaceAgent[];
   tasks: WorkspaceTask[];
+  tenantId?: string;
+  projectId?: string;
   workspaceId: string;
   statusBadgeTone: (status: string | undefined) => string;
 }
@@ -26,6 +30,8 @@ export function StatusTab({
   topologyEdges,
   agents,
   tasks,
+  tenantId,
+  projectId,
   workspaceId,
   statusBadgeTone,
 }: StatusTabProps) {
@@ -116,6 +122,22 @@ export function StatusTab({
                     .filter((item): item is string => typeof item === 'string' && item.length > 0)
                     .slice(0, 3)
                 : [];
+              const currentConversationId =
+                typeof task.metadata.current_attempt_conversation_id === 'string'
+                  ? task.metadata.current_attempt_conversation_id
+                  : '';
+              const currentAttemptNumber =
+                typeof task.metadata.current_attempt_number === 'number'
+                  ? task.metadata.current_attempt_number
+                  : undefined;
+              const conversationHref = currentConversationId
+                ? buildAgentWorkspacePath({
+                    tenantId,
+                    conversationId: currentConversationId,
+                    projectId,
+                    workspaceId,
+                  })
+                : '';
 
               return (
                 <article
@@ -148,6 +170,22 @@ export function StatusTab({
                       <p>
                         {t('blackboard.pendingAdjudicationChecks', 'Checks')}:{' '}
                         {reportVerifications.join(', ')}
+                      </p>
+                    )}
+                    {conversationHref && (
+                      <p>
+                        <Link
+                          to={conversationHref}
+                          className="text-status-text-info underline-offset-2 hover:underline dark:text-status-text-info-dark"
+                        >
+                          {t(
+                            'blackboard.pendingAdjudicationOpenConversation',
+                            'View attempt conversation'
+                          )}
+                          {currentAttemptNumber
+                            ? ` (#${currentAttemptNumber})`
+                            : ''}
+                        </Link>
                       </p>
                     )}
                   </div>

@@ -174,12 +174,16 @@ class WorkflowLearner:
             limit=1,
         )
 
-        search_result = await self._find_similar_pattern.execute(refresh_select_statement(search_request))
+        search_result = await self._find_similar_pattern.execute(
+            refresh_select_statement(search_request)
+        )
 
         if search_result.matches:
             # Similar pattern exists - will be merged in LearnPattern
             similar_result = search_result.matches[0]
-            pattern = await self._learn_pattern.execute(refresh_select_statement(analysis.to_learn_request()))
+            pattern = await self._learn_pattern.execute(
+                refresh_select_statement(analysis.to_learn_request())
+            )
 
             return LearningResult(
                 action="updated",
@@ -188,7 +192,9 @@ class WorkflowLearner:
             )
         else:
             # Create new pattern
-            pattern = await self._learn_pattern.execute(refresh_select_statement(analysis.to_learn_request()))
+            pattern = await self._learn_pattern.execute(
+                refresh_select_statement(analysis.to_learn_request())
+            )
 
             return LearningResult(
                 action="created",

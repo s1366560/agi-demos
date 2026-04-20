@@ -17,6 +17,10 @@ from src.domain.ports.repositories.workspace.workspace_agent_repository import (
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    ROOT_GOAL_TASK_ID,
+    TASK_ROLE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +56,7 @@ async def _resolve_workspace_authority_context(
             root_tasks = [
                 task
                 for task in tasks
-                if task.metadata.get("task_role") == "goal_root"
+                if task.metadata.get(TASK_ROLE) == "goal_root"
                 and task.archived_at is None
                 and getattr(task.status, "value", task.status) != "done"
             ]
@@ -61,7 +65,7 @@ async def _resolve_workspace_authority_context(
         if root_goal_task_id:
             return {
                 "workspace_id": workspace_id,
-                "root_goal_task_id": root_goal_task_id,
+                ROOT_GOAL_TASK_ID: root_goal_task_id,
                 "task_authority": "workspace",
             }
     return None

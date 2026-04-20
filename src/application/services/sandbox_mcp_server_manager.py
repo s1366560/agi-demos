@@ -80,7 +80,6 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
 
         config_json = json.dumps(transport_config)
 
-
         # Install the MCP server package
         install_result = await self._sandbox_resource.execute_tool(
             project_id=project_id,

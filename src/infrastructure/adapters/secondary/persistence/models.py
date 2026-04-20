@@ -3017,3 +3017,96 @@ class InstanceChannelConfigModel(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlanModel(Base):
+    """Typed multi-agent plan (DAG). See ``src/domain/model/workspace_plan/plan.py``.
+
+    Added in migration ``n1a2b3c4d5e6`` to persist ``Plan`` aggregates produced
+    by the V2 workspace orchestrator. Keeps the in-memory repo as fallback;
+    wired via settings flag / DI container.
+    """
+
+    __tablename__ = "workspace_plans"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    goal_id: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    nodes: Mapped[list["PlanNodeModel"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_plans_workspace", "workspace_id"),
+    )
+
+
+class PlanNodeModel(Base):
+    """A node in a :class:`PlanModel` DAG.
+
+    Complex nested value objects (``depends_on``, ``acceptance_criteria``,
+    ``inputs_schema``, ``outputs_schema``, ``recommended_capabilities``,
+    ``progress``, ``estimated_effort``) are stored as JSON blobs. The schema
+    is owned by the domain and deserialized by :class:`SqlPlanRepository`.
+    """
+
+    __tablename__ = "workspace_plan_nodes"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="task")
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    depends_on: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    inputs_schema: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    outputs_schema: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    acceptance_criteria: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    recommended_capabilities: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+
+    preferred_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    estimated_effort: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    intent: Mapped[str] = mapped_column(String(20), nullable=False, default="todo")
+    execution: Mapped[str] = mapped_column(String(20), nullable=False, default="idle")
+
+    progress: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    assignee_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    current_attempt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    workspace_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    plan: Mapped["PlanModel"] = relationship(back_populates="nodes")
+
+    __table_args__ = (
+        Index("ix_workspace_plan_nodes_plan", "plan_id"),
+        Index("ix_workspace_plan_nodes_parent", "parent_id"),
+        Index("ix_workspace_plan_nodes_workspace_task", "workspace_task_id"),
+    )

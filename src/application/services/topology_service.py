@@ -100,7 +100,7 @@ def _validate_topology_json_value(value: object, *, depth: int = 0) -> None:
         if len(value) > MAX_TOPOLOGY_DATA_STRING_LENGTH:
             raise ValueError(
                 f"Topology data string values must be {MAX_TOPOLOGY_DATA_STRING_LENGTH} characters or fewer"
-        )
+            )
         return
 
     if isinstance(value, list):

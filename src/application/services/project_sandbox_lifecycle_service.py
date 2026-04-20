@@ -752,8 +752,7 @@ class ProjectSandboxLifecycleService:
                             )
                         except Exception:
                             logger.warning(
-                                "Workspace sync failed for sandbox %s, "
-                                "proceeding with termination",
+                                "Workspace sync failed for sandbox %s, proceeding with termination",
                                 association.sandbox_id,
                                 exc_info=True,
                             )

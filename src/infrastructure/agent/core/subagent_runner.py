@@ -886,8 +886,8 @@ class SubAgentSessionRunner:
         workspace_task_id_str = cast("str", workspace_task_id)
         actor_user_id_str = cast("str", actor_user_id)
 
-        from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-            apply_workspace_worker_report,
+        from src.infrastructure.agent.workspace.orchestrator import (
+            WorkspaceAutonomyOrchestrator,
         )
 
         status_value = getattr(final_run.status, "value", str(final_run.status))
@@ -903,7 +903,7 @@ class SubAgentSessionRunner:
             else None
         )
         try:
-            await apply_workspace_worker_report(
+            await WorkspaceAutonomyOrchestrator().apply_worker_report(
                 workspace_id=workspace_id_str,
                 root_goal_task_id=root_goal_task_id_str,
                 task_id=workspace_task_id_str,

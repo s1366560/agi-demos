@@ -81,6 +81,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     trust,
     tunnel,
     webhooks,
+    workspace_autonomy,
     workspace_chat,
     workspace_goal_candidates,
     workspace_tasks,
@@ -90,6 +91,7 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
     router as agent_router,
 )
 from src.infrastructure.adapters.primary.web.startup import (
+    initialize_autonomy_idle_waker,
     initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
@@ -101,6 +103,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
+    shutdown_autonomy_idle_waker,
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
@@ -192,6 +195,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     # Initialize sandbox idle reaper (opt-in; disabled by default)
     await initialize_sandbox_idle_reaper(container)
 
+    # Initialize workspace autonomy idle waker (opt-in; disabled by default)
+    await initialize_autonomy_idle_waker()
+
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
     if channel_manager:
@@ -225,6 +231,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Stop sandbox idle reaper
     await shutdown_sandbox_idle_reaper()
+
+    # Stop workspace autonomy idle waker
+    await shutdown_autonomy_idle_waker()
 
     # Shutdown
     logger.info("Shutting down...")
@@ -397,6 +406,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(maintenance.router)
     app.include_router(tasks.router)
     app.include_router(workspace_goal_candidates.router)
+    app.include_router(workspace_autonomy.router)
     app.include_router(workspace_tasks.router)
     app.include_router(workspaces.router)
     app.include_router(cron.router)

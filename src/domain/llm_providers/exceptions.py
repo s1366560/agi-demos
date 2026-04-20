@@ -82,7 +82,6 @@ class AuthenticationError(ProviderError):
     """
 
 
-
 class RateLimitError(ProviderError):
     """
     Exception for rate limit exceeded errors.
@@ -136,7 +135,6 @@ class ProviderUnavailableError(ProviderError):
     """
 
 
-
 class ModelError(LLMError):
     """
     Exception for model-related errors.
@@ -168,7 +166,6 @@ class InvalidResponseError(ModelError):
     - Required fields missing
     - Unexpected response structure
     """
-
 
 
 class JSONParseError(ModelError):
@@ -204,7 +201,6 @@ class ContentPolicyViolationError(ModelError):
     """
 
 
-
 class ContextLengthExceededError(ModelError):
     """
     Exception when context length exceeds model limits.
@@ -238,7 +234,6 @@ class ConfigurationError(LLMError):
     """
 
 
-
 class EmbeddingError(LLMError):
     """
     Exception for embedding-related errors.
@@ -248,7 +243,6 @@ class EmbeddingError(LLMError):
     - Failed embedding generation
     - Invalid input for embedding
     """
-
 
 
 class RerankError(LLMError):
@@ -262,7 +256,6 @@ class RerankError(LLMError):
     """
 
 
-
 class StreamError(LLMError):
     """
     Exception for streaming-related errors.
@@ -272,4 +265,3 @@ class StreamError(LLMError):
     - Incomplete response
     - Stream parsing errors
     """
-

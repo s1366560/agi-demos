@@ -247,6 +247,7 @@ class DeadLetterQueuePort(ABC):
         Returns:
             List of DeadLetterMessage
         """
+
     @abstractmethod
     async def count_messages(
         self,
@@ -269,7 +270,6 @@ class DeadLetterQueuePort(ABC):
         """
 
     @abstractmethod
-
     @abstractmethod
     async def retry_message(self, message_id: str) -> bool:
         """Retry a DLQ message.
@@ -373,7 +373,6 @@ class DeadLetterQueuePort(ABC):
 
 class DLQError(Exception):
     """Base exception for DLQ operations."""
-
 
 
 class DLQMessageNotFoundError(DLQError):

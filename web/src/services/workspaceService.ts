@@ -58,6 +58,7 @@ const taskBase = (workspaceId: string) => `/workspaces/${workspaceId}/tasks`;
 
 const topologyBase = (workspaceId: string) => `/workspaces/${workspaceId}/topology`;
 const goalCandidateBase = (workspaceId: string) => `/workspaces/${workspaceId}/goal-candidates`;
+const autonomyBase = (workspaceId: string) => `/workspaces/${workspaceId}/autonomy`;
 
 function normalizeListResponse<T>(
   payload: unknown,
@@ -446,6 +447,24 @@ export const workspaceGoalCandidateService = {
   ): Promise<WorkspaceTask> => {
     const response = await apiFetch.post(`${goalCandidateBase(workspaceId)}/materialize`, candidate);
     return response.json() as Promise<WorkspaceTask>;
+  },
+};
+
+export interface WorkspaceAutonomyTickResult {
+  triggered: boolean;
+  root_task_id: string | null;
+  reason: string;
+}
+
+export const workspaceAutonomyService = {
+  tick: async (
+    workspaceId: string,
+    options: { force?: boolean } = {}
+  ): Promise<WorkspaceAutonomyTickResult> => {
+    const response = await apiFetch.post(`${autonomyBase(workspaceId)}/tick`, {
+      force: options.force ?? false,
+    });
+    return response.json() as Promise<WorkspaceAutonomyTickResult>;
   },
 };
 

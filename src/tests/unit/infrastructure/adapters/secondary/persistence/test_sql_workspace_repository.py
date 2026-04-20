@@ -76,12 +76,18 @@ class TestSqlWorkspaceRepository:
         )
         await v2_workspace_repo._session.flush()
 
-        await v2_workspace_repo.save(make_workspace("ws-a", tenant_id="tenant-1", project_id="project-1"))
         await v2_workspace_repo.save(
-            make_workspace("ws-b", tenant_id="tenant-1", project_id="project-1", name="Workspace Two")
+            make_workspace("ws-a", tenant_id="tenant-1", project_id="project-1")
         )
         await v2_workspace_repo.save(
-            make_workspace("ws-c", tenant_id="tenant-1", project_id="project-2", name="Other Project")
+            make_workspace(
+                "ws-b", tenant_id="tenant-1", project_id="project-1", name="Workspace Two"
+            )
+        )
+        await v2_workspace_repo.save(
+            make_workspace(
+                "ws-c", tenant_id="tenant-1", project_id="project-2", name="Other Project"
+            )
         )
 
         items = await v2_workspace_repo.find_by_project("tenant-1", "project-1")

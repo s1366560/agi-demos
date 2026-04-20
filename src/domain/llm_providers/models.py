@@ -163,19 +163,27 @@ class ModelMetadata(BaseModel):
 
     # --- Extended parameter support fields (B1.1) ---
     default_temperature: float | None = Field(
-        default=None, ge=0.0, le=2.0,
+        default=None,
+        ge=0.0,
+        le=2.0,
         description="Provider-recommended default temperature for this model",
     )
     default_top_p: float | None = Field(
-        default=None, ge=0.0, le=1.0,
+        default=None,
+        ge=0.0,
+        le=1.0,
         description="Provider-recommended default top_p for this model",
     )
     default_frequency_penalty: float | None = Field(
-        default=None, ge=-2.0, le=2.0,
+        default=None,
+        ge=-2.0,
+        le=2.0,
         description="Provider-recommended default frequency_penalty",
     )
     default_presence_penalty: float | None = Field(
-        default=None, ge=-2.0, le=2.0,
+        default=None,
+        ge=-2.0,
+        le=2.0,
         description="Provider-recommended default presence_penalty",
     )
     default_seed: int | None = Field(
@@ -292,6 +300,7 @@ def get_default_model_metadata(model_name: str) -> ModelMetadata:
         description=f"Unknown model '{model_name}' with conservative defaults",
     )
 
+
 class ProviderType(StrEnum):
     """Supported LLM provider types"""
 
@@ -376,7 +385,9 @@ class ProviderConfigBase(BaseModel):
     provider_type: ProviderType = Field(..., description="Provider type (openai, dashscope, etc.)")
     tenant_id: str | None = Field("default", description="Tenant/group ID")
     base_url: str | None = Field(None, description="Custom base URL for API calls")
-    llm_model: str | None = Field(None, description="Primary LLM model (required for chat/coding providers)")
+    llm_model: str | None = Field(
+        None, description="Primary LLM model (required for chat/coding providers)"
+    )
     llm_small_model: str | None = Field(None, description="Smaller/faster LLM model")
     embedding_model: str | None = Field(None, description="Embedding model")
     embedding_config: EmbeddingConfig | None = Field(
@@ -439,6 +450,7 @@ class ProviderConfigCreate(ProviderConfigBase):
             raise ValueError("llm_model is required for chat and coding providers")
 
         return self
+
 
 class ProviderConfigUpdate(BaseModel):
     """Model for updating an existing provider"""

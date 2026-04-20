@@ -385,6 +385,19 @@ class DIContainer:
     def workspace_task_session_attempt_service(self) -> WorkspaceTaskSessionAttemptService:
         return self._project.workspace_task_session_attempt_service()
 
+    # === Workspace V2 (multi-agent orchestrator) ===
+
+    def workspace_orchestrator(self) -> Any:
+        """Singleton lazy-built Workspace V2 orchestrator (multi-agent L5)."""
+        existing = getattr(self, "_workspace_v2_orchestrator", None)
+        if existing is not None:
+            return existing
+        from src.infrastructure.agent.workspace_plan import build_default_orchestrator
+
+        existing = build_default_orchestrator()
+        self._workspace_v2_orchestrator = existing  # type: ignore[attr-defined]
+        return existing
+
     def topology_repository(self) -> TopologyRepository:
         return self._project.topology_repository()
 

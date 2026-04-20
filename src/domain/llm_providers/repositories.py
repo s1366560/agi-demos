@@ -60,7 +60,7 @@ class ProviderRepository(ABC):
     @abstractmethod
     async def delete(self, provider_id: UUID, *, hard_delete: bool = False) -> bool:
         """Delete provider.
-        
+
         Args:
             provider_id: Provider ID to delete.
             hard_delete: If True, permanently remove from database.

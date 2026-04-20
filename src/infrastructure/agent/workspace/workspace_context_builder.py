@@ -49,6 +49,13 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository 
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    CURRENT_ATTEMPT_ID,
+    LAST_WORKER_REPORT_SUMMARY,
+    PENDING_LEADER_ADJUDICATION,
+    REMEDIATION_STATUS,
+    TASK_ROLE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +220,9 @@ def _format_messages(messages: list[WorkspaceMessage]) -> str | None:
         sender_label = f"{msg.sender_type.value}:{msg.sender_id}"
         content = truncate(msg.content, 200)
         mentions_attr = f' mentions="{",".join(msg.mentions)}"' if msg.mentions else ""
-        lines.append(f'    <message from="{sender_label}" at="{ts}"{mentions_attr}>{content}</message>')
+        lines.append(
+            f'    <message from="{sender_label}" at="{ts}"{mentions_attr}>{content}</message>'
+        )
     lines.append("  </recent-messages>")
     return "\n".join(lines)
 
@@ -239,7 +248,11 @@ def _format_objectives(objectives: list[CyberObjective]) -> str | None:
         return None
     lines = ["  <objectives>"]
     for objective in objectives:
-        description_attr = f' description="{truncate(objective.description, 160)}"' if objective.description else ""
+        description_attr = (
+            f' description="{truncate(objective.description, 160)}"'
+            if objective.description
+            else ""
+        )
         lines.append(
             f'    <objective id="{objective.id}" type="{objective.obj_type.value}" '
             + f'progress="{objective.progress:.2f}"{description_attr}>'
@@ -255,25 +268,25 @@ def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
     lines = ["  <tasks>"]
     for task in tasks:
         metadata = task.metadata
-        role = str(metadata.get("task_role", "task"))
+        role = str(metadata.get(TASK_ROLE, "task"))
         goal_health = metadata.get("goal_health")
-        remediation_status = metadata.get("remediation_status")
+        remediation_status = metadata.get(REMEDIATION_STATUS)
         goal_progress_summary = metadata.get("goal_progress_summary")
         last_worker_report_type = metadata.get("last_worker_report_type")
-        last_worker_report_summary = metadata.get("last_worker_report_summary")
+        last_worker_report_summary = metadata.get(LAST_WORKER_REPORT_SUMMARY)
         last_worker_report_artifacts = metadata.get("last_worker_report_artifacts")
         last_worker_report_verifications = metadata.get("last_worker_report_verifications")
         last_worker_report_id = metadata.get("last_worker_report_id")
         last_worker_report_fingerprint = metadata.get("last_worker_report_fingerprint")
-        current_attempt_id = metadata.get("current_attempt_id")
+        current_attempt_id = metadata.get(CURRENT_ATTEMPT_ID)
         current_attempt_number = metadata.get("current_attempt_number")
         last_attempt_id = metadata.get("last_attempt_id")
         last_attempt_status = metadata.get("last_attempt_status")
         goal_evidence = metadata.get("goal_evidence")
-        description_attr = f' description="{truncate(task.description, 160)}"' if task.description else ""
-        goal_health_attr = (
-            f' goal_health="{goal_health}"' if isinstance(goal_health, str) else ""
+        description_attr = (
+            f' description="{truncate(task.description, 160)}"' if task.description else ""
         )
+        goal_health_attr = f' goal_health="{goal_health}"' if isinstance(goal_health, str) else ""
         remediation_attr = (
             f' remediation_status="{remediation_status}"'
             if isinstance(remediation_status, str)
@@ -286,7 +299,7 @@ def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
         )
         pending_adjudication_attr = (
             ' pending_leader_adjudication="true"'
-            if metadata.get("pending_leader_adjudication") is True
+            if metadata.get(PENDING_LEADER_ADJUDICATION) is True
             else ""
         )
         worker_report_attr = (
@@ -330,9 +343,7 @@ def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
             else ""
         )
         last_attempt_id_attr = (
-            f' last_attempt_id="{last_attempt_id}"'
-            if isinstance(last_attempt_id, str)
-            else ""
+            f' last_attempt_id="{last_attempt_id}"' if isinstance(last_attempt_id, str) else ""
         )
         last_attempt_status_attr = (
             f' last_attempt_status="{last_attempt_status}"'
@@ -348,11 +359,11 @@ def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
         lines.append(
             f'    <task id="{task.id}" status="{task.status.value}" role="{role}" '
             + f'priority="{task.priority.value}"{description_attr}{goal_health_attr}'
-            + f'{remediation_attr}{progress_summary_attr}{pending_adjudication_attr}'
-            + f'{worker_report_attr}{worker_summary_attr}{worker_artifacts_attr}'
-            + f'{worker_verifications_attr}{worker_report_id_attr}{worker_report_fingerprint_attr}'
-            + f'{current_attempt_id_attr}{current_attempt_number_attr}{last_attempt_id_attr}'
-            + f'{last_attempt_status_attr}'
+            + f"{remediation_attr}{progress_summary_attr}{pending_adjudication_attr}"
+            + f"{worker_report_attr}{worker_summary_attr}{worker_artifacts_attr}"
+            + f"{worker_verifications_attr}{worker_report_id_attr}{worker_report_fingerprint_attr}"
+            + f"{current_attempt_id_attr}{current_attempt_number_attr}{last_attempt_id_attr}"
+            + f"{last_attempt_status_attr}"
             + f"{evidence_grade_attr}>"
             + f"{truncate(task.title, 120)}</task>"
         )

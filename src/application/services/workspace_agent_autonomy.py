@@ -17,10 +17,17 @@ from src.application.schemas.workspace_agent_autonomy import (
 )
 from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    AUTONOMY_SCHEMA_VERSION_KEY,
+    REMEDIATION_STATUS,
+    REMEDIATION_SUMMARY,
+    REPLAN_ATTEMPT_COUNT,
+    TASK_ROLE,
+)
 
 _PROTECTED_ROOT_METADATA_KEYS = {
-    "autonomy_schema_version",
-    "task_role",
+    AUTONOMY_SCHEMA_VERSION_KEY,
+    TASK_ROLE,
     "goal_origin",
     "goal_source_refs",
     "goal_formalization_reason",
@@ -35,7 +42,7 @@ def validate_autonomy_metadata(metadata: Mapping[str, Any] | None) -> dict[str, 
     if not has_autonomy_metadata(normalized):
         return normalized
 
-    task_role = normalized.get("task_role")
+    task_role = normalized.get(TASK_ROLE)
     if task_role == "goal_root":
         return RootGoalMetadataModel.model_validate(normalized).model_dump(mode="python")
     if task_role == "execution_task":
@@ -44,11 +51,11 @@ def validate_autonomy_metadata(metadata: Mapping[str, Any] | None) -> dict[str, 
 
 
 def is_goal_root_task(task: WorkspaceTask) -> bool:
-    return task.metadata.get("task_role") == "goal_root"
+    return task.metadata.get(TASK_ROLE) == "goal_root"
 
 
 def is_execution_task(task: WorkspaceTask) -> bool:
-    return task.metadata.get("task_role") == "execution_task"
+    return task.metadata.get(TASK_ROLE) == "execution_task"
 
 
 def is_autonomy_task(task: WorkspaceTask) -> bool:
@@ -119,8 +126,8 @@ def ensure_goal_completion_allowed(task: WorkspaceTask) -> None:
 
 def build_projected_objective_root_metadata(objective: CyberObjective) -> dict[str, Any]:
     return {
-        "autonomy_schema_version": AUTONOMY_SCHEMA_VERSION,
-        "task_role": "goal_root",
+        AUTONOMY_SCHEMA_VERSION_KEY: AUTONOMY_SCHEMA_VERSION,
+        TASK_ROLE: "goal_root",
         "goal_origin": "existing_objective",
         "goal_source_refs": [f"objective:{objective.id}"],
         "objective_id": objective.id,
@@ -130,14 +137,14 @@ def build_projected_objective_root_metadata(objective: CyberObjective) -> dict[s
             "completion_requires_external_proof": True,
         },
         "goal_health": "healthy",
-        "replan_attempt_count": 0,
+        REPLAN_ATTEMPT_COUNT: 0,
     }
 
 
 def build_inferred_goal_root_metadata(candidate: GoalCandidateRecordModel) -> dict[str, Any]:
     return {
-        "autonomy_schema_version": AUTONOMY_SCHEMA_VERSION,
-        "task_role": "goal_root",
+        AUTONOMY_SCHEMA_VERSION_KEY: AUTONOMY_SCHEMA_VERSION,
+        TASK_ROLE: "goal_root",
         "goal_origin": "agent_inferred",
         "goal_source_refs": list(candidate.source_refs),
         "goal_formalization_reason": "workspace goal candidate formalized from explicit evidence",
@@ -159,7 +166,7 @@ def build_inferred_goal_root_metadata(candidate: GoalCandidateRecordModel) -> di
             "completion_requires_external_proof": True,
         },
         "goal_health": "healthy",
-        "replan_attempt_count": 0,
+        REPLAN_ATTEMPT_COUNT: 0,
     }
 
 
@@ -334,8 +341,8 @@ async def reconcile_root_goal_progress(
             "blocked_child_task_ids": blocked_child_task_ids,
             "blocked_reason": blocked_reason,
             "goal_health": goal_health,
-            "remediation_status": remediation_status,
-            "remediation_summary": remediation_summary,
+            REMEDIATION_STATUS: remediation_status,
+            REMEDIATION_SUMMARY: remediation_summary,
         }
     )
     root_task.metadata = validate_autonomy_metadata(metadata)

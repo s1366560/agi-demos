@@ -80,7 +80,9 @@ class WorkspaceGoalMaterializationService:
                 )
             if source_ref.startswith("objective:"):
                 objective_id = source_ref.split(":", 1)[1]
-                existing = await self._task_repo.find_root_by_objective_id(workspace_id, objective_id)
+                existing = await self._task_repo.find_root_by_objective_id(
+                    workspace_id, objective_id
+                )
                 if existing is not None:
                     return existing
 

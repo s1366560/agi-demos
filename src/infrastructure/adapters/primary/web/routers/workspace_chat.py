@@ -133,13 +133,14 @@ async def send_message(
 
 
 def _fire_mention_routing(
-    request: Request,
+    request: Request | None,
     workspace_id: str,
     message: WorkspaceMessage,
     tenant_id: str,
     project_id: str,
     user_id: str,
 ) -> None:
+    from src.infrastructure.adapters.primary.web.startup.container import get_app_container
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
@@ -159,7 +160,11 @@ def _fire_mention_routing(
         SqlWorkspaceMessageRepository,
     )
 
-    container = request.app.state.container
+    container = (
+        request.app.state.container if request is not None else get_app_container()
+    )
+    if container is None:
+        return
     redis_client = container.redis_client
 
     async def _publish_event(ws_id: str, event_name: str, event_payload: dict[str, Any]) -> None:

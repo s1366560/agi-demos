@@ -30,15 +30,12 @@ class SerializationError(Exception):
     """Error during event serialization."""
 
 
-
 class DeserializationError(Exception):
     """Error during event deserialization."""
 
 
-
 class VersionMismatchError(Exception):
     """Schema version mismatch error."""
-
 
 
 @dataclass

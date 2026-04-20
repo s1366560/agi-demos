@@ -685,9 +685,7 @@ class MCPRuntimeService:
             },
         )
 
-        sandbox_config = (
-            self.to_sandbox_config(server.config) if server.config else {}
-        )
+        sandbox_config = self.to_sandbox_config(server.config) if server.config else {}
 
         start_status = await self._sandbox_manager.install_and_start(
             project_id=server.project_id,

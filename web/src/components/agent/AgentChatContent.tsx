@@ -57,6 +57,7 @@ import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
 import { ShortcutOverlay } from './chat/ShortcutOverlay';
+import { ConversationAgentBadge } from './ConversationAgentBadge';
 import { ConversationCompareView } from './comparison/ConversationCompareView';
 import { ConversationPickerModal } from './comparison/ConversationPickerModal';
 import { EmptyState } from './EmptyState';
@@ -180,6 +181,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const error = useAgentError();
 
     const conversations = useConversationsStore((state) => state.conversations);
+    const currentConversation = useConversationsStore(
+      (state) => state.currentConversation
+    );
 
     const doomLoopDetected = useDoomLoopDetected();
     const suggestions = useSuggestions();
@@ -623,12 +627,15 @@ ${content}`;
             {headerExtra}
           </div>
         )}
-        {activeAgentNode?.name && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-blue-50/50 dark:bg-blue-900/20 px-4 py-1.5 flex items-center gap-2">
-            <span className="flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded-full">
-              <Bot size={12} />
-              {activeAgentNode.name}
-            </span>
+        {(currentConversation || activeAgentNode?.name) && (
+          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-1.5 flex items-center gap-2">
+            <ConversationAgentBadge conversation={currentConversation} />
+            {activeAgentNode?.name && (
+              <span className="flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded-full">
+                <Bot size={12} />
+                {activeAgentNode.name}
+              </span>
+            )}
           </div>
         )}
         <div className="flex-1 overflow-hidden relative min-h-0">

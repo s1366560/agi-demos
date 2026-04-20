@@ -2041,11 +2041,11 @@ class ReActAgent:
         ) -> dict[str, str] | None:
             if workspace_root_task is None or not actor_user_id:
                 return None
-            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-                prepare_workspace_subagent_delegation,
+            from src.infrastructure.agent.workspace.orchestrator import (
+                WorkspaceAutonomyOrchestrator,
             )
 
-            return await prepare_workspace_subagent_delegation(
+            return await WorkspaceAutonomyOrchestrator().prepare_subagent_delegation(
                 workspace_id=getattr(workspace_root_task, "workspace_id", project_id),
                 root_goal_task_id=getattr(workspace_root_task, "id", ""),
                 actor_user_id=actor_user_id,
@@ -2081,11 +2081,11 @@ class ReActAgent:
         ) -> Any:
             if not task_binding or not actor_user_id:
                 return None
-            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-                apply_workspace_worker_report,
+            from src.infrastructure.agent.workspace.orchestrator import (
+                WorkspaceAutonomyOrchestrator,
             )
 
-            return await apply_workspace_worker_report(
+            return await WorkspaceAutonomyOrchestrator().apply_worker_report(
                 workspace_id=task_binding["workspace_id"],
                 root_goal_task_id=task_binding["root_goal_task_id"],
                 task_id=task_binding["workspace_task_id"],
@@ -2685,16 +2685,22 @@ class ReActAgent:
             selected_agent_id=selected_agent.id,
         )
         if project_id and tenant_id and user_id:
-            from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-                maybe_materialize_workspace_goal_candidate,
-                should_activate_workspace_authority,
+            from src.infrastructure.agent.workspace.orchestrator import (
+                WorkspaceAutonomyOrchestrator,
             )
 
-            if should_activate_workspace_authority(processed_user_message):
-                workspace_root_task = await maybe_materialize_workspace_goal_candidate(
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    user_id=user_id,
+            orchestrator = WorkspaceAutonomyOrchestrator()
+            has_workspace_binding = "[workspace-task-binding]" in (
+                processed_user_message or ""
+            )
+            if orchestrator.should_activate(
+                processed_user_message,
+                has_workspace_binding=has_workspace_binding,
+            ):
+                workspace_root_task = await orchestrator.materialize_goal_candidate(
+                    project_id,
+                    tenant_id,
+                    user_id,
                     leader_agent_id=selected_agent.id,
                     task_decomposer=self._task_decomposer,
                     user_query=processed_user_message,

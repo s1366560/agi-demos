@@ -16,6 +16,9 @@ from src.domain.model.workspace.blackboard_post import BlackboardPost
 from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace_message import WorkspaceMessage
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    TASK_ROLE,
+)
 
 _ACTION_PATTERN = re.compile(
     r"\b(need|must|please|todo|action|implement|fix|create|prepare|ship|deploy|write|add)\b",
@@ -68,9 +71,7 @@ class WorkspaceGoalSensingService:
     ) -> list[GoalCandidateRecordModel]:
         current_time = now or datetime.now(UTC)
         existing_root_titles = {
-            self._normalize_text(task.title)
-            for task in tasks
-            if self._is_open_root_task(task)
+            self._normalize_text(task.title) for task in tasks if self._is_open_root_task(task)
         }
 
         drafts: list[_DraftCandidate] = []
@@ -81,9 +82,7 @@ class WorkspaceGoalSensingService:
 
         return self._collapse_candidates(drafts)
 
-    def _task_candidates(
-        self, tasks: list[WorkspaceTask], now: datetime
-    ) -> list[_DraftCandidate]:
+    def _task_candidates(self, tasks: list[WorkspaceTask], now: datetime) -> list[_DraftCandidate]:
         candidates: list[_DraftCandidate] = []
         for task in tasks:
             if not self._is_open_root_task(task):
@@ -177,9 +176,7 @@ class WorkspaceGoalSensingService:
             )
         return candidates
 
-    def _collapse_candidates(
-        self, drafts: list[_DraftCandidate]
-    ) -> list[GoalCandidateRecordModel]:
+    def _collapse_candidates(self, drafts: list[_DraftCandidate]) -> list[GoalCandidateRecordModel]:
         grouped: dict[str, list[_DraftCandidate]] = defaultdict(list)
         for draft in drafts:
             grouped[self._normalize_text(draft.text)].append(draft)
@@ -259,7 +256,7 @@ class WorkspaceGoalSensingService:
     @staticmethod
     def _is_open_root_task(task: WorkspaceTask) -> bool:
         return (
-            task.metadata.get("task_role") == "goal_root"
+            task.metadata.get(TASK_ROLE) == "goal_root"
             and task.archived_at is None
             and task.status != WorkspaceTaskStatus.DONE
         )
@@ -308,9 +305,7 @@ class WorkspaceGoalSensingService:
         existing_root_titles: set[str],
     ) -> CandidateDecision:
         if any(
-            normalized_text == title
-            or normalized_text in title
-            or title in normalized_text
+            normalized_text == title or normalized_text in title or title in normalized_text
             for title in existing_root_titles
         ):
             return "defer"

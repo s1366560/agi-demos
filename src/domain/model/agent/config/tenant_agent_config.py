@@ -60,17 +60,28 @@ class RuntimeHookConfig:
         normalized_executor_kind = self.executor_kind.strip().lower()
         if normalized_executor_kind not in {item.value for item in HookExecutorKind}:
             raise ValueError(f"Unsupported executor_kind: {self.executor_kind}")
-        if normalized_executor_kind == HookExecutorKind.BUILTIN.value and not self.plugin_name.strip():
+        if (
+            normalized_executor_kind == HookExecutorKind.BUILTIN.value
+            and not self.plugin_name.strip()
+        ):
             raise ValueError("plugin_name cannot be empty for builtin runtime hooks")
-        if normalized_executor_kind in {
-            HookExecutorKind.SCRIPT.value,
-            HookExecutorKind.PLUGIN.value,
-        } and not (self.source_ref or "").strip():
+        if (
+            normalized_executor_kind
+            in {
+                HookExecutorKind.SCRIPT.value,
+                HookExecutorKind.PLUGIN.value,
+            }
+            and not (self.source_ref or "").strip()
+        ):
             raise ValueError("source_ref is required for custom runtime hooks")
-        if normalized_executor_kind in {
-            HookExecutorKind.SCRIPT.value,
-            HookExecutorKind.PLUGIN.value,
-        } and not (self.entrypoint or "").strip():
+        if (
+            normalized_executor_kind
+            in {
+                HookExecutorKind.SCRIPT.value,
+                HookExecutorKind.PLUGIN.value,
+            }
+            and not (self.entrypoint or "").strip()
+        ):
             raise ValueError("entrypoint is required for custom runtime hooks")
 
     @property

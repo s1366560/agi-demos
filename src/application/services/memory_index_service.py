@@ -210,7 +210,9 @@ class MemoryIndexService:
             if hasattr(self._embedding, "embed_batch_safe"):
                 embeddings = await self._embedding.embed_batch_safe(texts)
             elif hasattr(self._embedding, "embed_batch"):
-                embeddings = cast(list[list[float] | None], await self._embedding.embed_batch(texts))
+                embeddings = cast(
+                    list[list[float] | None], await self._embedding.embed_batch(texts)
+                )
             elif hasattr(self._embedding, "embed_text_safe"):
                 for i, text in enumerate(texts):
                     embeddings[i] = await self._embedding.embed_text_safe(text)

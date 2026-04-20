@@ -378,6 +378,9 @@ class TestTodoWriteTool:
                     metadata=kwargs["metadata"],
                 )
 
+            def consume_pending_events(self) -> list[Any]:
+                return []
+
         class _FakeWorkspaceRepo:
             def __init__(self, session: Any) -> None:
                 _ = session
@@ -385,20 +388,32 @@ class TestTodoWriteTool:
             async def find_by_root_goal_task_id(
                 self, workspace_id: str, root_goal_task_id: str
             ) -> list[Any]:
+                if not created:
+                    return []
                 return [
                     WorkspaceTask(
-                        id="wt-1",
+                        id=f"wt-{i + 1}",
                         workspace_id=workspace_id,
-                        title="Task A",
-                        created_by="user-1",
+                        title=kwargs["title"],
+                        created_by=kwargs["actor_user_id"],
                         status=WorkspaceTaskStatus.TODO,
-                        priority=WorkspaceTaskPriority.P1,
-                        metadata={"task_role": "execution_task", "root_goal_task_id": root_goal_task_id},
+                        priority=kwargs["priority"],
+                        metadata={**kwargs["metadata"], "root_goal_task_id": root_goal_task_id},
                     )
+                    for i, kwargs in enumerate(created)
                 ]
+
+        dispatch_calls: list[dict[str, Any]] = []
+
+        async def _fake_dispatch(**kwargs: Any) -> dict[str, Any]:
+            dispatch_calls.append(kwargs)
+            return {"dispatched": True}
 
         monkeypatch.setattr(todo_tools_module, "_todowrite_session_factory", lambda: _DummySession())
         monkeypatch.setattr(todo_tools_module, "WorkspaceTaskService", lambda **kwargs: object())
+        monkeypatch.setattr(
+            todo_tools_module, "_dispatch_created_workspace_tasks", _fake_dispatch
+        )
         monkeypatch.setattr(
             "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
             _FakeCommandService,
@@ -416,6 +431,7 @@ class TestTodoWriteTool:
                 "task_authority": "workspace",
                 "workspace_id": "ws-1",
                 "root_goal_task_id": "root-1",
+                "selected_agent_id": "leader-agent-1",
             },
         )
         result = await todowrite_tool.execute(
@@ -426,8 +442,14 @@ class TestTodoWriteTool:
         payload = json.loads(result.output)
 
         assert payload["success"] is True
+        assert payload["added_count"] == 1
+        assert payload["skipped_count"] == 0
+        assert payload["dispatched"] is True
         assert created[0]["workspace_id"] == "ws-1"
         assert created[0]["metadata"]["root_goal_task_id"] == "root-1"
+        assert len(dispatch_calls) == 1
+        assert dispatch_calls[0]["leader_agent_id"] == "leader-agent-1"
+        assert [t.title for t in dispatch_calls[0]["created_tasks"]] == ["Task A"]
         pending = ctx.consume_pending_events()
         assert any(event["type"] == "task_list_updated" for event in pending)
 
@@ -873,3 +895,211 @@ class TestTodoWriteTool:
         assert adjudicated[0]["attempt_id"] == "attempt-7"
         assert adjudicated[0]["status"] == WorkspaceTaskStatus.DONE
         assert updated == []
+
+    @pytest.mark.asyncio
+    async def test_add_skips_duplicate_by_title(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dedup: adding a todo whose title matches an existing task should skip."""
+        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+        class _DummySession:
+            async def __aenter__(self) -> _DummySession:
+                return self
+
+            async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+                return False
+
+            async def commit(self) -> None:
+                return None
+
+        created: list[dict[str, Any]] = []
+
+        class _FakeCommandService:
+            def __init__(self, task_service: Any) -> None:
+                _ = task_service
+
+            async def create_task(self, **kwargs: Any) -> WorkspaceTask:
+                created.append(kwargs)
+                return WorkspaceTask(
+                    id=f"wt-{len(created)}",
+                    workspace_id=kwargs["workspace_id"],
+                    title=kwargs["title"],
+                    created_by=kwargs["actor_user_id"],
+                    status=WorkspaceTaskStatus.TODO,
+                    priority=kwargs["priority"],
+                    metadata=kwargs["metadata"],
+                )
+
+            def consume_pending_events(self) -> list[Any]:
+                return []
+
+        class _FakeWorkspaceRepo:
+            def __init__(self, session: Any) -> None:
+                _ = session
+
+            async def find_by_root_goal_task_id(
+                self, workspace_id: str, root_goal_task_id: str
+            ) -> list[Any]:
+                return [
+                    WorkspaceTask(
+                        id="wt-existing",
+                        workspace_id=workspace_id,
+                        title="Existing Task",
+                        created_by="user-1",
+                        status=WorkspaceTaskStatus.TODO,
+                        priority=WorkspaceTaskPriority.P3,
+                        metadata={
+                            "task_role": "execution_task",
+                            "root_goal_task_id": root_goal_task_id,
+                        },
+                    )
+                ]
+
+        dispatch_calls: list[dict[str, Any]] = []
+
+        async def _fake_dispatch(**kwargs: Any) -> dict[str, Any]:
+            dispatch_calls.append(kwargs)
+            return {"dispatched": False, "dispatch_skipped_reason": "no_created_tasks"}
+
+        monkeypatch.setattr(
+            todo_tools_module, "_todowrite_session_factory", lambda: _DummySession()
+        )
+        monkeypatch.setattr(todo_tools_module, "WorkspaceTaskService", lambda **kwargs: object())
+        monkeypatch.setattr(
+            todo_tools_module, "_dispatch_created_workspace_tasks", _fake_dispatch
+        )
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
+            _FakeCommandService,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository."
+            "SqlWorkspaceTaskRepository",
+            _FakeWorkspaceRepo,
+        )
+
+        ctx = _make_ctx(
+            conversation_id="conv-persisted",
+            user_id="user-1",
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+                "selected_agent_id": "leader-1",
+            },
+        )
+        result = await todowrite_tool.execute(
+            ctx,
+            action="add",
+            todos=[{"content": "Existing Task"}, {"content": "New Task"}],
+        )
+        payload = json.loads(result.output)
+
+        assert payload["success"] is True
+        assert payload["added_count"] == 1
+        assert payload["skipped_count"] == 1
+        assert payload["skipped_titles"] == ["Existing Task"]
+        # Only the non-duplicate was passed to create_task
+        assert [c["title"] for c in created] == ["New Task"]
+        # Dispatch invoked exactly once for the single new task
+        assert len(dispatch_calls) == 1
+        assert [t.title for t in dispatch_calls[0]["created_tasks"]] == ["New Task"]
+
+    @pytest.mark.asyncio
+    async def test_add_without_selected_agent_id_skips_dispatch_with_reason(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """selected_agent_id missing → create succeeds, dispatch cleanly skipped with reason."""
+        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+        class _DummySession:
+            async def __aenter__(self) -> _DummySession:
+                return self
+
+            async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+                return False
+
+            async def commit(self) -> None:
+                return None
+
+        created: list[dict[str, Any]] = []
+
+        class _FakeCommandService:
+            def __init__(self, task_service: Any) -> None:
+                _ = task_service
+
+            async def create_task(self, **kwargs: Any) -> WorkspaceTask:
+                created.append(kwargs)
+                return WorkspaceTask(
+                    id=f"wt-{len(created)}",
+                    workspace_id=kwargs["workspace_id"],
+                    title=kwargs["title"],
+                    created_by=kwargs["actor_user_id"],
+                    status=WorkspaceTaskStatus.TODO,
+                    priority=kwargs["priority"] or WorkspaceTaskPriority.NONE,
+                    metadata=kwargs["metadata"],
+                )
+
+            def consume_pending_events(self) -> list[Any]:
+                return []
+
+        class _FakeWorkspaceRepo:
+            def __init__(self, session: Any) -> None:
+                _ = session
+
+            async def find_by_root_goal_task_id(
+                self, workspace_id: str, root_goal_task_id: str
+            ) -> list[Any]:
+                return [
+                    WorkspaceTask(
+                        id=f"wt-{i + 1}",
+                        workspace_id=workspace_id,
+                        title=kwargs["title"],
+                        created_by=kwargs["actor_user_id"],
+                        status=WorkspaceTaskStatus.TODO,
+                        priority=kwargs["priority"] or WorkspaceTaskPriority.NONE,
+                        metadata={**kwargs["metadata"], "root_goal_task_id": root_goal_task_id},
+                    )
+                    for i, kwargs in enumerate(created)
+                ]
+
+        # NOTE: intentionally do NOT monkeypatch _dispatch_created_workspace_tasks —
+        # we want the real code path so the "leader_agent_id_missing" branch executes.
+        monkeypatch.setattr(
+            todo_tools_module, "_todowrite_session_factory", lambda: _DummySession()
+        )
+        monkeypatch.setattr(todo_tools_module, "WorkspaceTaskService", lambda **kwargs: object())
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
+            _FakeCommandService,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository."
+            "SqlWorkspaceTaskRepository",
+            _FakeWorkspaceRepo,
+        )
+
+        ctx = _make_ctx(
+            conversation_id="conv-persisted",
+            user_id="user-1",
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+                # selected_agent_id deliberately omitted
+            },
+        )
+        result = await todowrite_tool.execute(
+            ctx,
+            action="add",
+            todos=[{"content": "Lonely Task"}],
+        )
+        payload = json.loads(result.output)
+
+        assert payload["success"] is True
+        assert payload["added_count"] == 1
+        assert payload["dispatched"] is False
+        assert payload["dispatch_skipped_reason"] == "leader_agent_id_missing"
+        # Task still created despite dispatch skip
+        assert len(created) == 1

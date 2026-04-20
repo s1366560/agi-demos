@@ -148,3 +148,69 @@ class TestWorkspaceTaskSessionAttemptService:
         assert updated.status == WorkspaceTaskSessionAttemptStatus.ACCEPTED
         assert updated.leader_feedback == "Looks good"
         assert updated.completed_at is not None
+
+    # ------------------------------------------------------------------
+    # bind_conversation
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_bind_conversation_happy_path(
+        self,
+        attempt_service,
+        attempt_repo: MagicMock,
+    ) -> None:
+        attempt_repo.find_by_id.return_value = _make_attempt()
+
+        updated = await attempt_service.bind_conversation("attempt-1", "conv-1")
+
+        assert updated.conversation_id == "conv-1"
+        attempt_repo.save.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_bind_conversation_idempotent_same_id(
+        self,
+        attempt_service,
+        attempt_repo: MagicMock,
+    ) -> None:
+        existing = _make_attempt()
+        existing.conversation_id = "conv-1"
+        attempt_repo.find_by_id.return_value = existing
+
+        updated = await attempt_service.bind_conversation("attempt-1", "conv-1")
+
+        assert updated is existing
+        attempt_repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_bind_conversation_rejects_rebind_to_different_id(
+        self,
+        attempt_service,
+        attempt_repo: MagicMock,
+    ) -> None:
+        existing = _make_attempt()
+        existing.conversation_id = "conv-1"
+        attempt_repo.find_by_id.return_value = existing
+
+        with pytest.raises(ValueError, match="different conversation"):
+            await attempt_service.bind_conversation("attempt-1", "conv-OTHER")
+
+    @pytest.mark.asyncio
+    async def test_bind_conversation_rejects_empty_id(
+        self,
+        attempt_service,
+    ) -> None:
+        with pytest.raises(ValueError, match="conversation_id is required"):
+            await attempt_service.bind_conversation("attempt-1", "")
+
+    @pytest.mark.asyncio
+    async def test_bind_conversation_rejects_terminal_status(
+        self,
+        attempt_service,
+        attempt_repo: MagicMock,
+    ) -> None:
+        attempt_repo.find_by_id.return_value = _make_attempt(
+            status=WorkspaceTaskSessionAttemptStatus.ACCEPTED,
+        )
+
+        with pytest.raises(ValueError, match="Cannot bind conversation"):
+            await attempt_service.bind_conversation("attempt-1", "conv-1")

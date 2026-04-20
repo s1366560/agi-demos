@@ -213,7 +213,6 @@ class HITLServiceError(Exception):
     """Base exception for HITL service errors."""
 
 
-
 class HITLRequestNotFoundError(HITLServiceError):
     """Raised when HITL request is not found."""
 

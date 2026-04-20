@@ -307,6 +307,8 @@ export function CentralBlackboardModal({
                 topologyEdges={topologyEdges}
                 agents={agents}
                 tasks={tasks}
+                tenantId={tenantId}
+                projectId={projectId}
                 workspaceId={workspaceId}
                 statusBadgeTone={statusBadgeTone}
               />

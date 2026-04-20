@@ -304,6 +304,14 @@ class AgentEventType(str, Enum):
     WORKSPACE_AGENT_UNBOUND = "workspace_agent_unbound"
     WORKSPACE_MESSAGE_CREATED = "workspace_message_created"
 
+    # Workspace orchestration lifecycle events
+    WORKSPACE_GOAL_MATERIALIZED = "workspace_goal_materialized"
+    WORKSPACE_DECOMPOSITION_COMPLETE = "workspace_decomposition_complete"
+    WORKSPACE_WORKER_DISPATCHED = "workspace_worker_dispatched"
+    WORKSPACE_WORKER_REPORT_SUBMITTED = "workspace_worker_report_submitted"
+    WORKSPACE_ADJUDICATION_COMPLETE = "workspace_adjudication_complete"
+    WORKSPACE_GOAL_COMPLETED = "workspace_goal_completed"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -480,6 +488,13 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.WORKSPACE_AGENT_BOUND: EventCategory.AGENT,
     AgentEventType.WORKSPACE_AGENT_UNBOUND: EventCategory.AGENT,
     AgentEventType.WORKSPACE_MESSAGE_CREATED: EventCategory.AGENT,
+    # Workspace orchestration lifecycle events
+    AgentEventType.WORKSPACE_GOAL_MATERIALIZED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_DECOMPOSITION_COMPLETE: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_WORKER_DISPATCHED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_WORKER_REPORT_SUBMITTED: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_ADJUDICATION_COMPLETE: EventCategory.AGENT,
+    AgentEventType.WORKSPACE_GOAL_COMPLETED: EventCategory.AGENT,
 }
 
 

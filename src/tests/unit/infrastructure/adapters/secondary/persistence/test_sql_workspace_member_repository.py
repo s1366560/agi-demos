@@ -59,8 +59,12 @@ class TestSqlWorkspaceMemberRepository:
     async def test_find_by_workspace_and_user(
         self, v2_workspace_member_repo: SqlWorkspaceMemberRepository
     ) -> None:
-        await v2_workspace_member_repo.save(make_member("wm-a", workspace_id="workspace-a", user_id="user-a"))
-        await v2_workspace_member_repo.save(make_member("wm-b", workspace_id="workspace-a", user_id="user-b"))
+        await v2_workspace_member_repo.save(
+            make_member("wm-a", workspace_id="workspace-a", user_id="user-a")
+        )
+        await v2_workspace_member_repo.save(
+            make_member("wm-b", workspace_id="workspace-a", user_id="user-b")
+        )
 
         found = await v2_workspace_member_repo.find_by_workspace_and_user("workspace-a", "user-b")
         assert found is not None
@@ -104,7 +108,9 @@ class TestSqlWorkspaceMemberRepository:
         assert found.role == WorkspaceRole.EDITOR
 
     @pytest.mark.asyncio
-    async def test_delete_member(self, v2_workspace_member_repo: SqlWorkspaceMemberRepository) -> None:
+    async def test_delete_member(
+        self, v2_workspace_member_repo: SqlWorkspaceMemberRepository
+    ) -> None:
         await v2_workspace_member_repo.save(make_member("wm-del"))
 
         deleted = await v2_workspace_member_repo.delete("wm-del")

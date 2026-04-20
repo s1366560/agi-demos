@@ -63,7 +63,9 @@ class TestSqlBlackboardRepository:
     """Tests for blackboard repository operations."""
 
     @pytest.mark.asyncio
-    async def test_save_and_find_post_by_id(self, v2_blackboard_repo: SqlBlackboardRepository) -> None:
+    async def test_save_and_find_post_by_id(
+        self, v2_blackboard_repo: SqlBlackboardRepository
+    ) -> None:
         post = make_post("post-1")
         await v2_blackboard_repo.save_post(post)
 
@@ -77,9 +79,15 @@ class TestSqlBlackboardRepository:
     async def test_list_posts_by_workspace_orders_pinned_first(
         self, v2_blackboard_repo: SqlBlackboardRepository
     ) -> None:
-        await v2_blackboard_repo.save_post(make_post("post-a", workspace_id="workspace-a", is_pinned=False))
-        await v2_blackboard_repo.save_post(make_post("post-b", workspace_id="workspace-a", is_pinned=True))
-        await v2_blackboard_repo.save_post(make_post("post-c", workspace_id="workspace-b", is_pinned=True))
+        await v2_blackboard_repo.save_post(
+            make_post("post-a", workspace_id="workspace-a", is_pinned=False)
+        )
+        await v2_blackboard_repo.save_post(
+            make_post("post-b", workspace_id="workspace-a", is_pinned=True)
+        )
+        await v2_blackboard_repo.save_post(
+            make_post("post-c", workspace_id="workspace-b", is_pinned=True)
+        )
 
         posts = await v2_blackboard_repo.list_posts_by_workspace("workspace-a")
         assert len(posts) == 2
@@ -89,7 +97,9 @@ class TestSqlBlackboardRepository:
     async def test_save_and_list_replies(self, v2_blackboard_repo: SqlBlackboardRepository) -> None:
         await v2_blackboard_repo.save_post(make_post("post-r"))
         await v2_blackboard_repo.save_reply(make_reply("reply-1", post_id="post-r"))
-        await v2_blackboard_repo.save_reply(make_reply("reply-2", post_id="post-r", author_id="user-2"))
+        await v2_blackboard_repo.save_reply(
+            make_reply("reply-2", post_id="post-r", author_id="user-2")
+        )
 
         replies = await v2_blackboard_repo.list_replies_by_post("post-r")
         assert len(replies) == 2
@@ -97,7 +107,9 @@ class TestSqlBlackboardRepository:
         assert replies[1].id == "reply-2"
 
     @pytest.mark.asyncio
-    async def test_delete_post_cascades_replies(self, v2_blackboard_repo: SqlBlackboardRepository) -> None:
+    async def test_delete_post_cascades_replies(
+        self, v2_blackboard_repo: SqlBlackboardRepository
+    ) -> None:
         await v2_blackboard_repo.save_post(make_post("post-del"))
         await v2_blackboard_repo.save_reply(make_reply("reply-del", post_id="post-del"))
 

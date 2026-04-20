@@ -14,6 +14,12 @@ class WorkspaceTaskStatus(str, Enum):
     BLOCKED = "blocked"
     DONE = "done"
 
+    # --- Orchestration lifecycle (fine-grained) ---
+    DISPATCHED = "dispatched"
+    EXECUTING = "executing"
+    REPORTED = "reported"
+    ADJUDICATING = "adjudicating"
+
 
 class WorkspaceTaskPriority(str, Enum):
     """Canonical public priority contract for workspace tasks."""

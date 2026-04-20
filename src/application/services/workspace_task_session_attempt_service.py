@@ -71,6 +71,34 @@ class WorkspaceTaskSessionAttemptService:
     async def mark_running(self, attempt_id: str) -> WorkspaceTaskSessionAttempt:
         return await self._set_status(attempt_id, WorkspaceTaskSessionAttemptStatus.RUNNING)
 
+    async def bind_conversation(
+        self,
+        attempt_id: str,
+        conversation_id: str,
+    ) -> WorkspaceTaskSessionAttempt:
+        """Bind a conversation to an attempt. Idempotent for same id; rejects rebind."""
+        if not conversation_id:
+            raise ValueError("conversation_id is required")
+        attempt = await self._require_attempt(attempt_id)
+        terminal = {
+            WorkspaceTaskSessionAttemptStatus.ACCEPTED,
+            WorkspaceTaskSessionAttemptStatus.REJECTED,
+            WorkspaceTaskSessionAttemptStatus.BLOCKED,
+        }
+        if attempt.status in terminal:
+            raise ValueError(
+                f"Cannot bind conversation to attempt in terminal status {attempt.status}"
+            )
+        if attempt.conversation_id == conversation_id:
+            return attempt
+        if attempt.conversation_id and attempt.conversation_id != conversation_id:
+            raise ValueError(
+                f"Attempt already bound to a different conversation ({attempt.conversation_id})"
+            )
+        attempt.conversation_id = conversation_id
+        attempt.updated_at = datetime.now(UTC)
+        return await self._attempt_repo.save(attempt)
+
     async def record_candidate_output(
         self,
         attempt_id: str,

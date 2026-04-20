@@ -34,6 +34,13 @@ from src.domain.ports.repositories.workspace.workspace_repository import Workspa
 from src.domain.ports.repositories.workspace.workspace_task_repository import (
     WorkspaceTaskRepository,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    CURRENT_ATTEMPT_ID,
+    EXECUTION_STATE,
+    LAST_WORKER_REPORT_SUMMARY,
+    PENDING_LEADER_ADJUDICATION,
+    ROOT_GOAL_TASK_ID,
+)
 
 
 @dataclass(frozen=True)
@@ -62,18 +69,18 @@ class WorkspaceTaskService:
     }
     _WORKER_ALLOWED_METADATA_KEYS: ClassVar[frozenset[str]] = frozenset(
         {
-            "execution_state",
+            EXECUTION_STATE,
             "evidence_refs",
             "execution_verifications",
             "last_worker_report_type",
-            "last_worker_report_summary",
+            LAST_WORKER_REPORT_SUMMARY,
             "last_worker_report_artifacts",
             "last_worker_report_verifications",
             "last_worker_reported_at",
             "last_worker_report_fingerprint",
             "last_worker_report_id",
-            "pending_leader_adjudication",
-            "current_attempt_id",
+            PENDING_LEADER_ADJUDICATION,
+            CURRENT_ATTEMPT_ID,
             "last_attempt_id",
             "current_attempt_number",
             "last_attempt_status",
@@ -185,7 +192,7 @@ class WorkspaceTaskService:
             task_id=task_id,
             actor_user_id=actor_user_id,
         )
-        value = task.metadata.get("root_goal_task_id")
+        value = task.metadata.get(ROOT_GOAL_TASK_ID)
         return value if isinstance(value, str) and value else None
 
     async def update_task(  # noqa: PLR0913
@@ -640,7 +647,7 @@ class WorkspaceTaskService:
             return
         if authority.role == "leader":
             if status in {WorkspaceTaskStatus.DONE, WorkspaceTaskStatus.BLOCKED}:
-                current_attempt_id = task.metadata.get("current_attempt_id")
+                current_attempt_id = task.metadata.get(CURRENT_ATTEMPT_ID)
                 if not isinstance(current_attempt_id, str) or not current_attempt_id:
                     raise PermissionError(
                         "Leader must adjudicate a concrete execution attempt before finalizing an execution task"
@@ -696,7 +703,7 @@ class WorkspaceTaskService:
             await self._ensure_root_not_todo_for_child_start(workspace_id=workspace_id, task=task)
         if authority.role == "leader":
             if target in {WorkspaceTaskStatus.DONE, WorkspaceTaskStatus.BLOCKED}:
-                current_attempt_id = task.metadata.get("current_attempt_id")
+                current_attempt_id = task.metadata.get(CURRENT_ATTEMPT_ID)
                 if not isinstance(current_attempt_id, str) or not current_attempt_id:
                     raise PermissionError(
                         "Leader must adjudicate a concrete execution attempt before finalizing an execution task"
@@ -748,7 +755,7 @@ class WorkspaceTaskService:
 
     @staticmethod
     def _root_goal_task_id(task: WorkspaceTask) -> str | None:
-        value = task.metadata.get("root_goal_task_id")
+        value = task.metadata.get(ROOT_GOAL_TASK_ID)
         return value if isinstance(value, str) and value else None
 
     @classmethod

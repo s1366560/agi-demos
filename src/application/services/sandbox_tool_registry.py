@@ -256,10 +256,13 @@ class SandboxToolRegistry:
             )
 
             # Add to tracking index
-            await cast(Awaitable[int], self._redis.sadd(
-                self._tracking_key,
-                registration.sandbox_id,
-            ))
+            await cast(
+                Awaitable[int],
+                self._redis.sadd(
+                    self._tracking_key,
+                    registration.sandbox_id,
+                ),
+            )
 
             # Update project index
             project_key = f"{self._key_prefix}project:{registration.project_id}"

@@ -3,6 +3,10 @@
 Contains modular initialization functions for various services.
 """
 
+from .autonomy_waker import (
+    initialize_autonomy_idle_waker,
+    shutdown_autonomy_idle_waker,
+)
 from .channels import (
     get_channel_manager,
     initialize_channel_manager,
@@ -23,6 +27,7 @@ from .workflow import initialize_workflow_engine
 
 __all__ = [
     "get_channel_manager",
+    "initialize_autonomy_idle_waker",
     "initialize_channel_manager",
     "initialize_container",
     "initialize_database_schema",
@@ -36,6 +41,7 @@ __all__ = [
     "initialize_workflow_engine",
     "reload_channel_manager_connections",
     "set_message_router",
+    "shutdown_autonomy_idle_waker",
     "shutdown_channel_manager",
     "shutdown_docker_services",
     "shutdown_sandbox_idle_reaper",

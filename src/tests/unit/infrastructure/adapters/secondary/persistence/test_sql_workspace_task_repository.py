@@ -51,7 +51,9 @@ class TestSqlWorkspaceTaskRepository:
     """Tests for workspace task repository behavior."""
 
     @pytest.mark.asyncio
-    async def test_save_and_find_by_id(self, v2_workspace_task_repo: SqlWorkspaceTaskRepository) -> None:
+    async def test_save_and_find_by_id(
+        self, v2_workspace_task_repo: SqlWorkspaceTaskRepository
+    ) -> None:
         task = make_task("wt-1")
         await v2_workspace_task_repo.save(task)
 
@@ -77,7 +79,9 @@ class TestSqlWorkspaceTaskRepository:
     async def test_find_by_workspace_with_status_filter(
         self, v2_workspace_task_repo: SqlWorkspaceTaskRepository
     ) -> None:
-        await v2_workspace_task_repo.save(make_task("wt-a", workspace_id="workspace-a", status=WorkspaceTaskStatus.TODO))
+        await v2_workspace_task_repo.save(
+            make_task("wt-a", workspace_id="workspace-a", status=WorkspaceTaskStatus.TODO)
+        )
         await v2_workspace_task_repo.save(
             make_task("wt-b", workspace_id="workspace-a", status=WorkspaceTaskStatus.IN_PROGRESS)
         )

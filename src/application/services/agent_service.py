@@ -579,8 +579,7 @@ class AgentService(AgentServicePort):
         assert self._agent_execution_event_repo is not None
         if message_id:
             events = await self._agent_execution_event_repo.get_events_by_message(
-                conversation_id=conversation_id,
-                message_id=message_id
+                conversation_id=conversation_id, message_id=message_id
             )
         else:
             events = await self._agent_execution_event_repo.list_by_conversation(
@@ -686,8 +685,7 @@ class AgentService(AgentServicePort):
         try:
             assert self._agent_execution_event_repo is not None
             msg_events = await self._agent_execution_event_repo.get_events_by_message(
-                conversation_id=conversation_id,
-                message_id=message_id
+                conversation_id=conversation_id, message_id=message_id
             )
             for me in msg_events:
                 if me.event_type == "user_message":

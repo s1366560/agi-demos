@@ -1410,6 +1410,149 @@ async def test_list_workspace_goal_candidates(authenticated_async_client, test_d
 
 
 @pytest.mark.asyncio
+async def test_list_workspace_goal_candidates_self_heals_legacy_sisyphus_name_conflict(
+    authenticated_async_client, test_db, monkeypatch
+) -> None:
+    client: AsyncClient = authenticated_async_client
+    triggered: dict[str, object] = {}
+
+    def _capture_fire(**kwargs: object) -> None:
+        triggered.update(kwargs)
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap._fire_mention_routing",
+        _capture_fire,
+    )
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-candidates-conflict@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-candidates-conflict",
+        name="TenantCandidatesConflict",
+        slug="tenant-ws-api-candidates-conflict",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-candidates-conflict",
+        tenant_id=tenant.id,
+        name="ProjectCandidatesConflict",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-candidates-conflict",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Candidates Conflict",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-candidates-conflict",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    root_task = WorkspaceTaskModel(
+        id="task-api-candidates-conflict",
+        workspace_id=workspace.id,
+        title="Existing goal",
+        created_by=user.id,
+        status="todo",
+        metadata_json={"task_role": "goal_root", "goal_origin": "human_defined"},
+    )
+    objective = CyberObjectiveModel(
+        id="obj-api-candidates-conflict",
+        workspace_id=workspace.id,
+        title="Improve resilience",
+        description="Objective description",
+        obj_type="objective",
+        progress=0.2,
+        created_by=user.id,
+    )
+    conflicting_agent = AgentDefinitionModel(
+        id="legacy-sisyphus",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="sisyphus",
+        display_name="Legacy Sisyphus",
+        system_prompt="Legacy builtin row",
+        allowed_tools=[],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+        source="database",
+    )
+    user_tenant = UserTenant(
+        id="ut-api-candidates-conflict",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-candidates-conflict",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [
+            user,
+            tenant,
+            project,
+            workspace,
+            membership,
+            root_task,
+            objective,
+            conflicting_agent,
+            user_tenant,
+            user_project,
+        ]
+    )
+    await test_db.commit()
+
+    response = await client.get(f"/api/v1/workspaces/{workspace.id}/goal-candidates")
+
+    assert response.status_code == status.HTTP_200_OK
+    decisions = {item["candidate_text"]: item["decision"] for item in response.json()}
+    assert decisions["Existing goal"] == "adopt_existing_goal"
+    assert decisions["Improve resilience"] == "adopt_existing_goal"
+    builtin_agent = await test_db.get(AgentDefinitionModel, BUILTIN_SISYPHUS_ID)
+    assert builtin_agent is not None
+    await test_db.refresh(conflicting_agent)
+    legacy_agent = conflicting_agent
+    assert legacy_agent.name == f"sisyphus-legacy-{conflicting_agent.id}"
+    assert legacy_agent.metadata_json["renamed_from_builtin_name"] == "sisyphus"
+    assert legacy_agent.metadata_json["renamed_for_builtin_id"] == BUILTIN_SISYPHUS_ID
+    binding = await test_db.scalar(
+        select(WorkspaceAgentModel).where(WorkspaceAgentModel.workspace_id == workspace.id)
+    )
+    assert binding is not None
+    assert binding.agent_id == BUILTIN_SISYPHUS_ID
+    message = await test_db.scalar(
+        select(WorkspaceMessageModel).where(WorkspaceMessageModel.workspace_id == workspace.id)
+    )
+    assert message is not None
+    assert message.mentions_json == [BUILTIN_SISYPHUS_ID]
+    assert triggered["workspace_id"] == workspace.id
+    assert triggered["message"].mentions == [BUILTIN_SISYPHUS_ID]
+
+
+@pytest.mark.asyncio
 async def test_materialize_workspace_goal_candidate(authenticated_async_client, test_db) -> None:
     client: AsyncClient = authenticated_async_client
 
@@ -2631,6 +2774,129 @@ async def test_create_objective_auto_binds_builtin_leader_when_workspace_has_no_
     assert message.metadata_json["conversation_scope"] == f"objective:{response.json()['id']}"
     triggered_message = triggered["message"]
     assert triggered_message.mentions == [BUILTIN_SISYPHUS_ID]
+
+
+@pytest.mark.asyncio
+async def test_create_objective_self_heals_legacy_sisyphus_name_conflict(
+    authenticated_async_client, test_db, monkeypatch
+) -> None:
+    client: AsyncClient = authenticated_async_client
+    triggered: dict[str, object] = {}
+
+    def _capture_fire(**kwargs: object) -> None:
+        triggered.update(kwargs)
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.routers.cyber_objectives._fire_mention_routing",
+        _capture_fire,
+    )
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-objective-autobind-conflict@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-objective-autobind-conflict",
+        name="TenantObjectiveAutoBindConflict",
+        slug="tenant-ws-api-objective-autobind-conflict",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-objective-autobind-conflict",
+        tenant_id=tenant.id,
+        name="ProjectObjectiveAutoBindConflict",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-objective-autobind-conflict",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Objective AutoBind Conflict",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-objective-autobind-conflict",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    conflicting_agent = AgentDefinitionModel(
+        id="legacy-sisyphus-autobind",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="sisyphus",
+        display_name="Legacy Sisyphus",
+        system_prompt="Legacy builtin row",
+        allowed_tools=[],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+        source="database",
+    )
+    user_tenant = UserTenant(
+        id="ut-api-objective-autobind-conflict",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-objective-autobind-conflict",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all(
+        [
+            user,
+            tenant,
+            project,
+            workspace,
+            membership,
+            conflicting_agent,
+            user_tenant,
+            user_project,
+        ]
+    )
+    await test_db.commit()
+
+    response = await client.post(
+        f"/api/v1/tenants/{tenant.id}/projects/{project.id}/workspaces/{workspace.id}/objectives",
+        json={"title": "Auto-bind leader objective with conflict", "obj_type": "objective"},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    binding = await test_db.scalar(
+        select(WorkspaceAgentModel).where(WorkspaceAgentModel.workspace_id == workspace.id)
+    )
+    assert binding is not None
+    assert binding.agent_id == BUILTIN_SISYPHUS_ID
+    builtin_agent = await test_db.get(AgentDefinitionModel, BUILTIN_SISYPHUS_ID)
+    assert builtin_agent is not None
+    await test_db.refresh(conflicting_agent)
+    legacy_agent = conflicting_agent
+    assert legacy_agent.name == f"sisyphus-legacy-{conflicting_agent.id}"
+    assert legacy_agent.metadata_json["renamed_from_builtin_name"] == "sisyphus"
+    assert legacy_agent.metadata_json["renamed_for_builtin_id"] == BUILTIN_SISYPHUS_ID
+    message = await test_db.scalar(
+        select(WorkspaceMessageModel).where(WorkspaceMessageModel.workspace_id == workspace.id)
+    )
+    assert message is not None
+    assert message.mentions_json == [BUILTIN_SISYPHUS_ID]
+    assert triggered["message"].mentions == [BUILTIN_SISYPHUS_ID]
 
 
 @pytest.mark.asyncio

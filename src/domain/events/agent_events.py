@@ -84,9 +84,13 @@ __all__ = [
     "SubAgentSteeredEvent",
     "ToolPolicyDeniedEvent",
     "TopologyUpdatedEvent",
+    "WorkspaceAdjudicationCompleteEvent",
     "WorkspaceAgentBoundEvent",
     "WorkspaceAgentUnboundEvent",
+    "WorkspaceDecompositionCompleteEvent",
     "WorkspaceDeletedEvent",
+    "WorkspaceGoalCompletedEvent",
+    "WorkspaceGoalMaterializedEvent",
     "WorkspaceMemberJoinedEvent",
     "WorkspaceMemberLeftEvent",
     "WorkspaceMessageCreatedEvent",
@@ -96,6 +100,8 @@ __all__ = [
     "WorkspaceTaskStatusChangedEvent",
     "WorkspaceTaskUpdatedEvent",
     "WorkspaceUpdatedEvent",
+    "WorkspaceWorkerDispatchedEvent",
+    "WorkspaceWorkerReportSubmittedEvent",
     "get_frontend_event_types",
 ]
 
@@ -1676,6 +1682,73 @@ class WorkspaceMessageCreatedEvent(AgentDomainEvent):
     mentions: list[str] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Workspace Orchestration Lifecycle Events
+# ---------------------------------------------------------------------------
+
+
+class WorkspaceGoalMaterializedEvent(AgentDomainEvent):
+    """Event: A workspace goal has been materialized and is ready for decomposition."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_GOAL_MATERIALIZED
+    workspace_id: str
+    goal_id: str
+    goal_description: str = ""
+
+
+class WorkspaceDecompositionCompleteEvent(AgentDomainEvent):
+    """Event: Goal decomposition finished; subtasks are ready for dispatch."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_DECOMPOSITION_COMPLETE
+    workspace_id: str
+    goal_id: str
+    subtask_ids: list[str] = Field(default_factory=list)
+    subtask_count: int = 0
+
+
+class WorkspaceWorkerDispatchedEvent(AgentDomainEvent):
+    """Event: A worker agent has been dispatched to execute a subtask."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_WORKER_DISPATCHED
+    workspace_id: str
+    task_id: str
+    worker_agent_id: str = ""
+    attempt_id: str = ""
+
+
+class WorkspaceWorkerReportSubmittedEvent(AgentDomainEvent):
+    """Event: A worker agent submitted its execution report for leader adjudication."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_WORKER_REPORT_SUBMITTED
+    workspace_id: str
+    task_id: str
+    attempt_id: str = ""
+    worker_agent_id: str = ""
+    status: str = ""
+
+
+class WorkspaceAdjudicationCompleteEvent(AgentDomainEvent):
+    """Event: Leader adjudication of a worker report is complete."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_ADJUDICATION_COMPLETE
+    workspace_id: str
+    task_id: str
+    attempt_id: str = ""
+    verdict: str = ""
+    next_task_id: str | None = None
+
+
+class WorkspaceGoalCompletedEvent(AgentDomainEvent):
+    """Event: All subtasks are done and the workspace goal is complete."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_GOAL_COMPLETED
+    workspace_id: str
+    goal_id: str
+    final_status: str = ""
+    completed_subtask_count: int = 0
+    total_subtask_count: int = 0
+
+
 # Event Type Utilities
 # =========================================================================
 
@@ -1797,6 +1870,12 @@ def get_event_type_docstring() -> str:
         WorkspaceTaskAssignedEvent,
         TopologyUpdatedEvent,
         WorkspaceMessageCreatedEvent,
+        WorkspaceGoalMaterializedEvent,
+        WorkspaceDecompositionCompleteEvent,
+        WorkspaceWorkerDispatchedEvent,
+        WorkspaceWorkerReportSubmittedEvent,
+        WorkspaceAdjudicationCompleteEvent,
+        WorkspaceGoalCompletedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 

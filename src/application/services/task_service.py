@@ -49,9 +49,7 @@ class TaskService:
         Returns:
             List of task logs
         """
-        tasks = await self._task_repo.find_by_group(
-            group_id, limit=limit, offset=offset
-        )
+        tasks = await self._task_repo.find_by_group(group_id, limit=limit, offset=offset)
         if status:
             tasks = [t for t in tasks if t.status == status]
         return tasks
@@ -71,9 +69,12 @@ class TaskService:
         Returns:
             List of task logs
         """
-        return cast(list[TaskLog], await self._task_repo.find_by_user(  # type: ignore[attr-defined]
-            user_id, status=status, limit=limit, offset=offset
-        ))
+        return cast(
+            list[TaskLog],
+            await self._task_repo.find_by_user(  # type: ignore[attr-defined]
+                user_id, status=status, limit=limit, offset=offset
+            ),
+        )
 
     async def retry_task(self, task_id: str) -> bool:
         """

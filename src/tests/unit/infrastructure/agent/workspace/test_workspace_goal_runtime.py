@@ -508,7 +508,9 @@ class TestWorkspaceGoalRuntime:
             attempt_service.get_active_attempt = AsyncMock(return_value=None)
             attempt_service.create_attempt = AsyncMock(return_value=pending_attempt)
             attempt_service.mark_running = AsyncMock(return_value=running_attempt)
-            attempt_service.record_candidate_output = AsyncMock(return_value=_attempt(status="awaiting_leader_adjudication"))
+            attempt_service.record_candidate_output = AsyncMock(
+                return_value=_attempt(status="awaiting_leader_adjudication")
+            )
             attempt_service_builder.return_value = attempt_service
             publisher = publisher_cls.return_value
             publisher.publish_pending_events = AsyncMock(return_value=None)
@@ -628,7 +630,9 @@ class TestWorkspaceGoalRuntime:
             running_attempt = _attempt(status="running")
             running_attempt.worker_agent_id = "worker-a"
             attempt_service.get_active_attempt = AsyncMock(return_value=running_attempt)
-            attempt_service.record_candidate_output = AsyncMock(return_value=_attempt(status="awaiting_leader_adjudication"))
+            attempt_service.record_candidate_output = AsyncMock(
+                return_value=_attempt(status="awaiting_leader_adjudication")
+            )
             attempt_service_builder.return_value = attempt_service
             publisher = publisher_cls.return_value
             publisher.publish_pending_events = AsyncMock(return_value=None)
@@ -750,7 +754,9 @@ class TestWorkspaceGoalRuntime:
             running_attempt = _attempt(status="running")
             running_attempt.worker_agent_id = "worker-a"
             attempt_service.get_active_attempt = AsyncMock(return_value=running_attempt)
-            attempt_service.record_candidate_output = AsyncMock(return_value=_attempt(status="awaiting_leader_adjudication"))
+            attempt_service.record_candidate_output = AsyncMock(
+                return_value=_attempt(status="awaiting_leader_adjudication")
+            )
             attempt_service_builder.return_value = attempt_service
             publisher = publisher_cls.return_value
             publisher.publish_pending_events = AsyncMock(return_value=None)
@@ -893,11 +899,21 @@ class TestWorkspaceGoalRuntime:
             task_service = task_service_cls.return_value
             task_service.get_task = AsyncMock(return_value=task)
             attempt_service = MagicMock()
-            attempt_service.get_attempt = AsyncMock(return_value=_attempt(attempt_id="attempt-3", status="awaiting_leader_adjudication"))
-            attempt_service.accept = AsyncMock(return_value=_attempt(attempt_id="attempt-3", status="accepted"))
-            attempt_service.block = AsyncMock(return_value=_attempt(attempt_id="attempt-3", status="blocked"))
-            attempt_service.reject = AsyncMock(return_value=_attempt(attempt_id="attempt-3", status="rejected"))
-            attempt_service.create_attempt = AsyncMock(return_value=_attempt(attempt_id="attempt-4", attempt_number=2, status="pending"))
+            attempt_service.get_attempt = AsyncMock(
+                return_value=_attempt(attempt_id="attempt-3", status="awaiting_leader_adjudication")
+            )
+            attempt_service.accept = AsyncMock(
+                return_value=_attempt(attempt_id="attempt-3", status="accepted")
+            )
+            attempt_service.block = AsyncMock(
+                return_value=_attempt(attempt_id="attempt-3", status="blocked")
+            )
+            attempt_service.reject = AsyncMock(
+                return_value=_attempt(attempt_id="attempt-3", status="rejected")
+            )
+            attempt_service.create_attempt = AsyncMock(
+                return_value=_attempt(attempt_id="attempt-4", attempt_number=2, status="pending")
+            )
             attempt_service_builder.return_value = attempt_service
             publisher = publisher_cls.return_value
             publisher.publish_pending_events = AsyncMock(return_value=None)

@@ -4,6 +4,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    AUTONOMY_SCHEMA_VERSION_KEY,
+    DERIVED_FROM_INTERNAL_PLAN_STEP,
+    EXECUTION_STATE,
+    REMEDIATION_STATUS,
+    REPLAN_ATTEMPT_COUNT,
+    ROOT_GOAL_TASK_ID,
+    TASK_ROLE,
+)
+
 AUTONOMY_SCHEMA_VERSION = 1
 
 GoalOrigin = Literal["human_defined", "agent_inferred", "existing_objective", "existing_root"]
@@ -172,20 +182,20 @@ def has_autonomy_metadata(metadata: dict[str, Any] | None) -> bool:
     return any(
         key in metadata
         for key in (
-            "autonomy_schema_version",
-            "task_role",
+            AUTONOMY_SCHEMA_VERSION_KEY,
+            TASK_ROLE,
             "goal_origin",
             "goal_source_refs",
             "goal_formalization_reason",
             "goal_evidence_bundle",
             "goal_health",
-            "remediation_status",
+            REMEDIATION_STATUS,
             "blocked_child_task_ids",
-            "replan_attempt_count",
-            "execution_state",
-            "root_goal_task_id",
+            REPLAN_ATTEMPT_COUNT,
+            EXECUTION_STATE,
+            ROOT_GOAL_TASK_ID,
             "objective_id",
             "root_goal_policy",
-            "derived_from_internal_plan_step",
+            DERIVED_FROM_INTERNAL_PLAN_STEP,
         )
     )

@@ -245,12 +245,8 @@ class SkillService:
         """Load tenant-level skills, including overrides for system skills."""
         self._load_tenant_fs_skills(skills_by_name, status, agent_mode, tier)
         if not skip_database:
-            await self._load_tenant_db_skills(
-                tenant_id, skills_by_name, status, agent_mode, tier
-            )
-        await self._apply_system_overrides(
-            tenant_configs, skills_by_name, agent_mode, tier
-        )
+            await self._load_tenant_db_skills(tenant_id, skills_by_name, status, agent_mode, tier)
+        await self._apply_system_overrides(tenant_configs, skills_by_name, agent_mode, tier)
 
     def _load_tenant_fs_skills(
         self,
@@ -302,7 +298,8 @@ class SkillService:
                 skill_for_tier = self._apply_tier(skill, tier)
                 skills_by_name[skill.name] = skill_for_tier
         except Exception as e:
-                logger.warning(f"Failed to load tenant skills from database: {e}")
+            logger.warning(f"Failed to load tenant skills from database: {e}")
+
     async def _apply_system_overrides(
         self,
         tenant_configs: dict[str, TenantSkillConfig],

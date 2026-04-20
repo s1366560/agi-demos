@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Button } from 'antd';
+import { App, Button } from 'antd';
 import {
   ChevronDown,
   ChevronUp,
@@ -15,7 +15,10 @@ import {
   Sparkles,
   Target,
   Users,
+  Zap,
 } from 'lucide-react';
+
+import { workspaceAutonomyService } from '@/services/workspaceService';
 
 import { ObjectiveList } from '@/components/workspace/objectives/ObjectiveList';
 import { TaskBoard } from '@/components/workspace/TaskBoard';
@@ -612,11 +615,37 @@ export function GoalsTab({
   onRefreshGoalCandidates,
   onMaterializeGoalCandidate,
 }: GoalsTabProps) {
+  const { message } = App.useApp();
   const [expandedObjectiveIds, setExpandedObjectiveIds] = useState<Record<string, boolean>>({});
   const [expandedChildTaskIds, setExpandedChildTaskIds] = useState<Record<string, boolean>>({});
   const [eventFilterByObjectiveId, setEventFilterByObjectiveId] = useState<
     Record<string, 'latest' | 'all'>
   >({});
+  const [autonomyTicking, setAutonomyTicking] = useState(false);
+
+  const handleRunAutonomy = async (force: boolean) => {
+    setAutonomyTicking(true);
+    try {
+      const result = await workspaceAutonomyService.tick(workspaceId, { force });
+      if (result.triggered) {
+        message.success('已触发自治：Leader 将推进下一步');
+        onRefreshGoalCandidates();
+      } else if (result.reason === 'cooling_down') {
+        message.info('冷却中（60s 内已触发过）。按住 Shift 再点可强制触发。');
+      } else if (result.reason === 'no_open_root') {
+        message.info('当前工作区没有进行中的 goal，无需触发。');
+      } else if (result.reason === 'no_root_needs_progress') {
+        message.info('所有 goal 都处于稳定状态，暂无需推进。');
+      } else {
+        message.warning(`未触发：${result.reason || 'unknown'}`);
+      }
+    } catch (err) {
+      const description = err instanceof Error ? err.message : String(err);
+      message.error(`启动自治失败：${description}`);
+    } finally {
+      setAutonomyTicking(false);
+    }
+  };
   const executionFeedback = objectives
     .map((objective) => getObjectiveExecutionFeedback(objective, tasks))
     .sort((left, right) => {
@@ -674,9 +703,24 @@ export function GoalsTab({
           <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
             Goal candidates
           </h3>
-          <Button size="small" onClick={onRefreshGoalCandidates}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="small"
+              type="primary"
+              icon={<Zap size={14} />}
+              loading={autonomyTicking}
+              onClick={(event) => {
+                const force = event.shiftKey;
+                void handleRunAutonomy(force);
+              }}
+              title="Run Autonomy — ask the leader to pick up the next step (Shift+Click to bypass cooldown)"
+            >
+              Run Autonomy
+            </Button>
+            <Button size="small" onClick={onRefreshGoalCandidates}>
+              Refresh
+            </Button>
+          </div>
         </div>
         {goalCandidatesLoading ? (
           <p className="text-xs text-text-secondary dark:text-text-muted">Loading candidates…</p>
