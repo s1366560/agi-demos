@@ -18,6 +18,12 @@ class _FakeRootTask:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class _FakeChildTask:
+    id: str = "child-1"
+    status: str = "in_progress"
+
+
 class _FakeTaskRepo:
     def __init__(self, children_map: dict[str, list[Any]]) -> None:
         self._children_map = children_map
@@ -51,7 +57,10 @@ class TestSelectRootTaskNeedingProgress:
     async def test_prefers_root_without_children(self) -> None:
         with_kids = _FakeRootTask(id="r-kids", metadata={"remediation_status": "none"})
         no_kids = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({"r-kids": [object()], "r-empty": []})
+        repo = _FakeTaskRepo({
+            "r-kids": [_FakeChildTask(status="in_progress")],
+            "r-empty": [],
+        })
 
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo,
@@ -66,7 +75,10 @@ class TestSelectRootTaskNeedingProgress:
             id="r-ready", metadata={"remediation_status": "ready_for_completion"}
         )
         empty = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({"r-ready": [object()], "r-empty": []})
+        repo = _FakeTaskRepo({
+            "r-ready": [_FakeChildTask(status="done")],
+            "r-empty": [],
+        })
 
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo, workspace_id="ws-1", root_tasks=[empty, ready]
@@ -77,13 +89,43 @@ class TestSelectRootTaskNeedingProgress:
     async def test_returns_none_when_all_stable(self) -> None:
         stable_a = _FakeRootTask(id="a", metadata={"remediation_status": "none"})
         stable_b = _FakeRootTask(id="b", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({"a": [object()], "b": [object()]})
+        repo = _FakeTaskRepo({
+            "a": [_FakeChildTask(status="in_progress")],
+            "b": [_FakeChildTask(status="done")],
+        })
 
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo, workspace_id="ws-1", root_tasks=[stable_a, stable_b]
         )
         assert task is None
         assert has_children is False
+
+    async def test_returns_root_when_children_in_todo(self) -> None:
+        """Root with TODO children needs progress (worker sessions must launch)."""
+        root = _FakeRootTask(id="r-todo", metadata={"remediation_status": "none"})
+        repo = _FakeTaskRepo({
+            "r-todo": [
+                _FakeChildTask(id="c1", status="todo"),
+                _FakeChildTask(id="c2", status="in_progress"),
+            ],
+        })
+        task, has_children = await bootstrap._select_root_task_needing_progress(
+            task_repo=repo, workspace_id="ws-1", root_tasks=[root]
+        )
+        assert task is not None and task.id == "r-todo"
+        assert has_children is True
+
+    async def test_force_returns_root_even_when_stable(self) -> None:
+        """force=True overrides the 'all children active' check."""
+        root = _FakeRootTask(id="r-stable", metadata={"remediation_status": "none"})
+        repo = _FakeTaskRepo({
+            "r-stable": [_FakeChildTask(status="in_progress")],
+        })
+        task, has_children = await bootstrap._select_root_task_needing_progress(
+            task_repo=repo, workspace_id="ws-1", root_tasks=[root], force=True,
+        )
+        assert task is not None and task.id == "r-stable"
+        assert has_children is True
 
 
 @pytest.mark.unit

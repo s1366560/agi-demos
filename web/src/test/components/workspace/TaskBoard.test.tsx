@@ -3,7 +3,7 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskBoard } from '@/components/workspace/TaskBoard';
-import { workspaceTaskService } from '@/services/workspaceService';
+import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 import { render, screen, fireEvent } from '@/test/utils';
 
 vi.mock('@/stores/workspace', () => ({
@@ -12,6 +12,9 @@ vi.mock('@/stores/workspace', () => ({
 }));
 
 vi.mock('@/services/workspaceService', () => ({
+  workspaceAutonomyService: {
+    tick: vi.fn(),
+  },
   workspaceTaskService: {
     create: vi.fn(),
     update: vi.fn(),
@@ -115,5 +118,25 @@ describe('TaskBoard', () => {
     expect(
       screen.getByText(/workspaceDetail\.taskBoard\.reportVerifications: worker_report:completed/i)
     ).toBeInTheDocument();
+  });
+
+  it('triggers forced autonomy tick from the task board header', async () => {
+    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+
+    vi.mocked(useWorkspaceTasks).mockReturnValue([] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+    vi.mocked(workspaceAutonomyService.tick).mockResolvedValue({
+      triggered: true,
+      root_task_id: 'root-1',
+      reason: 'triggered',
+    });
+
+    render(<TaskBoard workspaceId="ws-1" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' }));
+    });
+
+    expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });
   });
 });

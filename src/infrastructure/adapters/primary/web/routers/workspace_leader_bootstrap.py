@@ -270,13 +270,24 @@ async def _select_root_task_needing_progress(
     task_repo: Any,  # noqa: ANN401
     workspace_id: str,
     root_tasks: list[Any],
+    force: bool = False,
 ) -> tuple[Any | None, bool]:
     """Pick the first root task that should be advanced.
 
-    Returns ``(task, has_children)``. A root task is eligible when it has no
-    children yet or when its ``remediation_status`` indicates human/automation
-    follow-up is needed.
+    Returns ``(task, has_children)``. A root task is eligible when:
+    - it has no children yet (needs initial decomposition), OR
+    - its ``remediation_status`` indicates follow-up is needed, OR
+    - any child is still in a pre-execution state (TODO/DISPATCHED) meaning
+      worker sessions haven't been launched or haven't started yet, OR
+    - ``force=True`` (always eligible — used by the UI tick button).
     """
+    from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+
+    _PRE_EXECUTION_STATUSES = frozenset({
+        WorkspaceTaskStatus.TODO,
+        WorkspaceTaskStatus.DISPATCHED,
+    })
+
     prioritized = sorted(root_tasks, key=_root_task_sort_key)
     for root_task in prioritized:
         metadata = root_task.metadata or {}
@@ -286,6 +297,10 @@ async def _select_root_task_needing_progress(
         if not has_children:
             return root_task, False
         if remediation_status in _REMEDIATION_STATUSES_NEEDING_PROGRESS:
+            return root_task, True
+        if any(c.status in _PRE_EXECUTION_STATUSES for c in children):
+            return root_task, True
+        if force:
             return root_task, True
     return None, False
 
@@ -731,6 +746,7 @@ async def maybe_auto_trigger_existing_root_execution(
         task_repo=task_repo,
         workspace_id=workspace_id,
         root_tasks=root_tasks,
+        force=force,
     )
     if root_task is None:
         return {"triggered": False, "root_task_id": None, "reason": "no_root_needs_progress"}

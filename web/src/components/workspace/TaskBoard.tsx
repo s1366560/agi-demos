@@ -14,7 +14,7 @@ import {
 
 import { useWorkspaceAgents, useWorkspaceTasks } from '@/stores/workspace';
 
-import { workspaceTaskService } from '@/services/workspaceService';
+import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
 
@@ -188,6 +188,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
   const [priority, setPriority] = useState<WorkspaceTaskPriority>('');
   const [effort, setEffort] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutonomyTicking, setIsAutonomyTicking] = useState(false);
 
   const workspaceTasks = useMemo(() => {
     return tasks
@@ -271,6 +272,48 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
     }
   };
 
+  const handleForceAutonomyTick = async () => {
+    setIsAutonomyTicking(true);
+    try {
+      const result = await workspaceAutonomyService.tick(workspaceId, { force: true });
+      if (result.triggered) {
+        message?.success(
+          t(
+            'workspaceDetail.taskBoard.forceAutonomySuccess',
+            '已强制触发自治推进，Leader 将继续调度任务。'
+          )
+        );
+      } else if (result.reason === 'no_open_root') {
+        message?.info(
+          t(
+            'workspaceDetail.taskBoard.forceAutonomyNoRoot',
+            '当前工作区没有进行中的 goal，无需触发。'
+          )
+        );
+      } else if (result.reason === 'no_root_needs_progress') {
+        message?.info(
+          t(
+            'workspaceDetail.taskBoard.forceAutonomyStable',
+            '所有 goal 都处于稳定状态，暂无需推进。'
+          )
+        );
+      } else {
+        message?.warning(
+          t(
+            'workspaceDetail.taskBoard.forceAutonomyNoop',
+            `未触发自治推进：${result.reason || 'unknown'}`
+          )
+        );
+      }
+    } catch {
+      message?.error(
+        t('workspaceDetail.taskBoard.forceAutonomyFailed', '触发自治推进失败，请稍后重试。')
+      );
+    } finally {
+      setIsAutonomyTicking(false);
+    }
+  };
+
   const statusOptions = useMemo(
     () =>
       COLUMN_CONFIG.map((col) => ({
@@ -292,6 +335,16 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
           {t('workspaceDetail.taskBoard.title')}
         </h3>
         <div className="flex items-center gap-3">
+          <Button
+            size="small"
+            type="primary"
+            loading={isAutonomyTicking}
+            onClick={() => {
+              void handleForceAutonomyTick();
+            }}
+          >
+            {t('workspaceDetail.taskBoard.forceAutonomy', '强制推进自治')}
+          </Button>
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary dark:text-text-muted">
             {t('workspaceDetail.taskBoard.showArchived', 'Show archived')}
             <Switch
