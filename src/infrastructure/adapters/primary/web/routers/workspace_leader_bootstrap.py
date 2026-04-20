@@ -300,6 +300,15 @@ async def _select_root_task_needing_progress(
             return root_task, True
         if any(c.status in _PRE_EXECUTION_STATUSES for c in children):
             return root_task, True
+        # Detect children awaiting auto-adjudication (worker completed but
+        # report not yet adjudicated). This ensures the tick fires so the
+        # auto-adjudication step can close them out.
+        if any(
+            isinstance(c.metadata, dict)
+            and c.metadata.get("pending_leader_adjudication") is True
+            for c in children
+        ):
+            return root_task, True
         if force:
             return root_task, True
     return None, False
@@ -513,6 +522,112 @@ async def _heal_assigned_execution_tasks_without_sessions(
     return healed
 
 
+async def _auto_adjudicate_pending_reports(
+    *,
+    task_repo: Any,  # noqa: ANN401
+    workspace_id: str,
+    root_task_id: str,
+    leader_agent_id: str | None,
+    actor_user_id: str,
+) -> int:
+    """Auto-adjudicate worker reports that are pending leader adjudication.
+
+    This is an **auto-accept policy** executed in the tick path (not the worker
+    launch path).  For each execution child with
+    ``pending_leader_adjudication=True``, the report type determines the
+    adjudication status:
+
+    - ``completed`` → DONE
+    - ``blocked`` / ``failed`` → BLOCKED
+    - anything else → skip (leave for manual review)
+
+    Returns the number of tasks adjudicated.  Each call to
+    :func:`adjudicate_workspace_worker_report` opens its own DB session and
+    commits independently.  Runs sequentially so the reconciliation inside
+    ``complete_task()`` sees the latest committed state.
+    """
+    from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+    from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+        adjudicate_workspace_worker_report,
+    )
+
+    try:
+        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
+    except Exception:
+        logger.warning(
+            "autonomy_tick.auto_adjudicate.list_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.auto_adjudicate.list_failed",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+            },
+        )
+        return 0
+
+    _REPORT_TYPE_TO_STATUS: dict[str, WorkspaceTaskStatus] = {
+        "completed": WorkspaceTaskStatus.DONE,
+        "blocked": WorkspaceTaskStatus.BLOCKED,
+        "failed": WorkspaceTaskStatus.BLOCKED,
+    }
+
+    adjudicated = 0
+    for child in children:
+        metadata = child.metadata if isinstance(child.metadata, dict) else {}
+        if metadata.get("pending_leader_adjudication") is not True:
+            continue
+        report_type = metadata.get("last_worker_report_type")
+        target_status = _REPORT_TYPE_TO_STATUS.get(report_type or "")
+        if target_status is None:
+            continue
+        attempt_id = metadata.get("current_attempt_id")
+        if not isinstance(attempt_id, str) or not attempt_id:
+            attempt_id = None
+        try:
+            result = await adjudicate_workspace_worker_report(
+                workspace_id=workspace_id,
+                task_id=child.id,
+                attempt_id=attempt_id,
+                actor_user_id=actor_user_id,
+                status=target_status,
+                leader_agent_id=leader_agent_id,
+            )
+            if result is not None:
+                adjudicated += 1
+                logger.info(
+                    "autonomy_tick.auto_adjudicate.success",
+                    extra={
+                        "event": "autonomy_tick.auto_adjudicate.success",
+                        "workspace_id": workspace_id,
+                        "task_id": child.id,
+                        "report_type": report_type,
+                        "target_status": target_status.value,
+                    },
+                )
+        except Exception:
+            logger.warning(
+                "autonomy_tick.auto_adjudicate.failed",
+                exc_info=True,
+                extra={
+                    "event": "autonomy_tick.auto_adjudicate.failed",
+                    "workspace_id": workspace_id,
+                    "task_id": child.id,
+                    "report_type": report_type,
+                },
+            )
+    if adjudicated:
+        logger.info(
+            "autonomy_tick.auto_adjudicate.summary",
+            extra={
+                "event": "autonomy_tick.auto_adjudicate.summary",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+                "adjudicated_count": adjudicated,
+            },
+        )
+    return adjudicated
+
+
 def _build_message_service(
     request: Request | None, db: AsyncSession, container: DIContainer
 ) -> Any:  # noqa: ANN401
@@ -613,10 +728,32 @@ async def _try_auto_complete_root(
             },
         )
 
+    # Build a detailed completion report with child task summaries.
+    child_report_lines: list[str] = []
+    try:
+        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task.id)
+        for idx, child in enumerate(children, 1):
+            child_meta = child.metadata if isinstance(child.metadata, dict) else {}
+            child_summary = child_meta.get("last_worker_report_summary") or ""
+            child_status = getattr(child.status, "value", str(child.status))
+            line = f"  {idx}. [{child_status.upper()}] {child.title}"
+            if child_summary:
+                line += f"\n     Summary: {child_summary[:200]}"
+            child_report_lines.append(line)
+    except Exception:
+        pass
+    child_report = "\n".join(child_report_lines)
+    progress_summary = (root_task.metadata or {}).get("goal_progress_summary", "")
+
     info_content = (
-        f"✅ 工作区目标「{title}」的所有子任务已完成，根任务已自动关闭并生成完成证据。 "
-        f"All child tasks completed; the root goal has been auto-closed with synthesized evidence."
+        f"✅ 工作区目标「{title}」的所有子任务已完成，根任务已自动关闭并生成完成证据。\n"
+        f"All child tasks completed; the root goal has been auto-closed "
+        f"with synthesized evidence.\n\n"
     )
+    if progress_summary:
+        info_content += f"📊 Progress: {progress_summary}\n\n"
+    if child_report:
+        info_content += f"📋 Task Report:\n{child_report}\n"
     message_service = _build_message_service(request, db, container)
     info_message = await message_service.send_message(
         workspace_id=workspace_id,
@@ -804,6 +941,34 @@ async def maybe_auto_trigger_existing_root_execution(
             exc_info=True,
             extra={
                 "event": "autonomy_tick.worker_session_heal.unexpected_failure",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task.id,
+            },
+        )
+
+    # Auto-adjudicate pending worker reports. This closes the loop for
+    # workers that completed but whose reports were never adjudicated.
+    # Runs in the tick path (not worker_launch) to keep authority separation.
+    try:
+        adjudicated_count = await _auto_adjudicate_pending_reports(
+            task_repo=task_repo,
+            workspace_id=workspace_id,
+            root_task_id=root_task.id,
+            leader_agent_id=leader_binding.agent_id,
+            actor_user_id=current_user.id,
+        )
+        if adjudicated_count > 0:
+            # Refresh root task to pick up reconciled metadata (e.g.
+            # remediation_status may now be "ready_for_completion").
+            refreshed = await task_repo.find_by_id(root_task.id)
+            if refreshed is not None:
+                root_task = refreshed
+    except Exception:
+        logger.warning(
+            "autonomy_tick.auto_adjudicate.unexpected_failure",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.auto_adjudicate.unexpected_failure",
                 "workspace_id": workspace_id,
                 "root_task_id": root_task.id,
             },

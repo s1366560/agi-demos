@@ -22,6 +22,7 @@ class _FakeRootTask:
 class _FakeChildTask:
     id: str = "child-1"
     status: str = "in_progress"
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class _FakeTaskRepo:
@@ -125,6 +126,30 @@ class TestSelectRootTaskNeedingProgress:
             task_repo=repo, workspace_id="ws-1", root_tasks=[root], force=True,
         )
         assert task is not None and task.id == "r-stable"
+        assert has_children is True
+
+
+    async def test_returns_root_when_children_pending_adjudication(self) -> None:
+        """Children with pending_leader_adjudication=True trigger the tick."""
+        root = _FakeRootTask(id="r-adj", metadata={"remediation_status": "none"})
+        repo = _FakeTaskRepo({
+            "r-adj": [
+                _FakeChildTask(
+                    id="c1",
+                    status="in_progress",
+                    metadata={"pending_leader_adjudication": True},
+                ),
+                _FakeChildTask(
+                    id="c2",
+                    status="in_progress",
+                    metadata={"pending_leader_adjudication": True},
+                ),
+            ],
+        })
+        task, has_children = await bootstrap._select_root_task_needing_progress(
+            task_repo=repo, workspace_id="ws-1", root_tasks=[root]
+        )
+        assert task is not None and task.id == "r-adj"
         assert has_children is True
 
 
@@ -364,3 +389,210 @@ class TestSweepOrphanExecutionTasks:
             actor_user_id="user-1",
         )
         assert dispatched == 0
+
+
+@pytest.mark.unit
+class TestAutoAdjudicatePendingReports:
+    """Tests for _auto_adjudicate_pending_reports tick-based auto-accept."""
+
+    async def test_adjudicates_completed_report_as_done(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adjudicated_calls: list[dict[str, Any]] = []
+
+        async def _fake_adjudicate(**kwargs: Any) -> str:
+            adjudicated_calls.append(kwargs)
+            return "adjudicated"
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
+
+        repo = _FakeTaskRepo({
+            "root-1": [
+                _FakeChildTask(
+                    id="c1",
+                    status="in_progress",
+                    metadata={
+                        "pending_leader_adjudication": True,
+                        "last_worker_report_type": "completed",
+                        "current_attempt_id": "att-1",
+                    },
+                ),
+            ],
+        })
+
+        count = await bootstrap._auto_adjudicate_pending_reports(
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+        assert count == 1
+        assert adjudicated_calls[0]["task_id"] == "c1"
+        assert adjudicated_calls[0]["attempt_id"] == "att-1"
+        assert adjudicated_calls[0]["status"].value == "done"
+
+    async def test_adjudicates_blocked_report_as_blocked(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adjudicated_calls: list[dict[str, Any]] = []
+
+        async def _fake_adjudicate(**kwargs: Any) -> str:
+            adjudicated_calls.append(kwargs)
+            return "adjudicated"
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
+
+        repo = _FakeTaskRepo({
+            "root-1": [
+                _FakeChildTask(
+                    id="c1",
+                    status="in_progress",
+                    metadata={
+                        "pending_leader_adjudication": True,
+                        "last_worker_report_type": "blocked",
+                        "current_attempt_id": "att-2",
+                    },
+                ),
+                _FakeChildTask(
+                    id="c2",
+                    status="in_progress",
+                    metadata={
+                        "pending_leader_adjudication": True,
+                        "last_worker_report_type": "failed",
+                    },
+                ),
+            ],
+        })
+
+        count = await bootstrap._auto_adjudicate_pending_reports(
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+        assert count == 2
+        assert adjudicated_calls[0]["status"].value == "blocked"
+        assert adjudicated_calls[1]["status"].value == "blocked"
+        assert adjudicated_calls[1]["attempt_id"] is None  # no attempt_id
+
+    async def test_skips_children_without_pending_adjudication(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adjudicated_calls: list[dict[str, Any]] = []
+
+        async def _fake_adjudicate(**kwargs: Any) -> str:
+            adjudicated_calls.append(kwargs)
+            return "adjudicated"
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
+
+        repo = _FakeTaskRepo({
+            "root-1": [
+                _FakeChildTask(id="c1", status="done", metadata={}),
+                _FakeChildTask(
+                    id="c2",
+                    status="in_progress",
+                    metadata={"pending_leader_adjudication": False},
+                ),
+            ],
+        })
+
+        count = await bootstrap._auto_adjudicate_pending_reports(
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+        assert count == 0
+        assert adjudicated_calls == []
+
+    async def test_skips_unknown_report_type(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adjudicated_calls: list[dict[str, Any]] = []
+
+        async def _fake_adjudicate(**kwargs: Any) -> str:
+            adjudicated_calls.append(kwargs)
+            return "adjudicated"
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
+
+        repo = _FakeTaskRepo({
+            "root-1": [
+                _FakeChildTask(
+                    id="c1",
+                    status="in_progress",
+                    metadata={
+                        "pending_leader_adjudication": True,
+                        "last_worker_report_type": "progress_update",
+                    },
+                ),
+            ],
+        })
+
+        count = await bootstrap._auto_adjudicate_pending_reports(
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+        assert count == 0
+
+    async def test_continues_on_individual_adjudication_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        call_count = 0
+
+        async def _flaky_adjudicate(**kwargs: Any) -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("DB connection lost")
+            return "adjudicated"
+
+        import src.infrastructure.agent.workspace.workspace_goal_runtime as wgr
+
+        monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _flaky_adjudicate)
+
+        repo = _FakeTaskRepo({
+            "root-1": [
+                _FakeChildTask(
+                    id="c1",
+                    status="in_progress",
+                    metadata={
+                        "pending_leader_adjudication": True,
+                        "last_worker_report_type": "completed",
+                    },
+                ),
+                _FakeChildTask(
+                    id="c2",
+                    status="in_progress",
+                    metadata={
+                        "pending_leader_adjudication": True,
+                        "last_worker_report_type": "completed",
+                    },
+                ),
+            ],
+        })
+
+        count = await bootstrap._auto_adjudicate_pending_reports(
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+        # First call fails, second succeeds
+        assert count == 1
