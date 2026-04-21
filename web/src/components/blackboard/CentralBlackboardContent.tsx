@@ -126,8 +126,8 @@ export function CentralBlackboardContent({
     [agents, posts, tasks, topologyNodes],
   );
   const notes = useMemo(
-    () => buildBlackboardNotes(workspace, objectives, posts),
-    [objectives, posts, workspace],
+    () => buildBlackboardNotes(workspace, objectives, posts, tasks),
+    [objectives, posts, tasks, workspace],
   );
   const topologyNodeTitles = useMemo(
     () =>

@@ -14,9 +14,7 @@ import { HexObjective } from './HexObjective';
 import { HexTooltip } from './HexTooltip';
 import { useHexLayout } from './useHexLayout';
 
-import type { WorkspaceAgent, TopologyNode, TopologyEdge, CyberObjective } from '@/types/workspace';
-
-
+import type { WorkspaceAgent, TopologyNode, TopologyEdge, CyberObjective, WorkspaceTask } from '@/types/workspace';
 
 import type { MiniMapCell } from './HexMiniMap';
 
@@ -25,6 +23,7 @@ export interface HexGridProps {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
   objectives?: CyberObjective[] | undefined;
+  tasks?: WorkspaceTask[] | undefined;
   onSelectHex?: ((q: number, r: number) => void) | undefined;
   onMoveAgent?: ((agentId: string, q: number, r: number) => void) | undefined;
   onContextMenu?: ((q: number, r: number, e: ReactMouseEvent) => void) | undefined;
@@ -37,6 +36,7 @@ export const HexGrid: FC<HexGridProps> = ({
   nodes,
   edges,
   objectives = [],
+  tasks,
   onSelectHex,
   onMoveAgent,
   onContextMenu,
@@ -390,6 +390,7 @@ export const HexGrid: FC<HexGridProps> = ({
                     cy={y}
                     size={hexSize}
                     objective={occupant.data as CyberObjective}
+                    tasks={tasks}
                   />
                 )}
               </g>

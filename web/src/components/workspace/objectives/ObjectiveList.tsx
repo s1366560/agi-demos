@@ -7,10 +7,11 @@ import { Plus, Target } from 'lucide-react';
 
 import { ObjectiveCard } from './ObjectiveCard';
 
-import type { CyberObjective } from '@/types/workspace';
+import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
 
 export interface ObjectiveListProps {
   objectives: CyberObjective[];
+  tasks?: WorkspaceTask[] | undefined;
   onEdit?: ((objective: CyberObjective) => void) | undefined;
   onDelete?: ((objectiveId: string) => void) | undefined;
   onProject?: ((objectiveId: string) => void) | undefined;
@@ -20,6 +21,7 @@ export interface ObjectiveListProps {
 
 export const ObjectiveList: React.FC<ObjectiveListProps> = ({
   objectives,
+  tasks,
   onEdit,
   onDelete,
   onProject,
@@ -102,6 +104,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
             <div key={parent.id} className="space-y-2">
               <ObjectiveCard
                 objective={parent}
+                tasks={tasks}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onProject={onProject}
@@ -113,6 +116,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
                     <ObjectiveCard
                       key={child.id}
                       objective={child}
+                      tasks={tasks}
                       onEdit={onEdit}
                       onDelete={onDelete}
                       onProject={onProject}

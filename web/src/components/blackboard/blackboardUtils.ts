@@ -1,4 +1,4 @@
-import { toPercent } from '@/utils/objectiveProgress';
+import { deriveObjectiveProgressPct } from '@/utils/objectiveProgress';
 
 import type {
   BlackboardPost,
@@ -310,7 +310,8 @@ export function buildCanvasLinks(
 export function buildBlackboardNotes(
   workspace: Workspace | null,
   objectives: CyberObjective[],
-  posts: BlackboardPost[]
+  posts: BlackboardPost[],
+  tasks: WorkspaceTask[] = []
 ): BlackboardNoteCard[] {
   const notes: BlackboardNoteCard[] = [];
 
@@ -330,7 +331,7 @@ export function buildBlackboardNotes(
       title: objective.title,
       summary:
         objective.description?.trim() ||
-        `Progress ${String(toPercent(objective.progress))}% · ${objective.obj_type.replace('_', ' ')}`,
+        `Progress ${String(deriveObjectiveProgressPct(objective, tasks))}% · ${objective.obj_type.replace('_', ' ')}`,
     });
   }
 

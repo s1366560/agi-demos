@@ -3,14 +3,15 @@ import React from 'react';
 import { Dropdown } from 'antd';
 import { Circle, MoreHorizontal, Pencil, PlayCircle, Trash2 } from 'lucide-react';
 
-import { toPercent } from '@/utils/objectiveProgress';
+import { deriveObjectiveProgressPct } from '@/utils/objectiveProgress';
 
-import type { CyberObjective } from '@/types/workspace';
+import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
 
 import type { MenuProps } from 'antd';
 
 export interface ObjectiveCardProps {
   objective: CyberObjective;
+  tasks?: WorkspaceTask[] | undefined;
   onEdit?: ((objective: CyberObjective) => void) | undefined;
   onDelete?: ((objectiveId: string) => void) | undefined;
   onProject?: ((objectiveId: string) => void) | undefined;
@@ -18,13 +19,14 @@ export interface ObjectiveCardProps {
 
 export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
   objective,
+  tasks,
   onEdit,
   onDelete,
   onProject,
 }) => {
   const isObjective = objective.obj_type === 'objective';
   const progressColor = isObjective ? 'bg-primary' : 'bg-success';
-  const progressPct = toPercent(objective.progress);
+  const progressPct = deriveObjectiveProgressPct(objective, tasks);
 
   const menuItems: NonNullable<MenuProps['items']> = [
     ...(onEdit

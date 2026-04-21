@@ -714,6 +714,7 @@ export function GoalsTab({
     <div className="space-y-6">
       <ObjectiveList
         objectives={objectives}
+        tasks={tasks}
         onDelete={onDeleteObjective}
         onProject={onProjectObjective}
         onCreate={onCreateObjective}
