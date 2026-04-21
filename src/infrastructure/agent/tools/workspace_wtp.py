@@ -128,6 +128,41 @@ async def _send_envelope(
         )
 
     assert isinstance(result, SendResult)
+
+    # Fan-in copy for the WorkspaceSupervisor (Phase 2). Failures are
+    # swallowed inside publish_envelope_default — the A2A delivery has
+    # already succeeded and we refuse to surface a second error.
+    from src.infrastructure.agent.workspace.workspace_supervisor import (
+        publish_envelope_default,
+    )
+
+    worker_agent_id = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
+    enriched_envelope = envelope
+    try:
+        enriched_metadata = dict(envelope.extra_metadata)
+        enriched_metadata.setdefault("leader_agent_id", to_agent_id)
+        enriched_metadata.setdefault("worker_agent_id", worker_agent_id)
+        enriched_metadata.setdefault(
+            "worker_conversation_id", ctx.session_id or ""
+        )
+        actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
+        if actor_user_id:
+            enriched_metadata.setdefault("actor_user_id", actor_user_id)
+        enriched_envelope = WtpEnvelope(
+            verb=envelope.verb,
+            workspace_id=envelope.workspace_id,
+            task_id=envelope.task_id,
+            attempt_id=envelope.attempt_id,
+            payload=envelope.payload,
+            correlation_id=envelope.correlation_id,
+            root_goal_task_id=envelope.root_goal_task_id,
+            parent_message_id=envelope.parent_message_id,
+            extra_metadata=enriched_metadata,
+        )
+    except Exception:
+        logger.debug("workspace_wtp: envelope enrichment failed; publishing raw")
+    await publish_envelope_default(enriched_envelope)
+
     await ctx.emit(
         AgentMessageSentEvent(
             from_agent_id=result.from_agent_id,

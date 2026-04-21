@@ -198,6 +198,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     # Initialize workspace autonomy idle waker (opt-in; disabled by default)
     await initialize_autonomy_idle_waker()
 
+    # Initialize Workspace Supervisor (WTP fan-in consumer, Phase 2).
+    try:
+        from src.infrastructure.agent.workspace.workspace_supervisor import (
+            WorkspaceSupervisor,
+            configure_wtp_publisher,
+            set_workspace_supervisor,
+        )
+
+        configure_wtp_publisher(redis_client)
+        workspace_supervisor = WorkspaceSupervisor(redis_client)
+        await workspace_supervisor.start()
+        set_workspace_supervisor(workspace_supervisor)
+        app.state.workspace_supervisor = workspace_supervisor
+    except Exception:
+        logger.exception("Failed to start WorkspaceSupervisor -- WTP fan-in disabled")
+
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
     if channel_manager:
@@ -234,6 +250,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Stop workspace autonomy idle waker
     await shutdown_autonomy_idle_waker()
+
+    # Stop Workspace Supervisor (WTP fan-in consumer)
+    try:
+        from src.infrastructure.agent.workspace.workspace_supervisor import (
+            configure_wtp_publisher,
+            get_workspace_supervisor,
+            set_workspace_supervisor,
+        )
+
+        supervisor = get_workspace_supervisor()
+        if supervisor is not None:
+            await supervisor.stop()
+        set_workspace_supervisor(None)
+        configure_wtp_publisher(None)
+    except Exception:
+        logger.exception("Error stopping WorkspaceSupervisor")
 
     # Shutdown
     logger.info("Shutting down...")

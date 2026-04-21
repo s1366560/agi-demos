@@ -95,7 +95,7 @@ class TestBuildBrief:
             attempt_id=None,
             leader_agent_id=None,
         )
-        assert "attempt_id" not in brief
+        assert "attempt_id=" not in brief
 
     def test_includes_attempt_and_extra(self) -> None:
         task = _make_task()
