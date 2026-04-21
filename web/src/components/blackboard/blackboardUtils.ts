@@ -1,3 +1,5 @@
+import { toPercent } from '@/utils/objectiveProgress';
+
 import type {
   BlackboardPost,
   CyberObjective,
@@ -328,7 +330,7 @@ export function buildBlackboardNotes(
       title: objective.title,
       summary:
         objective.description?.trim() ||
-        `Progress ${String(objective.progress)}% · ${objective.obj_type.replace('_', ' ')}`,
+        `Progress ${String(toPercent(objective.progress))}% · ${objective.obj_type.replace('_', ' ')}`,
     });
   }
 

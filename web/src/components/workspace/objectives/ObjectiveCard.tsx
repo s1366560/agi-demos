@@ -3,6 +3,8 @@ import React from 'react';
 import { Dropdown } from 'antd';
 import { Circle, MoreHorizontal, Pencil, PlayCircle, Trash2 } from 'lucide-react';
 
+import { toPercent } from '@/utils/objectiveProgress';
+
 import type { CyberObjective } from '@/types/workspace';
 
 import type { MenuProps } from 'antd';
@@ -22,6 +24,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
 }) => {
   const isObjective = objective.obj_type === 'objective';
   const progressColor = isObjective ? 'bg-primary' : 'bg-success';
+  const progressPct = toPercent(objective.progress);
 
   const menuItems: NonNullable<MenuProps['items']> = [
     ...(onEdit
@@ -96,7 +99,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
 
         <div className="flex flex-none items-center gap-2">
           <span className="text-sm font-medium text-text-secondary dark:text-text-muted">
-            {Math.round(objective.progress)}%
+            {progressPct}%
           </span>
           {menuItems.length > 0 && (
             <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
@@ -115,7 +118,7 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
       <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border-light dark:bg-border-dark">
         <div
           className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
-          style={{ width: `${String(Math.min(100, Math.max(0, objective.progress)))}%` }}
+          style={{ width: `${String(progressPct)}%` }}
         />
       </div>
     </article>

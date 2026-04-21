@@ -1,5 +1,7 @@
 import type { FC } from 'react';
 
+import { toPercent } from '@/utils/objectiveProgress';
+
 import type { CyberObjective } from '@/types/workspace';
 
 export interface HexObjectiveProps {
@@ -12,7 +14,7 @@ export interface HexObjectiveProps {
 export const HexObjective: FC<HexObjectiveProps> = ({ cx, cy, size, objective }) => {
   const themeColor = objective.obj_type === 'key_result' ? '#10b981' : '#8b5cf6';
   const innerRadius = size * 0.55;
-  const progress = objective.progress || 0;
+  const progress = toPercent(objective.progress);
   
   const arcRadius = innerRadius + 4;
   const circumference = 2 * Math.PI * arcRadius;
