@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 from src.domain.events.agent_events import AgentMessageSentEvent
@@ -51,6 +52,15 @@ from src.infrastructure.agent.tools.result import ToolResult
 logger = logging.getLogger(__name__)
 
 _orchestrator: AgentOrchestrator | None = None
+
+
+def _supervisor_only_terminal_path() -> bool:
+    """Phase 8: when ``WORKSPACE_WTP_V1_ONLY`` is truthy, skip the worker-tool-side
+    direct call to ``apply_workspace_worker_report`` and rely solely on the
+    supervisor fan-in path for terminal transitions.
+    """
+    raw = os.getenv("WORKSPACE_WTP_V1_ONLY", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 def configure_workspace_wtp(orchestrator: AgentOrchestrator) -> None:
@@ -391,17 +401,20 @@ async def workspace_report_complete_tool(
 
     send_result = await _send_envelope(ctx, envelope, to_agent_id=leader_agent_id)
 
-    apply_result = await _apply_terminal_report(
-        ctx,
-        workspace_id=workspace_id,
-        root_goal_task_id=root_goal_task_id or "",
-        task_id=task_id,
-        attempt_id=attempt_id,
-        leader_agent_id=leader_agent_id,
-        report_type="completed",
-        summary=summary,
-        artifacts=normalized_artifacts or None,
-    )
+    if _supervisor_only_terminal_path():
+        apply_result = {"skipped": True, "reason": "WORKSPACE_WTP_V1_ONLY"}
+    else:
+        apply_result = await _apply_terminal_report(
+            ctx,
+            workspace_id=workspace_id,
+            root_goal_task_id=root_goal_task_id or "",
+            task_id=task_id,
+            attempt_id=attempt_id,
+            leader_agent_id=leader_agent_id,
+            report_type="completed",
+            summary=summary,
+            artifacts=normalized_artifacts or None,
+        )
     try:
         enriched = json.loads(send_result.output)
     except (TypeError, ValueError):
@@ -482,17 +495,20 @@ async def workspace_report_blocked_tool(
     send_result = await _send_envelope(ctx, envelope, to_agent_id=leader_agent_id)
 
     summary = reason if not evidence else f"{reason}\n\n{evidence}"
-    apply_result = await _apply_terminal_report(
-        ctx,
-        workspace_id=workspace_id,
-        root_goal_task_id=root_goal_task_id or "",
-        task_id=task_id,
-        attempt_id=attempt_id,
-        leader_agent_id=leader_agent_id,
-        report_type="blocked",
-        summary=summary,
-        artifacts=None,
-    )
+    if _supervisor_only_terminal_path():
+        apply_result = {"skipped": True, "reason": "WORKSPACE_WTP_V1_ONLY"}
+    else:
+        apply_result = await _apply_terminal_report(
+            ctx,
+            workspace_id=workspace_id,
+            root_goal_task_id=root_goal_task_id or "",
+            task_id=task_id,
+            attempt_id=attempt_id,
+            leader_agent_id=leader_agent_id,
+            report_type="blocked",
+            summary=summary,
+            artifacts=None,
+        )
     try:
         enriched = json.loads(send_result.output)
     except (TypeError, ValueError):
