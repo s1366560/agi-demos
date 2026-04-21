@@ -42,6 +42,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import time
 from typing import Any, Protocol
 
 from src.domain.model.workspace.wtp_envelope import (
@@ -55,6 +57,53 @@ logger = logging.getLogger(__name__)
 WORKSPACE_WTP_INBOX_STREAM = "workspace:wtp:inbox"
 DEFAULT_MAXLEN = 10_000
 DEFAULT_BLOCK_MS = 5_000
+
+# --- Phase 5: watchdog defaults ---------------------------------------------
+# How long an attempt may go without ANY inbound WTP traffic (progress /
+# heartbeat / terminal) before the watchdog flips it to blocked. Set to 0
+# to disable the watchdog entirely.
+DEFAULT_STALE_SECONDS = int(os.getenv("WORKSPACE_ATTEMPT_STALE_SECONDS", "180"))
+# How often the watchdog wakes up to scan the in-memory liveness map.
+DEFAULT_WATCHDOG_INTERVAL_SECONDS = float(
+    os.getenv("WORKSPACE_ATTEMPT_WATCHDOG_INTERVAL_SECONDS", "30")
+)
+
+
+# --- Phase 7: Prometheus metrics (soft import) ------------------------------
+
+try:  # pragma: no cover - exercised in prod runtime
+    from prometheus_client import Counter  # type: ignore[import-untyped]
+
+    _WTP_VERB_COUNTER = Counter(
+        "memstack_wtp_envelopes_total",
+        "Total WTP envelopes processed by the supervisor, labeled by verb.",
+        labelnames=("verb", "source"),
+    )
+    _WTP_STALE_COUNTER = Counter(
+        "memstack_wtp_stale_attempts_total",
+        "Total attempts flipped to blocked by the liveness watchdog.",
+    )
+except Exception:  # pragma: no cover - keep supervisor importable without prom
+    _WTP_VERB_COUNTER = None  # type: ignore[assignment]
+    _WTP_STALE_COUNTER = None  # type: ignore[assignment]
+
+
+def _count_verb(verb: WtpVerb, *, source: str) -> None:
+    if _WTP_VERB_COUNTER is None:
+        return
+    try:
+        _WTP_VERB_COUNTER.labels(verb=verb.value, source=source).inc()
+    except Exception:  # pragma: no cover
+        pass
+
+
+def _count_stale() -> None:
+    if _WTP_STALE_COUNTER is None:
+        return
+    try:
+        _WTP_STALE_COUNTER.inc()
+    except Exception:  # pragma: no cover
+        pass
 
 
 class _RedisLike(Protocol):
@@ -138,17 +187,28 @@ class WorkspaceSupervisor:
         *,
         stream: str = WORKSPACE_WTP_INBOX_STREAM,
         block_ms: int = DEFAULT_BLOCK_MS,
+        stale_seconds: int = DEFAULT_STALE_SECONDS,
+        watchdog_interval_seconds: float = DEFAULT_WATCHDOG_INTERVAL_SECONDS,
     ) -> None:
         self._redis = redis_client
         self._stream = stream
         self._block_ms = block_ms
         self._task: asyncio.Task[None] | None = None
+        self._watchdog_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._last_id: str = "$"
+        # Phase 5 liveness state: attempt_id → {last_seen, envelope snapshot}.
+        self._liveness: dict[str, dict[str, Any]] = {}
+        self._stale_seconds = max(0, int(stale_seconds))
+        self._watchdog_interval = max(1.0, float(watchdog_interval_seconds))
 
     @property
     def is_running(self) -> bool:
         return self._task is not None and not self._task.done()
+
+    def get_liveness_snapshot(self) -> dict[str, dict[str, Any]]:
+        """Return a deep copy of the liveness table (for health checks / tests)."""
+        return {k: dict(v) for k, v in self._liveness.items()}
 
     async def start(self) -> None:
         """Begin consuming. Safe to call multiple times (idempotent)."""
@@ -163,25 +223,31 @@ class WorkspaceSupervisor:
         self._task = asyncio.create_task(
             self._run_loop(), name="workspace-supervisor"
         )
+        if self._stale_seconds > 0 and self._watchdog_task is None:
+            self._watchdog_task = asyncio.create_task(
+                self._watchdog_loop(), name="workspace-supervisor-watchdog"
+            )
         logger.info(
-            "WorkspaceSupervisor started (stream=%s block_ms=%d)",
+            "WorkspaceSupervisor started (stream=%s block_ms=%d stale_seconds=%d)",
             self._stream,
             self._block_ms,
+            self._stale_seconds,
         )
 
     async def stop(self) -> None:
         """Signal the loop to exit and await the task."""
-        if self._task is None:
-            return
         self._stop_event.set()
-        self._task.cancel()
-        try:
-            await self._task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-            pass
-        finally:
-            self._task = None
-            logger.info("WorkspaceSupervisor stopped")
+        for task in (self._task, self._watchdog_task):
+            if task is None:
+                continue
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        self._task = None
+        self._watchdog_task = None
+        logger.info("WorkspaceSupervisor stopped")
 
     # --- Internal loop ---------------------------------------------------
 
@@ -249,7 +315,31 @@ class WorkspaceSupervisor:
     async def _dispatch_envelope(self, envelope: WtpEnvelope) -> None:
         """Route an envelope to the correct domain handler."""
         verb = envelope.verb
+        _count_verb(verb, source="supervisor")
+
+        # Phase 5: every inbound envelope refreshes the attempt's liveness.
+        if envelope.attempt_id:
+            self._liveness[envelope.attempt_id] = {
+                "last_seen_monotonic": time.monotonic(),
+                "workspace_id": envelope.workspace_id,
+                "task_id": envelope.task_id,
+                "root_goal_task_id": envelope.root_goal_task_id or "",
+                "leader_agent_id": envelope.extra_metadata.get("leader_agent_id")
+                or "",
+                "worker_agent_id": envelope.extra_metadata.get("worker_agent_id")
+                or "",
+                "actor_user_id": envelope.extra_metadata.get("actor_user_id") or "",
+                "worker_conversation_id": envelope.extra_metadata.get(
+                    "worker_conversation_id"
+                )
+                or "",
+                "last_verb": verb.value,
+            }
+
         if verb in WtpVerb.terminal():
+            # Terminal envelope removes the attempt from liveness tracking.
+            if envelope.attempt_id:
+                self._liveness.pop(envelope.attempt_id, None)
             await self._apply_terminal(envelope)
             return
         if verb is WtpVerb.TASK_PROGRESS:
@@ -268,12 +358,109 @@ class WorkspaceSupervisor:
                 envelope.task_id,
             )
             return
+        if verb is WtpVerb.TASK_CLARIFY_RESPONSE:
+            try:
+                from src.infrastructure.agent.tools.workspace_clarification import (
+                    deliver_clarification_response,
+                )
+
+                delivered = deliver_clarification_response(envelope)
+                logger.info(
+                    "wtp.clarify_response correlation=%s delivered=%s",
+                    envelope.correlation_id,
+                    delivered,
+                )
+            except Exception:
+                logger.exception(
+                    "workspace_supervisor: failed delivering clarify_response "
+                    "correlation=%s",
+                    envelope.correlation_id,
+                )
+            return
         logger.info(
-            "wtp.%s received (workspace=%s task=%s) — no Phase 2 handler",
+            "wtp.%s received (workspace=%s task=%s)",
             verb.value,
             envelope.workspace_id,
             envelope.task_id,
         )
+
+    async def _watchdog_loop(self) -> None:
+        """Phase 5: scan liveness table and flip stale attempts to blocked."""
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    await asyncio.wait_for(
+                        self._stop_event.wait(), timeout=self._watchdog_interval
+                    )
+                    return
+                except asyncio.TimeoutError:
+                    pass
+                try:
+                    await self._watchdog_tick()
+                except Exception:
+                    logger.exception("workspace_supervisor watchdog tick failed")
+        except asyncio.CancelledError:
+            raise
+
+    async def _watchdog_tick(self) -> None:
+        """Inspect liveness table once; flip stale attempts to blocked."""
+        if self._stale_seconds <= 0:
+            return
+        now = time.monotonic()
+        stale: list[tuple[str, dict[str, Any]]] = []
+        for attempt_id, info in list(self._liveness.items()):
+            last_seen = info.get("last_seen_monotonic")
+            if not isinstance(last_seen, int | float):
+                continue
+            if now - last_seen < self._stale_seconds:
+                continue
+            stale.append((attempt_id, info))
+
+        for attempt_id, info in stale:
+            self._liveness.pop(attempt_id, None)
+            await self._apply_stale_attempt(attempt_id, info)
+
+    async def _apply_stale_attempt(
+        self, attempt_id: str, info: dict[str, Any]
+    ) -> None:
+        """Record a ``blocked`` terminal report for a stale attempt."""
+        from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+            apply_workspace_worker_report,
+        )
+
+        summary = f"stale_no_heartbeat (last_verb={info.get('last_verb')})"
+        try:
+            await apply_workspace_worker_report(
+                workspace_id=str(info.get("workspace_id") or ""),
+                root_goal_task_id=str(info.get("root_goal_task_id") or ""),
+                task_id=str(info.get("task_id") or ""),
+                attempt_id=attempt_id,
+                conversation_id=str(info.get("worker_conversation_id") or ""),
+                actor_user_id=str(info.get("actor_user_id") or ""),
+                worker_agent_id=str(info.get("worker_agent_id") or ""),
+                report_type="blocked",
+                summary=summary,
+                artifacts=None,
+                leader_agent_id=(
+                    str(info["leader_agent_id"])
+                    if info.get("leader_agent_id")
+                    else None
+                ),
+                report_id=f"watchdog:{attempt_id}",
+            )
+            _count_stale()
+            logger.warning(
+                "workspace_supervisor.watchdog flipped attempt=%s task=%s to blocked (stale)",
+                attempt_id,
+                info.get("task_id"),
+            )
+        except Exception:
+            logger.exception(
+                "workspace_supervisor.watchdog failed to apply stale report "
+                "(attempt=%s task=%s)",
+                attempt_id,
+                info.get("task_id"),
+            )
 
     async def _apply_terminal(self, envelope: WtpEnvelope) -> None:
         """Invoke :func:`apply_workspace_worker_report` for terminal verbs."""

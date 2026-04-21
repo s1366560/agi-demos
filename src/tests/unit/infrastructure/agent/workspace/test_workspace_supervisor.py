@@ -256,3 +256,103 @@ class TestPublisherInjection:
 
 def test_constants_exposed() -> None:
     assert WORKSPACE_WTP_INBOX_STREAM == "workspace:wtp:inbox"
+
+
+# --- Phase 5 watchdog --------------------------------------------------------
+
+
+class TestWatchdog:
+    async def test_progress_updates_liveness_entry(self) -> None:
+        supervisor = WorkspaceSupervisor(None)
+        env = _completed_envelope(verb=WtpVerb.TASK_PROGRESS, correlation_id="c-p")
+        await supervisor._dispatch_envelope(env)
+        snap = supervisor.get_liveness_snapshot()
+        assert "attempt-1" in snap
+        assert snap["attempt-1"]["last_verb"] == "task.progress"
+        assert snap["attempt-1"]["workspace_id"] == "ws-1"
+
+    async def test_terminal_removes_liveness_entry(self) -> None:
+        supervisor = WorkspaceSupervisor(None)
+        # First, register liveness via a progress envelope.
+        await supervisor._dispatch_envelope(
+            _completed_envelope(
+                verb=WtpVerb.TASK_PROGRESS, correlation_id="c-progress"
+            )
+        )
+        assert "attempt-1" in supervisor.get_liveness_snapshot()
+        # Then terminal.
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime."
+            "apply_workspace_worker_report",
+            new=AsyncMock(return_value=None),
+        ):
+            await supervisor._dispatch_envelope(_completed_envelope())
+        assert "attempt-1" not in supervisor.get_liveness_snapshot()
+
+    async def test_watchdog_tick_flips_stale_to_blocked(self) -> None:
+        supervisor = WorkspaceSupervisor(
+            None, stale_seconds=1, watchdog_interval_seconds=1
+        )
+        # Pre-seed liveness with a stale entry.
+        supervisor._liveness["attempt-stale"] = {
+            "last_seen_monotonic": 0.0,  # far in the past
+            "workspace_id": "ws-1",
+            "task_id": "task-stale",
+            "root_goal_task_id": "root-1",
+            "leader_agent_id": "leader",
+            "worker_agent_id": "worker",
+            "actor_user_id": "user-1",
+            "worker_conversation_id": "conv-1",
+            "last_verb": "task.progress",
+        }
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime."
+            "apply_workspace_worker_report",
+            new=AsyncMock(return_value=None),
+        ) as apply_mock:
+            await supervisor._watchdog_tick()
+        apply_mock.assert_awaited_once()
+        kwargs = apply_mock.await_args.kwargs
+        assert kwargs["report_type"] == "blocked"
+        assert "stale_no_heartbeat" in kwargs["summary"]
+        assert kwargs["report_id"] == "watchdog:attempt-stale"
+        assert "attempt-stale" not in supervisor.get_liveness_snapshot()
+
+    async def test_watchdog_disabled_when_stale_seconds_zero(self) -> None:
+        supervisor = WorkspaceSupervisor(None, stale_seconds=0)
+        supervisor._liveness["x"] = {"last_seen_monotonic": 0.0}
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime."
+            "apply_workspace_worker_report",
+            new=AsyncMock(),
+        ) as apply_mock:
+            await supervisor._watchdog_tick()
+        apply_mock.assert_not_awaited()
+        assert "x" in supervisor.get_liveness_snapshot()
+
+    async def test_clarify_response_delivered_to_registry(self) -> None:
+        from src.infrastructure.agent.tools import workspace_clarification as clar
+
+        supervisor = WorkspaceSupervisor(None)
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future[str] = loop.create_future()
+        clar._pending_clarifications["corr-resp"] = fut
+        try:
+            env = WtpEnvelope(
+                verb=WtpVerb.TASK_CLARIFY_RESPONSE,
+                workspace_id="ws-1",
+                task_id="task-1",
+                attempt_id="attempt-1",
+                correlation_id="corr-resp",
+                payload={"answer": "use api key ABC"},
+            )
+            await supervisor._dispatch_envelope(env)
+            # Give call_soon_threadsafe a tick to fire.
+            for _ in range(5):
+                if fut.done():
+                    break
+                await asyncio.sleep(0.01)
+            assert fut.done()
+            assert fut.result() == "use api key ABC"
+        finally:
+            clar._pending_clarifications.pop("corr-resp", None)
