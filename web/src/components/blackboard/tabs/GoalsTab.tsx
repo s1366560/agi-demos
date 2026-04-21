@@ -18,10 +18,13 @@ import {
   Zap,
 } from 'lucide-react';
 
+import { Link } from 'react-router-dom';
+
 import { workspaceAutonomyService } from '@/services/workspaceService';
 
 import { ObjectiveList } from '@/components/workspace/objectives/ObjectiveList';
 import { TaskBoard } from '@/components/workspace/TaskBoard';
+import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
 import type { CyberObjective, WorkspaceGoalCandidate, WorkspaceTask } from '@/types/workspace';
 
@@ -37,6 +40,8 @@ export interface GoalsTabProps {
   tasks: WorkspaceTask[];
   completionRatio: number;
   workspaceId: string;
+  tenantId?: string | undefined;
+  projectId?: string | undefined;
   onDeleteObjective: (objectiveId: string) => void;
   onProjectObjective: (objectiveId: string) => void;
   onCreateObjective: () => void;
@@ -81,6 +86,8 @@ interface ChildTaskLogEntry {
   assigneeLabel: string;
   status: WorkspaceTask['status'];
   events: FeedbackLogEntry[];
+  conversationId?: string | undefined;
+  attemptNumber?: number | undefined;
 }
 
 interface ChildTaskLogCardProps {
@@ -89,6 +96,7 @@ interface ChildTaskLogCardProps {
   filterMode: 'latest' | 'all';
   onToggle: () => void;
   onJump: () => void;
+  conversationHref?: string | undefined;
 }
 
 function getObjectiveExecutionFeedback(
@@ -444,12 +452,25 @@ function buildChildTaskLogs(item: ObjectiveExecutionFeedback, tasks: WorkspaceTa
         });
       }
 
+      const conversationIdRaw = task.metadata?.current_attempt_conversation_id;
+      const attemptNumberRaw = task.metadata?.current_attempt_number;
+      const conversationId =
+        typeof conversationIdRaw === 'string' && conversationIdRaw.length > 0
+          ? conversationIdRaw
+          : undefined;
+      const attemptNumber =
+        typeof attemptNumberRaw === 'number' && Number.isFinite(attemptNumberRaw)
+          ? attemptNumberRaw
+          : undefined;
+
       return {
         childTaskId: task.id,
         title: task.title,
         assigneeLabel: task.assignee_agent_id ?? task.assignee_user_id ?? '未分配',
         status: task.status,
         events: events.reverse(),
+        conversationId,
+        attemptNumber,
       };
     });
 }
@@ -460,6 +481,7 @@ function ChildTaskLogCard({
   filterMode,
   onToggle,
   onJump,
+  conversationHref,
 }: ChildTaskLogCardProps) {
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
   const latestEventRef = useRef<HTMLDivElement | null>(null);
@@ -519,13 +541,25 @@ function ChildTaskLogCard({
             </div>
           </div>
         </button>
-        <button
-          type="button"
-          onClick={onJump}
-          className="shrink-0 rounded-md border border-current/15 px-2 py-1 text-[10px] font-medium opacity-80 transition hover:bg-white/40 dark:hover:bg-black/10"
-        >
-          跳转到任务板
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onJump}
+            className="rounded-md border border-current/15 px-2 py-1 text-[10px] font-medium opacity-80 transition hover:bg-white/40 dark:hover:bg-black/10"
+          >
+            跳转到任务板
+          </button>
+          {conversationHref && (child.status === 'in_progress' || child.status === 'done') && (
+            <Link
+              to={conversationHref}
+              className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary transition hover:bg-primary/20 dark:border-primary-300/40 dark:bg-primary-300/10 dark:text-primary-100 dark:hover:bg-primary-300/20"
+              title={child.attemptNumber ? `Attempt #${child.attemptNumber}` : undefined}
+            >
+              跳转到会话
+              {child.attemptNumber ? ` #${child.attemptNumber}` : ''}
+            </Link>
+          )}
+        </div>
       </div>
       {expanded && (
         <div className="mt-3 space-y-2">
@@ -609,6 +643,8 @@ export function GoalsTab({
   goalCandidatesError,
   tasks,
   workspaceId,
+  tenantId,
+  projectId,
   onDeleteObjective,
   onProjectObjective,
   onCreateObjective,
@@ -939,20 +975,32 @@ export function GoalsTab({
                           还没有 child task 详细事件。
                         </div>
                       ) : (
-                        buildChildTaskLogs(item, tasks).map((child) => (
-                          <ChildTaskLogCard
-                            key={child.childTaskId}
-                            child={child}
-                            expanded={isChildLogExpanded(child.childTaskId, child.status)}
-                            filterMode={eventFilterByObjectiveId[item.objectiveId] ?? 'latest'}
-                            onToggle={() => {
-                              toggleChildLog(child.childTaskId, child.status);
-                            }}
-                            onJump={() => {
-                              jumpToTaskBoardCard(child.childTaskId);
-                            }}
-                          />
-                        ))
+                        buildChildTaskLogs(item, tasks).map((child) => {
+                          const conversationHref =
+                            child.conversationId && tenantId
+                              ? buildAgentWorkspacePath({
+                                  tenantId,
+                                  conversationId: child.conversationId,
+                                  projectId,
+                                  workspaceId,
+                                })
+                              : undefined;
+                          return (
+                            <ChildTaskLogCard
+                              key={child.childTaskId}
+                              child={child}
+                              expanded={isChildLogExpanded(child.childTaskId, child.status)}
+                              filterMode={eventFilterByObjectiveId[item.objectiveId] ?? 'latest'}
+                              onToggle={() => {
+                                toggleChildLog(child.childTaskId, child.status);
+                              }}
+                              onJump={() => {
+                                jumpToTaskBoardCard(child.childTaskId);
+                              }}
+                              conversationHref={conversationHref}
+                            />
+                          );
+                        })
                       )}
                     </div>
                   )}

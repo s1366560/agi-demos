@@ -218,6 +218,8 @@ export function CentralBlackboardModal({
                 tasks={tasks}
                 completionRatio={stats.completionRatio}
                 workspaceId={workspaceId}
+                tenantId={tenantId}
+                projectId={projectId}
                 onDeleteObjective={(objectiveId) => {
                   void actions.handleDeleteObjective(objectiveId);
                 }}
