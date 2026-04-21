@@ -552,9 +552,11 @@ async def auto_complete_ready_root(
     (e.g. autonomy ticks) remain resilient.
     """
     try:
-        children = await task_repo.list_children(root_task.id)
+        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task.id)
     except Exception:
-        logger.warning("auto_complete_ready_root: list_children failed", exc_info=True)
+        logger.warning(
+            "auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True
+        )
         return None
     execution_children = [
         c
