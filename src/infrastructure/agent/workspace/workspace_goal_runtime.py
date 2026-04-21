@@ -974,14 +974,38 @@ async def _assign_execution_tasks_to_workers(
         offset=0,
     )
     if not active_bindings:
+        logger.warning(
+            "_assign_execution_tasks_to_workers: no active workspace agents",
+            extra={
+                "event": "workspace_assign.no_active_members",
+                "workspace_id": workspace_id,
+                "leader_agent_id": leader_agent_id,
+                "created_count": len(created_tasks),
+                "reason": reason,
+            },
+        )
         return
 
     worker_bindings = [
         binding for binding in active_bindings if binding.agent_id != leader_agent_id
     ]
     if not worker_bindings:
-        worker_bindings = list(active_bindings)
-    if not worker_bindings:
+        # Do NOT fall back to assigning the leader as worker — that violates
+        # the leader/worker separation and causes workers to run with
+        # task_authority=leader (which in turn skips worker-specific
+        # guardrails). Leave tasks unassigned; the UI / autonomy tick will
+        # surface this state so the user can add a worker agent.
+        logger.warning(
+            "_assign_execution_tasks_to_workers: no non-leader workspace members",
+            extra={
+                "event": "workspace_assign.no_worker_members",
+                "workspace_id": workspace_id,
+                "leader_agent_id": leader_agent_id,
+                "created_count": len(created_tasks),
+                "active_binding_count": len(active_bindings),
+                "reason": reason,
+            },
+        )
         return
 
     worker_bindings.sort(

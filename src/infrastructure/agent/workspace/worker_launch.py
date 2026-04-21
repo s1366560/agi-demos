@@ -266,6 +266,36 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     "reason": "workspace_not_found",
                 }
 
+            # Defensive membership check: the worker_agent_id MUST be an
+            # active workspace binding. This guards against races where a
+            # binding is deactivated between task assignment and launch.
+            from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
+                SqlWorkspaceAgentRepository,
+            )
+
+            workspace_agent_repo = SqlWorkspaceAgentRepository(db)
+            worker_binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
+                workspace_id=workspace_id,
+                agent_id=worker_agent_id,
+            )
+            if worker_binding is None or not worker_binding.is_active:
+                logger.warning(
+                    "workspace_worker_launch.worker_not_workspace_member",
+                    extra={
+                        "event": "workspace_worker_launch.worker_not_workspace_member",
+                        "workspace_id": workspace_id,
+                        "task_id": task.id,
+                        "worker_agent_id": worker_agent_id,
+                        "binding_found": worker_binding is not None,
+                    },
+                )
+                return {
+                    "launched": False,
+                    "conversation_id": None,
+                    "attempt_id": resolved_attempt_id,
+                    "reason": "worker_not_workspace_member",
+                }
+
             attempt_service = _build_attempt_service(db)
             attempt = await _ensure_execution_attempt(
                 attempt_service=attempt_service,
