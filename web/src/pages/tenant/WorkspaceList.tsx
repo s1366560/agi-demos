@@ -224,7 +224,7 @@ export function WorkspaceList() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-8">
+    <div className="flex h-full min-h-0 w-full flex-col px-6 py-8 sm:px-8">
       {/* Header */}
       <header className="mb-6 flex flex-col gap-1">
         <div className="flex items-baseline gap-3">
@@ -290,35 +290,39 @@ export function WorkspaceList() {
       </div>
 
       {/* Content */}
-      {isLoading && workspaces.length === 0 ? (
-        <div className="flex min-h-[240px] items-center justify-center">
-          <Spin />
-        </div>
-      ) : filtered.length === 0 ? (
-        <EmptyStateSimple
-          icon={LayoutGrid}
-          title={
-            query
-              ? t('tenant.workspaceList.emptyFiltered', 'No workspaces match your search')
-              : t('tenant.workspaceList.empty', 'No workspaces found')
-          }
-          description={
-            query
-              ? undefined
-              : t(
-                  'tenant.workspaceList.emptyDescription',
-                  'Create a workspace to organize your agents and objectives'
-                )
-          }
-        />
-      ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        {isLoading && workspaces.length === 0 ? (
+          <div className="flex min-h-[240px] items-center justify-center">
+            <Spin />
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyStateSimple
+            icon={LayoutGrid}
+            title={
+              query
+                ? t('tenant.workspaceList.emptyFiltered', 'No workspaces match your search')
+                : t('tenant.workspaceList.empty', 'No workspaces found')
+            }
+            description={
+              query
+                ? undefined
+                : t(
+                    'tenant.workspaceList.emptyDescription',
+                    'Create a workspace to organize your agents and objectives'
+                  )
+            }
+          />
+        ) : (
+          <ul
+            className="grid gap-3"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
+          >
           {filtered.map((workspace) => {
             const updated = workspace.updated_at ?? workspace.created_at;
             const archived = workspace.is_archived === true;
             const summary = summaries[workspace.id];
             return (
-              <li key={workspace.id}>
+              <li key={workspace.id} className="h-full">
                 <Link
                   to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
                   aria-label={workspace.name}
@@ -415,8 +419,9 @@ export function WorkspaceList() {
               </li>
             );
           })}
-        </ul>
-      )}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
