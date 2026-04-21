@@ -1932,7 +1932,12 @@
       "updated": "Updated {{time}}",
       "openAction": "Open blackboard",
       "count_one": "{{count}} workspace",
-      "count_other": "{{count}} workspaces"
+      "count_other": "{{count}} workspaces",
+      "objectiveProgress": "Objective progress",
+      "loadingObjectives": "Loading objectives…",
+      "objectivesCount_one": "{{count}} objective",
+      "objectivesCount_other": "{{count}} objectives",
+      "completedCount": "{{completed}} of {{total}} complete"
     },
     "workflowPatterns": {
       "title": "Workflow Patterns",

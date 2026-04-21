@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 
-import { Button, Input, message, Spin, Tag } from 'antd';
-import { FolderKanban, LayoutGrid, Plus, Search } from 'lucide-react';
+import { Button, Input, message, Progress, Spin, Tag } from 'antd';
+import { FolderKanban, LayoutGrid, Plus, Search, Target } from 'lucide-react';
 
 import { formatDistanceToNow } from '@/utils/date';
 
@@ -12,7 +12,44 @@ import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
 import { useWorkspaceActions, useWorkspaceLoading, useWorkspaces } from '@/stores/workspace';
 
+import { workspaceObjectiveService } from '@/services/workspaceService';
+import type { CyberObjective } from '@/types/workspace';
+
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
+
+interface ObjectiveSummary {
+  total: number;
+  objectives: number;
+  avgProgress: number;
+  completed: number;
+  loading: boolean;
+}
+
+const EMPTY_SUMMARY: ObjectiveSummary = {
+  total: 0,
+  objectives: 0,
+  avgProgress: 0,
+  completed: 0,
+  loading: true,
+};
+
+function summarize(items: CyberObjective[]): ObjectiveSummary {
+  const objectives = items.filter((o) => o.obj_type === 'objective');
+  const relevant = objectives.length > 0 ? objectives : items;
+  const total = relevant.length;
+  if (total === 0) {
+    return { total: 0, objectives: 0, avgProgress: 0, completed: 0, loading: false };
+  }
+  const sum = relevant.reduce((acc, o) => acc + (Number.isFinite(o.progress) ? o.progress : 0), 0);
+  const completed = relevant.filter((o) => o.progress >= 100).length;
+  return {
+    total: items.length,
+    objectives: objectives.length,
+    avgProgress: Math.round(sum / total),
+    completed,
+    loading: false,
+  };
+}
 
 export function WorkspaceList() {
   const { t } = useTranslation();
@@ -28,6 +65,7 @@ export function WorkspaceList() {
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [summaries, setSummaries] = useState<Record<string, ObjectiveSummary>>({});
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
   const projectId = params.projectId ?? currentProject?.id ?? projects[0]?.id ?? null;
@@ -43,6 +81,43 @@ export function WorkspaceList() {
     if (!tenantId || !projectId) return;
     void loadWorkspaces(tenantId, projectId);
   }, [tenantId, projectId, loadWorkspaces]);
+
+  // Fetch objective summaries in parallel for all visible workspaces.
+  useEffect(() => {
+    if (!tenantId || !projectId || workspaces.length === 0) return;
+    let cancelled = false;
+    const ids = workspaces.map((w) => w.id);
+
+    setSummaries((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        if (!next[id]) next[id] = EMPTY_SUMMARY;
+      }
+      return next;
+    });
+
+    void (async () => {
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const items = await workspaceObjectiveService.list(tenantId, projectId, id);
+            if (cancelled) return;
+            setSummaries((prev) => ({ ...prev, [id]: summarize(items) }));
+          } catch {
+            if (cancelled) return;
+            setSummaries((prev) => ({
+              ...prev,
+              [id]: { total: 0, objectives: 0, avgProgress: 0, completed: 0, loading: false },
+            }));
+          }
+        })
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, projectId, workspaces]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -183,6 +258,7 @@ export function WorkspaceList() {
           {filtered.map((workspace) => {
             const updated = workspace.updated_at ?? workspace.created_at;
             const archived = workspace.is_archived === true;
+            const summary = summaries[workspace.id];
             return (
               <li key={workspace.id}>
                 <Link
@@ -203,6 +279,48 @@ export function WorkspaceList() {
                   <p className="line-clamp-2 min-h-[2.5rem] text-xs text-text-secondary dark:text-text-muted">
                     {workspace.description?.trim() || '—'}
                   </p>
+
+                  {/* Objective progress */}
+                  <div
+                    className="mt-1 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
+                    aria-label={t('tenant.workspaceList.objectiveProgress', 'Objective progress')}
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 text-text-secondary dark:text-text-muted">
+                        <Target size={12} aria-hidden />
+                        {summary && !summary.loading
+                          ? t('tenant.workspaceList.objectivesCount', {
+                              count: summary.objectives > 0 ? summary.objectives : summary.total,
+                              defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
+                            })
+                          : t('tenant.workspaceList.loadingObjectives', 'Loading objectives…')}
+                      </span>
+                      <span className="font-medium tabular-nums text-text-primary dark:text-text-inverse">
+                        {summary && !summary.loading ? `${String(summary.avgProgress)}%` : '—'}
+                      </span>
+                    </div>
+                    <Progress
+                      percent={summary && !summary.loading ? summary.avgProgress : 0}
+                      size="small"
+                      showInfo={false}
+                      {...(summary && !summary.loading && summary.avgProgress >= 100
+                        ? { strokeColor: '#10b981' }
+                        : {})}
+                      aria-hidden
+                    />
+                    {summary && !summary.loading && summary.total > 0 ? (
+                      <div className="mt-1 text-[11px] text-text-muted">
+                        {t('tenant.workspaceList.completedCount', {
+                          completed: summary.completed,
+                          total: summary.objectives > 0 ? summary.objectives : summary.total,
+                          defaultValue: `${String(summary.completed)} of ${String(
+                            summary.objectives > 0 ? summary.objectives : summary.total
+                          )} complete`,
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+
                   <div className="mt-auto flex items-center justify-between pt-2 text-xs text-text-muted dark:text-text-muted">
                     <span>
                       {t('tenant.workspaceList.updated', {

@@ -2079,7 +2079,12 @@
       "updated": "更新于 {{time}}",
       "openAction": "打开黑板",
       "count_one": "{{count}} 个工作空间",
-      "count_other": "{{count}} 个工作空间"
+      "count_other": "{{count}} 个工作空间",
+      "objectiveProgress": "目标进度",
+      "loadingObjectives": "正在加载目标…",
+      "objectivesCount_one": "{{count}} 个目标",
+      "objectivesCount_other": "{{count}} 个目标",
+      "completedCount": "已完成 {{completed}} / {{total}}"
     },
     "workflowPatterns": {
       "title": "工作流模式",

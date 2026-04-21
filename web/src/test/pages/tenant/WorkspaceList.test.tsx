@@ -28,6 +28,12 @@ vi.mock('../../../stores/workspace', () => ({
   useWorkspaceActions: () => workspaceState.actions,
 }));
 
+vi.mock('../../../services/workspaceService', () => ({
+  workspaceObjectiveService: {
+    list: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 describe('WorkspaceList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
