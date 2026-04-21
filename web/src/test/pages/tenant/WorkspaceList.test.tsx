@@ -67,7 +67,7 @@ describe('WorkspaceList', () => {
     expect(screen.getByRole('heading', { name: 'Workspaces' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Workspace One/i })).toHaveAttribute(
       'href',
-      '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-1&open=1'
+      '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-1'
     );
   });
 });

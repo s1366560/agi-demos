@@ -442,7 +442,7 @@ describe('ProjectSidebar', () => {
 
       expect(blackboardLink).toBeInTheDocument();
       expect(blackboardLink?.getAttribute('href')).toBe(
-        '/tenant/tenant-1/project/test-project/blackboard?workspaceId=ws-current&open=1'
+        '/tenant/tenant-1/project/test-project/blackboard?workspaceId=ws-current'
       );
     });
   });

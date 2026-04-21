@@ -364,7 +364,6 @@ export function getCanonicalBlackboardPath(
 
   const searchParams = new URLSearchParams({
     workspaceId: context.preferredWorkspaceId,
-    open: '1',
   });
 
   return `${basePath}?${searchParams.toString()}`;
@@ -1138,7 +1137,7 @@ export function getProjectSidebarConfig(
         item.id === 'blackboard'
           ? {
               ...item,
-              path: `/blackboard?workspaceId=${preferredWorkspaceId}&open=1`,
+              path: `/blackboard?workspaceId=${preferredWorkspaceId}`,
             }
           : item
       ),

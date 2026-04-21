@@ -15,7 +15,6 @@ interface BlackboardLifecycleParams {
   tenantId: string | undefined;
   projectId: string | undefined;
   requestedWorkspaceId: string | null;
-  shouldAutoOpen: boolean;
   searchParams: URLSearchParams;
   setSearchParams: (params: URLSearchParams, options?: { replace?: boolean }) => void;
   currentWorkspaceId: string | undefined;
@@ -28,8 +27,6 @@ interface BlackboardLifecycleResult {
   workspacesLoading: boolean;
   workspacesError: string | null;
   surfaceLoading: boolean;
-  boardOpen: boolean;
-  setBoardOpen: React.Dispatch<React.SetStateAction<boolean>>;
   handleRetrySurface: () => Promise<void>;
 }
 
@@ -37,10 +34,9 @@ export function useBlackboardLifecycle({
   tenantId,
   projectId,
   requestedWorkspaceId,
-  shouldAutoOpen,
   searchParams,
   setSearchParams,
-  currentWorkspaceId,
+  currentWorkspaceId: _currentWorkspaceId,
 }: BlackboardLifecycleParams): BlackboardLifecycleResult {
   const { loadWorkspaceSurface, clearSelectedHex } = useWorkspaceActions();
 
@@ -49,7 +45,6 @@ export function useBlackboardLifecycle({
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
   const [workspacesError, setWorkspacesError] = useState<string | null>(null);
   const [surfaceLoading, setSurfaceLoading] = useState(false);
-  const [boardOpen, setBoardOpen] = useState(false);
   const workspaceListRequestIdRef = useRef(0);
   const requestedWorkspaceIdRef = useRef(requestedWorkspaceId);
   const appliedRequestedWorkspaceIdRef = useRef<string | null>(null);
@@ -59,10 +54,6 @@ export function useBlackboardLifecycle({
       clearSelectedHex();
     };
   }, [clearSelectedHex]);
-
-  useEffect(() => {
-    setBoardOpen(false);
-  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     requestedWorkspaceIdRef.current = requestedWorkspaceId;
@@ -184,32 +175,6 @@ export function useBlackboardLifecycle({
     setSearchParams(nextSearchParams, { replace: true });
   }, [searchParams, selectedWorkspaceId, setSearchParams, workspacesLoading]);
 
-  useEffect(() => {
-    if (
-      !shouldAutoOpen ||
-      !requestedWorkspaceId ||
-      requestedWorkspaceId !== selectedWorkspaceId ||
-      surfaceLoading ||
-      currentWorkspaceId !== selectedWorkspaceId
-    ) {
-      return;
-    }
-
-    setBoardOpen(true);
-
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.delete('open');
-    setSearchParams(nextSearchParams, { replace: true });
-  }, [
-    currentWorkspaceId,
-    requestedWorkspaceId,
-    searchParams,
-    selectedWorkspaceId,
-    setSearchParams,
-    shouldAutoOpen,
-    surfaceLoading,
-  ]);
-
   const handleRetrySurface = useCallback(async () => {
     setSurfaceLoading(true);
     try {
@@ -229,8 +194,6 @@ export function useBlackboardLifecycle({
       workspacesLoading,
       workspacesError,
       surfaceLoading,
-      boardOpen,
-      setBoardOpen,
       handleRetrySurface,
     }),
     [
@@ -239,7 +202,6 @@ export function useBlackboardLifecycle({
       workspacesLoading,
       workspacesError,
       surfaceLoading,
-      boardOpen,
       handleRetrySurface,
     ]
   );

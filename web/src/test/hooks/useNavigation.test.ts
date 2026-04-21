@@ -58,13 +58,13 @@ describe('useNavigation', () => {
 
     it('should ignore query params in active-state checks for dynamic routes', () => {
       mockLocation.pathname = '/tenant/test-tenant/project/proj-123/blackboard';
-      mockLocation.search = '?workspaceId=ws-1&open=1';
+      mockLocation.search = '?workspaceId=ws-1';
 
       const { result } = renderHook(() =>
         useNavigation('/tenant/test-tenant/project/proj-123')
       );
 
-      expect(result.current.isActive('blackboard?workspaceId=ws-1&open=1')).toBe(true);
+      expect(result.current.isActive('blackboard?workspaceId=ws-1')).toBe(true);
 
       mockLocation.pathname = '/tenant/test-tenant/project/proj-123/memories';
       mockLocation.search = '';

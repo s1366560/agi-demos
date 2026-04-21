@@ -161,7 +161,7 @@ describe('TenantHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Blackboard' }));
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-current&open=1'
+      '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-current'
     );
   });
 

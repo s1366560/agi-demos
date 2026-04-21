@@ -146,7 +146,7 @@ describe('workspace/agent workspace bridge', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('location-probe')).toHaveTextContent(
-        '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-1&open=1'
+        '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-1'
       );
     });
   });

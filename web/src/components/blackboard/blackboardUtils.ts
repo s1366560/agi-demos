@@ -9,6 +9,18 @@ import type {
   WorkspaceTaskStatus,
 } from '@/types/workspace';
 
+/**
+ * Map a worker status string to a tailwind background token class used
+ * on small status dots throughout the blackboard surface.
+ */
+export function statusBadgeTone(status: string | undefined): string {
+  if (status === 'busy' || status === 'running') return 'bg-success';
+  if (status === 'error') return 'bg-error';
+  if (status === 'idle') return 'bg-text-muted dark:bg-text-muted';
+  return 'bg-warning';
+}
+
+
 export type BlackboardCanvasActorKind = 'agent' | 'human';
 
 export interface BlackboardCanvasActor {

@@ -121,23 +121,9 @@ vi.mock('@/services/unifiedEventService', () => ({
   },
 }));
 
-vi.mock('@/components/blackboard/CentralBlackboardModal', () => ({
-  CentralBlackboardModal: (props: { open: boolean; onClose: () => void }) => (
-    <div data-testid="central-blackboard-modal" data-open={props.open}>
-      <button type="button" data-testid="close-modal" onClick={props.onClose}>
-        Close modal
-      </button>
-    </div>
-  ),
-}));
-
-vi.mock('@/components/blackboard/WorkstationArrangementBoard', () => ({
-  WorkstationArrangementBoard: (props: { onOpenBlackboard: () => void }) => (
-    <div data-testid="workstation-arrangement-board">
-      <button type="button" data-testid="open-blackboard-btn" onClick={props.onOpenBlackboard}>
-        Open blackboard trigger
-      </button>
-    </div>
+vi.mock('@/components/blackboard/CentralBlackboardContent', () => ({
+  CentralBlackboardContent: (props: { activeTab: string }) => (
+    <div data-testid="central-blackboard-content" data-active-tab={props.activeTab} />
   ),
 }));
 
@@ -145,11 +131,15 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   useLazyMessage: () => ({ error: mockErrorFn }),
 }));
 
-vi.mock('@/pages/project/blackboardRouteUtils', () => ({
-  clearBlackboardAutoOpenSearchParam: vi.fn().mockReturnValue(null),
-  resolveRequestedWorkspaceSelection: vi.fn().mockReturnValue(null),
-  syncBlackboardWorkspaceSearchParams: vi.fn().mockReturnValue(null),
-}));
+vi.mock('@/pages/project/blackboardRouteUtils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/pages/project/blackboardRouteUtils')>();
+  return {
+    ...actual,
+    clearBlackboardAutoOpenSearchParam: vi.fn().mockReturnValue(null),
+    resolveRequestedWorkspaceSelection: vi.fn().mockReturnValue(null),
+    syncBlackboardWorkspaceSearchParams: vi.fn().mockReturnValue(null),
+  };
+});
 
 vi.mock('@/utils/agentWorkspacePath', () => ({
   buildAgentWorkspacePath: vi.fn().mockReturnValue('/tenant/t1/agent-workspace'),
@@ -181,16 +171,16 @@ function makeWorkspaces(count = 2): Workspace[] {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function setupSearchParams() {
-  const searchParams = new URLSearchParams();
+function setupSearchParams(query: string = '') {
+  const searchParams = new URLSearchParams(query);
   const setSearchParams = vi.fn();
   (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue([searchParams, setSearchParams]);
   return { searchParams, setSearchParams };
 }
 
-function renderBlackboard() {
+function renderBlackboard(options: { initialEntries?: string[] } = {}) {
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <MemoryRouter>{children}</MemoryRouter>
+    <MemoryRouter initialEntries={options.initialEntries ?? ['/']}>{children}</MemoryRouter>
   );
   return render(<Blackboard />, { wrapper });
 }
@@ -269,27 +259,21 @@ describe('Blackboard', () => {
     });
   });
 
-  // 4. WorkstationArrangementBoard renders when surface is loaded
-  it('renders WorkstationArrangementBoard when surface is loaded', async () => {
+  // 4. loadWorkspaceSurface is called when a workspace becomes selected
+  it('triggers loadWorkspaceSurface when a workspace is selected', async () => {
     const workspaces = makeWorkspaces(1);
     mockListByProject.mockResolvedValue(workspaces);
-
-    mockLoadWorkspaceSurface.mockImplementation(async () => {
-      storeStateRef.current = {
-        ...storeStateRef.current,
-        currentWorkspace: workspaces[0],
-      };
-    });
+    mockLoadWorkspaceSurface.mockResolvedValue(undefined);
 
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByTestId('workstation-arrangement-board')).toBeInTheDocument();
+      expect(mockLoadWorkspaceSurface).toHaveBeenCalledWith('t1', 'p1', 'ws-1');
     });
   });
 
-  // 5. Opens CentralBlackboardModal when onOpenBlackboard is called
-  it('opens CentralBlackboardModal when open central blackboard button is clicked', async () => {
+  // 5. Central blackboard content renders directly on the page
+  it('renders CentralBlackboardContent directly on the page when a workspace is loaded', async () => {
     const workspaces = makeWorkspaces(1);
     mockListByProject.mockResolvedValue(workspaces);
 
@@ -302,27 +286,12 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByTestId('workstation-arrangement-board')).toBeInTheDocument();
-    });
-
-    // Wait for surfaceLoading to finish so the button becomes enabled
-    await waitFor(() => {
-      expect(screen.getByText('blackboard.openBoard')).not.toBeDisabled();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('blackboard.openBoard'));
-    });
-
-    await waitFor(() => {
-      const modal = screen.getByTestId('central-blackboard-modal');
-      expect(modal).toBeInTheDocument();
-      expect(modal).toHaveAttribute('data-open', 'true');
+      expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
   });
 
-  // 6. Closes CentralBlackboardModal
-  it('closes CentralBlackboardModal when onClose is called', async () => {
+  // 6. Deep-links to a tab via ?tab= search param
+  it('respects the ?tab= query parameter when deep-linking', async () => {
     const workspaces = makeWorkspaces(1);
     mockListByProject.mockResolvedValue(workspaces);
 
@@ -332,29 +301,14 @@ describe('Blackboard', () => {
     };
     mockLoadWorkspaceSurface.mockResolvedValue(undefined);
 
+    setupSearchParams('tab=status');
     renderBlackboard();
 
-    // Wait for surfaceLoading to finish so the button becomes enabled
     await waitFor(() => {
-      expect(screen.getByText('blackboard.openBoard')).not.toBeDisabled();
-    });
-
-    // Open modal
-    await act(async () => {
-      fireEvent.click(screen.getByText('blackboard.openBoard'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('central-blackboard-modal')).toHaveAttribute('data-open', 'true');
-    });
-
-    // Close modal
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('close-modal'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('central-blackboard-modal')).toHaveAttribute('data-open', 'false');
+      expect(screen.getByTestId('central-blackboard-content')).toHaveAttribute(
+        'data-active-tab',
+        'status'
+      );
     });
   });
 
@@ -436,16 +390,7 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.openBoard')).toBeInTheDocument();
-    });
-
-    // Open the modal first so the callback gets wired up
-    await act(async () => {
-      fireEvent.click(screen.getByText('blackboard.openBoard'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('central-blackboard-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
 
     // The mock CentralBlackboardModal receives onCreatePost as a prop but does not render it;
@@ -467,16 +412,7 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.openBoard')).toBeInTheDocument();
-    });
-
-    // Open modal to wire callbacks
-    await act(async () => {
-      fireEvent.click(screen.getByText('blackboard.openBoard'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('central-blackboard-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
 
     // The callbacks are wired; verify the mock has not been called prematurely
@@ -497,15 +433,7 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.openBoard')).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText('blackboard.openBoard'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('central-blackboard-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
 
     expect(mockDeletePost).not.toHaveBeenCalled();
@@ -560,40 +488,12 @@ describe('Blackboard', () => {
     const { unmount } = renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByTestId('workstation-arrangement-board')).toBeInTheDocument();
+      expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
 
     unmount();
 
     expect(mockClearSelectedHex).toHaveBeenCalled();
-  });
-
-  // 16. onOpenBlackboard from WorkstationArrangementBoard
-  it('opens modal when onOpenBlackboard from WorkstationArrangementBoard is triggered', async () => {
-    const workspaces = makeWorkspaces(1);
-    mockListByProject.mockResolvedValue(workspaces);
-
-    storeStateRef.current = {
-      ...storeStateRef.current,
-      currentWorkspace: workspaces[0],
-    };
-    mockLoadWorkspaceSurface.mockResolvedValue(undefined);
-
-    renderBlackboard();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('open-blackboard-btn')).toBeInTheDocument();
-    });
-
-    // Open via the board's own trigger
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('open-blackboard-btn'));
-    });
-
-    await waitFor(() => {
-      const modal = screen.getByTestId('central-blackboard-modal');
-      expect(modal).toHaveAttribute('data-open', 'true');
-    });
   });
 
   // 17. SSE subscribes with new workspace ID when workspace changes
@@ -630,21 +530,21 @@ describe('Blackboard', () => {
     expect(mockUnsubscribe).toHaveBeenCalled();
   });
 
-  // 18. Open central blackboard button is disabled during surface loading
-  it('disables open button while surface is loading', async () => {
+  // 18. Surface loading state reflects in page (no stale content)
+  it('waits for surface load before rendering central blackboard content', async () => {
     const workspaces = makeWorkspaces(1);
     mockListByProject.mockResolvedValue(workspaces);
 
-    // Surface never resolves
+    // Surface never resolves — currentWorkspace stays null
     mockLoadWorkspaceSurface.mockReturnValue(new Promise(() => {}));
 
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.openBoard')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('blackboard.openBoard')).toBeDisabled();
+    expect(screen.queryByTestId('central-blackboard-content')).not.toBeInTheDocument();
   });
 
   // 19. Renders page title (sr-only heading in compact toolbar)

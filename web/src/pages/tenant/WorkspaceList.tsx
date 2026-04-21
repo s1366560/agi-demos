@@ -76,7 +76,7 @@ export function WorkspaceList() {
           workspaces.map((workspace) => (
             <Link
               key={workspace.id}
-              to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}&open=1`}
+              to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
               className="border rounded p-3 bg-white hover:border-primary"
             >
               <div className="font-medium">{workspace.name}</div>

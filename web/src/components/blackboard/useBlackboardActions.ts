@@ -48,8 +48,7 @@ export interface WorkspaceActionDeps {
   ) => Promise<void>;
 }
 
-export interface UseBlackboardModalActionsParams {
-  open: boolean;
+export interface UseBlackboardActionsParams {
   tenantId: string;
   projectId: string;
   workspaceId: string;
@@ -61,8 +60,15 @@ export interface UseBlackboardModalActionsParams {
   t: (key: string, fallback: string) => string;
 }
 
-export function useBlackboardModalActions({
-  open,
+/**
+ * Encapsulates local UI state + side effects for the blackboard surface
+ * (post selection, draft buffers, auto reply loading, create/delete helpers).
+ *
+ * Historically named `useBlackboardModalActions`; the blackboard is no longer
+ * a modal, so the `open` gate has been removed. The export alias is kept for
+ * now to avoid a large import churn.
+ */
+export function useBlackboardActions({
   tenantId,
   projectId,
   workspaceId,
@@ -72,7 +78,7 @@ export function useBlackboardModalActions({
   workspaceActions,
   message,
   t,
-}: UseBlackboardModalActionsParams) {
+}: UseBlackboardActionsParams) {
   const {
     onLoadReplies,
     onCreatePost,
@@ -118,12 +124,6 @@ export function useBlackboardModalActions({
     setReplyDraft('');
   }, [selectedPostId]);
 
-  useEffect(() => {
-    if (!open) {
-      setAutoReplyRetryBlockedByPostId({});
-    }
-  }, [open]);
-
   const handleLoadReplies = useCallback(
     async (postId: string, options?: { manual?: boolean }) => {
       setLoadingRepliesPostId(postId);
@@ -153,7 +153,6 @@ export function useBlackboardModalActions({
 
   useEffect(() => {
     if (
-      !open ||
       !selectedPostId ||
       loadedReplyPostIds[selectedPostId] ||
       autoReplyRetryBlockedByPostId[selectedPostId] === true ||
@@ -168,7 +167,6 @@ export function useBlackboardModalActions({
     handleLoadReplies,
     loadedReplyPostIds,
     loadingRepliesPostId,
-    open,
     selectedPostId,
   ]);
 
@@ -353,4 +351,4 @@ export function useBlackboardModalActions({
   };
 }
 
-export type UseBlackboardModalActionsReturn = ReturnType<typeof useBlackboardModalActions>;
+export type UseBlackboardActionsReturn = ReturnType<typeof useBlackboardActions>;

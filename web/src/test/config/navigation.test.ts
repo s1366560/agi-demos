@@ -123,7 +123,7 @@ describe('Navigation Configuration', () => {
           projectId: 'proj-456',
           preferredWorkspaceId: 'ws-001',
         })
-      ).toBe('/tenant/tenant-123/project/proj-456/blackboard?workspaceId=ws-001&open=1');
+      ).toBe('/tenant/tenant-123/project/proj-456/blackboard?workspaceId=ws-001');
     });
 
     it('should return canonical project top-nav outputs with context-aware paths', () => {
@@ -138,7 +138,7 @@ describe('Navigation Configuration', () => {
         '/tenant/tenant-123/project/proj-456'
       );
       expect(items.find((item) => item.id === 'blackboard')?.path).toBe(
-        '/tenant/tenant-123/project/proj-456/blackboard?workspaceId=ws-001&open=1'
+        '/tenant/tenant-123/project/proj-456/blackboard?workspaceId=ws-001'
       );
       expect(items.every((item) => item.context === 'project')).toBe(true);
     });

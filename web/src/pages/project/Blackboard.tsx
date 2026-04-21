@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -10,17 +10,16 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useBlackboardPageActions } from '@/hooks/useBlackboardActions';
 import { useBlackboardLifecycle } from '@/hooks/useBlackboardLifecycle';
 import { useBlackboardSSE } from '@/hooks/useBlackboardSSE';
-import { clearBlackboardAutoOpenSearchParam } from '@/pages/project/blackboardRouteUtils';
+import {
+  resolveBlackboardTab,
+  syncBlackboardTabSearchParam,
+} from '@/pages/project/blackboardRouteUtils';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
 import { BlackboardErrorBoundary } from '@/components/blackboard/BlackboardErrorBoundary';
-import { WorkstationArrangementBoard } from '@/components/blackboard/WorkstationArrangementBoard';
+import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
 
-const CentralBlackboardModal = lazy(() =>
-  import('@/components/blackboard/CentralBlackboardModal').then((module) => ({
-    default: module.CentralBlackboardModal,
-  }))
-);
+import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 
 function LoadingShell() {
   return (
@@ -42,19 +41,19 @@ export function Blackboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
   const requestedWorkspaceId = searchParams.get('workspaceId');
-  const shouldAutoOpen = searchParams.get('open') === '1';
+  const activeTab = resolveBlackboardTab(searchParams);
 
   const {
     currentWorkspace,
     posts,
     repliesByPostId,
     loadedReplyPostIds,
-      tasks,
-      objectives,
-      genes,
-      agents,
-      topologyNodes,
-      topologyEdges,
+    tasks,
+    objectives,
+    genes,
+    agents,
+    topologyNodes,
+    topologyEdges,
     error,
   } = useWorkspaceStore(
     useShallow((state) => ({
@@ -79,14 +78,11 @@ export function Blackboard() {
     workspacesLoading,
     workspacesError,
     surfaceLoading,
-    boardOpen,
-    setBoardOpen,
     handleRetrySurface,
   } = useBlackboardLifecycle({
     tenantId,
     projectId,
     requestedWorkspaceId,
-    shouldAutoOpen,
     searchParams,
     setSearchParams,
     currentWorkspaceId: currentWorkspace?.id,
@@ -117,6 +113,14 @@ export function Blackboard() {
     handleUnpinPost,
     handleDeleteReply,
   } = useBlackboardPageActions({ tenantId, projectId, selectedWorkspaceId });
+
+  const handleTabChange = (nextTab: BlackboardTab) => {
+    const next = syncBlackboardTabSearchParam(searchParams, nextTab);
+    if (!next) {
+      return;
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   if (workspacesLoading) {
     return (
@@ -159,153 +163,124 @@ export function Blackboard() {
     );
   }
 
+  const canRenderBoard =
+    !!tenantId &&
+    !!projectId &&
+    !!selectedWorkspaceId &&
+    !surfaceLoading &&
+    currentWorkspace?.id === selectedWorkspaceId;
+
   return (
     <BlackboardErrorBoundary
       fallbackLabel={t('blackboard.errorBoundary.title', 'Something went wrong')}
       retryLabel={t('blackboard.errorBoundary.retry', 'Try again')}
     >
-    <div className="flex h-full min-h-0 flex-col gap-4 bg-background-light p-4 dark:bg-background-dark sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
-        <h1 className="sr-only">
-          {t('blackboard.title', 'Blackboard')}
-        </h1>
+      <div className="flex h-full min-h-0 flex-col gap-4 bg-background-light p-4 dark:bg-background-dark sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-semibold text-text-primary dark:text-text-inverse sm:text-xl">
+              {t('blackboard.title', 'Blackboard')}
+            </h1>
+            <div className="mt-1 truncate text-sm text-text-secondary dark:text-text-muted">
+              {selectedWorkspace?.name ??
+                t(
+                  'blackboard.modalSubtitle',
+                  'Shared goals, tasks, discussions, and topology for the active workspace.'
+                )}
+            </div>
+          </div>
 
-        <div className="flex w-full items-center sm:w-auto sm:min-w-[260px]">
-          <label htmlFor="workspace-select" className="sr-only">
-            {t('blackboard.workspaceLabel', 'Workspace')}
-          </label>
-          <select
-            id="workspace-select"
-            value={selectedWorkspaceId ?? ''}
-            onChange={(event) => {
-              setSelectedWorkspaceId(event.target.value || null);
-
-              if (shouldAutoOpen) {
-                const nextSearchParams = clearBlackboardAutoOpenSearchParam(searchParams);
-                if (!nextSearchParams) {
-                  return;
-                }
-
-                setSearchParams(nextSearchParams, { replace: true });
-              }
-            }}
-            className="min-h-12 w-full rounded-2xl border border-border-light bg-surface-light px-4 text-sm normal-case tracking-normal text-text-primary transition focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
-          >
-            {workspaces.map((workspace) => (
-              <option
-                key={workspace.id}
-                value={workspace.id}
-                className="bg-surface-light text-text-primary dark:bg-surface-dark dark:text-text-inverse"
-              >
-                {workspace.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:flex-nowrap">
-          {selectedWorkspaceId ? (
-            <Link
-              to={agentWorkspacePath}
-              className="inline-flex min-h-12 flex-1 items-center justify-center whitespace-nowrap rounded-2xl border border-border-light bg-surface-light px-5 text-sm font-medium text-text-primary transition motion-reduce:transition-none hover:border-primary/30 hover:bg-primary/8 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse sm:flex-none"
+          <div className="flex w-full items-center sm:w-auto sm:min-w-[260px]">
+            <label htmlFor="workspace-select" className="sr-only">
+              {t('blackboard.workspaceLabel', 'Workspace')}
+            </label>
+            <select
+              id="workspace-select"
+              value={selectedWorkspaceId ?? ''}
+              onChange={(event) => {
+                setSelectedWorkspaceId(event.target.value || null);
+              }}
+              className="min-h-11 w-full rounded-2xl border border-border-light bg-surface-light px-4 text-sm normal-case tracking-normal text-text-primary transition focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
             >
-              {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
-            </Link>
-          ) : (
-            <span className="inline-flex min-h-12 flex-1 items-center justify-center whitespace-nowrap rounded-2xl border border-border-light px-5 text-sm font-medium text-text-muted dark:border-border-dark dark:text-text-muted sm:flex-none">
-              {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
-            </span>
-          )}
+              {workspaces.map((workspace) => (
+                <option
+                  key={workspace.id}
+                  value={workspace.id}
+                  className="bg-surface-light text-text-primary dark:bg-surface-dark dark:text-text-inverse"
+                >
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setBoardOpen(true);
-            }}
-            disabled={
-              surfaceLoading || !selectedWorkspaceId || currentWorkspace?.id !== selectedWorkspaceId
-            }
-            className="min-h-12 flex-1 whitespace-nowrap rounded-2xl bg-primary px-5 text-sm font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
-          >
-            {t('blackboard.openBoard', 'Open central blackboard')}
-          </button>
+          <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:flex-nowrap">
+            {selectedWorkspaceId ? (
+              <Link
+                to={agentWorkspacePath}
+                className="inline-flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-2xl border border-border-light bg-surface-light px-5 text-sm font-medium text-text-primary transition motion-reduce:transition-none hover:border-primary/30 hover:bg-primary/8 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse sm:flex-none"
+              >
+                {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
+              </Link>
+            ) : (
+              <span className="inline-flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-2xl border border-border-light px-5 text-sm font-medium text-text-muted dark:border-border-dark dark:text-text-muted sm:flex-none">
+                {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {error && (
-        <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-sm text-status-text-error dark:text-status-text-error-dark sm:flex-row sm:items-center sm:justify-between">
-          <span className="break-words">{error}</span>
-          <button
-            type="button"
-            onClick={() => {
-              void handleRetrySurface();
-            }}
-            disabled={surfaceLoading || !selectedWorkspaceId}
-            className="min-h-10 rounded-2xl border border-error/25 bg-surface-light px-4 text-sm font-medium text-status-text-error transition motion-reduce:transition-none hover:bg-error/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5 dark:text-status-text-error-dark"
+        {error && (
+          <div
+            role="alert"
+            className="flex flex-col gap-3 rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-sm text-status-text-error dark:text-status-text-error-dark sm:flex-row sm:items-center sm:justify-between"
           >
-            {surfaceLoading
-              ? t('common.loading', 'Loading…')
-              : t('common.retry', 'Retry')}
-          </button>
-        </div>
-      )}
-
-      <div className="flex-1 min-h-0">
-        {surfaceLoading ? (
-          <LoadingShell />
-        ) : (
-          <WorkstationArrangementBoard
-            tenantId={tenantId ?? ''}
-            projectId={projectId ?? ''}
-            workspaceId={selectedWorkspaceId ?? currentWorkspace?.id ?? ''}
-            workspaceName={selectedWorkspace?.name ?? t('blackboard.title', 'Blackboard')}
-            agentWorkspacePath={agentWorkspacePath}
-            agents={agents}
-            nodes={topologyNodes}
-            edges={topologyEdges}
-            tasks={tasks}
-            onOpenBlackboard={() => {
-              setBoardOpen(true);
-            }}
-          />
+            <span className="break-words">{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                void handleRetrySurface();
+              }}
+              disabled={surfaceLoading || !selectedWorkspaceId}
+              className="min-h-10 rounded-2xl border border-error/25 bg-surface-light px-4 text-sm font-medium text-status-text-error transition motion-reduce:transition-none hover:bg-error/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5 dark:text-status-text-error-dark"
+            >
+              {surfaceLoading ? t('common.loading', 'Loading…') : t('common.retry', 'Retry')}
+            </button>
+          </div>
         )}
-      </div>
 
-      {tenantId &&
-        projectId &&
-        selectedWorkspaceId &&
-        !surfaceLoading &&
-        currentWorkspace?.id === selectedWorkspaceId && (
-        <Suspense fallback={null}>
-          <CentralBlackboardModal
-            open={boardOpen}
-            tenantId={tenantId}
-            projectId={projectId}
-            workspaceId={selectedWorkspaceId}
-            workspace={selectedWorkspace}
-            posts={posts}
-            repliesByPostId={repliesByPostId}
-            loadedReplyPostIds={loadedReplyPostIds}
-            tasks={tasks}
-            objectives={objectives}
-            genes={genes}
-            agents={agents}
-            topologyNodes={topologyNodes}
-            topologyEdges={topologyEdges}
-            onClose={() => {
-              setBoardOpen(false);
-            }}
-            onLoadReplies={handleLoadReplies}
-            onCreatePost={handleCreatePost}
-            onCreateReply={handleCreateReply}
-            onDeletePost={handleDeletePost}
-            onPinPost={handlePinPost}
-            onUnpinPost={handleUnpinPost}
-            onDeleteReply={handleDeleteReply}
-          />
-        </Suspense>
-      )}
-    </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {surfaceLoading || !canRenderBoard ? (
+            <LoadingShell />
+          ) : (
+            <CentralBlackboardContent
+              tenantId={tenantId!}
+              projectId={projectId!}
+              workspaceId={selectedWorkspaceId!}
+              workspace={selectedWorkspace}
+              posts={posts}
+              repliesByPostId={repliesByPostId}
+              loadedReplyPostIds={loadedReplyPostIds}
+              tasks={tasks}
+              objectives={objectives}
+              genes={genes}
+              agents={agents}
+              topologyNodes={topologyNodes}
+              topologyEdges={topologyEdges}
+              activeTab={activeTab}
+              onActiveTabChange={handleTabChange}
+              agentWorkspacePath={agentWorkspacePath}
+              onLoadReplies={handleLoadReplies}
+              onCreatePost={handleCreatePost}
+              onCreateReply={handleCreateReply}
+              onDeletePost={handleDeletePost}
+              onPinPost={handlePinPost}
+              onUnpinPost={handleUnpinPost}
+              onDeleteReply={handleDeleteReply}
+            />
+          )}
+        </div>
+      </div>
     </BlackboardErrorBoundary>
   );
 }

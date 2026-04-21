@@ -70,8 +70,8 @@ describe('blackboardRouteUtils', () => {
     ).toBeNull();
   });
 
-  it('only adds the auto-open flag to redirect URLs when a workspace id exists', () => {
-    expect(buildWorkspaceBlackboardRedirectQuery('ws-2')).toBe('workspaceId=ws-2&open=1');
+  it('only adds the workspace id to redirect URLs when one exists', () => {
+    expect(buildWorkspaceBlackboardRedirectQuery('ws-2')).toBe('workspaceId=ws-2');
     expect(buildWorkspaceBlackboardRedirectQuery()).toBe('');
   });
 });
