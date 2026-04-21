@@ -71,6 +71,27 @@ const commonTranslations: Record<string, string> = {
   'tenant.projects.loading': 'Loading projects...',
   'tenant.projects.deleteConfirm': 'Are you sure you want to delete this project?',
 
+  // Tenant Workspace List
+  'tenant.workspaceList.title': 'Workspaces',
+  'tenant.workspaceList.subtitle':
+    'Collaborative multi-agent spaces scoped to this project',
+  'tenant.workspaceList.createButton': 'Create Workspace',
+  'tenant.workspaceList.searchPlaceholder': 'Search workspaces...',
+  'tenant.workspaceList.empty': 'No workspaces found',
+  'tenant.workspaceList.emptyDescription':
+    'Create a workspace to organize your agents and objectives',
+  'tenant.workspaceList.emptyFiltered': 'No workspaces match your search',
+  'tenant.workspaceList.noContextTitle': 'Pick a tenant and project',
+  'tenant.workspaceList.noContextDescription':
+    'Workspaces are scoped to a project. Select a tenant and project to continue.',
+  'tenant.workspaceList.namePlaceholder': 'Workspace name',
+  'tenant.workspaceList.createSuccess': 'Workspace created',
+  'tenant.workspaceList.createError': 'Failed to create workspace',
+  'tenant.workspaceList.archived': 'Archived',
+  'tenant.workspaceList.active': 'Active',
+  'tenant.workspaceList.updated': 'Updated {{time}}',
+  'tenant.workspaceList.openAction': 'Open blackboard',
+
   // Tenant Users
   'tenant.users.title': 'Member Management',
   'tenant.users.subtitle':

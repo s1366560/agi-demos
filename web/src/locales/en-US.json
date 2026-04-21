@@ -1916,10 +1916,23 @@
     },
     "workspaceList": {
       "title": "Workspaces",
-      "subtitle": "Manage your workspaces and their resources",
+      "subtitle": "Collaborative multi-agent spaces scoped to this project",
       "createButton": "Create Workspace",
       "searchPlaceholder": "Search workspaces...",
-      "empty": "No workspaces found"
+      "empty": "No workspaces found",
+      "emptyDescription": "Create a workspace to organize your agents and objectives",
+      "emptyFiltered": "No workspaces match your search",
+      "noContextTitle": "Pick a tenant and project",
+      "noContextDescription": "Workspaces are scoped to a project. Select a tenant and project to continue.",
+      "namePlaceholder": "Workspace name",
+      "createSuccess": "Workspace created",
+      "createError": "Failed to create workspace",
+      "archived": "Archived",
+      "active": "Active",
+      "updated": "Updated {{time}}",
+      "openAction": "Open blackboard",
+      "count_one": "{{count}} workspace",
+      "count_other": "{{count}} workspaces"
     },
     "workflowPatterns": {
       "title": "Workflow Patterns",

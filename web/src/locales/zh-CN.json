@@ -2063,10 +2063,23 @@
     },
     "workspaceList": {
       "title": "工作空间",
-      "subtitle": "管理您的工作空间和其资源",
+      "subtitle": "属于当前项目的多智能体协作空间",
       "createButton": "创建工作空间",
       "searchPlaceholder": "搜索工作空间...",
-      "empty": "未找到工作空间"
+      "empty": "未找到工作空间",
+      "emptyDescription": "创建一个工作空间，开始组织你的智能体与目标",
+      "emptyFiltered": "没有符合筛选条件的工作空间",
+      "noContextTitle": "请选择租户与项目",
+      "noContextDescription": "工作空间属于具体项目。请先选择租户和项目。",
+      "namePlaceholder": "工作空间名称",
+      "createSuccess": "工作空间已创建",
+      "createError": "创建工作空间失败",
+      "archived": "已归档",
+      "active": "进行中",
+      "updated": "更新于 {{time}}",
+      "openAction": "打开黑板",
+      "count_one": "{{count}} 个工作空间",
+      "count_other": "{{count}} 个工作空间"
     },
     "workflowPatterns": {
       "title": "工作流模式",
