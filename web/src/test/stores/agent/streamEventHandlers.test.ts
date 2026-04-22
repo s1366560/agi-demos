@@ -1285,4 +1285,46 @@ describe('streamEventHandlers', () => {
       })
     );
   });
+
+  it('handles onAgentGoalCompleted by storing the summary on conversation state', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    handlers.onAgentGoalCompleted!({
+      type: 'agent_goal_completed',
+      data: {
+        conversation_id: conversationId,
+        summary: 'All checks passed',
+      },
+    } as any);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({ goalCompletionSummary: 'All checks passed' })
+    );
+  });
+
+  it('handles onAgentConversationFinished by marking the conversation terminated', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    handlers.onAgentConversationFinished!({
+      type: 'agent_conversation_finished',
+      data: {
+        conversation_id: conversationId,
+        reason: 'goal_completed',
+        rationale: 'goal evaluator passed',
+      },
+    } as any);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        isTerminated: true,
+        terminationReason: 'goal_completed',
+        terminationRationale: 'goal evaluator passed',
+        isStreaming: false,
+        streamStatus: 'idle',
+        agentState: 'idle',
+      })
+    );
+  });
 });

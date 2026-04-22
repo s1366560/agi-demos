@@ -188,6 +188,18 @@ export interface ConversationState {
   // ===== Multi-Agent Spawn Tree =====
   /** Agent nodes for multi-agent spawn tree visualization (agentId -> AgentNode) */
   agentNodes: Map<string, AgentNode>;
+
+  // ===== Conversation Termination (3-gate) =====
+  /** Whether the conversation has reached a terminal state (goal completed,
+   * goal abandoned, budget exhausted, safety stop, or max iterations). */
+  isTerminated: boolean;
+  /** TerminationReason string from backend (goal_completed | goal_abandoned |
+   * budget_exhausted | safety_stop | max_iterations). */
+  terminationReason: string | null;
+  /** Optional human-readable rationale for termination. */
+  terminationRationale: string | null;
+  /** Optional summary text from agent_goal_completed. */
+  goalCompletionSummary: string | null;
 }
 
 /**
@@ -251,6 +263,12 @@ export function createDefaultConversationState(): ConversationState {
 
     // Multi-Agent spawn tree
     agentNodes: new Map(),
+
+    // Termination
+    isTerminated: false,
+    terminationReason: null,
+    terminationRationale: null,
+    goalCompletionSummary: null,
   };
 }
 

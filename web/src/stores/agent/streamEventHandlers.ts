@@ -2282,5 +2282,40 @@ export function createStreamEventHandlers(
         streamStatus: 'idle',
       });
     },
+
+    onAgentGoalCompleted: (event) => {
+      const { updateConversationState } = get();
+      const data = event.data ?? {};
+      const summary = typeof data.summary === 'string' ? data.summary : null;
+      updateConversationState(handlerConversationId, {
+        goalCompletionSummary: summary,
+      });
+    },
+
+    onAgentConversationFinished: (event) => {
+      const { updateConversationState } = get();
+      const data = event.data ?? {};
+      const reason = typeof data.reason === 'string' ? data.reason : null;
+      const rationale = typeof data.rationale === 'string' ? data.rationale : null;
+
+      clearThoughtIdleResetTimer();
+      clearAllDeltaBuffers();
+      clearPendingA2UIRequestIds(handlerConversationId);
+
+      updateConversationState(handlerConversationId, {
+        isTerminated: true,
+        terminationReason: reason,
+        terminationRationale: rationale,
+        isStreaming: false,
+        streamStatus: 'idle',
+        agentState: 'idle',
+        isThinkingStreaming: false,
+        streamingThought: '',
+        pendingToolsStack: [],
+      });
+
+      tabSync.broadcastConversationCompleted(handlerConversationId);
+      tabSync.broadcastStreamingStateChanged(handlerConversationId, false, 'idle');
+    },
   };
 }

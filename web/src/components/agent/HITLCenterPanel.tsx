@@ -14,9 +14,11 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 
 import { restApi } from '../../services/agent/restApi';
-import type { HITLRequestFromApi } from '../../types/hitl.unified';
+import { useAgentV3Store } from '../../stores/agentV3';
+import type { DecisionOption, HITLRequestFromApi } from '../../types/hitl.unified';
 
 export interface HITLCenterPanelProps {
   conversationId: string | null;
@@ -32,10 +34,18 @@ const filterOptions: FilterType[] = ['all', 'clarification', 'decision', 'env_va
 const badgeBase =
   'inline-flex h-[18px] items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-[#ebebeb] px-2 text-[11px] font-medium text-[#171717]';
 
+const actionBtnBase =
+  'inline-flex h-[26px] items-center rounded border border-[rgba(0,0,0,0.08)] px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50';
+
 function getMetaString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   if (!metadata) return null;
   const v = metadata[key];
   return typeof v === 'string' ? v : null;
+}
+
+/** Pick a decision option's stable identifier for the response payload. */
+function decisionOptionKey(option: DecisionOption): string {
+  return option.id || option.label;
 }
 
 export const HITLCenterPanel = memo<HITLCenterPanelProps>(
@@ -45,6 +55,16 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
     const [filter, setFilter] = useState<FilterType>('all');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
+    const [resolvingId, setResolvingId] = useState<string | null>(null);
+    const [resolveError, setResolveError] = useState<string | null>(null);
+
+    const { respondToDecision, respondToClarification, respondToPermission } = useAgentV3Store(
+      useShallow((state) => ({
+        respondToDecision: state.respondToDecision,
+        respondToClarification: state.respondToClarification,
+        respondToPermission: state.respondToPermission,
+      }))
+    );
 
     const fetchPending = useCallback(async () => {
       if (!conversationId) {
@@ -74,6 +94,55 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
     }, [fetchPending, conversationId, autoRefreshMs]);
 
     const visible = useMemo(() => requests, [requests]);
+
+    /**
+     * Resolve an HITL request inline.
+     *
+     * - decision: Accept = first option, Reject = last option (declines via the
+     *   final option in the canonical list).
+     * - permission: Accept = granted=true, Reject = granted=false.
+     * - clarification / env_var: requires user input — defer to InlineHITLCard
+     *   via onSelectRequest, no inline resolution here.
+     */
+    const handleResolve = useCallback(
+      async (req: HITLRequestFromApi, accept: boolean) => {
+        setResolvingId(req.id);
+        setResolveError(null);
+        try {
+          if (req.request_type === 'decision') {
+            const opts = (req.options ?? []) as DecisionOption[];
+            if (!opts.length) {
+              throw new Error('decision request has no options');
+            }
+            const target = accept ? opts[0] : opts[opts.length - 1];
+            if (!target) {
+              throw new Error('decision request has no options');
+            }
+            await respondToDecision(req.id, decisionOptionKey(target));
+          } else if (req.request_type === 'permission') {
+            await respondToPermission(req.id, accept);
+          } else if (req.request_type === 'clarification' && !accept) {
+            await respondToClarification(req.id, '');
+          } else {
+            onSelectRequest?.(req.id);
+            return;
+          }
+          setRequests((prev) => prev.filter((r) => r.id !== req.id));
+        } catch (err) {
+          setResolveError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setResolvingId(null);
+          void fetchPending();
+        }
+      },
+      [
+        fetchPending,
+        onSelectRequest,
+        respondToClarification,
+        respondToDecision,
+        respondToPermission,
+      ]
+    );
 
     if (!conversationId) return null;
 
@@ -126,35 +195,96 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
           </p>
         )}
 
+        {resolveError && (
+          <p
+            className="mb-2 text-xs text-[#ee0000]"
+            role="alert"
+            data-testid="hitl-resolve-error"
+          >
+            {resolveError}
+          </p>
+        )}
+
         <ul className="space-y-2">
           {visible.map((req) => {
             const category = getMetaString(req.metadata, 'category');
             const visibility = getMetaString(req.metadata, 'visibility');
+            const isResolving = resolvingId === req.id;
+            const supportsInlineResolve =
+              req.request_type === 'decision' || req.request_type === 'permission';
             return (
               <li
                 key={req.id}
-                className="cursor-pointer rounded-md border border-[rgba(0,0,0,0.08)] bg-white px-3 py-2 hover:border-[#0070f3]"
-                onClick={() => onSelectRequest?.(req.id)}
+                className="rounded-md border border-[rgba(0,0,0,0.08)] bg-white px-3 py-2 hover:border-[#0070f3]"
+                data-testid="hitl-center-item"
               >
-                <div className="mb-1 flex items-center gap-1">
-                  <span className={badgeBase} data-testid="hitl-type-badge">
-                    {req.request_type}
-                  </span>
-                  {category && (
-                    <span className={badgeBase} title="category">
-                      {category}
+                <button
+                  type="button"
+                  className="block w-full cursor-pointer text-left"
+                  onClick={() => onSelectRequest?.(req.id)}
+                >
+                  <div className="mb-1 flex items-center gap-1">
+                    <span className={badgeBase} data-testid="hitl-type-badge">
+                      {req.request_type}
                     </span>
-                  )}
-                  {visibility && (
-                    <span className={badgeBase} title="visibility">
-                      {visibility}
-                    </span>
+                    {category && (
+                      <span className={badgeBase} title="category">
+                        {category}
+                      </span>
+                    )}
+                    {visibility && (
+                      <span className={badgeBase} title="visibility">
+                        {visibility}
+                      </span>
+                    )}
+                  </div>
+                  <p className="line-clamp-2 text-sm text-[#171717]">{req.question}</p>
+                  <p className="mt-1 text-[11px] text-[#999]">
+                    {new Date(req.created_at).toLocaleString()}
+                  </p>
+                </button>
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  {supportsInlineResolve ? (
+                    <>
+                      <button
+                        type="button"
+                        className={`${actionBtnBase} border-[#0070f3] bg-[#0070f3] text-white hover:bg-[#0058c1]`}
+                        disabled={isResolving}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleResolve(req, true);
+                        }}
+                        data-testid="hitl-accept-btn"
+                      >
+                        {t('agent.hitl.center.accept', { defaultValue: 'Accept' })}
+                      </button>
+                      <button
+                        type="button"
+                        className={`${actionBtnBase} bg-white text-[#171717] hover:border-[#171717]`}
+                        disabled={isResolving}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleResolve(req, false);
+                        }}
+                        data-testid="hitl-reject-btn"
+                      >
+                        {t('agent.hitl.center.reject', { defaultValue: 'Reject' })}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`${actionBtnBase} bg-white text-[#171717] hover:border-[#171717]`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectRequest?.(req.id);
+                      }}
+                      data-testid="hitl-open-btn"
+                    >
+                      {t('agent.hitl.center.open', { defaultValue: 'Open' })}
+                    </button>
                   )}
                 </div>
-                <p className="line-clamp-2 text-sm text-[#171717]">{req.question}</p>
-                <p className="mt-1 text-[11px] text-[#999]">
-                  {new Date(req.created_at).toLocaleString()}
-                </p>
               </li>
             );
           })}

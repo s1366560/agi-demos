@@ -88,6 +88,8 @@ import type {
   CompleteEventData,
   ErrorEventData,
   RetryEventData,
+  AgentGoalCompletedEventData,
+  AgentConversationFinishedEventData,
 } from './events';
 /**
  * Agent SSE stream handler (extended for multi-level thinking and typewriter effect)
@@ -235,6 +237,11 @@ export interface AgentStreamHandler {
   onAgentDefinitionCreated?: ((event: AgentEvent) => void) | undefined;
   onAgentDefinitionUpdated?: ((event: AgentEvent) => void) | undefined;
   onAgentDefinitionDeleted?: ((event: AgentEvent) => void) | undefined;
+  // Conversation terminal events (3-gate termination + goal completion)
+  onAgentGoalCompleted?: ((event: AgentEvent<AgentGoalCompletedEventData>) => void) | undefined;
+  onAgentConversationFinished?:
+    | ((event: AgentEvent<AgentConversationFinishedEventData>) => void)
+    | undefined;
   // Terminal handlers
   onComplete?: ((event: AgentEvent<CompleteEventData>) => void) | undefined;
   onError?: ((event: AgentEvent<ErrorEventData>) => void) | undefined;

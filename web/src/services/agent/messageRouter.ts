@@ -676,5 +676,12 @@ export function routeToHandler(
     case 'agent_definition_deleted':
       handler.onAgentDefinitionDeleted?.(event as AgentEvent);
       break;
+    // Conversation terminal events (3-gate termination + goal completion)
+    case 'agent_goal_completed':
+      handler.onAgentGoalCompleted?.(event as AgentEvent);
+      break;
+    case 'agent_conversation_finished':
+      handler.onAgentConversationFinished?.(event as AgentEvent);
+      break;
   }
 }

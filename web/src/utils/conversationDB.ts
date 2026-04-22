@@ -66,6 +66,11 @@ interface SerializedConversationState {
   policyFiltered: PolicyFilteredEventData | null;
   executionNarrative: ExecutionNarrativeEntry[];
   latestToolsetChange: ToolsetChangedEventData | null;
+  // Termination (3-gate)
+  isTerminated: boolean;
+  terminationReason: string | null;
+  terminationRationale: string | null;
+  goalCompletionSummary: string | null;
   // Metadata
   lastUpdated: number;
   conversationId: string;
@@ -144,6 +149,10 @@ function serializeState(
     policyFiltered: state.policyFiltered || null,
     executionNarrative: state.executionNarrative || [],
     latestToolsetChange: state.latestToolsetChange || null,
+    isTerminated: state.isTerminated ?? false,
+    terminationReason: state.terminationReason ?? null,
+    terminationRationale: state.terminationRationale ?? null,
+    goalCompletionSummary: state.goalCompletionSummary ?? null,
     lastUpdated: Date.now(),
   };
 }
@@ -186,6 +195,10 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     recalledMemories: stored.recalledMemories,
     agentNodes: new Map(),
     subagentPreviews: new Map(),
+    isTerminated: stored.isTerminated ?? false,
+    terminationReason: stored.terminationReason ?? null,
+    terminationRationale: stored.terminationRationale ?? null,
+    goalCompletionSummary: stored.goalCompletionSummary ?? null,
   };
 }
 

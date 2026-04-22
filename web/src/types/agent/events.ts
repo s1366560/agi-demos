@@ -299,7 +299,10 @@ export type AgentEventType =
   // Agent definition management events (self-creation tool)
   | 'agent_definition_created' // New agent definition created by tool
   | 'agent_definition_updated' // Agent definition updated by tool
-  | 'agent_definition_deleted'; // Agent definition deleted by tool
+  | 'agent_definition_deleted' // Agent definition deleted by tool
+  // Conversation terminal events (3-gate termination + goal completion)
+  | 'agent_goal_completed' // Goal evaluator confirmed user goal is met
+  | 'agent_conversation_finished'; // Conversation reached terminal state (3-gate)
 
 /**
  * Base SSE event from agent
@@ -393,6 +396,33 @@ export interface CompleteEventData {
   message_id?: string | undefined;
   assistant_message_id?: string | undefined;
   artifacts?: ArtifactReference[] | undefined;
+}
+
+/**
+ * Goal completed event data (autonomous mode goal evaluation)
+ */
+export interface AgentGoalCompletedEventData {
+  conversation_id?: string | undefined;
+  actor_agent_id?: string | undefined;
+  summary?: string | undefined;
+  artifacts?: unknown[] | undefined;
+  metadata?: Record<string, unknown> | undefined;
+}
+
+/**
+ * Conversation finished event data (3-gate termination)
+ *
+ * `reason` is one of TerminationReason: goal_completed | goal_abandoned |
+ * budget_exhausted | safety_stop | max_iterations.
+ */
+export interface AgentConversationFinishedEventData {
+  conversation_id?: string | undefined;
+  reason?: string | undefined;
+  actor?: string | undefined;
+  rationale?: string | undefined;
+  terminal_state?: Record<string, unknown> | undefined;
+  resumable_state?: Record<string, unknown> | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
