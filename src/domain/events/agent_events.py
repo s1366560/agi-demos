@@ -1654,6 +1654,24 @@ class AgentGoalCompletedEvent(AgentDomainEvent):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentSupervisorVerdictEvent(AgentDomainEvent):
+    """Supervisor agent's structured verdict on conversation health.
+
+    Emitted by the `verdict` tool. The ``status`` field mirrors
+    :class:`VerdictStatus` as a string — we keep it string-typed on the
+    event payload so serialization stays stable across schema migrations.
+    """
+
+    event_type: AgentEventType = AgentEventType.AGENT_SUPERVISOR_VERDICT
+    conversation_id: str
+    actor_agent_id: str
+    status: str  # one of healthy | stalled | looping | goal_drift | budget_risk
+    rationale: str = ""
+    recommended_actions: list[str] = Field(default_factory=list)
+    trigger: str = "tick"  # tick | doom_loop | stale | budget
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class WorkspaceUpdatedEvent(AgentDomainEvent):
     """Event: Workspace settings or metadata were updated."""
 
