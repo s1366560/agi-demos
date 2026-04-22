@@ -11,11 +11,13 @@ import { memo, useState, useEffect, useRef, forwardRef, useImperativeHandle } fr
 import { useTranslation } from 'react-i18next';
 
 import { message } from 'antd';
-import { Hash, FileText, Loader2, Workflow } from 'lucide-react';
+import { Hash, FileText, Loader2, Workflow, Users } from 'lucide-react';
 
 import { useSubAgentStore } from '@/stores/subagent';
 
 import { mentionService, type MentionItem } from '@/services/mentionService';
+
+import { useConversationParticipants } from '@/hooks/useConversationParticipants';
 
 export interface MentionPopoverHandle {
   getSelectedItem: () => MentionItem | null;
@@ -29,16 +31,29 @@ interface MentionPopoverProps {
   onClose: () => void;
   selectedIndex: number;
   onSelectedIndexChange: (index: number) => void;
+  conversationId?: string | null;
 }
 
 export const MentionPopover = memo(
   forwardRef<MentionPopoverHandle, MentionPopoverProps>(
-    ({ query, projectId, visible, onSelect, selectedIndex, onSelectedIndexChange }, ref) => {
+    (
+      {
+        query,
+        projectId,
+        visible,
+        onSelect,
+        selectedIndex,
+        onSelectedIndexChange,
+        conversationId,
+      },
+      ref
+    ) => {
       const { t } = useTranslation();
       const [items, setItems] = useState<MentionItem[]>([]);
       const [loading, setLoading] = useState(false);
       const listRef = useRef<HTMLDivElement>(null);
       const { subagents, listSubAgents } = useSubAgentStore();
+      const { roster } = useConversationParticipants(conversationId ?? null);
 
       // Ensure subagents are loaded
       useEffect(() => {
@@ -91,8 +106,21 @@ export const MentionPopover = memo(
                 entityType: 'SubAgent',
               }));
 
-            // Combine results: SubAgents first, then others
-            setItems([...subagentResults, ...mentionResults]);
+            // Filter conversation participants locally (Track B)
+            const participantResults: MentionItem[] = (roster?.participant_agents ?? [])
+              .filter((agentId) => agentId.toLowerCase().includes(query.toLowerCase()))
+              .map((agentId) => ({
+                id: agentId,
+                name: agentId,
+                type: 'participant',
+                entityType: 'Participant',
+                ...(agentId === roster?.coordinator_agent_id
+                  ? { summary: t('agent.mentions.coordinator', 'Coordinator') }
+                  : {}),
+              }));
+
+            // Combine results: participants > SubAgents > entities/memories.
+            setItems([...participantResults, ...subagentResults, ...mentionResults]);
             onSelectedIndexChange(0);
           } catch (err: unknown) {
             void message.error(
@@ -109,7 +137,7 @@ export const MentionPopover = memo(
         return () => {
           clearTimeout(timer);
         };
-      }, [query, projectId, visible, onSelectedIndexChange, subagents]);
+      }, [query, projectId, visible, onSelectedIndexChange, subagents, roster, t]);
 
       // Scroll selected item into view
       useEffect(() => {
@@ -121,6 +149,7 @@ export const MentionPopover = memo(
       if (!visible) return null;
 
       const typeIcon = (item: MentionItem) => {
+        if (item.type === 'participant') return <Users size={14} className="text-emerald-500" />;
         if (item.type === 'subagent') return <Workflow size={14} className="text-purple-500" />;
         if (item.type === 'entity') return <Hash size={14} className="text-primary" />;
         return <FileText size={14} className="text-slate-500" />;

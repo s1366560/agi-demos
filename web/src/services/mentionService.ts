@@ -10,7 +10,7 @@ import { apiFetch } from './client/urlUtils';
 export interface MentionItem {
   id: string;
   name: string;
-  type: 'entity' | 'memory' | 'episode' | 'subagent';
+  type: 'entity' | 'memory' | 'episode' | 'subagent' | 'participant';
   entityType?: string | undefined;
   summary?: string | undefined;
 }

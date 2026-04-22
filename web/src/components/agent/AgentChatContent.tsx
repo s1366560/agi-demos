@@ -677,6 +677,7 @@ ${content}`;
             isStreaming={isStreaming}
             disabled={isLoadingHistory || isCreatingConversation}
             projectId={projectId || undefined}
+            conversationId={activeConversationId || undefined}
             onTogglePlanMode={() => {
               void handleTogglePlanMode();
             }}

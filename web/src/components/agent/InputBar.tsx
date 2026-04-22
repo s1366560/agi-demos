@@ -48,6 +48,7 @@ interface InputBarProps {
   isStreaming: boolean;
   disabled?: boolean | undefined;
   projectId?: string | undefined;
+  conversationId?: string | undefined;
   onTogglePlanMode?: (() => void) | undefined;
   isPlanMode?: boolean | undefined;
   activeAgentId?: string | undefined;
@@ -75,6 +76,7 @@ export const InputBar = memo<InputBarProps>(
     isStreaming,
     disabled,
     projectId,
+    conversationId,
     onTogglePlanMode,
     isPlanMode,
     activeAgentId,
@@ -512,6 +514,7 @@ export const InputBar = memo<InputBarProps>(
                 ref={mentionPopoverRef}
                 query={mentionQuery}
                 projectId={projectId}
+                conversationId={conversationId ?? null}
                 visible={mentionVisible}
                 onSelect={handleMentionSelect}
                 onClose={() => {
