@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MSG_FILE="${1:?commit message file required}"
+
+first_line="$(grep -v '^[[:space:]]*#' "$MSG_FILE" | sed -n '1p')"
+
+if [[ -z "${first_line}" ]]; then
+  echo "commit-msg: empty commit message subject" >&2
+  exit 1
+fi
+
+if [[ "$first_line" =~ ^(Merge|Revert\ |fixup!\ |squash!\ ) ]]; then
+  exit 0
+fi
+
+pattern='^(feat|fix|refactor|docs|test|chore)(\([a-z0-9._/-]+\))?(!)?: .+$'
+
+if [[ "$first_line" =~ $pattern ]]; then
+  exit 0
+fi
+
+cat >&2 <<EOF
+commit-msg: invalid commit subject
+
+Expected Conventional Commit syntax:
+  <type>(<scope>): <summary>
+
+Examples:
+  feat(agent): supervisor verdict tool + structural tick scheduler
+  fix(sandbox): clarify read offset semantics
+  refactor(skills): lift curated lineage into domain
+
+Allowed types: feat, fix, refactor, docs, test, chore
+See AGENTS.md for repository commit guidance.
+EOF
+
+exit 1

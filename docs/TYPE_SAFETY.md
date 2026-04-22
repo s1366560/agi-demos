@@ -330,7 +330,7 @@ Pyright enforces `reportUnnecessaryTypeIgnoreComment` -- stale ignore comments a
 
 ---
 
-## Pre-commit Workflow
+## Git Hook Workflow
 
 ### What Runs on Commit
 
@@ -341,6 +341,21 @@ The `.githooks/pre-commit` hook runs automatically on `git commit`:
    - Included: `src/`, `sdk/`, `scripts/`
    - Excluded: `src/tests/`, `src/alembic/`, `src/memstack_agent/`
 3. **ESLint** on staged TypeScript/JavaScript files in `web/`.
+
+The `.githooks/commit-msg` hook also runs automatically and validates the
+commit subject line against the repository's Conventional Commit format:
+
+`<type>(<scope>): <summary>`
+
+Examples:
+
+- `feat(agent): supervisor verdict tool + structural tick scheduler`
+- `fix(sandbox): clarify read offset semantics`
+- `refactor(skills): lift curated lineage into domain`
+
+Allowed types are currently `feat`, `fix`, `refactor`, `docs`, `test`, and
+`chore`. Merge commits, `Revert`, `fixup!`, and `squash!` subjects are allowed
+through unchanged.
 
 ### Setup
 

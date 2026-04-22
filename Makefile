@@ -535,7 +535,8 @@ hooks-install: ## Install git hooks (requires git)
 	@echo " Installing git hooks..."
 	@git config core.hooksPath .githooks
 	@chmod +x .githooks/pre-commit
-	@echo " Git hooks installed (pre-commit will run 'make check')"
+	@chmod +x .githooks/commit-msg
+	@echo " Git hooks installed (pre-commit checks staged code, commit-msg enforces Conventional Commit subjects)"
 
 hooks-uninstall: ## Uninstall git hooks (restore default hooks path)
 	@echo " Uninstalling git hooks..."

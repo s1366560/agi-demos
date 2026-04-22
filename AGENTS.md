@@ -11,7 +11,7 @@ Guidance for AI coding assistants (Copilot, Claude, Cursor, Gemini, ...) working
 - **Plan before execute** for non-trivial changes; delegate to specialized agents when useful.
 - **TDD**: write/adjust tests alongside code; maintain 80%+ coverage.
 - **Security first**: never paste secrets (API keys, tokens, JWTs, passwords). Redact logs.
-- **Code style**: no emojis in code/docs. Prefer immutability. Small files (200–400 lines typical, 800 max). Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
+- **Code style**: no emojis in code/docs. Prefer immutability. Small files (200–400 lines typical, 800 max). Commit subjects MUST use Conventional Commit syntax with an optional scope, for example `feat(agent): add supervisor verdict tool`, `fix(sandbox): clarify read offset semantics`, `refactor(skills): lift curated lineage into domain`. Keep the first line in that format, then use the Lore protocol trailers below in the body when a body is present.
 - Before editing a symbol: run `gitnexus_impact` (see GitNexus section) and report blast radius.
 - Before committing: run `gitnexus_detect_changes` to verify scope.
 - **Agent First (top-level architectural rule)**: every **subjective** decision point — anything that requires semantic understanding, intent inference, quality assessment, appropriateness judgment, categorization by meaning, or resolution of ambiguity — **MUST be made by an agent via a structured tool-call**. Hardcoded heuristics for subjective calls are prohibited: no regex-on-text for routing or classification, no keyword matching for intent, no `dict` lookup tables masquerading as policy engines, no hand-tuned thresholds that produce semantic verdicts on their own. The following stay deterministic because they are **structural / arithmetic / protocol** facts, not judgments:
@@ -54,7 +54,7 @@ make fresh         # reset + init + dev
 | Dev (focused) | `dev-backend`, `dev-worker`, `dev-agent-worker`, `dev-mcp-worker`, `dev-web` | Start one component |
 | Test | `make test` / `test-unit` / `test-integration` / `test-coverage` / `test-watch` | Pytest + Vitest |
 | Quality | `make format` / `lint` / `check` / `ci` / `type-check` / `type-check-{mypy,pyright}` | Ruff/ESLint/Mypy/Pyright |
-| Hooks | `make hooks-install` | Pre-commit: ruff + pyright on staged Python |
+| Hooks | `make hooks-install` | Pre-commit checks staged code + commit subject format guard |
 | DB | `make db-init` / `db-reset` / `db-migrate` / `db-migrate-new` / `db-status` | Alembic |
 | Docker/Sandbox | `make docker-{up,down,clean}` / `sandbox-{build,run,stop,status,shell,test}` | |
 | Ray | `make ray-up-dev` / `ray-reload` | Dev mode = live code reload |
@@ -227,7 +227,7 @@ Ray actors run from baked Docker images — local edits do **not** take effect u
 - Naming: `PascalCase` classes, `snake_case` funcs/vars, `UPPER_SNAKE_CASE` constants, `_leading_underscore` private.
 - Import order (auto): future → stdlib → third-party → `src.*` → relative.
 - **Multi-tenancy**: always scope queries by `project_id` / `tenant_id`.
-- Pre-commit hook (after `hooks-install`) runs ruff + pyright on staged Python in `src/`, `sdk/`, `scripts/`. See `docs/TYPE_SAFETY.md`.
+- Git hooks (after `hooks-install`) run pre-commit checks on staged code and validate commit subjects against the repo's Conventional Commit format. See `docs/TYPE_SAFETY.md`.
 
 Patterns for new domain/application/infrastructure layers follow standard DDD; examples: `src/domain/model/memory/`, `src/infrastructure/adapters/secondary/persistence/sql_*.py`, `src/application/services/*`.
 
