@@ -28,6 +28,7 @@ __all__ = [
     "AgentCompletedEvent",
     "AgentConflictMarkedEvent",
     "AgentContextSummaryGeneratedEvent",
+    "AgentConversationFinishedEvent",
     "AgentDomainEvent",
     "AgentElicitationAnsweredEvent",
     "AgentElicitationAskedEvent",
@@ -1696,6 +1697,27 @@ class AgentSupervisorVerdictEvent(AgentDomainEvent):
     rationale: str = ""
     recommended_actions: list[str] = Field(default_factory=list)
     trigger: str = "tick"  # tick | doom_loop | stale | budget
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentConversationFinishedEvent(AgentDomainEvent):
+    """Conversation terminated by one of the three gates: goal, budget, or safety.
+
+    Emitted by the termination evaluator when any gate fires. The ``reason``
+    field is a structured enum (TerminationReason); ``rationale`` is the
+    deterministic arithmetic / membership check that fired the gate.
+
+    Carries ``terminal_state`` (snapshot of goal_contract + supervisor verdict +
+    cost counters) for audit trail and resumable_state (autonomous mode).
+    """
+
+    event_type: AgentEventType = AgentEventType.AGENT_CONVERSATION_FINISHED
+    conversation_id: str
+    reason: str  # TerminationReason enum value
+    actor: str = "system"
+    rationale: str = ""
+    terminal_state: dict[str, Any] = Field(default_factory=dict)
+    resumable_state: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
