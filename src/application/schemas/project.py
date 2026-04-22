@@ -102,6 +102,17 @@ class ProjectCreate(BaseModel):
         default_factory=SandboxConfigSchema, description="Sandbox configuration"
     )
     is_public: bool = Field(default=False, description="Whether the project is public")
+    agent_conversation_mode: Literal[
+        "single_agent", "multi_agent_shared", "multi_agent_isolated"
+    ] = Field(
+        default="single_agent",
+        description=(
+            "How agents are scoped for chat conversations. 'single_agent' (default) "
+            "routes each conversation to one agent; 'multi_agent_shared' lets multiple "
+            "agents collaborate inside a shared thread; 'multi_agent_isolated' keeps "
+            "per-agent threads side by side."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -143,6 +154,12 @@ class ProjectUpdate(BaseModel):
         default=None, description="Sandbox configuration"
     )
     is_public: bool | None = Field(default=None, description="Whether the project is public")
+    agent_conversation_mode: (
+        Literal["single_agent", "multi_agent_shared", "multi_agent_isolated"] | None
+    ) = Field(
+        default=None,
+        description="Agent conversation scoping mode",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -231,6 +248,12 @@ class ProjectResponse(BaseModel):
         default_factory=SandboxConfigSchema, description="Sandbox configuration"
     )
     is_public: bool = Field(default=False, description="Whether the project is public")
+    agent_conversation_mode: Literal[
+        "single_agent", "multi_agent_shared", "multi_agent_isolated"
+    ] = Field(
+        default="single_agent",
+        description="Agent conversation scoping mode",
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime | None = Field(default=None, description="Last update timestamp")
     stats: ProjectStats | None = Field(default=None, description="Project statistics")

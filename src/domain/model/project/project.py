@@ -91,6 +91,7 @@ class Project(Entity):
     graph_config: dict[str, Any] = field(default_factory=dict)
     sandbox_config: SandboxConfig = field(default_factory=SandboxConfig)
     is_public: bool = False
+    agent_conversation_mode: str = "single_agent"
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = None
 

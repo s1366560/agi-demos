@@ -104,6 +104,7 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
             memory_rules=db_project.memory_rules,
             graph_config=db_project.graph_config,
             is_public=db_project.is_public,
+            agent_conversation_mode=db_project.agent_conversation_mode,
             created_at=db_project.created_at,
             updated_at=db_project.updated_at,
         )
@@ -131,6 +132,7 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
             memory_rules=domain_entity.memory_rules,
             graph_config=domain_entity.graph_config,
             is_public=domain_entity.is_public,
+            agent_conversation_mode=domain_entity.agent_conversation_mode,
             created_at=domain_entity.created_at,
             updated_at=domain_entity.updated_at,
         )
@@ -152,4 +154,5 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
         db_model.memory_rules = domain_entity.memory_rules
         db_model.graph_config = domain_entity.graph_config
         db_model.is_public = domain_entity.is_public
+        db_model.agent_conversation_mode = domain_entity.agent_conversation_mode
         db_model.updated_at = domain_entity.updated_at

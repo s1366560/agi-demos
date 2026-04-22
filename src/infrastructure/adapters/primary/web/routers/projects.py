@@ -89,6 +89,7 @@ async def create_project(
             memory_rules=project_data.memory_rules.model_dump(),
             graph_config=project_data.graph_config.model_dump(),
             is_public=project_data.is_public,
+            agent_conversation_mode=project_data.agent_conversation_mode,
         )
         db.add(project)
 

@@ -6,15 +6,18 @@
  * Decisions baked in (see session files/p2-design-questions.md for rationale):
  *   - Scope: project (AgentDefinition.project_id). Cross-tenant is future work.
  *   - Display: list of rows with avatar glyph + name + enabled dot + status.
- *   - Actions: none. Click "Manage" to jump to /tenant/agent-definitions.
+ *   - Actions: "Start chat" opens a new conversation and jumps to
+ *     AgentWorkspace. "Manage" jumps to /tenant/agent-definitions.
  */
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Card, Empty, List, Skeleton, Space, Tag, Typography } from 'antd';
-import { Bot } from 'lucide-react';
+import { Badge, Button, Card, Empty, List, Skeleton, Space, Tag, Typography, message } from 'antd';
+import { Bot, MessageSquarePlus } from 'lucide-react';
 
 import { definitionsService } from '@/services/agent/definitionsService';
+import { agentService } from '@/services/agentService';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 
@@ -36,6 +39,9 @@ function initials(name: string): string {
 }
 
 export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
+  const navigate = useNavigate();
+  const [startingId, setStartingId] = useState<string | null>(null);
+
   const query = useQuery<AgentDefinition[]>({
     queryKey: ['project', projectId, 'agent-definitions'],
     queryFn: () => definitionsService.list({ project_id: projectId }),
@@ -45,6 +51,26 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
   });
 
   const agents = query.data ?? [];
+
+  const handleStartChat = async (agent: AgentDefinition) => {
+    const displayName = agent.display_name ?? agent.name;
+    setStartingId(agent.id);
+    try {
+      const conversation = await agentService.createConversation({
+        project_id: projectId,
+        title: `Chat with ${displayName}`,
+        agent_config: { agent_definition_id: agent.id },
+      });
+      navigate(
+        `/tenant/agent-workspace?conversation=${encodeURIComponent(conversation.id)}`,
+      );
+    } catch (error) {
+      console.error('Failed to start chat with agent', error);
+      message.error('Failed to start chat. Please try again.');
+    } finally {
+      setStartingId(null);
+    }
+  };
 
   return (
     <Card
@@ -83,7 +109,23 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
             const successPct =
               agent.success_rate == null ? null : Math.round(agent.success_rate * 100);
             return (
-              <List.Item>
+              <List.Item
+                actions={[
+                  <Button
+                    key="start-chat"
+                    type="primary"
+                    size="small"
+                    icon={<MessageSquarePlus size={14} />}
+                    loading={startingId === agent.id}
+                    disabled={!agent.enabled || startingId !== null}
+                    onClick={() => {
+                      void handleStartChat(agent);
+                    }}
+                  >
+                    开始对话
+                  </Button>,
+                ]}
+              >
                 <List.Item.Meta
                   avatar={
                     <div

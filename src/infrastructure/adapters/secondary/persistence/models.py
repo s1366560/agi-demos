@@ -206,6 +206,12 @@ class Project(Base):
         JSON, default=dict, nullable=False
     )  # Local sandbox config when sandbox_type is "local"
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    agent_conversation_mode: Mapped[str] = mapped_column(
+        String(32),
+        default="single_agent",
+        server_default="single_agent",
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True

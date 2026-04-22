@@ -4,6 +4,8 @@ import { X, Settings, Trash2 } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 
+type AgentConversationMode = 'single_agent' | 'multi_agent_shared' | 'multi_agent_isolated';
+
 interface Project {
   id: string;
   name: string;
@@ -11,6 +13,7 @@ interface Project {
   tenant_id: string;
   owner_id: string;
   is_public: boolean;
+  agent_conversation_mode?: AgentConversationMode;
   created_at: string;
 }
 
@@ -22,6 +25,24 @@ interface ProjectSettingsModalProps {
   onDelete?: ((projectId: string) => void) | undefined;
 }
 
+const AGENT_MODE_OPTIONS: { value: AgentConversationMode; label: string; hint: string }[] = [
+  {
+    value: 'single_agent',
+    label: '单 Agent(默认)',
+    hint: '每个会话只路由到一个 Agent，HITL 以私密 modal 呈现。',
+  },
+  {
+    value: 'multi_agent_shared',
+    label: '多 Agent 共享频道',
+    hint: '多个 Agent 在同一会话中协作；HITL 将以频道消息形式公开。',
+  },
+  {
+    value: 'multi_agent_isolated',
+    label: '多 Agent 独立线程',
+    hint: '每个 Agent 保留独立线程，并排展示，互不干扰。',
+  },
+];
+
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   project,
   isOpen,
@@ -32,6 +53,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || '');
   const [isPublic, setIsPublic] = useState(project.is_public);
+  const [agentMode, setAgentMode] = useState<AgentConversationMode>(
+    project.agent_conversation_mode ?? 'single_agent',
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -40,12 +64,18 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     setName(project.name);
     setDescription(project.description || '');
     setIsPublic(project.is_public);
+    setAgentMode(project.agent_conversation_mode ?? 'single_agent');
   }, [project]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave(project.id, { name, description, is_public: isPublic });
+      await onSave(project.id, {
+        name,
+        description,
+        is_public: isPublic,
+        agent_conversation_mode: agentMode,
+      });
       onClose();
     } catch (error) {
       console.error('Failed to update project:', error);
@@ -141,6 +171,41 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
               公开项目可以被任何拥有链接的人访问
             </p>
+          </div>
+
+          {/* Agent conversation mode */}
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              Agent 会话模式
+            </p>
+            <div className="space-y-2">
+              {AGENT_MODE_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className="flex items-start space-x-3 p-2 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="agent_conversation_mode"
+                    value={option.value}
+                    checked={agentMode === option.value}
+                    onChange={() => {
+                      setAgentMode(option.value);
+                    }}
+                    disabled={isSaving}
+                    className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 dark:border-slate-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span className="flex-1">
+                    <span className="block text-sm font-medium text-gray-900 dark:text-slate-100">
+                      {option.label}
+                    </span>
+                    <span className="block text-xs text-gray-500 dark:text-slate-500 mt-0.5">
+                      {option.hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* Project Info */}
