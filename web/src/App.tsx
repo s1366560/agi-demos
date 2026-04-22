@@ -481,6 +481,18 @@ const LoginRedirect = () => {
   return <Navigate to={safe} replace />;
 };
 
+// Redirect unauthenticated users to /login while preserving the current
+// location (path + search) as ?redirect=, so that after sign-in they are
+// returned to where they originally wanted to go. Paired with LoginRedirect.
+const RedirectToLogin = () => {
+  const location = useLocation();
+  const target = `${location.pathname}${location.search}`;
+  const safe = target.startsWith('/') && !target.startsWith('//') ? target : '/';
+  const loginHref =
+    safe === '/' || safe === '/login' ? '/login' : `/login?redirect=${encodeURIComponent(safe)}`;
+  return <Navigate to={loginHref} replace />;
+};
+
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
@@ -557,7 +569,7 @@ function App() {
                     <NewTenant />
                   </Suspense>
                 ) : (
-                  <Navigate to="/login" replace />
+                  <RedirectToLogin />
                 )
               }
             />
@@ -573,7 +585,7 @@ function App() {
                     <TenantLayout />
                   </OrgSetupGuard>
                 ) : (
-                  <Navigate to="/login" replace />
+                  <RedirectToLogin />
                 )
               }
             >
@@ -1684,7 +1696,7 @@ function App() {
             <Route
               path="/project/:projectId/*"
               element={
-                isAuthenticated ? <LegacyProjectRedirect /> : <Navigate to="/login" replace />
+                isAuthenticated ? <LegacyProjectRedirect /> : <RedirectToLogin />
               }
             />
 
