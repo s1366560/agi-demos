@@ -23,7 +23,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useConversationParticipants } from '../../hooks/useConversationParticipants';
+import { useMentionCandidates } from '../../hooks/useMentionCandidates';
 
 export interface MentionPickerProps {
   conversationId: string | null;
@@ -37,7 +37,7 @@ export interface MentionPickerProps {
 export const MentionPicker = memo<MentionPickerProps>(
   ({ conversationId, query, open, onMentionSelected, onDismiss, className }) => {
     const { t } = useTranslation();
-    const { roster } = useConversationParticipants(conversationId);
+    const { candidates: roster } = useMentionCandidates(conversationId, { enabled: open });
     const [activeState, setActiveState] = useState<{ trigger: string; index: number }>({
       trigger: `${open}|${query}`,
       index: 0,
@@ -57,15 +57,16 @@ export const MentionPicker = memo<MentionPickerProps>(
     );
 
     const candidates = useMemo(() => {
-      if (!roster) return [];
+      if (!roster.length) return [];
       const q = query.toLowerCase();
-      // Simple prefix + contains filter on agent IDs. This is NOT NL
-      // classification — the set is bounded by the roster and the
-      // match is a structural substring test on user-typed characters
-      // after the '@'.
-      return roster.participant_agents.filter((agentId) =>
-        agentId.toLowerCase().includes(q)
-      );
+      // Substring filter over the bounded set — Agent-First: never a
+      // free-form classifier, always a structural match.
+      return roster.filter((c) => {
+        const id = c.agent_id.toLowerCase();
+        const name = (c.display_name ?? '').toLowerCase();
+        const label = (c.label ?? '').toLowerCase();
+        return id.includes(q) || name.includes(q) || label.includes(q);
+      });
     }, [roster, query]);
 
     useEffect(() => {
@@ -85,7 +86,7 @@ export const MentionPicker = memo<MentionPickerProps>(
         } else if (event.key === 'Enter' || event.key === 'Tab') {
           event.preventDefault();
           const selected = candidates[activeIndex];
-          if (selected) onMentionSelected(selected);
+          if (selected) onMentionSelected(selected.agent_id);
         } else if (event.key === 'Escape') {
           event.preventDefault();
           onDismiss();
@@ -111,18 +112,28 @@ export const MentionPicker = memo<MentionPickerProps>(
         }
       >
         <ul ref={listRef} className="max-h-60 overflow-auto py-1">
-          {candidates.map((agentId, idx) => (
+          {candidates.map((candidate, idx) => (
             <li
-              key={agentId}
+              key={candidate.agent_id}
               role="option"
               aria-selected={idx === activeIndex}
               onMouseEnter={() => setActiveIndex(idx)}
-              onClick={() => onMentionSelected(agentId)}
-              className={`cursor-pointer px-3 py-1.5 text-sm ${
+              onClick={() => onMentionSelected(candidate.agent_id)}
+              className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm ${
                 idx === activeIndex ? 'bg-[#fafafa] text-[#0070f3]' : 'text-[#171717]'
               }`}
             >
-              @{agentId}
+              <span className="truncate">
+                @{candidate.agent_id}
+                {candidate.display_name ? (
+                  <span className="ml-2 text-xs text-[#666]">{candidate.display_name}</span>
+                ) : null}
+              </span>
+              {candidate.label ? (
+                <span className="rounded-full bg-[#ebebeb] px-2 py-0.5 text-[11px] text-[#171717]">
+                  {candidate.label}
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>

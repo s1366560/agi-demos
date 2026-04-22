@@ -36,9 +36,35 @@ export interface RemoveParticipantOptions {
 const base = (conversationId: string) =>
   `/agent/conversations/${conversationId}/participants`;
 
+export interface MentionCandidate {
+  agent_id: string;
+  display_name: string | null;
+  label: string | null;
+  status: string;
+  is_active: boolean;
+  source: 'workspace' | 'conversation';
+}
+
+export interface MentionCandidatesResponse {
+  conversation_id: string;
+  workspace_id: string | null;
+  source: 'workspace' | 'conversation';
+  candidates: MentionCandidate[];
+}
+
 export const participantsService = {
   async listRoster(conversationId: string): Promise<RosterResponse> {
     return httpClient.get<RosterResponse>(base(conversationId));
+  },
+
+  async listMentionCandidates(
+    conversationId: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<MentionCandidatesResponse> {
+    return httpClient.get<MentionCandidatesResponse>(
+      `/agent/conversations/${conversationId}/mention-candidates`,
+      { params: { include_inactive: options?.includeInactive ?? false } }
+    );
   },
 
   async addParticipant(

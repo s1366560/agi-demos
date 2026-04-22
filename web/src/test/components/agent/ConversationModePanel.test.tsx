@@ -27,10 +27,28 @@ vi.mock('@/hooks/useConversationParticipants', () => ({
 }));
 
 const updateConversationMode = vi.fn().mockResolvedValue({});
+const getConversation = vi.fn().mockResolvedValue({
+  id: 'c1',
+  workspace_id: null,
+  linked_workspace_task_id: null,
+});
+const listTasks = vi.fn().mockResolvedValue([]);
 
 vi.mock('@/services/agentService', () => ({
   agentService: {
     updateConversationMode: (...args: unknown[]) => updateConversationMode(...args),
+  },
+}));
+
+vi.mock('@/services/agent/restApi', () => ({
+  restApi: {
+    getConversation: (...args: unknown[]) => getConversation(...args),
+  },
+}));
+
+vi.mock('@/services/workspaceService', () => ({
+  workspaceTaskService: {
+    list: (...args: unknown[]) => listTasks(...args),
   },
 }));
 
@@ -40,6 +58,12 @@ describe('ConversationModePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRoster = { effective_mode: 'single_agent' };
+    getConversation.mockResolvedValue({
+      id: 'c1',
+      workspace_id: null,
+      linked_workspace_task_id: null,
+    });
+    listTasks.mockResolvedValue([]);
   });
 
   it('renders the mode segmented control reflecting effective_mode from roster', () => {
@@ -75,5 +99,42 @@ describe('ConversationModePanel', () => {
     fireEvent.click(screen.getByText('Single'));
     await new Promise((r) => setTimeout(r, 20));
     expect(updateConversationMode).not.toHaveBeenCalled();
+  });
+
+  it('renders the workspace-task picker in autonomous mode when conversation.workspace_id is set', async () => {
+    mockRoster = { effective_mode: 'autonomous' };
+    getConversation.mockResolvedValue({
+      id: 'c1',
+      workspace_id: 'ws1',
+      linked_workspace_task_id: null,
+    });
+    listTasks.mockResolvedValue([
+      { id: 't1', title: 'Ship rollout', status: 'in_progress' },
+      { id: 't2', title: 'Audit logs', status: 'open' },
+    ]);
+
+    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+
+    await waitFor(() => {
+      expect(listTasks).toHaveBeenCalledWith('ws1');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('conversation-task-picker')).toBeInTheDocument();
+    });
+  });
+
+  it('does not render the task picker when workspace_id is absent', async () => {
+    mockRoster = { effective_mode: 'autonomous' };
+    getConversation.mockResolvedValue({
+      id: 'c1',
+      workspace_id: null,
+      linked_workspace_task_id: null,
+    });
+
+    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+
+    await waitFor(() => expect(getConversation).toHaveBeenCalled());
+    expect(screen.queryByTestId('conversation-task-picker')).not.toBeInTheDocument();
+    expect(listTasks).not.toHaveBeenCalled();
   });
 });

@@ -1,21 +1,27 @@
 /**
- * ConversationModePanel — mode-picker (G1: GoalContract removed).
+ * ConversationModePanel — mode picker + WorkspaceTask linker (Phase-5 G8).
  *
  * Lets the operator switch a conversation between single / shared /
- * isolated / autonomous modes. Persists via
- * `PATCH /agent/conversations/{id}/mode` and refreshes the roster.
+ * isolated / autonomous modes and, when the mode is ``autonomous``,
+ * pick the linked WorkspaceTask whose goal + budget + status drive
+ * the 3-gate termination (Phase-5 G3).
  *
- * Autonomous mode's goal/budget now lives on the linked WorkspaceTask
- * (G8 will add the WorkspaceTask picker here).
+ * Agent-First: the task is selected from a bounded workspace roster —
+ * no free-form text parsing. Goal & budget live on the WorkspaceTask;
+ * this panel does not duplicate goal state on the conversation.
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Segmented, message } from 'antd';
+import { Segmented, Select, message } from 'antd';
 
 import { useConversationParticipants } from '@/hooks/useConversationParticipants';
 import { agentService } from '@/services/agentService';
+import { restApi } from '@/services/agent/restApi';
+import { workspaceTaskService } from '@/services/workspaceService';
+import type { Conversation } from '@/types/agent/core';
+import type { WorkspaceTask } from '@/types/workspace';
 
 type Mode = 'single_agent' | 'multi_agent_shared' | 'multi_agent_isolated' | 'autonomous';
 
@@ -42,8 +48,42 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
     const { roster, refresh } = useConversationParticipants(conversationId);
 
     const [submitting, setSubmitting] = useState(false);
+    const [conversation, setConversation] = useState<Conversation | null>(null);
+    const [tasks, setTasks] = useState<WorkspaceTask[]>([]);
+    const [taskLoading, setTaskLoading] = useState(false);
 
     const effectiveMode = (roster?.effective_mode ?? 'single_agent') as Mode;
+
+    const loadConversation = useCallback(async () => {
+      try {
+        const conv = await restApi.getConversation(conversationId, projectId);
+        setConversation(conv);
+      } catch (err) {
+        // non-fatal — panel degrades to mode-only UI.
+        console.error('[ConversationModePanel] load conversation failed', err);
+      }
+    }, [conversationId, projectId]);
+
+    useEffect(() => {
+      void loadConversation();
+    }, [loadConversation]);
+
+    useEffect(() => {
+      const ws = conversation?.workspace_id;
+      if (!ws) {
+        setTasks([]);
+        return;
+      }
+      setTaskLoading(true);
+      void workspaceTaskService
+        .list(ws)
+        .then((items) => setTasks(items ?? []))
+        .catch((err) => {
+          console.error('[ConversationModePanel] load workspace tasks failed', err);
+          setTasks([]);
+        })
+        .finally(() => setTaskLoading(false));
+    }, [conversation?.workspace_id]);
 
     const handleModeChange = useCallback(
       async (next: Mode) => {
@@ -54,6 +94,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
             conversation_mode: next,
           });
           await refresh();
+          await loadConversation();
           message.success(t('agent.workspace.mode.updated', 'Mode updated'));
         } catch (err) {
           message.error(
@@ -64,7 +105,29 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
           setSubmitting(false);
         }
       },
-      [conversationId, projectId, effectiveMode, refresh, t]
+      [conversationId, projectId, effectiveMode, refresh, loadConversation, t]
+    );
+
+    const handleTaskChange = useCallback(
+      async (nextTaskId: string | null) => {
+        if ((conversation?.linked_workspace_task_id ?? null) === nextTaskId) return;
+        setSubmitting(true);
+        try {
+          await agentService.updateConversationMode(conversationId, projectId, {
+            linked_workspace_task_id: nextTaskId,
+          });
+          await loadConversation();
+          message.success(t('agent.workspace.task.updated', 'Linked task updated'));
+        } catch (err) {
+          message.error(
+            (err as Error).message ||
+              t('agent.workspace.task.updateFailed', 'Failed to update linked task')
+          );
+        } finally {
+          setSubmitting(false);
+        }
+      },
+      [conversation?.linked_workspace_task_id, conversationId, projectId, loadConversation, t]
     );
 
     const modeOptions = useMemo(
@@ -75,6 +138,18 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
         })),
       [t]
     );
+
+    const taskOptions = useMemo(
+      () =>
+        tasks.map((task) => ({
+          label: `${task.title}${task.status ? ` · ${task.status}` : ''}`,
+          value: task.id,
+        })),
+      [tasks]
+    );
+
+    const showTaskPicker =
+      effectiveMode === 'autonomous' && !!conversation?.workspace_id;
 
     return (
       <div className={className} data-testid="conversation-mode-panel">
@@ -89,6 +164,31 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
           block
           data-testid="conversation-mode-toggle"
         />
+
+        {showTaskPicker ? (
+          <div className="mt-4" data-testid="conversation-task-picker">
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#666]">
+              {t('agent.workspace.task.label', 'Linked workspace task')}
+            </div>
+            <Select<string | null>
+              value={conversation?.linked_workspace_task_id ?? null}
+              onChange={(next) => void handleTaskChange(next ?? null)}
+              options={taskOptions}
+              loading={taskLoading}
+              disabled={submitting}
+              allowClear
+              placeholder={t('agent.workspace.task.placeholder', 'Pick a workspace task…')}
+              className="w-full"
+              data-testid="conversation-task-select"
+            />
+            <div className="mt-1 text-[11px] text-[#999]">
+              {t(
+                'agent.workspace.task.hint',
+                'Goal, budget and termination are driven by the linked task.'
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
