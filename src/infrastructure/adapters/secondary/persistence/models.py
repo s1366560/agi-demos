@@ -887,12 +887,13 @@ class Conversation(Base):
 
     # Multi-agent collaboration (P2-3 phase-2, Track B · Agent First).
     # ``participant_agents`` was dark-launched by migration b1a2c3d4e5f6.
-    # The remaining 4 columns were added by migration b2c3d4e5f6a7.
+    # The remaining 3 columns were added by migration b2c3d4e5f6a7; the
+    # ``goal_contract`` JSON column was dropped by migration g1a0b1c2d3e4
+    # (goal ownership moved to Workspace/WorkspaceTask).
     participant_agents: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     conversation_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     coordinator_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
     focused_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    goal_contract: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     project: Mapped["Project"] = relationship(foreign_keys=[project_id])
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])

@@ -16,7 +16,6 @@ import pytest
 
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
-from src.domain.model.agent.conversation.goal_contract import GoalContract
 from src.domain.model.agent.conversation.message import Message, MessageRole, MessageType
 from src.domain.model.agent.routing_context import RoutingContext
 from src.infrastructure.agent.routing.conversation_aware_router import (
@@ -44,7 +43,6 @@ def _conv(
     participants: list[str],
     coordinator: str | None = None,
     focused: str | None = None,
-    goal: GoalContract | None = None,
 ) -> Conversation:
     return Conversation(
         id="conv-1",
@@ -57,7 +55,6 @@ def _conv(
         conversation_mode=mode,
         coordinator_agent_id=coordinator,
         focused_agent_id=focused,
-        goal_contract=goal,
     )
 
 
@@ -202,12 +199,10 @@ async def test_shared_mode_without_coordinator_falls_through(
 async def test_autonomous_mode_requires_coordinator_in_roster(
     inner_router: AsyncMock, conv_repo: AsyncMock
 ) -> None:
-    goal = GoalContract(primary_goal="ship it")
     conv_repo.find_by_id.return_value = _conv(
         mode=ConversationMode.AUTONOMOUS,
         participants=["coord", "helper"],
         coordinator="coord",
-        goal=goal,
     )
     router = ConversationAwareRouter(inner=inner_router, conversation_repository=conv_repo)
 
@@ -219,12 +214,10 @@ async def test_autonomous_mode_requires_coordinator_in_roster(
 async def test_autonomous_mode_with_stale_coordinator_falls_through(
     inner_router: AsyncMock, conv_repo: AsyncMock
 ) -> None:
-    goal = GoalContract(primary_goal="ship it")
     conv_repo.find_by_id.return_value = _conv(
         mode=ConversationMode.AUTONOMOUS,
         participants=["helper"],
         coordinator="left-the-room",
-        goal=goal,
     )
     router = ConversationAwareRouter(inner=inner_router, conversation_repository=conv_repo)
 

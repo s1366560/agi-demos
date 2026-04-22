@@ -10,7 +10,6 @@ from src.application.services.agent.termination_service import (
     TerminationService,
 )
 from src.domain.events.agent_events import AgentConversationFinishedEvent
-from src.domain.model.agent.conversation.goal_contract import GoalBudget, GoalContract
 from src.domain.model.agent.conversation.termination import (
     BudgetCounters,
     TerminationReason,
@@ -35,11 +34,8 @@ class _FailingNotifier(InMemoryReceiptNotifier):
         raise RuntimeError("boom")
 
 
-def _goal_contract() -> GoalContract:
-    return GoalContract(
-        primary_goal="ship it",
-        budget=GoalBudget(max_turns=3, max_usd=1.0, max_wall_seconds=30),
-    )
+def _caps() -> dict[str, int | float]:
+    return {"max_turns": 3, "max_usd": 1.0, "max_wall_seconds": 30}
 
 
 class TestEvaluate:
@@ -48,7 +44,7 @@ class TestEvaluate:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             counters=BudgetCounters(turns=999),
             goal_completed_event_id="evt-123",
             goal_completed_summary="All green.",
@@ -64,7 +60,7 @@ class TestEvaluate:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             counters=BudgetCounters(turns=3),
         )
         decision = svc.evaluate(ctx)
@@ -76,7 +72,7 @@ class TestEvaluate:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             latest_verdict=VerdictStatus.LOOPING,
             latest_verdict_rationale="same tool called 5x",
         )
@@ -89,7 +85,7 @@ class TestEvaluate:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             counters=BudgetCounters(turns=1),
             latest_verdict=VerdictStatus.HEALTHY,
         )
@@ -104,7 +100,7 @@ class TestFinalize:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             counters=BudgetCounters(turns=2, usd=0.5, wall_seconds=10),
             goal_completed_event_id="evt-1",
             goal_completed_summary="done",
@@ -121,7 +117,7 @@ class TestFinalize:
         assert emitted.resumable_state == {"cursor": "step-5"}
         assert emitted.terminal_state["counters"]["turns"] == 2
         assert emitted.terminal_state["gate"] == "goal"
-        assert emitted.terminal_state["goal_contract"]["primary_goal"] == "ship it"
+        assert emitted.terminal_state["budget_caps"]["max_turns"] == 3
         assert len(notifier.delivered) == 1
         assert notifier.delivered[0].reason == "goal_completed"
         assert notifier.delivered[0].payload["artifacts"] == ["artifact-1"]
@@ -132,7 +128,7 @@ class TestFinalize:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             latest_verdict=VerdictStatus.LOOPING,
             latest_verdict_rationale="agent repeats",
         )
@@ -148,7 +144,7 @@ class TestFinalize:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal_contract(),
+            **_caps(),
             counters=BudgetCounters(turns=3),
         )
         decision = svc.evaluate(ctx)

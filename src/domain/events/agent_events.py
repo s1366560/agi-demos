@@ -1707,7 +1707,7 @@ class AgentConversationFinishedEvent(AgentDomainEvent):
     field is a structured enum (TerminationReason); ``rationale`` is the
     deterministic arithmetic / membership check that fired the gate.
 
-    Carries ``terminal_state`` (snapshot of goal_contract + supervisor verdict +
+    Carries ``terminal_state`` (snapshot of budget caps + supervisor verdict +
     cost counters) for audit trail and resumable_state (autonomous mode).
     """
 

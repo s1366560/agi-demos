@@ -1,12 +1,14 @@
 """Conversation termination domain (Track B · Agent First · P2-3 phase-2).
 
-The three-gate termination model from ``p2-decisions.md``:
+The three-gate termination model:
 
 1. **Goal gate** — coordinator calls ``signal_goal_complete`` → emits
    ``AgentGoalCompletedEvent``; this gate is a pure subscription, not a
    judgment.
-2. **Budget gate** — arithmetic comparison of counters against
-   ``GoalContract.budget``.  Pure integer/float math, Agent First compliant.
+2. **Budget gate** — arithmetic comparison of counters against caller-supplied
+   caps (``max_turns`` / ``max_usd`` / ``max_wall_seconds``). Pure
+   integer/float math; the caps are sourced from the owning ``Workspace`` /
+   ``WorkspaceTask`` context by the application layer.
 3. **Safety gate** — supervisor ``verdict`` ∈ {``LOOPING``} **OR** structural
    doom-loop signal ratified by a supervisor verdict.  The *judgment* (is this
    truly a loop?) stays with the Supervisor Agent; the gate here only tests
@@ -26,7 +28,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.domain.model.agent.conversation.goal_contract import GoalBudget
 from src.domain.model.agent.conversation.verdict_status import VerdictStatus
 
 
@@ -115,37 +116,38 @@ class TerminationDecision:
 
 
 def evaluate_budget(
-    budget: GoalBudget | None,
+    *,
+    max_turns: int | None,
+    max_usd: float | None,
+    max_wall_seconds: int | None,
     counters: BudgetCounters,
 ) -> TerminationDecision | None:
     """Pure arithmetic: return a budget decision if any cap is exceeded.
 
     Evaluated in a fixed order so the rationale is deterministic:
     ``turns`` → ``usd`` → ``wall_seconds``.  ``None`` caps are unbounded and
-    skipped.  Returns ``None`` when no cap fires.
+    skipped.  Returns ``None`` when no cap fires. Caller sources the caps
+    from the owning Workspace / WorkspaceTask context.
     """
-    if budget is None:
-        return None
-
-    if budget.max_turns is not None and counters.turns >= budget.max_turns:
+    if max_turns is not None and counters.turns >= max_turns:
         return TerminationDecision(
             reason=TerminationReason.BUDGET_TURNS,
             actor="system",
-            rationale=f"turns={counters.turns} >= max_turns={budget.max_turns}",
+            rationale=f"turns={counters.turns} >= max_turns={max_turns}",
         )
-    if budget.max_usd is not None and counters.usd >= budget.max_usd:
+    if max_usd is not None and counters.usd >= max_usd:
         return TerminationDecision(
             reason=TerminationReason.BUDGET_USD,
             actor="system",
-            rationale=f"usd={counters.usd:.4f} >= max_usd={budget.max_usd:.4f}",
+            rationale=f"usd={counters.usd:.4f} >= max_usd={max_usd:.4f}",
         )
-    if budget.max_wall_seconds is not None and counters.wall_seconds >= budget.max_wall_seconds:
+    if max_wall_seconds is not None and counters.wall_seconds >= max_wall_seconds:
         return TerminationDecision(
             reason=TerminationReason.BUDGET_WALL_SECONDS,
             actor="system",
             rationale=(
                 f"wall_seconds={counters.wall_seconds} "
-                f">= max_wall_seconds={budget.max_wall_seconds}"
+                f">= max_wall_seconds={max_wall_seconds}"
             ),
         )
     return None

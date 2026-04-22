@@ -9,8 +9,8 @@ Modes:
 - MULTI_AGENT_ISOLATED  : multiple agents each have their own thread scoped by
                           ``focused_agent_id``; messages are private by default.
 - AUTONOMOUS            : user offline; a ``coordinator_agent_id`` drives the
-                          group toward ``goal_contract.primary_goal`` until a
-                          termination gate fires.
+                          group toward the goal described by the linked
+                          ``WorkspaceTask`` until a termination gate fires.
 """
 
 from enum import Enum

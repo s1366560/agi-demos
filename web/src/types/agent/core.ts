@@ -120,20 +120,6 @@ export interface Message {
 /**
  * Conversation entity
  */
-export interface GoalBudget {
-  max_turns?: number | null;
-  max_usd?: number | null;
-  max_wall_seconds?: number | null;
-}
-
-export interface GoalContract {
-  primary_goal: string;
-  blocking_categories: string[];
-  operator_guidance: string;
-  budget: GoalBudget;
-  supervisor_tick_seconds: number;
-}
-
 export type ConversationMode =
   | 'single_agent'
   | 'multi_agent_shared'
@@ -156,7 +142,6 @@ export interface Conversation {
   parent_conversation_id?: string | null | undefined;
   branch_point_message_id?: string | null | undefined;
   conversation_mode?: ConversationMode | null | undefined;
-  goal_contract?: GoalContract | null | undefined;
 }
 
 /**

@@ -17,7 +17,6 @@ from src.domain.model.agent.conversation.errors import (
     ParticipantNotPresentError,
     SenderNotInRosterError,
 )
-from src.domain.model.agent.conversation.goal_contract import GoalBudget, GoalContract
 from src.domain.model.agent.conversation.message import (
     Message,
     MessageRole,
@@ -36,8 +35,6 @@ __all__ = [
     "ConversationMode",
     "ConversationStatus",
     "CoordinatorRequiredError",
-    "GoalBudget",
-    "GoalContract",
     "MentionsInvalidError",
     "Message",
     "MessageRole",

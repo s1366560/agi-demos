@@ -34,7 +34,6 @@ from src.domain.model.agent.conversation.conversation import (
     ConversationStatus,
 )
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
-from src.domain.model.agent.conversation.goal_contract import GoalBudget, GoalContract
 from src.domain.model.agent.conversation.hitl_policy import (
     HitlCategory,
     HitlVisibility,
@@ -82,7 +81,6 @@ def _build_conversation(
     participants: list[str],
     coordinator: str | None = None,
     focused: str | None = None,
-    goal: GoalContract | None = None,
 ) -> Conversation:
     return Conversation(
         project_id="proj-1",
@@ -94,7 +92,6 @@ def _build_conversation(
         conversation_mode=mode,
         coordinator_agent_id=coordinator,
         focused_agent_id=focused,
-        goal_contract=goal,
     )
 
 
@@ -112,12 +109,17 @@ def _ctx() -> RoutingContext:
     return RoutingContext(conversation_id="conv-1", project_id="proj-1", tenant_id="tenant-1")
 
 
-def _goal(*, blocking: set[str] | None = None, **budget: int) -> GoalContract:
-    return GoalContract(
-        primary_goal="deliver demo",
-        blocking_categories=frozenset(blocking or set()),
-        budget=GoalBudget(**budget) if budget else GoalBudget(),
-    )
+def _caps(
+    *,
+    max_turns: int | None = None,
+    max_usd: float | None = None,
+    max_wall_seconds: int | None = None,
+) -> dict[str, int | float | None]:
+    return {
+        "max_turns": max_turns,
+        "max_usd": max_usd,
+        "max_wall_seconds": max_wall_seconds,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +143,6 @@ class TestRoutingComposition:
                 participants=["a", "b", "coordinator"],
                 coordinator="coordinator",
                 focused="a",
-                goal=_goal() if mode is ConversationMode.AUTONOMOUS else None,
             )
             repo = AsyncMock()
             repo.find_by_id.return_value = conv
@@ -187,7 +188,6 @@ class TestRoutingComposition:
             mode=ConversationMode.AUTONOMOUS,
             participants=["a", "b"],
             coordinator=None,
-            goal=_goal(),
         )
         repo = AsyncMock()
         repo.find_by_id.return_value = conv
@@ -310,7 +310,7 @@ class TestTerminationEndToEnd:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal(max_turns=100),
+            **_caps(max_turns=100),
             counters=BudgetCounters(turns=5),
             goal_completed_event_id="evt-goal-1",
         )
@@ -329,7 +329,7 @@ class TestTerminationEndToEnd:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal(max_turns=3, max_usd=999, max_wall_seconds=9999),
+            **_caps(max_turns=3, max_usd=999, max_wall_seconds=9999),
             counters=BudgetCounters(turns=3, usd=0.01, wall_seconds=1),
         )
         decision = svc.evaluate(ctx)
@@ -344,7 +344,7 @@ class TestTerminationEndToEnd:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal(max_turns=100),
+            **_caps(max_turns=100),
             counters=BudgetCounters(turns=10),
             latest_verdict=VerdictStatus.LOOPING,
             latest_verdict_rationale="supervisor judgment",
@@ -362,7 +362,7 @@ class TestTerminationEndToEnd:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal(max_turns=100),
+            **_caps(max_turns=100),
             counters=BudgetCounters(turns=10),
             doom_loop_triggered=True,
         )
@@ -373,7 +373,7 @@ class TestTerminationEndToEnd:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal(max_turns=100),
+            **_caps(max_turns=100),
             counters=BudgetCounters(turns=10),
             latest_verdict=VerdictStatus.LOOPING,
             doom_loop_triggered=True,
@@ -392,7 +392,7 @@ class TestTerminationEndToEnd:
         ctx = TerminationContext(
             conversation_id="c1",
             user_id="u1",
-            goal_contract=_goal(max_turns=3),
+            **_caps(max_turns=3),
             counters=BudgetCounters(turns=3),
             goal_completed_event_id="evt-goal",
             latest_verdict=VerdictStatus.LOOPING,

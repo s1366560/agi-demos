@@ -9,8 +9,9 @@ buckets the coordinator may act on:
 - ``LOOPING``      : doom-loop counter exceeded threshold — agents are
                      repeating tool-calls without progress.
 - ``GOAL_DRIFT``   : agents are working on something misaligned with the
-                     ``goal_contract.primary_goal``.
-- ``BUDGET_RISK``  : projected budget spend > ``goal_contract.budget`` cap.
+                     goal described by the linked ``WorkspaceTask``.
+- ``BUDGET_RISK``  : projected budget spend > the budget cap sourced from
+                     the owning Workspace / WorkspaceTask context.
 
 Agent First:
     The MAPPING (signals → verdict) is a subjective judgment made by the

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from src.domain.model.agent.conversation.goal_contract import GoalBudget
 from src.domain.model.agent.conversation.termination import (
     BudgetCounters,
     TerminationDecision,
@@ -41,35 +40,55 @@ class TestBudgetCounters:
 
 
 class TestEvaluateBudget:
-    def test_returns_none_when_budget_is_none(self) -> None:
-        assert evaluate_budget(None, BudgetCounters(turns=9999)) is None
-
     def test_unbounded_caps_dont_fire(self) -> None:
-        budget = GoalBudget()
-        assert evaluate_budget(budget, BudgetCounters(turns=9999, usd=9999.0)) is None
+        assert (
+            evaluate_budget(
+                max_turns=None,
+                max_usd=None,
+                max_wall_seconds=None,
+                counters=BudgetCounters(turns=9999, usd=9999.0),
+            )
+            is None
+        )
 
     def test_turns_gate_fires_at_cap(self) -> None:
-        budget = GoalBudget(max_turns=10)
-        d = evaluate_budget(budget, BudgetCounters(turns=10))
+        d = evaluate_budget(
+            max_turns=10,
+            max_usd=None,
+            max_wall_seconds=None,
+            counters=BudgetCounters(turns=10),
+        )
         assert d is not None
         assert d.reason is TerminationReason.BUDGET_TURNS
         assert "turns=10" in d.rationale
 
     def test_usd_gate_fires(self) -> None:
-        budget = GoalBudget(max_usd=1.0)
-        d = evaluate_budget(budget, BudgetCounters(usd=1.0))
+        d = evaluate_budget(
+            max_turns=None,
+            max_usd=1.0,
+            max_wall_seconds=None,
+            counters=BudgetCounters(usd=1.0),
+        )
         assert d is not None
         assert d.reason is TerminationReason.BUDGET_USD
 
     def test_wall_seconds_gate_fires(self) -> None:
-        budget = GoalBudget(max_wall_seconds=60)
-        d = evaluate_budget(budget, BudgetCounters(wall_seconds=60))
+        d = evaluate_budget(
+            max_turns=None,
+            max_usd=None,
+            max_wall_seconds=60,
+            counters=BudgetCounters(wall_seconds=60),
+        )
         assert d is not None
         assert d.reason is TerminationReason.BUDGET_WALL_SECONDS
 
     def test_turns_wins_over_usd_in_fixed_order(self) -> None:
-        budget = GoalBudget(max_turns=5, max_usd=1.0)
-        d = evaluate_budget(budget, BudgetCounters(turns=5, usd=2.0))
+        d = evaluate_budget(
+            max_turns=5,
+            max_usd=1.0,
+            max_wall_seconds=None,
+            counters=BudgetCounters(turns=5, usd=2.0),
+        )
         assert d is not None
         assert d.reason is TerminationReason.BUDGET_TURNS
 

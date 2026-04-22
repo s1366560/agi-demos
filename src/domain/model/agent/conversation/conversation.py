@@ -14,7 +14,6 @@ from src.domain.model.agent.conversation.errors import (
     ParticipantNotPresentError,
     SenderNotInRosterError,
 )
-from src.domain.model.agent.conversation.goal_contract import GoalContract
 from src.domain.model.agent.merge_strategy import MergeStrategy
 from src.domain.shared_kernel import Entity
 
@@ -81,16 +80,14 @@ class Conversation(Entity):
     # ``focused_agent_id`` selects the active agent for MULTI_AGENT_ISOLATED
     # mode (each human turn addresses one agent at a time).
     #
-    # ``goal_contract`` is required for AUTONOMOUS mode and expresses the
-    # user's terminal goal + guardrails (budget, blocking side-effect categories,
-    # prose operator_guidance).  See ``goal_contract.py`` — Agent First
-    # compliant: prose guidance is consumed by the coordinator agent, NOT a
-    # dict-lookup policy engine.
+    # Autonomous-mode goal + budgets are sourced from the owning Workspace /
+    # WorkspaceTask (see G2/G3); the Conversation no longer carries an inline
+    # goal_contract. The Leader agent articulates intent via structured
+    # tool-calls against the workspace, not a prose blob on this entity.
     participant_agents: list[str] = field(default_factory=list)
     conversation_mode: ConversationMode | None = None
     coordinator_agent_id: str | None = None
     focused_agent_id: str | None = None
-    goal_contract: GoalContract | None = None
 
     # Domain events pending dispatch to infrastructure (Redis stream, SSE).
     # Not persisted; consumed once by the application/repository layer.
@@ -337,7 +334,10 @@ class Conversation(Entity):
         """When the effective mode is AUTONOMOUS, enforce structural preconditions.
 
         - ``coordinator_agent_id`` MUST be set and in the roster.
-        - ``goal_contract`` MUST be set.
+
+        Goal + budget constraints are now owned by the linked Workspace /
+        WorkspaceTask (enforced by the application layer); the Conversation
+        entity no longer carries that state.
         """
         if effective_mode != ConversationMode.AUTONOMOUS:
             return
@@ -348,10 +348,6 @@ class Conversation(Entity):
         if self.coordinator_agent_id not in self.participant_agents:
             raise ParticipantNotPresentError(
                 f"coordinator_agent_id {self.coordinator_agent_id} must be in roster"
-            )
-        if self.goal_contract is None:
-            raise CoordinatorRequiredError(
-                f"Autonomous conversation {self.id} requires goal_contract"
             )
 
     def consume_pending_events(self) -> list["AgentDomainEvent"]:
@@ -386,9 +382,6 @@ class Conversation(Entity):
             ),
             "coordinator_agent_id": self.coordinator_agent_id,
             "focused_agent_id": self.focused_agent_id,
-            "goal_contract": (
-                self.goal_contract.to_dict() if self.goal_contract is not None else None
-            ),
         }
 
     @classmethod
@@ -400,8 +393,6 @@ class Conversation(Entity):
         )
         mode_raw = data.get("conversation_mode")
         conversation_mode = ConversationMode(mode_raw) if mode_raw else None
-        goal_raw = data.get("goal_contract")
-        goal_contract = GoalContract.from_dict(goal_raw) if isinstance(goal_raw, dict) else None
         return cls(
             id=data["id"],
             project_id=data["project_id"],
@@ -422,5 +413,4 @@ class Conversation(Entity):
             conversation_mode=conversation_mode,
             coordinator_agent_id=data.get("coordinator_agent_id"),
             focused_agent_id=data.get("focused_agent_id"),
-            goal_contract=goal_contract,
         )

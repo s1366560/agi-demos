@@ -30,7 +30,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_mode import AgentMode
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
-from src.domain.model.agent.conversation.goal_contract import GoalContract
 from src.domain.model.agent.merge_strategy import MergeStrategy
 from src.domain.ports.repositories.agent_repository import ConversationRepository
 from src.infrastructure.adapters.secondary.common.base_repository import (
@@ -110,11 +109,6 @@ class SqlConversationRepository(
             ),
             "coordinator_agent_id": conversation.coordinator_agent_id,
             "focused_agent_id": conversation.focused_agent_id,
-            "goal_contract": (
-                conversation.goal_contract.to_dict()
-                if conversation.goal_contract is not None
-                else None
-            ),
         }
 
         # Use PostgreSQL ON CONFLICT for upsert
@@ -146,11 +140,6 @@ class SqlConversationRepository(
                     ),
                     "coordinator_agent_id": conversation.coordinator_agent_id,
                     "focused_agent_id": conversation.focused_agent_id,
-                    "goal_contract": (
-                        conversation.goal_contract.to_dict()
-                        if conversation.goal_contract is not None
-                        else None
-                    ),
                 },
             )
         )
@@ -362,8 +351,6 @@ class SqlConversationRepository(
         # Multi-agent (Track B) — safe decode with defaults for legacy rows.
         mode_raw = getattr(db_conversation, "conversation_mode", None)
         conv_mode = ConversationMode(mode_raw) if mode_raw else None
-        goal_raw = getattr(db_conversation, "goal_contract", None)
-        goal_contract = GoalContract.from_dict(goal_raw) if isinstance(goal_raw, dict) else None
         participant_agents = list(getattr(db_conversation, "participant_agents", None) or [])
 
         return Conversation(
@@ -394,7 +381,6 @@ class SqlConversationRepository(
             conversation_mode=conv_mode,
             coordinator_agent_id=getattr(db_conversation, "coordinator_agent_id", None),
             focused_agent_id=getattr(db_conversation, "focused_agent_id", None),
-            goal_contract=goal_contract,
         )
 
     def _to_db(self, domain_entity: Conversation) -> DBConversation:
@@ -438,9 +424,4 @@ class SqlConversationRepository(
             ),
             coordinator_agent_id=domain_entity.coordinator_agent_id,
             focused_agent_id=domain_entity.focused_agent_id,
-            goal_contract=(
-                domain_entity.goal_contract.to_dict()
-                if domain_entity.goal_contract is not None
-                else None
-            ),
         )

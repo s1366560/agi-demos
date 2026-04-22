@@ -292,18 +292,6 @@ class AgentServiceImpl implements AgentService {
     projectId: string,
     payload: {
       conversation_mode?: string | null;
-      goal_contract?: {
-        primary_goal: string;
-        blocking_categories: string[];
-        operator_guidance: string;
-        budget: {
-          max_turns?: number | null;
-          max_usd?: number | null;
-          max_wall_seconds?: number | null;
-        };
-        supervisor_tick_seconds: number;
-      } | null;
-      clear_goal_contract?: boolean;
     }
   ): Promise<Conversation> {
     return restApi.updateConversationMode(conversationId, projectId, payload);

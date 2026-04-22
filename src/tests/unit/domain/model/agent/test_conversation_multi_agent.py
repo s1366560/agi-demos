@@ -2,7 +2,6 @@
 
 Covers:
 - ConversationMode enum semantics
-- GoalContract invariants + side-effect intersection
 - Roster add/remove + coordinator/focused invariants
 - Sender-in-roster write-path check
 - Structured mentions (no text parsing)
@@ -19,8 +18,6 @@ from src.domain.model.agent.conversation import (
     Conversation,
     ConversationMode,
     CoordinatorRequiredError,
-    GoalBudget,
-    GoalContract,
     Message,
     MessageRole,
     ParticipantAlreadyPresentError,
@@ -51,58 +48,6 @@ class TestConversationMode:
     def test_requires_coordinator(self) -> None:
         assert ConversationMode.AUTONOMOUS.requires_coordinator
         assert not ConversationMode.MULTI_AGENT_SHARED.requires_coordinator
-
-
-# ---------------------------------------------------------------------------
-# GoalContract
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestGoalContract:
-    def test_requires_primary_goal(self) -> None:
-        with pytest.raises(ValueError):
-            GoalContract(primary_goal="")
-        with pytest.raises(ValueError):
-            GoalContract(primary_goal="   ")
-
-    def test_normalizes_blocking_categories(self) -> None:
-        contract = GoalContract(
-            primary_goal="ship demo",
-            blocking_categories=frozenset({" Payment ", "DELETE", "", "delete"}),
-        )
-        assert contract.blocking_categories == frozenset({"payment", "delete"})
-
-    def test_budget_positive(self) -> None:
-        with pytest.raises(ValueError):
-            GoalBudget(max_turns=0)
-        with pytest.raises(ValueError):
-            GoalBudget(max_usd=-1.0)
-        with pytest.raises(ValueError):
-            GoalBudget(max_wall_seconds=-10)
-        with pytest.raises(ValueError):
-            GoalContract(primary_goal="x", supervisor_tick_seconds=0)
-
-    def test_side_effect_intersection(self) -> None:
-        contract = GoalContract(
-            primary_goal="ship demo",
-            blocking_categories=frozenset({"payment", "delete"}),
-        )
-        assert contract.is_side_effect_blocking({"payment"})
-        assert contract.is_side_effect_blocking({"read", "delete"})
-        assert not contract.is_side_effect_blocking({"read", "write"})
-        assert not contract.is_side_effect_blocking(set())
-
-    def test_round_trip(self) -> None:
-        original = GoalContract(
-            primary_goal="Deploy staging",
-            blocking_categories=frozenset({"payment"}),
-            operator_guidance="Never skip integration tests.",
-            budget=GoalBudget(max_turns=50, max_usd=2.5, max_wall_seconds=1800),
-            supervisor_tick_seconds=60,
-        )
-        restored = GoalContract.from_dict(original.to_dict())
-        assert restored == original
 
 
 # ---------------------------------------------------------------------------
@@ -216,30 +161,25 @@ class TestSenderInvariant:
 
 @pytest.mark.unit
 class TestAutonomousInvariants:
-    def test_requires_coordinator_and_goal_contract(self) -> None:
+    def test_requires_coordinator(self) -> None:
         conv = _conv(conversation_mode=ConversationMode.AUTONOMOUS)
         with pytest.raises(CoordinatorRequiredError):
             conv.assert_autonomous_invariants(ConversationMode.AUTONOMOUS)
 
         conv.participant_agents.append("agent-a")
         conv.coordinator_agent_id = "agent-a"
-        with pytest.raises(CoordinatorRequiredError):
-            conv.assert_autonomous_invariants(ConversationMode.AUTONOMOUS)
-
-        conv.goal_contract = GoalContract(primary_goal="ship")
         conv.assert_autonomous_invariants(ConversationMode.AUTONOMOUS)
 
     def test_coordinator_must_be_in_roster(self) -> None:
         conv = _conv(
             conversation_mode=ConversationMode.AUTONOMOUS,
             coordinator_agent_id="ghost-agent",
-            goal_contract=GoalContract(primary_goal="ship"),
         )
         with pytest.raises(ParticipantNotPresentError):
             conv.assert_autonomous_invariants(ConversationMode.AUTONOMOUS)
 
     def test_non_autonomous_mode_is_a_noop(self) -> None:
-        conv = _conv()  # no coordinator, no contract
+        conv = _conv()  # no coordinator
         conv.assert_autonomous_invariants(ConversationMode.MULTI_AGENT_SHARED)
 
 
@@ -280,20 +220,12 @@ class TestSerialization:
             conversation_mode=ConversationMode.AUTONOMOUS,
             coordinator_agent_id="agent-a",
             focused_agent_id=None,
-            goal_contract=GoalContract(
-                primary_goal="ship demo",
-                blocking_categories=frozenset({"payment"}),
-                operator_guidance="no prod writes",
-                budget=GoalBudget(max_turns=10, max_usd=1.0, max_wall_seconds=600),
-                supervisor_tick_seconds=60,
-            ),
         )
         restored = Conversation.from_dict(original.to_dict())
         assert restored.participant_agents == ["agent-a", "agent-b"]
         assert restored.conversation_mode == ConversationMode.AUTONOMOUS
         assert restored.coordinator_agent_id == "agent-a"
         assert restored.focused_agent_id is None
-        assert restored.goal_contract == original.goal_contract
 
     def test_legacy_dict_without_multi_agent_fields(self) -> None:
         """from_dict must tolerate legacy payloads produced before P2-3 phase-2."""
@@ -316,4 +248,3 @@ class TestSerialization:
         assert restored.participant_agents == []
         assert restored.conversation_mode is None
         assert restored.coordinator_agent_id is None
-        assert restored.goal_contract is None

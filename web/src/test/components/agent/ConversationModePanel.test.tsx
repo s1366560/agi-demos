@@ -1,5 +1,5 @@
 /**
- * Unit tests for ConversationModePanel (Track F — f-mode-toggle + f-goal-editor).
+ * Unit tests for ConversationModePanel (mode-picker only after G1).
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -27,12 +27,10 @@ vi.mock('@/hooks/useConversationParticipants', () => ({
 }));
 
 const updateConversationMode = vi.fn().mockResolvedValue({});
-const getConversation = vi.fn().mockResolvedValue({ goal_contract: null });
 
 vi.mock('@/services/agentService', () => ({
   agentService: {
     updateConversationMode: (...args: unknown[]) => updateConversationMode(...args),
-    getConversation: (...args: unknown[]) => getConversation(...args),
   },
 }));
 
@@ -51,7 +49,7 @@ describe('ConversationModePanel', () => {
     expect(screen.getByText('Autonomous')).toBeInTheDocument();
   });
 
-  it('PATCHes the new mode when operator clicks a non-autonomous option', async () => {
+  it('PATCHes the new mode when operator picks a non-autonomous option', async () => {
     render(<ConversationModePanel conversationId="c1" projectId="p1" />);
     fireEvent.click(screen.getByText('Shared'));
     await waitFor(() => {
@@ -62,49 +60,20 @@ describe('ConversationModePanel', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 
-  it('opens the goal drawer instead of PATCHing when autonomous is picked', async () => {
+  it('PATCHes autonomous mode directly (no goal-contract drawer after G1)', async () => {
     render(<ConversationModePanel conversationId="c1" projectId="p1" />);
     fireEvent.click(screen.getByText('Autonomous'));
     await waitFor(() => {
-      expect(screen.getByTestId('goal-contract-drawer')).toBeInTheDocument();
-    });
-    expect(updateConversationMode).not.toHaveBeenCalled();
-  });
-
-  it('submits the goal_contract with conversation_mode=autonomous after user fills primary_goal', async () => {
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
-    fireEvent.click(screen.getByText('Autonomous'));
-
-    await screen.findByTestId('goal-contract-drawer');
-    const textarea = document.querySelector(
-      '[data-testid="goal-contract-drawer"] textarea'
-    ) as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: 'Ship the feature' } });
-    fireEvent.click(screen.getByTestId('goal-contract-submit'));
-
-    await waitFor(() => {
-      expect(updateConversationMode).toHaveBeenCalledWith(
-        'c1',
-        'p1',
-        expect.objectContaining({
-          conversation_mode: 'autonomous',
-          goal_contract: expect.objectContaining({
-            primary_goal: 'Ship the feature',
-            supervisor_tick_seconds: 120,
-          }),
-        })
-      );
+      expect(updateConversationMode).toHaveBeenCalledWith('c1', 'p1', {
+        conversation_mode: 'autonomous',
+      });
     });
   });
 
-  it('blocks submission when primary_goal is empty (validation error)', async () => {
+  it('ignores clicks on the already-active mode', async () => {
     render(<ConversationModePanel conversationId="c1" projectId="p1" />);
-    fireEvent.click(screen.getByText('Autonomous'));
-    await screen.findByTestId('goal-contract-drawer');
-    fireEvent.click(screen.getByTestId('goal-contract-submit'));
-
-    // Let microtasks / validation run
-    await new Promise((r) => setTimeout(r, 50));
+    fireEvent.click(screen.getByText('Single'));
+    await new Promise((r) => setTimeout(r, 20));
     expect(updateConversationMode).not.toHaveBeenCalled();
   });
 });

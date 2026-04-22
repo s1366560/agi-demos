@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from src.domain.events.agent_events import AgentConversationFinishedEvent
-from src.domain.model.agent.conversation.goal_contract import GoalContract
 from src.domain.model.agent.conversation.termination import (
     BudgetCounters,
     TerminationDecision,
@@ -45,6 +44,10 @@ class _EventSink(Protocol):
 class TerminationContext:
     """Snapshot of all inputs the three gates need.
 
+    Budget caps (``max_turns`` / ``max_usd`` / ``max_wall_seconds``) are
+    supplied by the application layer from the owning Workspace /
+    WorkspaceTask context. ``None`` means unbounded on that axis.
+
     ``goal_completed_event_id`` is non-empty iff a coordinator already emitted
     ``AgentGoalCompletedEvent`` this turn; the service treats that as the
     goal gate firing.  The service NEVER inspects message content to decide
@@ -53,7 +56,9 @@ class TerminationContext:
 
     conversation_id: str
     user_id: str
-    goal_contract: GoalContract | None = None
+    max_turns: int | None = None
+    max_usd: float | None = None
+    max_wall_seconds: int | None = None
     counters: BudgetCounters = field(default_factory=BudgetCounters)
     latest_verdict: VerdictStatus | str | None = None
     latest_verdict_rationale: str = ""
@@ -93,8 +98,10 @@ class TerminationService:
             )
 
         budget_decision = evaluate_budget(
-            ctx.goal_contract.budget if ctx.goal_contract else None,
-            ctx.counters,
+            max_turns=ctx.max_turns,
+            max_usd=ctx.max_usd,
+            max_wall_seconds=ctx.max_wall_seconds,
+            counters=ctx.counters,
         )
         if budget_decision is not None:
             return budget_decision
@@ -129,9 +136,12 @@ class TerminationService:
                 "usd": ctx.counters.usd,
                 "wall_seconds": ctx.counters.wall_seconds,
             },
+            "budget_caps": {
+                "max_turns": ctx.max_turns,
+                "max_usd": ctx.max_usd,
+                "max_wall_seconds": ctx.max_wall_seconds,
+            },
         }
-        if ctx.goal_contract is not None:
-            terminal_state["goal_contract"] = ctx.goal_contract.to_dict()
         if ctx.latest_verdict is not None:
             latest = (
                 ctx.latest_verdict.value
