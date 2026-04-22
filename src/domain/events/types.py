@@ -308,6 +308,15 @@ class AgentEventType(str, Enum):
     CONVERSATION_PARTICIPANT_JOINED = "conversation_participant_joined"
     CONVERSATION_PARTICIPANT_LEFT = "conversation_participant_left"
 
+    # Multi-agent structured action events (Track B · Agent First action toolset)
+    AGENT_TASK_ASSIGNED = "agent_task_assigned"
+    AGENT_TASK_REFUSED = "agent_task_refused"
+    AGENT_HUMAN_INPUT_REQUESTED = "agent_human_input_requested"
+    AGENT_ESCALATED = "agent_escalated"
+    AGENT_CONFLICT_MARKED = "agent_conflict_marked"
+    AGENT_PROGRESS_DECLARED = "agent_progress_declared"
+    AGENT_GOAL_COMPLETED = "agent_goal_completed"
+
     # Workspace orchestration lifecycle events
     WORKSPACE_GOAL_MATERIALIZED = "workspace_goal_materialized"
     WORKSPACE_DECOMPOSITION_COMPLETE = "workspace_decomposition_complete"
@@ -495,6 +504,14 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     # Multi-agent conversation participant events
     AgentEventType.CONVERSATION_PARTICIPANT_JOINED: EventCategory.AGENT,
     AgentEventType.CONVERSATION_PARTICIPANT_LEFT: EventCategory.AGENT,
+    # Multi-agent structured action events (Agent First action toolset)
+    AgentEventType.AGENT_TASK_ASSIGNED: EventCategory.AGENT,
+    AgentEventType.AGENT_TASK_REFUSED: EventCategory.AGENT,
+    AgentEventType.AGENT_HUMAN_INPUT_REQUESTED: EventCategory.AGENT,
+    AgentEventType.AGENT_ESCALATED: EventCategory.AGENT,
+    AgentEventType.AGENT_CONFLICT_MARKED: EventCategory.AGENT,
+    AgentEventType.AGENT_PROGRESS_DECLARED: EventCategory.AGENT,
+    AgentEventType.AGENT_GOAL_COMPLETED: EventCategory.AGENT,
     # Workspace orchestration lifecycle events
     AgentEventType.WORKSPACE_GOAL_MATERIALIZED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_DECOMPOSITION_COMPLETE: EventCategory.AGENT,

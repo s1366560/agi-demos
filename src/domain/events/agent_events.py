@@ -26,15 +26,19 @@ __all__ = [
     "AgentBackgroundLaunchedEvent",
     "AgentCanvasUpdatedEvent",
     "AgentCompletedEvent",
+    "AgentConflictMarkedEvent",
     "AgentContextSummaryGeneratedEvent",
     "AgentDomainEvent",
     "AgentElicitationAnsweredEvent",
     "AgentElicitationAskedEvent",
+    "AgentEscalatedEvent",
     "AgentEventType",
+    "AgentGoalCompletedEvent",
     "AgentHttpServiceErrorEvent",
     "AgentHttpServiceStartedEvent",
     "AgentHttpServiceStoppedEvent",
     "AgentHttpServiceUpdatedEvent",
+    "AgentHumanInputRequestedEvent",
     "AgentMCPAppRegisteredEvent",
     "AgentMCPAppResultEvent",
     "AgentMessageReceivedEvent",
@@ -43,10 +47,13 @@ __all__ = [
     "AgentParallelStartedEvent",
     "AgentPlanSuggestedEvent",
     "AgentPolicyFilteredEvent",
+    "AgentProgressDeclaredEvent",
     "AgentSelectionTraceEvent",
     "AgentSpawnedEvent",
     "AgentStoppedEvent",
     "AgentSuggestionsEvent",
+    "AgentTaskAssignedEvent",
+    "AgentTaskRefusedEvent",
     "BlackboardPostCreatedEvent",
     "BlackboardPostDeletedEvent",
     "BlackboardPostUpdatedEvent",
@@ -1549,6 +1556,101 @@ class ConversationParticipantLeftEvent(AgentDomainEvent):
     agent_id: str
     actor_id: str | None = None
     reason: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+# =========================================================================
+# Multi-agent structured action events (Track B · Agent First action toolset)
+#
+# These events form the structured "decision log" for every subjective
+# multi-agent decision. Each event is emitted by exactly one tool call;
+# the domain layer treats them as an append-only audit record of who
+# decided what, when, and why (prose reason — never a code lookup).
+# =========================================================================
+
+
+class AgentTaskAssignedEvent(AgentDomainEvent):
+    """Coordinator assigned a task to a target agent."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_TASK_ASSIGNED
+    conversation_id: str
+    actor_agent_id: str
+    target_agent_id: str
+    task_title: str
+    rationale: str
+    task_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentTaskRefusedEvent(AgentDomainEvent):
+    """Worker refused an assigned task with a prose reason."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_TASK_REFUSED
+    conversation_id: str
+    actor_agent_id: str
+    task_id: str | None = None
+    reason: str = ""
+    suggested_reassignment: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentHumanInputRequestedEvent(AgentDomainEvent):
+    """Agent judged that human input is required and raised a request."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_HUMAN_INPUT_REQUESTED
+    conversation_id: str
+    actor_agent_id: str
+    question: str
+    urgency: str = "normal"  # normal | high | blocking
+    context: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentEscalatedEvent(AgentDomainEvent):
+    """Agent escalated an issue to coordinator or human."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_ESCALATED
+    conversation_id: str
+    actor_agent_id: str
+    escalated_to: str  # "coordinator" | "human" | an agent_id
+    reason: str = ""
+    severity: str = "medium"  # low | medium | high | critical
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentConflictMarkedEvent(AgentDomainEvent):
+    """Agent flagged a conflict / disagreement that needs resolution."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_CONFLICT_MARKED
+    conversation_id: str
+    actor_agent_id: str
+    conflict_with: str  # agent_id, artifact_id, decision_ref, etc.
+    summary: str = ""
+    evidence: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentProgressDeclaredEvent(AgentDomainEvent):
+    """Agent reported progress on an assigned task."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_PROGRESS_DECLARED
+    conversation_id: str
+    actor_agent_id: str
+    task_id: str | None = None
+    status: str = "in_progress"  # in_progress | blocked | done | needs_review
+    summary: str = ""
+    percent_complete: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentGoalCompletedEvent(AgentDomainEvent):
+    """Coordinator (or solo agent) declared the top-level goal complete."""
+
+    event_type: AgentEventType = AgentEventType.AGENT_GOAL_COMPLETED
+    conversation_id: str
+    actor_agent_id: str
+    summary: str = ""
+    artifacts: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

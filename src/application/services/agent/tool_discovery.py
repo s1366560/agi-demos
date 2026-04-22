@@ -21,6 +21,7 @@ def _ensure_tool_modules_imported() -> None:
     import src.infrastructure.agent.tools.clarification  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.decision  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.model_availability_tool  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.multi_agent_action_tools  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.session_status  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.skill_installer  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.web_scrape  # pyright: ignore[reportUnusedImport]
@@ -76,6 +77,15 @@ class ToolDiscoveryService:
             "skill_installer": "skill_installer",
             "session_status": "session_status",
             "list_available_models": "list_available_models",
+            # Multi-agent structured action toolset (Track B · Agent First).
+            # Each tool records one subjective decision as a typed event.
+            "assign_task": "assign_task",
+            "refuse_task": "refuse_task",
+            "request_human_input": "request_human_input",
+            "escalate": "escalate",
+            "mark_conflict": "mark_conflict",
+            "declare_progress": "declare_progress",
+            "signal_goal_complete": "signal_goal_complete",
         }
         result: list[dict[str, Any]] = []
         for display_name, registry_name in _TOOL_NAME_MAP.items():
