@@ -20,6 +20,8 @@ def _ensure_tool_modules_imported() -> None:
     """
     import src.infrastructure.agent.tools.clarification  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.decision  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.model_availability_tool  # pyright: ignore[reportUnusedImport]
+    import src.infrastructure.agent.tools.session_status  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.skill_installer  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.web_scrape  # pyright: ignore[reportUnusedImport]
     import src.infrastructure.agent.tools.web_search  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -72,6 +74,8 @@ class ToolDiscoveryService:
             "web_search": "web_search",
             "web_scrape": "web_scrape",
             "skill_installer": "skill_installer",
+            "session_status": "session_status",
+            "list_available_models": "list_available_models",
         }
         result: list[dict[str, Any]] = []
         for display_name, registry_name in _TOOL_NAME_MAP.items():

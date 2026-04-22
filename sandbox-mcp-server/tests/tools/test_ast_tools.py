@@ -6,7 +6,6 @@ TDD Cycle:
 3. REFACTOR - Improve while keeping tests passing
 """
 
-import asyncio
 import pytest
 
 from src.tools.ast_tools import (
@@ -83,6 +82,38 @@ class TestASTParse:
         )
 
         assert not result.get("isError")
+
+    @pytest.mark.asyncio
+    async def test_parse_accepts_absolute_path_inside_workspace(self, tmp_path):
+        """Absolute paths inside the workspace should resolve successfully."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        sample = workspace / "sample.py"
+        sample.write_text("def demo() -> int:\n    return 1\n", encoding="utf-8")
+
+        result = await ast_parse(
+            file_path=str(sample.resolve()),
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        assert result["metadata"]["resolved_path"] == str(sample.resolve())
+
+    @pytest.mark.asyncio
+    async def test_parse_rejects_path_escape(self, tmp_path):
+        """AST parsing should reject files outside the workspace boundary."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        outside = tmp_path / "outside.py"
+        outside.write_text("def escape():\n    return True\n", encoding="utf-8")
+
+        result = await ast_parse(
+            file_path=str(outside.resolve()),
+            _workspace_dir=str(workspace),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "path_outside_workspace"
 
 
 class TestASTFindSymbols:

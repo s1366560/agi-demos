@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from src.server.websocket_server import MCPTool
-from src.tools.file_tools import _resolve_path
+from src.tools.file_tools import _error_result, _resolve_path, _success_result
 
 logger = logging.getLogger(__name__)
 
@@ -383,10 +383,12 @@ async def code_index_build(
         result = await indexer.build(project_path, pattern, exclude_dirs)
 
         if "error" in result:
-            return {
-                "content": [{"type": "text", "text": result["error"]}],
-                "isError": True,
-            }
+            return _error_result(
+                result["error"],
+                code="index_build_failed",
+                hint="Keep project_path and pattern inside the workspace.",
+                metadata={"project_path": project_path, "pattern": pattern},
+            )
 
         lines = [
             f"Code index built for project: {project_path}",
@@ -396,18 +398,15 @@ async def code_index_build(
             f"Call graph nodes: {result['call_graph_nodes']}",
         ]
 
-        return {
-            "content": [{"type": "text", "text": "\n".join(lines)}],
-            "isError": False,
-            "metadata": result,
-        }
+        return _success_result("\n".join(lines), metadata=result)
 
     except Exception as e:
         logger.error(f"Error building index: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="index_build_failed",
+            metadata={"project_path": project_path, "pattern": pattern},
+        )
 
 
 def create_code_index_build_tool() -> MCPTool:
@@ -471,10 +470,11 @@ async def find_definition(
         if not indexer.index.files_indexed:
             build_result = await indexer.build(".")
             if "error" in build_result:
-                return {
-                    "content": [{"type": "text", "text": build_result["error"]}],
-                    "isError": True,
-                }
+                return _error_result(
+                    build_result["error"],
+                    code="index_build_failed",
+                    hint="Run code_index_build with a valid project path first.",
+                )
         definitions = indexer.find_definition(symbol_name)
 
         if not definitions:
@@ -507,18 +507,14 @@ async def find_definition(
             else:
                 lines.append(f"  {file_path}:{lineno} ({type_label})")
 
-        return {
-            "content": [{"type": "text", "text": "\n".join(lines)}],
-            "isError": False,
-            "metadata": {"found": True, "symbol": symbol_name, "definitions": definitions},
-        }
+        return _success_result(
+            "\n".join(lines),
+            metadata={"found": True, "symbol": symbol_name, "definitions": definitions},
+        )
 
     except Exception as e:
         logger.error(f"Error finding definition: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(str(e), code="find_definition_failed", metadata={"symbol": symbol_name})
 
 
 def create_find_definition_tool() -> MCPTool:
@@ -573,10 +569,11 @@ async def find_references(
         if not indexer.index.files_indexed:
             build_result = await indexer.build(".")
             if "error" in build_result:
-                return {
-                    "content": [{"type": "text", "text": build_result["error"]}],
-                    "isError": True,
-                }
+                return _error_result(
+                    build_result["error"],
+                    code="index_build_failed",
+                    hint="Run code_index_build with a valid project path first.",
+                )
         references = indexer.find_references(symbol_name)
 
         if not references:
@@ -586,7 +583,7 @@ async def find_references(
                 "metadata": {"found": False, "symbol": symbol_name},
             }
 
-        # Limit results
+        total_references = len(references)
         references = references[:max_results]
 
         if group_by_file:
@@ -614,23 +611,20 @@ async def find_references(
                 lineno = ref.get("lineno", 0)
                 lines.append(f"  {file}:{lineno}")
 
-        return {
-            "content": [{"type": "text", "text": "\n".join(lines)}],
-            "isError": False,
-            "metadata": {
+        return _success_result(
+            "\n".join(lines),
+            metadata={
                 "found": True,
                 "symbol": symbol_name,
-                "total_references": len(references),
+                "total_references": total_references,
+                "returned_references": len(references),
                 "references": references,
             },
-        }
+        )
 
     except Exception as e:
         logger.error(f"Error finding references: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(str(e), code="find_references_failed", metadata={"symbol": symbol_name})
 
 
 def create_find_references_tool() -> MCPTool:
@@ -690,10 +684,11 @@ async def get_call_graph(
         if not indexer.index.files_indexed:
             build_result = await indexer.build(".")
             if "error" in build_result:
-                return {
-                    "content": [{"type": "text", "text": build_result["error"]}],
-                    "isError": True,
-                }
+                return _error_result(
+                    build_result["error"],
+                    code="index_build_failed",
+                    hint="Run code_index_build with a valid project path first.",
+                )
 
         if symbol_name:
             graph = indexer.get_call_graph(symbol_name)
@@ -726,11 +721,10 @@ async def get_call_graph(
                     if callee_graph.get("calls"):
                         lines.append(f"    {callee} calls: {', '.join(list(callee_graph['calls'])[:5])}")
 
-            return {
-                "content": [{"type": "text", "text": "\n".join(lines)}],
-                "isError": False,
-                "metadata": {"symbol": symbol_name, "graph": graph},
-            }
+            return _success_result(
+                "\n".join(lines),
+                metadata={"symbol": symbol_name, "graph": graph},
+            )
 
         else:
             # Return summary of entire call graph
@@ -750,24 +744,22 @@ async def get_call_graph(
             for func, callees in sorted_funcs:
                 lines.append(f"  {func}: {len(callees)} calls")
 
-            return {
-                "content": [{"type": "text", "text": "\n".join(lines)}],
-                "isError": False,
-                "metadata": {
+            return _success_result(
+                "\n".join(lines),
+                metadata={
                     "total_functions": len(all_calls),
                     "total_edges": total_edges,
-                    "top_functions": [
-                        {"name": f, "calls": len(c)} for f, c in sorted_funcs
-                    ],
+                    "top_functions": [{"name": f, "calls": len(c)} for f, c in sorted_funcs],
                 },
-            }
+            )
 
     except Exception as e:
         logger.error(f"Error getting call graph: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="call_graph_failed",
+            metadata={"symbol": symbol_name, "max_depth": max_depth},
+        )
 
 
 def create_call_graph_tool() -> MCPTool:
@@ -822,16 +814,17 @@ async def get_dependency_graph(
         if not indexer.index.import_graph:
             build_result = await indexer.build(project_path)
             if "error" in build_result:
-                return {
-                    "content": [{"type": "text", "text": build_result["error"]}],
-                    "isError": True,
-                }
+                return _error_result(
+                    build_result["error"],
+                    code="index_build_failed",
+                    hint="Run code_index_build with a valid project path first.",
+                )
 
         if not indexer.index.import_graph:
-            return {
-                "content": [{"type": "text", "text": "No import graph available. Run code_index_build first."}],
-                "isError": False,
-            }
+            return _success_result(
+                "No import graph available. Run code_index_build first.",
+                metadata={"project_path": project_path},
+            )
 
         import_graph = indexer.index.import_graph
 
@@ -871,9 +864,10 @@ async def get_dependency_graph(
                     for dep in sorted(deps):
                         lines.append(f"    - {dep}")
 
+        all_external: Set[str] = set()
+
         # External dependencies (summary)
         if external_deps:
-            all_external: Set[str] = set()
             for deps in external_deps.values():
                 all_external.update(deps)
 
@@ -884,21 +878,21 @@ async def get_dependency_graph(
                 count = sum(1 for deps in external_deps.values() if dep in deps)
                 lines.append(f"  {dep} (used by {count} module{'s' if count > 1 else ''})")
 
-        return {
-            "content": [{"type": "text", "text": "\n".join(lines)}],
-            "isError": False,
-            "metadata": {
+        return _success_result(
+            "\n".join(lines),
+            metadata={
                 "internal": {k: list(v) for k, v in internal_deps.items()},
                 "external": list(all_external),
             },
-        }
+        )
 
     except Exception as e:
         logger.error(f"Error getting dependency graph: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="dependency_graph_failed",
+            metadata={"project_path": project_path},
+        )
 
 
 def create_dependency_graph_tool() -> MCPTool:

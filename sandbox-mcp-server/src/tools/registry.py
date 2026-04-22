@@ -37,6 +37,7 @@ from src.tools.edit_tools import (
     create_preview_edit_tool,
 )
 from src.tools.file_tools import (
+    create_batch_read_tool,
     create_edit_tool,
     create_glob_tool,
     create_grep_tool,
@@ -133,6 +134,7 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
 
     # Register file tools
     registry.register(create_read_tool())
+    registry.register(create_batch_read_tool())
     registry.register(create_write_tool())
     registry.register(create_edit_tool())
     registry.register(create_glob_tool())

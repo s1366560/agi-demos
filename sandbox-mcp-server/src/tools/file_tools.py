@@ -3,6 +3,7 @@
 Implements read, write, edit, glob, and grep operations.
 """
 
+import difflib
 import logging
 import os
 import re
@@ -74,6 +75,160 @@ _host_source = os.getenv("MCP_HOST_SOURCE", "")
 if _host_source:
     _EXTRA_ALLOWED_PATHS.append(Path(_host_source))
 
+
+def _expand_user_path(path: str) -> str:
+    """Expand user-home shorthand while preserving empty-path semantics."""
+    return os.path.expanduser(path.strip() or ".")
+
+
+def _build_error_text(
+    message: str,
+    *,
+    hint: str | None = None,
+    suggestions: list[str] | None = None,
+) -> str:
+    """Build a readable error message for MCP text content."""
+    lines = [f"Error: {message}"]
+    if hint:
+        lines.append(f"Hint: {hint}")
+    if suggestions:
+        lines.append("Suggestions:")
+        lines.extend(f"- {suggestion}" for suggestion in suggestions)
+    return "\n".join(lines)
+
+
+def _path_metadata(resolved: Path, workspace_dir: str) -> dict[str, Any]:
+    """Return consistent path metadata for tool responses."""
+    workspace = Path(_expand_user_path(workspace_dir)).resolve()
+    metadata: dict[str, Any] = {
+        "resolved_path": str(resolved),
+        "workspace_root": str(workspace),
+    }
+    try:
+        metadata["workspace_relative_path"] = str(resolved.relative_to(workspace))
+    except ValueError:
+        metadata["workspace_relative_path"] = None
+    return metadata
+
+
+def _nearest_existing_parent(path: Path) -> Path | None:
+    """Find the nearest existing parent directory for a candidate path."""
+    current = path if path.is_dir() else path.parent
+    while True:
+        if current.exists():
+            return current
+        if current == current.parent:
+            return None
+        current = current.parent
+
+
+def _suggest_path_matches(
+    path: str,
+    workspace_dir: str,
+    *,
+    allow_extra_paths: bool = False,
+    limit: int = 5,
+) -> list[str]:
+    """Return a compact list of similar nearby paths."""
+    workspace = Path(_expand_user_path(workspace_dir)).resolve()
+    normalized = _expand_user_path(path)
+    candidate = Path(normalized) if os.path.isabs(normalized) else workspace / normalized
+    parent = _nearest_existing_parent(candidate)
+    if parent is None or not parent.is_dir():
+        return []
+
+    try:
+        children = sorted(child.name for child in parent.iterdir())
+    except OSError:
+        return []
+
+    close_matches = difflib.get_close_matches(candidate.name, children, n=limit, cutoff=0.4)
+    suggestions: list[str] = []
+    for match in close_matches:
+        suggestion_path = (parent / match).resolve()
+        try:
+            suggestions.append(str(suggestion_path.relative_to(workspace)))
+            continue
+        except ValueError:
+            pass
+
+        if allow_extra_paths:
+            suggestions.append(str(suggestion_path))
+
+    return suggestions
+
+
+def _success_result(
+    text: str,
+    *,
+    metadata: dict[str, Any] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Return a standard successful MCP tool payload."""
+    result: dict[str, Any] = {
+        "content": [{"type": "text", "text": text}],
+        "isError": False,
+    }
+    if metadata is not None:
+        result["metadata"] = metadata
+    result.update(extra)
+    return result
+
+
+def _error_result(
+    message: str,
+    *,
+    code: str,
+    hint: str | None = None,
+    suggestions: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Return a standard error MCP tool payload."""
+    error = {
+        "code": code,
+        "message": message,
+        "hint": hint,
+        "suggestions": suggestions or [],
+    }
+    merged_metadata = dict(metadata or {})
+    merged_metadata["error"] = error
+    result: dict[str, Any] = {
+        "content": [
+            {
+                "type": "text",
+                "text": _build_error_text(
+                    message,
+                    hint=hint,
+                    suggestions=suggestions or None,
+                ),
+            }
+        ],
+        "isError": True,
+        "error": error,
+        "metadata": merged_metadata,
+    }
+    result.update(extra)
+    return result
+
+
+def get_path_error_result(
+    message: str,
+    *,
+    code: str = "path_error",
+    hint: str | None = None,
+    suggestions: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Public helper for standardized path-related errors."""
+    return _error_result(
+        message,
+        code=code,
+        hint=hint,
+        suggestions=suggestions,
+        metadata=metadata,
+    )
+
 def _resolve_path(
     path: str,
     workspace_dir: str,
@@ -96,13 +251,14 @@ def _resolve_path(
     Raises:
         ValueError: If path escapes allowed directories
     """
-    workspace = Path(workspace_dir).resolve()
+    normalized_path = _expand_user_path(path)
+    workspace = Path(_expand_user_path(workspace_dir)).resolve()
 
     # Handle absolute paths
-    if os.path.isabs(path):
-        resolved = Path(path).resolve()
+    if os.path.isabs(normalized_path):
+        resolved = Path(normalized_path).resolve()
     else:
-        resolved = (workspace / path).resolve()
+        resolved = (workspace / normalized_path).resolve()
 
     # Security check: ensure path is within workspace
     try:
@@ -152,18 +308,28 @@ async def read_file(
     """
     try:
         resolved = _resolve_path(file_path, _workspace_dir, allow_extra_paths=True)
+        path_metadata = _path_metadata(resolved, _workspace_dir)
 
         if not resolved.exists():
-            return {
-                "content": [{"type": "text", "text": f"Error: File not found: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"File not found: {file_path}",
+                code="file_not_found",
+                hint="Use glob to discover valid files near the requested path.",
+                suggestions=_suggest_path_matches(
+                    file_path,
+                    _workspace_dir,
+                    allow_extra_paths=True,
+                ),
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         if not resolved.is_file():
-            return {
-                "content": [{"type": "text", "text": f"Error: Not a file: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Not a file: {file_path}",
+                code="not_a_file",
+                hint="Pass a concrete file path instead of a directory.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         async with aiofiles.open(resolved, "r", encoding="utf-8", errors="replace") as f:
             lines = await f.readlines()
@@ -183,22 +349,35 @@ async def read_file(
                 numbered_lines.append(f"{i:6}\t{line.rstrip()}")
             content = "\n".join(numbered_lines)
 
-        return {
-            "content": [{"type": "text", "text": content}],
-            "isError": False,
-            "metadata": {
+        return _success_result(
+            content,
+            metadata={
                 "total_lines": total_lines,
                 "offset": offset,
                 "lines_returned": len(selected_lines),
+                **path_metadata,
             },
-        }
+        )
 
+    except ValueError as exc:
+        return get_path_error_result(
+            str(exc),
+            code="path_outside_workspace",
+            hint="Use a path inside the workspace or an allowlisted read-only directory.",
+            suggestions=_suggest_path_matches(
+                file_path,
+                _workspace_dir,
+                allow_extra_paths=True,
+            ),
+            metadata={"requested_path": file_path},
+        )
     except Exception as e:
         logger.error(f"Error reading file: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="read_failed",
+            metadata={"requested_path": file_path},
+        )
 
 
 def create_read_tool() -> MCPTool:
@@ -235,6 +414,104 @@ def create_read_tool() -> MCPTool:
     )
 
 
+async def batch_read(
+    file_paths: list[str],
+    offset: int = 0,
+    limit: int = 2000,
+    raw: bool = False,
+    stop_on_error: bool = False,
+    _workspace_dir: str = "/workspace",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Read multiple files in a single call."""
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    for file_path in file_paths:
+        result = await read_file(
+            file_path=file_path,
+            offset=offset,
+            limit=limit,
+            raw=raw,
+            _workspace_dir=_workspace_dir,
+        )
+        if result.get("isError"):
+            error_metadata = result.get("metadata", {}).get("error", {})
+            errors.append(
+                {
+                    "file_path": file_path,
+                    "error": error_metadata
+                    or {"code": "read_failed", "message": result["content"][0]["text"]},
+                }
+            )
+            if stop_on_error:
+                break
+            continue
+
+        results.append(
+            {
+                "file_path": file_path,
+                "content": result["content"][0]["text"],
+                "metadata": result.get("metadata", {}),
+            }
+        )
+
+    return _success_result(
+        f"Batch read complete: {len(results)} successful, {len(errors)} failed",
+        metadata={
+            "total": len(file_paths),
+            "successful": len(results),
+            "failed": len(errors),
+            "offset": offset,
+            "limit": limit,
+            "raw": raw,
+            "stop_on_error": stop_on_error,
+        },
+        results=results,
+        errors=errors,
+    )
+
+
+def create_batch_read_tool() -> MCPTool:
+    """Create the batch read tool."""
+    return MCPTool(
+        name="batch_read",
+        description="Read multiple files in one call. Returns per-file content, metadata, and errors.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "file_paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of file paths to read",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Line number to start reading from (0-based)",
+                    "default": 0,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of lines to read from each file",
+                    "default": 2000,
+                },
+                "raw": {
+                    "type": "boolean",
+                    "description": "If true, return raw file content without line numbers",
+                    "default": False,
+                },
+                "stop_on_error": {
+                    "type": "boolean",
+                    "description": "Stop after the first read failure",
+                    "default": False,
+                },
+            },
+            "required": ["file_paths"],
+        },
+        handler=batch_read,
+    )
+
+
 # =============================================================================
 # WRITE TOOL
 # =============================================================================
@@ -259,6 +536,7 @@ async def write_file(
     """
     try:
         resolved = _resolve_path(file_path, _workspace_dir)
+        path_metadata = _path_metadata(resolved, _workspace_dir)
 
         # Create parent directories
         resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -266,17 +544,28 @@ async def write_file(
         async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
             await f.write(content)
 
-        return {
-            "content": [{"type": "text", "text": f"Successfully wrote to {file_path}"}],
-            "isError": False,
-        }
+        return _success_result(
+            f"Successfully wrote to {file_path}",
+            metadata={
+                "bytes_written": len(content.encode("utf-8")),
+                **path_metadata,
+            },
+        )
 
+    except ValueError as exc:
+        return get_path_error_result(
+            str(exc),
+            code="path_outside_workspace",
+            hint="Write operations are limited to files inside the workspace.",
+            metadata={"requested_path": file_path},
+        )
     except Exception as e:
         logger.error(f"Error writing file: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="write_failed",
+            metadata={"requested_path": file_path},
+        )
 
 
 def create_write_tool() -> MCPTool:
@@ -330,37 +619,37 @@ async def edit_file(
     """
     try:
         resolved = _resolve_path(file_path, _workspace_dir)
+        path_metadata = _path_metadata(resolved, _workspace_dir)
 
         if not resolved.exists():
-            return {
-                "content": [{"type": "text", "text": f"Error: File not found: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"File not found: {file_path}",
+                code="file_not_found",
+                hint="Use glob to discover valid files before editing.",
+                suggestions=_suggest_path_matches(file_path, _workspace_dir),
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         async with aiofiles.open(resolved, "r", encoding="utf-8") as f:
             content = await f.read()
 
         # Check if old_string exists
         if old_string not in content:
-            return {
-                "content": [
-                    {"type": "text", "text": f"Error: String not found in file: {old_string[:100]}"}
-                ],
-                "isError": True,
-            }
+            return _error_result(
+                f"String not found in file: {old_string[:100]}",
+                code="string_not_found",
+                hint="Read the file first or use grep to confirm the exact text to replace.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         # Check uniqueness if not replacing all
         if not replace_all and content.count(old_string) > 1:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"Error: String appears {content.count(old_string)} times. "
-                        "Use replace_all=true or provide more context.",
-                    }
-                ],
-                "isError": True,
-            }
+            return _error_result(
+                f"String appears {content.count(old_string)} times.",
+                code="ambiguous_replacement",
+                hint="Use replace_all=true or provide a longer unique old_string.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         # Perform replacement
         if replace_all:
@@ -373,22 +662,28 @@ async def edit_file(
         async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
             await f.write(new_content)
 
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Successfully replaced {count} occurrence(s) in {file_path}",
-                }
-            ],
-            "isError": False,
-        }
+        return _success_result(
+            f"Successfully replaced {count} occurrence(s) in {file_path}",
+            metadata={
+                "replacements": count,
+                **path_metadata,
+            },
+        )
 
+    except ValueError as exc:
+        return get_path_error_result(
+            str(exc),
+            code="path_outside_workspace",
+            hint="Edit operations are limited to files inside the workspace.",
+            metadata={"requested_path": file_path},
+        )
     except Exception as e:
         logger.error(f"Error editing file: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="edit_failed",
+            metadata={"requested_path": file_path},
+        )
 
 
 def create_edit_tool() -> MCPTool:
@@ -446,45 +741,51 @@ async def glob_files(
         List of matching file paths
     """
     try:
-        workspace = Path(_workspace_dir).resolve()
+        workspace = Path(_expand_user_path(_workspace_dir)).resolve()
+        normalized_pattern = _expand_user_path(pattern)
 
         # Handle absolute patterns like /workspace/**/*.py
         # pathlib.glob() rejects non-relative patterns, so we convert them
-        if os.path.isabs(pattern):
-            pattern_path = Path(pattern)
+        if os.path.isabs(normalized_pattern):
+            pattern_path = Path(normalized_pattern)
             # Check if the absolute pattern starts with the workspace dir
             try:
                 rel_pattern = str(pattern_path.relative_to(workspace))
-                pattern = rel_pattern
+                normalized_pattern = rel_pattern
             except ValueError:
                 # Pattern is outside workspace - also try unresolved workspace
                 try:
-                    rel_pattern = str(pattern_path.relative_to(Path(_workspace_dir)))
-                    pattern = rel_pattern
+                    rel_pattern = str(pattern_path.relative_to(Path(_expand_user_path(_workspace_dir))))
+                    normalized_pattern = rel_pattern
                 except ValueError:
-                    return {
-                        "content": [{"type": "text", "text": f"Error: Absolute pattern '{pattern}' is outside workspace directory"}],
-                        "isError": True,
-                    }
+                    return get_path_error_result(
+                        f"Absolute pattern '{pattern}' is outside workspace directory",
+                        code="path_outside_workspace",
+                        hint="Use a pattern rooted in the workspace or pass a workspace-relative pattern.",
+                        metadata={"pattern": pattern},
+                    )
 
         if path:
             base_dir = _resolve_path(path, _workspace_dir, allow_extra_paths=True)
         else:
-            base_dir = Path(_workspace_dir)
+            base_dir = workspace
 
         if not base_dir.exists():
-            return {
-                "content": [{"type": "text", "text": f"Error: Directory not found: {path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Directory not found: {path}",
+                code="directory_not_found",
+                hint="Use list or glob on a parent directory to discover valid search roots.",
+                suggestions=_suggest_path_matches(path or ".", _workspace_dir, allow_extra_paths=True),
+                metadata={"requested_path": path, "pattern": pattern},
+            )
 
         # Use pathlib glob
         matches = []
-        for match in base_dir.glob(pattern):
+        for match in base_dir.glob(normalized_pattern):
             if match.is_file():
                 # Return relative path from workspace
                 try:
-                    rel_path = match.relative_to(_workspace_dir)
+                    rel_path = match.relative_to(workspace)
                     matches.append(str(rel_path))
                 except ValueError:
                     matches.append(str(match))
@@ -492,34 +793,49 @@ async def glob_files(
         # Sort by modification time (newest first)
         def get_mtime(p):
             try:
-                return (Path(_workspace_dir) / p).stat().st_mtime
+                return (workspace / p).stat().st_mtime
             except OSError:
                 return 0
 
         matches.sort(key=get_mtime, reverse=True)
 
         if not matches:
-            return {
-                "content": [{"type": "text", "text": f"No files found matching: {pattern}"}],
-                "isError": False,
-            }
+            return _success_result(
+                f"No files found matching: {pattern}",
+                metadata={
+                    "total_matches": 0,
+                    "pattern": normalized_pattern,
+                    "search_root": str(base_dir.resolve()),
+                },
+            )
 
         result = "\n".join(matches[:100])  # Limit to 100 files
         if len(matches) > 100:
             result += f"\n... and {len(matches) - 100} more files"
 
-        return {
-            "content": [{"type": "text", "text": result}],
-            "isError": False,
-            "metadata": {"total_matches": len(matches)},
-        }
+        return _success_result(
+            result,
+            metadata={
+                "total_matches": len(matches),
+                "pattern": normalized_pattern,
+                "search_root": str(base_dir.resolve()),
+            },
+        )
 
+    except ValueError as exc:
+        return get_path_error_result(
+            str(exc),
+            code="path_outside_workspace",
+            hint="Search roots must stay inside the workspace or an allowlisted read-only directory.",
+            metadata={"requested_path": path, "pattern": pattern},
+        )
     except Exception as e:
         logger.error(f"Error in glob: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="glob_failed",
+            metadata={"requested_path": path, "pattern": pattern},
+        )
 
 
 def create_glob_tool() -> MCPTool:
@@ -613,23 +929,28 @@ async def grep_files(
         if path:
             base_dir = _resolve_path(path, _workspace_dir, allow_extra_paths=True)
         else:
-            base_dir = Path(_workspace_dir)
+            base_dir = Path(_expand_user_path(_workspace_dir)).resolve()
 
         if not base_dir.exists():
-            return {
-                "content": [{"type": "text", "text": f"Error: Directory not found: {path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Directory not found: {path}",
+                code="directory_not_found",
+                hint="Use list or glob on a parent directory to discover valid search roots.",
+                suggestions=_suggest_path_matches(path or ".", _workspace_dir, allow_extra_paths=True),
+                metadata={"requested_path": path, "pattern": pattern},
+            )
 
         # Compile regex
         flags = re.IGNORECASE if case_insensitive else 0
         try:
             regex = re.compile(pattern, flags)
         except re.error as e:
-            return {
-                "content": [{"type": "text", "text": f"Error: Invalid regex pattern: {e}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Invalid regex pattern: {e}",
+                code="invalid_regex",
+                hint="Provide a valid Python regular expression.",
+                metadata={"pattern": pattern},
+            )
 
         results = []
         files_searched = 0
@@ -699,31 +1020,37 @@ async def grep_files(
                 break
 
         if not results:
-            return {
-                "content": [{"type": "text", "text": f"No matches found for: {pattern}"}],
-                "isError": False,
-                "metadata": {"files_searched": files_searched},
-            }
+            return _success_result(
+                f"No matches found for: {pattern}",
+                metadata={"files_searched": files_searched, "matches_found": 0},
+            )
 
         result_text = "\n".join(results)
         if matches_found >= max_results:
             result_text += f"\n... (truncated, showing first {max_results} matches)"
 
-        return {
-            "content": [{"type": "text", "text": result_text}],
-            "isError": False,
-            "metadata": {
+        return _success_result(
+            result_text,
+            metadata={
                 "files_searched": files_searched,
                 "matches_found": matches_found,
             },
-        }
+        )
 
+    except ValueError as exc:
+        return get_path_error_result(
+            str(exc),
+            code="path_outside_workspace",
+            hint="Search roots must stay inside the workspace or an allowlisted read-only directory.",
+            metadata={"requested_path": path, "pattern": pattern},
+        )
     except Exception as e:
         logger.error(f"Error in grep: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="grep_failed",
+            metadata={"requested_path": path, "pattern": pattern},
+        )
 
 
 def create_grep_tool() -> MCPTool:
@@ -867,12 +1194,16 @@ async def list_directory(
     """
     try:
         resolved = _resolve_path(path, _workspace_dir, allow_extra_paths=True)
+        path_metadata = _path_metadata(resolved, _workspace_dir)
 
         if not resolved.exists():
-            return {
-                "content": [{"type": "text", "text": f"Error: Path not found: {path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Path not found: {path}",
+                code="path_not_found",
+                hint="Use list on a parent directory or glob to discover available paths.",
+                suggestions=_suggest_path_matches(path, _workspace_dir, allow_extra_paths=True),
+                metadata={"requested_path": path, **path_metadata},
+            )
 
         if resolved.is_file():
             # Single file - return file info
@@ -880,10 +1211,10 @@ async def list_directory(
             size_str = _format_size(stat.st_size)
             mtime = _format_mtime(stat.st_mtime)
 
-            return {
-                "content": [{"type": "text", "text": f"📄 {resolved.name} ({size_str}, {mtime})"}],
-                "isError": False,
-            }
+            return _success_result(
+                f"📄 {resolved.name} ({size_str}, {mtime})",
+                metadata=path_metadata,
+            )
 
         # It's a directory - list contents
         entries = []
@@ -919,10 +1250,10 @@ async def list_directory(
             )
 
         if not items:
-            return {
-                "content": [{"type": "text", "text": f"📁 Empty directory: {path}"}],
-                "isError": False,
-            }
+            return _success_result(
+                f"📁 Empty directory: {path}",
+                metadata=path_metadata,
+            )
 
         for item in items:
             try:
@@ -956,10 +1287,10 @@ async def list_directory(
                 logger.debug(f"Error listing item: {e}")
 
         if not entries:
-            return {
-                "content": [{"type": "text", "text": f"📁 Empty directory: {path}"}],
-                "isError": False,
-            }
+            return _success_result(
+                f"📁 Empty directory: {path}",
+                metadata=path_metadata,
+            )
 
         header = f"📁 Listing: {path}"
         if recursive:
@@ -977,18 +1308,25 @@ async def list_directory(
         elif recursive and len(entries) > 50:
             result += f"\n... ({len(entries)} total entries)"
 
-        return {
-            "content": [{"type": "text", "text": result}],
-            "isError": False,
-            "metadata": {"total_entries": len(entries)},
-        }
+        return _success_result(
+            result,
+            metadata={"total_entries": len(entries), **path_metadata},
+        )
 
+    except ValueError as exc:
+        return get_path_error_result(
+            str(exc),
+            code="path_outside_workspace",
+            hint="Listing is limited to the workspace or allowlisted read-only directories.",
+            metadata={"requested_path": path},
+        )
     except Exception as e:
         logger.error(f"Error listing directory: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="list_failed",
+            metadata={"requested_path": path},
+        )
 
 
 def _format_size(size: int) -> str:
@@ -1086,18 +1424,24 @@ async def apply_patch(
     """
     try:
         resolved = _resolve_path(file_path, _workspace_dir)
+        path_metadata = _path_metadata(resolved, _workspace_dir)
 
         if not resolved.exists():
-            return {
-                "content": [{"type": "text", "text": f"Error: File not found: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"File not found: {file_path}",
+                code="file_not_found",
+                hint="Use list or glob to confirm the patch target exists.",
+                suggestions=_suggest_path_matches(file_path, _workspace_dir),
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         if not resolved.is_file():
-            return {
-                "content": [{"type": "text", "text": f"Error: Not a file: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Not a file: {file_path}",
+                code="not_a_file",
+                hint="Patch requires a concrete file path.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         # Read original file
         async with aiofiles.open(resolved, "r", encoding="utf-8") as f:
@@ -1107,15 +1451,12 @@ async def apply_patch(
         parsed_patch = _parse_unified_diff(patch, strip)
         parsed_hunks = parsed_patch["hunks"]
         if not parsed_hunks or parsed_patch["header_count"] != 1:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Error: Invalid patch format, missing headers, or no hunks found",
-                    }
-                ],
-                "isError": True,
-            }
+            return _error_result(
+                "Invalid patch format, missing headers, or no hunks found",
+                code="invalid_patch",
+                hint="Provide a unified diff with one target file and at least one hunk.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         if not _patch_targets_match(
             resolved,
@@ -1124,60 +1465,51 @@ async def apply_patch(
             parsed_patch["new_path"],
             strip,
         ):
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Error: Patch target does not match the requested file path",
-                    }
-                ],
-                "isError": True,
-            }
+            return _error_result(
+                "Patch target does not match the requested file path",
+                code="patch_target_mismatch",
+                hint="Make sure the diff headers target the same file_path you passed to the tool.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         # Apply hunks to file content
         new_lines, failed_hunks = _apply_hunks(original_lines, parsed_hunks)
 
         if failed_hunks:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"Error: Patch application failed. {len(failed_hunks)} hunks could not be applied.",
-                    }
-                ],
-                "isError": True,
-                "metadata": {"failed_hunks": [hunk.to_dict() for hunk in failed_hunks]},
-            }
+            return _error_result(
+                f"Patch application failed. {len(failed_hunks)} hunks could not be applied.",
+                code="patch_apply_failed",
+                hint="Re-read the target file and regenerate the patch against the current content.",
+                metadata={
+                    "failed_hunks": [hunk.to_dict() for hunk in failed_hunks],
+                    "requested_path": file_path,
+                    **path_metadata,
+                },
+            )
 
         # Write patched content
         async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
             await f.writelines(new_lines)
 
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        f"Successfully applied patch to {file_path} ({len(parsed_hunks)} hunks)"
-                    ),
-                }
-            ],
-            "isError": False,
-            "metadata": {"hunks_applied": len(parsed_hunks)},
-        }
+        return _success_result(
+            f"Successfully applied patch to {file_path} ({len(parsed_hunks)} hunks)",
+            metadata={"hunks_applied": len(parsed_hunks), **path_metadata},
+        )
 
     except ValueError as e:
-        # Path security error
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return get_path_error_result(
+            str(e),
+            code="path_outside_workspace",
+            hint="Patch operations are limited to files inside the workspace.",
+            metadata={"requested_path": file_path},
+        )
     except Exception as e:
         logger.error(f"Error applying patch: {e}")
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="patch_failed",
+            metadata={"requested_path": file_path},
+        )
 
 
 def _extract_patch_path(header_value: str) -> str | None:

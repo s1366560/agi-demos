@@ -6,10 +6,10 @@ Provides Python AST parsing capabilities for code understanding.
 import ast
 import logging
 import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.server.websocket_server import MCPTool
+from src.tools.file_tools import _error_result, _path_metadata, _resolve_path, _success_result
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +37,24 @@ async def ast_parse(
         AST structure with symbols metadata
     """
     try:
-        full_path = Path(_workspace_dir) / file_path
+        full_path = _resolve_path(file_path, _workspace_dir, allow_extra_paths=True)
+        path_metadata = _path_metadata(full_path, _workspace_dir)
 
         if not full_path.exists():
-            return {
-                "content": [{"type": "text", "text": f"File not found: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"File not found: {file_path}",
+                code="file_not_found",
+                hint="Pass a Python file inside the workspace or an allowlisted read-only path.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         if not full_path.is_file():
-            return {
-                "content": [{"type": "text", "text": f"Not a file: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Not a file: {file_path}",
+                code="not_a_file",
+                hint="AST parsing requires a concrete Python source file.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         content = full_path.read_text(encoding="utf-8")
         tree = ast.parse(content, filename=str(full_path))
@@ -235,14 +240,14 @@ async def ast_parse(
                         lines.append(f"    - {async_prefix}def {method['name']}({', '.join(method['args'])})")
 
         if symbols["functions"]:
-            lines.append(f"")
+            lines.append("")
             lines.append(f"Functions ({len(symbols['functions'])}):")
             for func in symbols["functions"]:
                 async_prefix = "async " if func.get("async") else ""
                 lines.append(f"  {func['lineno']}: {async_prefix}def {func['name']}({', '.join(func['args'])})")
 
         if symbols["imports"]:
-            lines.append(f"")
+            lines.append("")
             lines.append(f"Imports ({len(symbols['imports'])}):")
             for imp in symbols["imports"]:
                 if imp["type"] == "import":
@@ -251,28 +256,37 @@ async def ast_parse(
                 else:
                     lines.append(f"  {imp['lineno']}: from {imp['module']} import {', '.join(imp['names'])}")
 
-        return {
-            "content": [{"type": "text", "text": "\n".join(lines)}],
-            "isError": False,
-            "metadata": {
+        return _success_result(
+            "\n".join(lines),
+            metadata={
                 "file_path": file_path,
                 "symbols": symbols,
                 "total_symbols": sum(len(v) for v in symbols.values()),
+                **path_metadata,
             },
-        }
+        )
 
     except SyntaxError as e:
-        return {
-            "content": [{"type": "text", "text": f"Syntax error at line {e.lineno}: {e.msg}"}],
-            "isError": True,
-            "metadata": {"error_type": "SyntaxError", "lineno": e.lineno},
-        }
+        return _error_result(
+            f"Syntax error at line {e.lineno}: {e.msg}",
+            code="syntax_error",
+            hint="Fix the Python syntax before using AST tools on this file.",
+            metadata={"error_type": "SyntaxError", "lineno": e.lineno, "file_path": file_path},
+        )
+    except ValueError as e:
+        return _error_result(
+            str(e),
+            code="path_outside_workspace",
+            hint="AST tools are limited to the workspace or allowlisted read-only directories.",
+            metadata={"requested_path": file_path},
+        )
     except Exception as e:
         logger.error(f"Error parsing AST: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="ast_parse_failed",
+            metadata={"requested_path": file_path},
+        )
 
 
 def create_ast_parse_tool() -> MCPTool:
@@ -348,10 +362,12 @@ async def ast_find_symbols(
             symbols["classes"] + symbols["functions"] + symbols["imports"]
         )
     else:
-        return {
-            "content": [{"type": "text", "text": f"Invalid symbol_type: {symbol_type}"}],
-            "isError": True,
-        }
+        return _error_result(
+            f"Invalid symbol_type: {symbol_type}",
+            code="invalid_symbol_type",
+            hint="Use one of: class, function, import, all.",
+            metadata={"symbol_type": symbol_type},
+        )
 
     # Filter by pattern if provided
     if pattern:
@@ -360,10 +376,12 @@ async def ast_find_symbols(
             regex = re.compile(pattern, flags)
             matches = [m for m in matches if regex.search(m.get("name", ""))]
         except re.error as e:
-            return {
-                "content": [{"type": "text", "text": f"Invalid regex pattern: {e}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"Invalid regex pattern: {e}",
+                code="invalid_regex",
+                hint="Provide a valid Python regular expression.",
+                metadata={"pattern": pattern},
+            )
 
     # Format output
     lines = []
@@ -376,7 +394,7 @@ async def ast_find_symbols(
                 lines.append(f"{lineno}: {m['parent']}.{name} ({type_label})")
             else:
                 lines.append(f"{lineno}: {name} ({type_label})")
-        elif m.get("type") == "import":
+        elif m.get("type") in {"import", "import_from"}:
             if m["type"] == "import":
                 alias = f" as {m['alias']}" if m['alias'] else ""
                 lines.append(f"{m['lineno']}: import {m['module']}{alias}")
@@ -384,17 +402,15 @@ async def ast_find_symbols(
                 lines.append(f"{m['lineno']}: from {m['module']} import {', '.join(m['names'])}")
 
     if not lines:
-        return {
-            "content": [{"type": "text", "text": f"No {symbol_type} symbols found"}],
-            "isError": False,
-            "metadata": {"matches": [], "count": 0},
-        }
+        return _success_result(
+            f"No {symbol_type} symbols found",
+            metadata={"matches": [], "count": 0},
+        )
 
-    return {
-        "content": [{"type": "text", "text": "\n".join(lines)}],
-        "isError": False,
-        "metadata": {"matches": matches, "count": len(matches)},
-    }
+    return _success_result(
+        "\n".join(lines),
+        metadata={"matches": matches, "count": len(matches)},
+    )
 
 
 def create_ast_find_symbols_tool() -> MCPTool:
@@ -455,13 +471,16 @@ async def ast_extract_function(
         Function source code and metadata
     """
     try:
-        full_path = Path(_workspace_dir) / file_path
+        full_path = _resolve_path(file_path, _workspace_dir, allow_extra_paths=True)
+        path_metadata = _path_metadata(full_path, _workspace_dir)
 
         if not full_path.exists():
-            return {
-                "content": [{"type": "text", "text": f"File not found: {file_path}"}],
-                "isError": True,
-            }
+            return _error_result(
+                f"File not found: {file_path}",
+                code="file_not_found",
+                hint="Pass a Python file inside the workspace or an allowlisted read-only path.",
+                metadata={"requested_path": file_path, **path_metadata},
+            )
 
         content = full_path.read_text(encoding="utf-8")
         tree = ast.parse(content, filename=str(full_path))
@@ -517,11 +536,10 @@ async def ast_extract_function(
         finder.visit(tree)
 
         if not finder.result:
-            return {
-                "content": [{"type": "text", "text": f"Function '{function_name}' not found"}],
-                "isError": False,
-                "metadata": {"found": False},
-            }
+            return _success_result(
+                f"Function '{function_name}' not found",
+                metadata={"found": False, **path_metadata},
+            )
 
         # Extract source lines
         lines = content.splitlines()
@@ -530,26 +548,36 @@ async def ast_extract_function(
         source_lines = lines[start:end]
         source = "\n".join(source_lines)
 
-        return {
-            "content": [{"type": "text", "text": source}],
-            "isError": False,
-            "metadata": {
+        return _success_result(
+            source,
+            metadata={
                 "found": True,
                 **finder.result,
+                **path_metadata,
             },
-        }
+        )
 
     except SyntaxError as e:
-        return {
-            "content": [{"type": "text", "text": f"Syntax error at line {e.lineno}: {e.msg}"}],
-            "isError": True,
-        }
+        return _error_result(
+            f"Syntax error at line {e.lineno}: {e.msg}",
+            code="syntax_error",
+            hint="Fix the Python syntax before extracting function source.",
+            metadata={"requested_path": file_path, "lineno": e.lineno},
+        )
+    except ValueError as e:
+        return _error_result(
+            str(e),
+            code="path_outside_workspace",
+            hint="AST tools are limited to the workspace or allowlisted read-only directories.",
+            metadata={"requested_path": file_path},
+        )
     except Exception as e:
         logger.error(f"Error extracting function: {e}", exc_info=True)
-        return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-            "isError": True,
-        }
+        return _error_result(
+            str(e),
+            code="ast_extract_failed",
+            metadata={"requested_path": file_path},
+        )
 
 
 def create_ast_extract_function_tool() -> MCPTool:
@@ -616,7 +644,7 @@ async def ast_get_imports(
         # Group by module
         grouped: Dict[str, List[Dict]] = {}
         for imp in imports:
-            module = imp.get("module", "")
+            module = imp.get("module", "") or "<relative>"
             if module not in grouped:
                 grouped[module] = []
             grouped[module].append(imp)
@@ -631,20 +659,18 @@ async def ast_get_imports(
                 else:
                     lines.append(f"  - from {imp['module']} import {', '.join(imp['names'])}")
 
-        return {
-            "content": [{"type": "text", "text": "\n".join(lines)}],
-            "isError": False,
-            "metadata": {"imports": imports, "grouped": grouped, "count": len(imports)},
-        }
+        return _success_result(
+            "\n".join(lines),
+            metadata={"imports": imports, "grouped": grouped, "count": len(imports)},
+        )
 
     # Flat list
     lines = [f"{imp['lineno']}: {imp['module']}" for imp in imports]
 
-    return {
-        "content": [{"type": "text", "text": "\n".join(lines)}],
-        "isError": False,
-        "metadata": {"imports": imports, "count": len(imports)},
-    }
+    return _success_result(
+        "\n".join(lines),
+        metadata={"imports": imports, "count": len(imports)},
+    )
 
 
 def create_ast_get_imports_tool() -> MCPTool:

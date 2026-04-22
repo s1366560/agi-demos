@@ -54,11 +54,65 @@ After starting the container:
 | Tool | Description |
 |------|-------------|
 | `read` | Read file contents with line numbers |
+| `batch_read` | Read multiple files in one call |
 | `write` | Write/create files |
 | `edit` | Replace text in files |
 | `glob` | Find files by pattern |
 | `grep` | Search file contents with regex |
+| `list` | List files/directories with recursive and detailed modes |
+| `patch` | Apply unified diff patches |
 | `bash` | Execute shell commands |
+
+### Artifact Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_artifacts` | Discover exportable files in output directories |
+| `export_artifact` | Export one file with MIME and encoding metadata |
+| `batch_export_artifacts` | Export multiple files in one call |
+
+### Code Analysis Tools
+
+| Tool | Description |
+|------|-------------|
+| `ast_parse` | Parse Python files into symbol metadata |
+| `ast_find_symbols` | Find classes, functions, and imports |
+| `ast_extract_function` | Extract function or method source |
+| `ast_get_imports` | List imports, optionally grouped by module |
+| `code_index_build` | Build a Python symbol/reference index |
+| `find_definition` | Locate symbol definitions in the index |
+| `find_references` | Locate symbol references in the index |
+| `call_graph` | Show outgoing/incoming call relationships |
+| `dependency_graph` | Summarize import relationships |
+
+### Edit and Refactor Tools
+
+| Tool | Description |
+|------|-------------|
+| `edit_by_ast` | Rename Python classes/functions/methods via AST |
+| `batch_edit` | Apply multiple string edits in one call |
+| `preview_edit` | Preview a unified diff before editing |
+
+### Test and Git Tools
+
+| Tool | Description |
+|------|-------------|
+| `generate_tests` | Generate test skeletons from Python source |
+| `run_tests` | Run pytest suites from the sandbox |
+| `analyze_coverage` | Analyze file-level test coverage |
+| `git_diff` | Inspect current git changes |
+| `git_log` | Show recent commits |
+| `generate_commit` | Draft a commit message from current changes |
+
+### Import / Dependency Tools
+
+| Tool | Description |
+|------|-------------|
+| `import_file` | Import a single file from MemStack storage |
+| `import_files_batch` | Import multiple files from MemStack storage |
+| `deps_check` | Check Python/system/command dependencies |
+| `deps_install` | Install Python/system/npm dependencies |
+| `plugin_tool_exec` | Run plugin-scoped helper commands |
 
 ### Desktop Tools
 

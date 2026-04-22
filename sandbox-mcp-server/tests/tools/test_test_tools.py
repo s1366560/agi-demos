@@ -6,7 +6,9 @@ TDD Cycle:
 3. REFACTOR - Improve while keeping tests passing
 """
 
-import asyncio
+import ast
+from pathlib import Path
+
 import pytest
 
 from src.tools.test_tools import (
@@ -87,6 +89,47 @@ class Calculator:
 
         assert result.get("isError") is True
 
+    @pytest.mark.asyncio
+    async def test_generate_tests_output_is_valid_python(self, tmp_path):
+        """Generated tests should always be syntactically valid Python."""
+        source_file = tmp_path / "calculator.py"
+        source_file.write_text(
+            """
+def add(a: int, b: int) -> int:
+    return a + b
+
+async def fetch(name: str) -> str:
+    return name
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = await generate_tests(
+            file_path=str(source_file),
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        output_file = Path(result["metadata"]["output_file"])
+        ast.parse(output_file.read_text(encoding="utf-8"))
+
+    @pytest.mark.asyncio
+    async def test_generate_tests_rejects_path_escape(self, tmp_path):
+        """Test generation should not write files for sources outside the workspace."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        outside = tmp_path / "outside.py"
+        outside.write_text("def escape() -> int:\n    return 1\n", encoding="utf-8")
+
+        result = await generate_tests(
+            file_path=str(outside.resolve()),
+            _workspace_dir=str(workspace),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "path_outside_workspace"
+
 
 class TestRunTests:
     """Test suite for run_tests tool."""
@@ -152,6 +195,22 @@ def test_failing():
         )
 
         assert not result.get("isError")
+
+    @pytest.mark.asyncio
+    async def test_run_tests_rejects_path_escape(self, tmp_path):
+        """Escaped test directories should be rejected."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+
+        result = await run_tests(
+            test_path=str(outside.resolve()),
+            _workspace_dir=str(workspace),
+        )
+
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["code"] == "path_outside_workspace"
 
 
 class TestAnalyzeCoverage:
@@ -230,6 +289,28 @@ def test_my_function():
         )
 
         assert result.get("isError") is True
+
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_does_not_leave_temp_test_file(self, tmp_path):
+        """Coverage analysis should not leave helper tests in the source directory."""
+        module_file = tmp_path / "mymodule.py"
+        module_file.write_text(
+            """
+def my_function():
+    return 1
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = await analyze_coverage(
+            file_path=str(module_file),
+            use_pytest=True,
+            _workspace_dir=str(tmp_path),
+        )
+
+        assert not result.get("isError")
+        assert not (tmp_path / "test_mymodule_coverage.py").exists()
 
 
 class TestTestToolsIntegration:

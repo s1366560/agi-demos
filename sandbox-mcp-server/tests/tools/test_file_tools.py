@@ -2,7 +2,14 @@
 
 import pytest
 
-from src.tools.file_tools import grep_files
+from src.tools.file_tools import (
+    batch_read,
+    get_path_error_result,
+    glob_files,
+    grep_files,
+    read_file,
+)
+from src.tools.registry import get_tool_registry
 
 
 class TestGrepTool:
@@ -54,3 +61,126 @@ class TestGrepTool:
 
         assert not result.get("isError")
         assert "outside.txt:1: needle" in result["content"][0]["text"]
+
+
+class TestReadTool:
+    """Regression coverage for read-oriented file helpers."""
+
+    @pytest.mark.asyncio
+    async def test_read_file_returns_structured_missing_file_error(self, tmp_path):
+        """Missing-file responses should include structured hints and suggestions."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "sample.py").write_text("print('ok')\n", encoding="utf-8")
+
+        result = await read_file(
+            file_path="sampl.py",
+            _workspace_dir=str(workspace),
+        )
+
+        assert result.get("isError") is True
+        metadata = result.get("metadata", {})
+        error = metadata.get("error", {})
+        assert error.get("code") == "file_not_found"
+        assert "glob" in (error.get("hint") or "").lower()
+        suggestions = error.get("suggestions") or []
+        assert any("sample.py" in suggestion for suggestion in suggestions)
+
+    @pytest.mark.asyncio
+    async def test_read_file_supports_tilde_expansion(self, tmp_path, monkeypatch):
+        """Tilde paths should be expanded before workspace resolution."""
+        fake_home = tmp_path / "home"
+        workspace = fake_home / "workspace"
+        workspace.mkdir(parents=True)
+        sample = workspace / "sample.txt"
+        sample.write_text("hello\nworld\n", encoding="utf-8")
+
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        result = await read_file(
+            file_path="~/workspace/sample.txt",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        assert "hello" in result["content"][0]["text"]
+        assert result["metadata"]["resolved_path"] == str(sample.resolve())
+
+
+class TestGlobTool:
+    """Regression tests for glob path normalization."""
+
+    @pytest.mark.asyncio
+    async def test_glob_supports_tilde_expansion(self, tmp_path, monkeypatch):
+        """Glob should expand tilde-based patterns and search roots."""
+        fake_home = tmp_path / "home"
+        workspace = fake_home / "workspace"
+        src_dir = workspace / "src"
+        src_dir.mkdir(parents=True)
+        sample = src_dir / "demo.py"
+        sample.write_text("print('demo')\n", encoding="utf-8")
+
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        result = await glob_files(
+            pattern="~/workspace/src/*.py",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        assert "src/demo.py" in result["content"][0]["text"]
+
+
+class TestBatchReadTool:
+    """Regression tests for batch file reads."""
+
+    @pytest.mark.asyncio
+    async def test_batch_read_collects_results_and_errors(self, tmp_path):
+        """Batch reads should preserve both successes and per-file failures."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        first = workspace / "one.txt"
+        second = workspace / "two.txt"
+        first.write_text("one\n", encoding="utf-8")
+        second.write_text("two\n", encoding="utf-8")
+
+        result = await batch_read(
+            file_paths=["one.txt", "missing.txt", "two.txt"],
+            _workspace_dir=str(workspace),
+        )
+
+        assert result.get("isError") is False
+        assert result["metadata"]["successful"] == 2
+        assert result["metadata"]["failed"] == 1
+        assert len(result["results"]) == 2
+        assert len(result["errors"]) == 1
+        assert result["errors"][0]["error"]["code"] == "file_not_found"
+        assert "one" in result["results"][0]["content"]
+
+
+class TestErrorHelpers:
+    """Focused tests for reusable error payload helpers."""
+
+    def test_path_error_helper_includes_structured_metadata(self):
+        """Shared error helpers should produce machine-readable metadata."""
+        result = get_path_error_result(
+            message="Path '/tmp/outside.py' is outside workspace directory",
+            code="path_outside_workspace",
+            hint="Use a path inside the workspace.",
+            suggestions=["sandbox-mcp-server/src/tools/file_tools.py"],
+        )
+
+        assert result["isError"] is True
+        error = result["metadata"]["error"]
+        assert error["code"] == "path_outside_workspace"
+        assert error["suggestions"] == ["sandbox-mcp-server/src/tools/file_tools.py"]
+
+
+class TestToolRegistry:
+    """Regression tests for file-tool registration."""
+
+    def test_batch_read_is_registered(self):
+        """The registry should expose the new batch_read tool."""
+        registry = get_tool_registry()
+
+        assert "batch_read" in registry.list_names()
