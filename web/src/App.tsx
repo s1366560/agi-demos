@@ -35,6 +35,9 @@ const OAuthCallback = lazy(() =>
 const InviteAccept = lazy(() =>
   import('./pages/InviteAccept').then((m) => ({ default: m.InviteAccept }))
 );
+const DeviceApprove = lazy(() =>
+  import('./pages/DeviceApprove').then((m) => ({ default: m.DeviceApprove }))
+);
 
 // Tenant pages
 const TenantOverview = lazy(() =>
@@ -493,6 +496,14 @@ function App() {
               element={
                 <Suspense fallback={<PageLoader />}>
                   <InviteAccept />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/device"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <DeviceApprove />
                 </Suspense>
               }
             />

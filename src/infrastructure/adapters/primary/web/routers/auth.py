@@ -2,7 +2,9 @@
 Authentication router.
 """
 
+import json as _json
 import logging
+import secrets
 from typing import Any
 from uuid import uuid4
 
@@ -323,3 +325,181 @@ async def update_user_me(
         created_at=current_user.created_at,
         profile={},
     )
+
+
+# ---------------------------------------------------------------------------
+# Device-code flow (RFC 8628) — for CLI `memstack login`
+# ---------------------------------------------------------------------------
+#
+# Flow:
+#   1. CLI  → POST /auth/device/code        (unauthenticated)
+#      Returns: {device_code, user_code, verification_uri, interval, expires_in}
+#   2. User → browser to verification_uri, logs in, enters user_code, approves.
+#      Approval happens via authenticated POST /auth/device/approve
+#      {"user_code": "ABCD1234"} which binds the session to a user and
+#      creates a session ms_sk_.
+#   3. CLI  → POST /auth/device/token {device_code}  (polling, every `interval`)
+#      Returns: 428 Precondition Required while pending,
+#               200 {access_token, token_type} once approved,
+#               410 Gone once expired.
+#
+# Storage: Redis key `memstack:device_code:{device_code}` → JSON
+#   {"user_code": str, "status": "pending|approved|expired",
+#    "approved_user_id": str|null, "access_token": str|null}
+# Additional index `memstack:device_user_code:{user_code}` → device_code.
+# TTL: 600 seconds (10 minutes).
+
+_DEVICE_CODE_TTL = 600
+_DEVICE_CODE_INTERVAL = 5
+_USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I,O,0,1 ambiguity
+_USER_CODE_LEN = 8
+
+
+def _new_user_code() -> str:
+    return "".join(secrets.choice(_USER_CODE_ALPHABET) for _ in range(_USER_CODE_LEN))
+
+
+def _device_key(device_code: str) -> str:
+    return f"memstack:device_code:{device_code}"
+
+
+def _user_code_key(user_code: str) -> str:
+    return f"memstack:device_user_code:{user_code}"
+
+
+@router.post("/auth/device/code")
+async def device_code_request(request: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Create a new device-code session.
+
+    Accepts an optional JSON body (currently unused but kept for forward
+    compatibility with client_id / scope hints).
+    """
+    _ = request  # reserved
+    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+    redis_client = await get_redis_client()
+
+    # Avoid collisions on user_code by retrying a few times.
+    for _attempt in range(5):
+        user_code = _new_user_code()
+        if not await redis_client.exists(_user_code_key(user_code)):
+            break
+    else:
+        raise HTTPException(status_code=503, detail="Could not allocate user code")
+
+    device_code = secrets.token_urlsafe(32)
+    payload = {
+        "user_code": user_code,
+        "status": "pending",
+        "approved_user_id": None,
+        "access_token": None,
+    }
+    await redis_client.setex(
+        _device_key(device_code), _DEVICE_CODE_TTL, _json.dumps(payload)
+    )
+    await redis_client.setex(
+        _user_code_key(user_code), _DEVICE_CODE_TTL, device_code
+    )
+
+    # The verification URI is the frontend route that reads user_code from
+    # the URL, authenticates the user, and calls /auth/device/approve.
+    # We return only the path; the CLI composes the full URL from its
+    # configured base.
+    return {
+        "device_code": device_code,
+        "user_code": user_code,
+        "verification_uri": "/device",
+        "verification_uri_complete": f"/device?user_code={user_code}",
+        "expires_in": _DEVICE_CODE_TTL,
+        "interval": _DEVICE_CODE_INTERVAL,
+    }
+
+
+@router.post("/auth/device/approve")
+async def device_code_approve(
+    payload: dict[str, Any],
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Approve a pending device code. Requires an authenticated user.
+
+    The frontend `/device` page posts here with {"user_code": "..."}.
+    """
+    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+    user_code = str(payload.get("user_code", "")).strip().upper()
+    if not user_code:
+        raise HTTPException(status_code=400, detail="user_code required")
+
+    redis_client = await get_redis_client()
+    device_code_raw = await redis_client.get(_user_code_key(user_code))
+    if device_code_raw is None:
+        raise HTTPException(status_code=404, detail="user_code expired or unknown")
+    device_code = device_code_raw.decode() if isinstance(device_code_raw, bytes) else device_code_raw
+
+    raw = await redis_client.get(_device_key(device_code))
+    if raw is None:
+        raise HTTPException(status_code=410, detail="device code expired")
+    session = _json.loads(raw)
+    if session.get("status") != "pending":
+        raise HTTPException(status_code=409, detail=f"already {session.get('status')}")
+
+    # Determine permissions like /auth/token does.
+    is_admin = any(r.role.name == "admin" for r in current_user.roles)
+    permissions = ["read", "write"] + (["admin"] if is_admin else [])
+
+    plain_key, _api_key = await create_api_key(
+        db,
+        user_id=current_user.id,
+        name=f"CLI device login ({user_code})",
+        permissions=permissions,
+        expires_in_days=30,
+    )
+    await db.commit()
+
+    session["status"] = "approved"
+    session["approved_user_id"] = current_user.id
+    session["access_token"] = plain_key
+    ttl = await redis_client.ttl(_device_key(device_code))
+    ttl_seconds = ttl if ttl and ttl > 0 else _DEVICE_CODE_TTL
+    await redis_client.setex(_device_key(device_code), ttl_seconds, _json.dumps(session))
+
+    return {"status": "approved"}
+
+
+@router.post("/auth/device/token")
+async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
+    """Poll for a device-code approval. Unauthenticated — device_code is the secret."""
+    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+    device_code = str(payload.get("device_code", "")).strip()
+    if not device_code:
+        raise HTTPException(status_code=400, detail="device_code required")
+
+    redis_client = await get_redis_client()
+    raw = await redis_client.get(_device_key(device_code))
+    if raw is None:
+        raise HTTPException(status_code=410, detail="expired_token")
+    session = _json.loads(raw)
+    status_val = session.get("status", "pending")
+    if status_val == "pending":
+        # RFC 8628 uses 400 + error=authorization_pending. We use 428 so that
+        # HTTP-generic retry logic can distinguish "not ready" from "bad".
+        raise HTTPException(
+            status_code=428,
+            detail={"error": "authorization_pending", "interval": _DEVICE_CODE_INTERVAL},
+        )
+    if status_val != "approved":
+        raise HTTPException(status_code=410, detail=status_val)
+
+    access_token = session.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=500, detail="approved but no token stored")
+
+    # Single-use: delete the device code + user_code index.
+    await redis_client.delete(_device_key(device_code))
+    user_code = session.get("user_code")
+    if user_code:
+        await redis_client.delete(_user_code_key(user_code))
+
+    return {"access_token": access_token, "token_type": "bearer"}

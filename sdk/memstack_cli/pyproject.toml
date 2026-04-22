@@ -1,0 +1,51 @@
+[project]
+name = "memstack-cli"
+version = "0.1.0"
+description = "MemStack command-line interface - ship prompts, fetch artifacts, manage conversations."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "MemStack Team", email = "dev@memstack.ai" }]
+keywords = ["ai", "memstack", "cli", "agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "click>=8.1.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+memstack = "memstack_cli.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/s1366560/memstack"
+Documentation = "https://docs.memstack.ai"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["memstack_cli", "memstack_cli.commands"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
