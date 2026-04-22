@@ -79,6 +79,22 @@ class ParticipantRemoveRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
 
 
+class CoordinatorSetRequest(BaseModel):
+    """Assign (or clear) the coordinator agent.
+
+    The target agent MUST already be on the roster. Passing ``null`` clears
+    the coordinator — valid only when the effective mode is *not*
+    ``autonomous`` (autonomous conversations require a coordinator to pass
+    ``assert_autonomous_invariants``).
+    """
+
+    agent_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Agent ID to promote to coordinator; null to clear.",
+    )
+
+
 class RosterResponse(BaseModel):
     """Current roster + coordination state for a conversation."""
 
@@ -271,6 +287,40 @@ async def remove_participant(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except CoordinatorRequiredError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+    await conv_repo.save(conversation)
+    await db.commit()
+    return _roster_response(conversation, effective_mode)
+
+
+@router.patch(
+    "/conversations/{conversation_id}/participants/coordinator",
+    response_model=RosterResponse,
+)
+async def set_coordinator(
+    conversation_id: str,
+    data: CoordinatorSetRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> RosterResponse:
+    """Assign or clear the coordinator agent for a conversation.
+
+    Required before switching an autonomous conversation into run state
+    (``Conversation.assert_autonomous_invariants`` raises
+    ``CoordinatorRequiredError`` when it is missing).
+    """
+    conv_repo, conversation, project = await _load_conversation_and_project(
+        request, db, conversation_id
+    )
+    effective_mode = _resolve_effective_mode(conversation, project)
+    _assert_write_permission(conversation, project, current_user, effective_mode)
+
+    try:
+        conversation.set_coordinator(data.agent_id)
+    except ParticipantNotPresentError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     await conv_repo.save(conversation)
     await db.commit()

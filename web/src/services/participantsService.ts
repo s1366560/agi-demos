@@ -84,4 +84,14 @@ export const participantsService = {
       options?.reason ? { data: { reason: options.reason } } : undefined
     );
   },
+
+  async setCoordinator(
+    conversationId: string,
+    agentId: string | null
+  ): Promise<RosterResponse> {
+    return httpClient.patch<RosterResponse>(
+      `${base(conversationId)}/coordinator`,
+      { agent_id: agentId }
+    );
+  },
 };

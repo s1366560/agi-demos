@@ -28,9 +28,8 @@ const modeLabel = (mode: string) => mode.replace(/_/g, ' ');
 export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelProps>(
   ({ conversationId, onSelectAgent, onRemoveAgent, className }) => {
     const { t } = useTranslation();
-    const { roster, loading, error, removeParticipant } = useConversationParticipants(
-      conversationId
-    );
+    const { roster, loading, error, removeParticipant, setCoordinator } =
+      useConversationParticipants(conversationId);
 
     if (!conversationId) {
       return null;
@@ -111,6 +110,21 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                         {t('agent.participants.focused', { defaultValue: 'focused' })}
                       </span>
                     )}
+                    {!isCoordinator && (
+                      <button
+                        type="button"
+                        onClick={() => void setCoordinator(agentId)}
+                        className="rounded px-2 py-0.5 text-xs text-[#666] hover:bg-[#fafafa] hover:text-[#0070f3]"
+                        title={t('agent.participants.setCoordinator', {
+                          defaultValue: 'Set as coordinator',
+                        })}
+                        aria-label={t('agent.participants.setCoordinatorFor', {
+                          defaultValue: `Set ${agentId} as coordinator`,
+                        })}
+                      >
+                        ★
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={async () => {
@@ -129,6 +143,14 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
               );
             })}
           </ul>
+        )}
+        {effective_mode === 'autonomous' && !coordinator_agent_id && participant_agents.length > 0 && (
+          <p className="mt-3 text-xs text-[#ee0000]">
+            {t('agent.participants.autonomousRequiresCoordinator', {
+              defaultValue:
+                'Autonomous mode requires a coordinator. Click ★ on a participant to assign.',
+            })}
+          </p>
         )}
       </aside>
     );
