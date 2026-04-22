@@ -1595,7 +1595,13 @@ class AgentTaskRefusedEvent(AgentDomainEvent):
 
 
 class AgentHumanInputRequestedEvent(AgentDomainEvent):
-    """Agent judged that human input is required and raised a request."""
+    """Agent judged that human input is required and raised a request.
+
+    Carries the **agent-declared** HITL category plus the audit-only
+    ``rationale`` / ``proposed_fallback`` prose (Track B · Agent First).
+    The backend never classifies category itself — it only applies the
+    structural ``blocking_categories ∩ side_effects`` upgrade.
+    """
 
     event_type: AgentEventType = AgentEventType.AGENT_HUMAN_INPUT_REQUESTED
     conversation_id: str
@@ -1603,6 +1609,27 @@ class AgentHumanInputRequestedEvent(AgentDomainEvent):
     question: str
     urgency: str = "normal"  # normal | high | blocking
     context: str = ""
+    category: str = "informational"  # HitlCategory value (agent-declared)
+    rationale: str = ""
+    proposed_fallback: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentDecisionLoggedEvent(AgentDomainEvent):
+    """Audit marker for a judgmental tool-call (Agent First).
+
+    Emitted alongside every multi-agent action tool + supervisor
+    ``verdict``. Persisted to ``decision_logs``.
+    """
+
+    event_type: AgentEventType = AgentEventType.AGENT_DECISION_LOGGED
+    conversation_id: str
+    actor_agent_id: str
+    tool_name: str
+    input_payload: dict[str, Any] = Field(default_factory=dict)
+    output_summary: str = ""
+    rationale: str = ""
+    latency_ms: int = -1
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

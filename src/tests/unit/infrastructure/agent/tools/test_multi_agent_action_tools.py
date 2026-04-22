@@ -168,8 +168,11 @@ class TestRequestHumanInput:
         result = await request_human_input_tool.execute(
             ctx,
             question="Should I proceed with the destructive migration?",
+            category="blocking_human_only",
+            rationale="DB-destructive action requires human sign-off.",
             context="The target database has 2TB of data.",
             urgency="blocking",
+            proposed_fallback="Abort and notify operator on channel #ops.",
         )
         assert result.is_error is False
         events = _drain(ctx)
@@ -177,6 +180,9 @@ class TestRequestHumanInput:
         event = events[0]
         assert isinstance(event, AgentHumanInputRequestedEvent)
         assert event.urgency == "blocking"
+        assert event.category == "blocking_human_only"
+        assert event.rationale.startswith("DB-destructive")
+        assert event.proposed_fallback.startswith("Abort")
         assert "destructive migration" in event.question
 
     @pytest.mark.asyncio
@@ -185,7 +191,33 @@ class TestRequestHumanInput:
         result = await request_human_input_tool.execute(
             ctx,
             question="Q?",
+            category="informational",
+            rationale="Needs operator preference.",
             urgency="extreme",
+        )
+        assert result.is_error is True
+        assert _drain(ctx) == []
+
+    @pytest.mark.asyncio
+    async def test_rejects_bad_category(self) -> None:
+        ctx = _make_ctx()
+        result = await request_human_input_tool.execute(
+            ctx,
+            question="Q?",
+            category="semantic_judgment",  # not a structural value
+            rationale="r",
+        )
+        assert result.is_error is True
+        assert _drain(ctx) == []
+
+    @pytest.mark.asyncio
+    async def test_rejects_empty_rationale(self) -> None:
+        ctx = _make_ctx()
+        result = await request_human_input_tool.execute(
+            ctx,
+            question="Q?",
+            category="preference",
+            rationale="   ",
         )
         assert result.is_error is True
         assert _drain(ctx) == []

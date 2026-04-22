@@ -62,6 +62,7 @@ _MAX_TITLE_LEN = 500
 _MAX_URGENCY = {"normal", "high", "blocking"}
 _MAX_SEVERITY = {"low", "medium", "high", "critical"}
 _MAX_PROGRESS_STATUS = {"in_progress", "blocked", "done", "needs_review"}
+_HITL_CATEGORIES = {"blocking_human_only", "preference", "informational"}
 
 
 def _require_non_empty(value: str, field: str) -> str | ToolResult:
@@ -270,8 +271,11 @@ async def refuse_task_tool(
     description=(
         "Raise a question to the human operator. Use when agent-only "
         "reasoning cannot resolve the issue (missing info, policy "
-        "decision, risky action). The urgency field lets you signal "
-        "whether work can continue while waiting."
+        "decision, risky action). YOU declare the category "
+        "(blocking_human_only | preference | informational), and YOU "
+        "provide a rationale explaining why this cannot be handled by "
+        "an agent — both are recorded verbatim in the decision log. "
+        "The backend never re-classifies the category from text."
     ),
     parameters={
         "type": "object",
@@ -280,9 +284,38 @@ async def refuse_task_tool(
                 "type": "string",
                 "description": "The question for the human. Plain prose.",
             },
+            "category": {
+                "type": "string",
+                "enum": [
+                    "blocking_human_only",
+                    "preference",
+                    "informational",
+                ],
+                "description": (
+                    "blocking_human_only = only a human can decide, "
+                    "conversation should halt; preference = human "
+                    "preference input (coordinator may auto-decide from "
+                    "operator_guidance in autonomous mode); "
+                    "informational = FYI only, no action required."
+                ),
+            },
+            "rationale": {
+                "type": "string",
+                "description": (
+                    "Prose explaining WHY this decision requires a "
+                    "human. Audited as-is; do NOT template."
+                ),
+            },
             "context": {
                 "type": "string",
                 "description": "Optional background context to help the human answer.",
+            },
+            "proposed_fallback": {
+                "type": "string",
+                "description": (
+                    "Optional: what you would do if no human answers. "
+                    "Used by autonomous-mode coordinators."
+                ),
             },
             "urgency": {
                 "type": "string",
@@ -295,7 +328,7 @@ async def refuse_task_tool(
                 "default": "normal",
             },
         },
-        "required": ["question"],
+        "required": ["question", "category", "rationale"],
     },
     permission=None,
     category="multi_agent",
@@ -305,17 +338,29 @@ async def request_human_input_tool(
     ctx: ToolContext,
     *,
     question: str,
+    category: str,
+    rationale: str,
     context: str = "",
+    proposed_fallback: str = "",
     urgency: str = "normal",
 ) -> ToolResult:
     """Request input from the human operator."""
     question_clean = _require_non_empty(question, "question")
     if isinstance(question_clean, ToolResult):
         return question_clean
+    category_ok = _require_enum(category, _HITL_CATEGORIES, "category")
+    if isinstance(category_ok, ToolResult):
+        return category_ok
+    rationale_clean = _require_non_empty(rationale, "rationale")
+    if isinstance(rationale_clean, ToolResult):
+        return rationale_clean
     urgency_ok = _require_enum(urgency, _MAX_URGENCY, "urgency")
     if isinstance(urgency_ok, ToolResult):
         return urgency_ok
     context_clean = context.strip()[:_MAX_TEXT_LEN] if isinstance(context, str) else ""
+    fallback_clean = (
+        proposed_fallback.strip()[:_MAX_TEXT_LEN] if isinstance(proposed_fallback, str) else ""
+    )
 
     event = AgentHumanInputRequestedEvent(
         conversation_id=ctx.conversation_id,
@@ -323,12 +368,16 @@ async def request_human_input_tool(
         question=question_clean,
         urgency=urgency_ok,
         context=context_clean,
+        category=category_ok,
+        rationale=rationale_clean,
+        proposed_fallback=fallback_clean,
     )
     await ctx.emit(event)
     return _result(
         "Human input requested",
         {
             "question": question_clean,
+            "category": category_ok,
             "urgency": urgency_ok,
             "requested_by": event.actor_agent_id,
         },

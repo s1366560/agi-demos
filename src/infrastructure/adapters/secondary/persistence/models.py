@@ -3192,3 +3192,74 @@ class PlanNodeModel(Base):
         Index("ix_workspace_plan_nodes_parent", "parent_id"),
         Index("ix_workspace_plan_nodes_workspace_task", "workspace_task_id"),
     )
+
+
+class PendingReviewModel(Base):
+    """HITL ``blocking_human_only`` pending review (Track B P2-3 phase-2)."""
+
+    __tablename__ = "pending_reviews"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    scope_agent_id: Mapped[str] = mapped_column(String, nullable=False)
+    effective_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    declared_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False)
+    urgency: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    question: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    context: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    proposed_fallback: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    structurally_upgraded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolution_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_pending_reviews_conversation_status", "conversation_id", "status"),
+        Index("ix_pending_reviews_agent", "scope_agent_id"),
+    )
+
+
+class DecisionLogModel(Base):
+    """Audit row for a judgmental tool-call (Track B P2-3 phase-2).
+
+    Every Agent-First decision (multi-agent action tools + supervisor
+    ``verdict``) must persist a row here; this is the forensic trail
+    backing the top-level Agent First rule.
+    """
+
+    __tablename__ = "decision_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(String, nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    output_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=-1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index(
+            "ix_decision_logs_conversation_created",
+            "conversation_id",
+            "created_at",
+        ),
+        Index("ix_decision_logs_agent", "agent_id"),
+        Index("ix_decision_logs_tool", "tool_name"),
+    )
