@@ -623,7 +623,21 @@ class TestHookCatalogAccess:
                 default_entrypoint=None,
                 default_settings={},
                 settings_schema={},
-            )
+            ),
+            SimpleNamespace(
+                plugin_name="memory-runtime",
+                hook_name="before_prompt_build",
+                hook_family="mutating",
+                display_name="Memory recall",
+                description="desc",
+                default_priority=25,
+                default_enabled=True,
+                default_executor_kind="builtin",
+                default_source_ref="memory-runtime",
+                default_entrypoint=None,
+                default_settings={},
+                settings_schema={},
+            ),
         ]
 
         with (
@@ -644,6 +658,10 @@ class TestHookCatalogAccess:
 
         assert response.hooks[0].hook_family == "mutating"
         assert response.hooks[0].default_executor_kind == "builtin"
+        assert {hook.plugin_name for hook in response.hooks} == {
+            "sisyphus-runtime",
+            "memory-runtime",
+        }
 
 
 @pytest.mark.unit

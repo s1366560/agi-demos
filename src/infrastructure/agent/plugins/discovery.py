@@ -98,6 +98,15 @@ def _discover_builtin_plugins(
     """Discover built-in plugins shipped inside the core runtime."""
     for plugin in _builtin_plugins():
         plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
+        payload = _resolve_entrypoint_manifest_payload(plugin)
+        manifest_metadata: PluginManifestMetadata | None = None
+        if payload is not None:
+            manifest_metadata, manifest_diagnostics = parse_plugin_manifest_payload(
+                payload,
+                plugin_name=plugin_name,
+                source="builtin manifest",
+            )
+            diagnostics.extend(manifest_diagnostics)
         if not _is_enabled(plugin_name, state_store=state_store, include_disabled=include_disabled):
             diagnostics.append(
                 PluginDiagnostic(
@@ -113,6 +122,13 @@ def _discover_builtin_plugins(
                 name=plugin_name,
                 plugin=plugin,
                 source="builtin",
+                version=manifest_metadata.version if manifest_metadata else None,
+                kind=manifest_metadata.kind if manifest_metadata else None,
+                manifest_id=manifest_metadata.id if manifest_metadata else None,
+                manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+                channels=manifest_metadata.channels if manifest_metadata else (),
+                providers=manifest_metadata.providers if manifest_metadata else (),
+                skills=manifest_metadata.skills if manifest_metadata else (),
             )
         )
         seen_names.add(plugin_name)

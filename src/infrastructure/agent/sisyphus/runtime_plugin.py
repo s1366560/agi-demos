@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, ClassVar
 
 from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
 from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
@@ -185,6 +185,11 @@ class BuiltinSisyphusRuntimePlugin:
     """Builtin plugin wrapper so discovery/runtime manager can inventory sisyphus-runtime."""
 
     name = PLUGIN_NAME
+    plugin_manifest: ClassVar[dict[str, str]] = {
+        "id": PLUGIN_NAME,
+        "kind": "runtime",
+        "version": "builtin",
+    }
 
     def setup(self, api: PluginRuntimeApi) -> None:
         _register_sisyphus_plugin(api)

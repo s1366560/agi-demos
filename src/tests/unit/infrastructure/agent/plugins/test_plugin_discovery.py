@@ -14,8 +14,13 @@ def test_discover_plugins_includes_builtin_runtime_plugins() -> None:
     """Core discovery should expose built-in runtime plugins."""
     discovered, diagnostics = discover_plugins(include_entrypoints=False)
 
-    names = {plugin.name for plugin in discovered}
+    by_name = {plugin.name: plugin for plugin in discovered}
+    names = set(by_name)
     assert {"sisyphus-runtime", "memory-runtime"}.issubset(names)
+    assert by_name["sisyphus-runtime"].kind == "runtime"
+    assert by_name["memory-runtime"].kind == "runtime"
+    assert by_name["sisyphus-runtime"].version == "builtin"
+    assert by_name["memory-runtime"].version == "builtin"
     assert all(diagnostic.code != "plugin_discovery_failed" for diagnostic in diagnostics)
 
 

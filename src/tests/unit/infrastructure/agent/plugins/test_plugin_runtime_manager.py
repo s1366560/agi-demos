@@ -112,10 +112,15 @@ def test_list_plugins_includes_builtin_runtime_plugins(tmp_path) -> None:
     )
 
     plugins, diagnostics = manager.list_plugins()
-    names = {item["name"] for item in plugins}
+    by_name = {item["name"]: item for item in plugins}
+    names = set(by_name)
 
     assert diagnostics == []
     assert {"sisyphus-runtime", "memory-runtime"}.issubset(names)
+    assert by_name["sisyphus-runtime"]["kind"] == "runtime"
+    assert by_name["memory-runtime"]["kind"] == "runtime"
+    assert by_name["sisyphus-runtime"]["version"] == "builtin"
+    assert by_name["memory-runtime"]["version"] == "builtin"
 
 
 @pytest.mark.unit

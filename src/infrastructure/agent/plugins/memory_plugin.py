@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from src.infrastructure.agent.memory.runtime import MemoryRuntimeProtocol
 from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, PluginToolBuildContext
@@ -248,6 +248,11 @@ class BuiltinMemoryRuntimePlugin:
     """Builtin plugin wrapper so discovery/runtime manager can inventory memory-runtime."""
 
     name = PLUGIN_NAME
+    plugin_manifest: ClassVar[dict[str, str]] = {
+        "id": PLUGIN_NAME,
+        "kind": "runtime",
+        "version": "builtin",
+    }
 
     def setup(self, api: PluginRuntimeApi) -> None:
         _register_memory_plugin(api)
