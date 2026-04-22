@@ -128,7 +128,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """Downgrade schema.
+
+    Fail fast (10s) instead of hanging indefinitely when idle-in-transaction
+    backends hold AccessShareLock on `skills`/`projects`. Operators must
+    stop API/worker processes before running this downgrade.
+    """
+    bind = op.get_bind()
+    bind.exec_driver_sql("SET LOCAL lock_timeout = '10s'")
+
     op.drop_column("skills", "revision_hash")
     op.drop_column("skills", "semver")
     op.drop_column("skills", "parent_curated_id")

@@ -112,6 +112,10 @@ class SkillResponse(BaseModel):
     metadata: dict[str, Any] | None
     current_version: int = 0
     version_label: str | None = None
+    # P2-4 curated lineage
+    parent_curated_id: str | None = None
+    semver: str | None = None
+    revision_hash: str | None = None
 
 
 class SkillMatchRequest(BaseModel):
@@ -157,6 +161,9 @@ def skill_to_response(skill: Skill) -> SkillResponse:
         metadata=skill.metadata,
         current_version=getattr(skill, "current_version", 0),
         version_label=getattr(skill, "version_label", None),
+        parent_curated_id=getattr(skill, "parent_curated_id", None),
+        semver=getattr(skill, "semver", None),
+        revision_hash=getattr(skill, "revision_hash", None),
     )
 
 

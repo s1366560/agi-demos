@@ -180,6 +180,14 @@ class Skill:
     # Version tracking
     current_version: int = 0  # Latest version_number from skill_versions
     version_label: str | None = None  # Display version from SKILL.md (e.g., "1.2.0")
+    # P2-4 curated library lineage — populated by curated fork / submission flows.
+    # ``parent_curated_id`` links a forked skill to its curated source row;
+    # ``semver`` + ``revision_hash`` mirror the curated row at fork time so the
+    # domain knows its provenance. Direct PATCH of these fields is rejected by
+    # the skills router (managed by the curated registry).
+    parent_curated_id: str | None = None
+    semver: str | None = None
+    revision_hash: str | None = None
 
     # Name validation pattern (AgentSkills.io spec)
     _NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -395,6 +403,9 @@ class Skill:
             is_system_skill=self.is_system_skill,
             current_version=self.current_version,
             version_label=self.version_label,
+            parent_curated_id=self.parent_curated_id,
+            semver=self.semver,
+            revision_hash=self.revision_hash,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -432,6 +443,10 @@ class Skill:
             "spec_version": self.spec_version,
             "current_version": self.current_version,
             "version_label": self.version_label,
+            # Curated lineage (P2-4)
+            "parent_curated_id": self.parent_curated_id,
+            "semver": self.semver,
+            "revision_hash": self.revision_hash,
         }
 
     @classmethod
@@ -470,6 +485,9 @@ class Skill:
             spec_version=data.get("spec_version", "1.0"),
             current_version=data.get("current_version", 0),
             version_label=data.get("version_label"),
+            parent_curated_id=data.get("parent_curated_id"),
+            semver=data.get("semver"),
+            revision_hash=data.get("revision_hash"),
         )
 
     @classmethod

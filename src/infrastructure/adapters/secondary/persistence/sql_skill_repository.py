@@ -85,6 +85,9 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             full_content=skill.full_content,
             current_version=skill.current_version,
             version_label=skill.version_label,
+            parent_curated_id=skill.parent_curated_id,
+            semver=skill.semver,
+            revision_hash=skill.revision_hash,
         )
 
         self._session.add(db_skill)
@@ -155,6 +158,10 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         db_skill.full_content = skill.full_content
         db_skill.current_version = skill.current_version
         db_skill.version_label = skill.version_label
+        # P2-4 curated lineage — preserved through domain update
+        db_skill.parent_curated_id = skill.parent_curated_id
+        db_skill.semver = skill.semver
+        db_skill.revision_hash = skill.revision_hash
 
         await self._session.flush()
 
@@ -306,6 +313,11 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         if hasattr(db_skill, "version_label"):
             version_label = db_skill.version_label
 
+        # P2-4 curated lineage (new columns — guarded for older rows)
+        parent_curated_id = getattr(db_skill, "parent_curated_id", None)
+        semver = getattr(db_skill, "semver", None)
+        revision_hash = getattr(db_skill, "revision_hash", None)
+
         return Skill(
             id=db_skill.id,
             tenant_id=db_skill.tenant_id,
@@ -328,6 +340,9 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             full_content=full_content,
             current_version=current_version,
             version_label=version_label,
+            parent_curated_id=parent_curated_id,
+            semver=semver,
+            revision_hash=revision_hash,
         )
 
     def _to_db(self, domain_entity: Skill) -> DBSkill:
@@ -353,4 +368,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             full_content=domain_entity.full_content,
             current_version=domain_entity.current_version,
             version_label=domain_entity.version_label,
+            parent_curated_id=domain_entity.parent_curated_id,
+            semver=domain_entity.semver,
+            revision_hash=domain_entity.revision_hash,
         )
