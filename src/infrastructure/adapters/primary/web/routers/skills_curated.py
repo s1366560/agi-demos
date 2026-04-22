@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.skill_revision import revision_hash_of
+from src.application.services.skill_revision import next_semver, revision_hash_of
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -72,6 +72,16 @@ class SkillSubmitRequest(BaseModel):
     submission_note: str | None = Field(default=None, max_length=2000)
 
 
+class SubmissionEditRequest(BaseModel):
+    """P2-4 Track D: edit a pending submission (submitter only)."""
+
+    proposed_semver: str | None = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")
+    submission_note: str | None = Field(default=None, max_length=2000)
+    # If the underlying skill has changed, submitter can re-snapshot by
+    # passing refresh_snapshot=True; otherwise the stored snapshot is kept.
+    refresh_snapshot: bool = Field(default=False)
+
+
 class SubmissionResponse(BaseModel):
     id: str
     submitter_tenant_id: str
@@ -89,6 +99,10 @@ class SubmissionResponse(BaseModel):
 
 class ReviewRequest(BaseModel):
     review_note: str | None = Field(default=None, max_length=2000)
+    # Optional semver bump hint — when provided, server computes the next
+    # semver from the previous active curated row for the same
+    # source_skill_id; when absent, submission.proposed_semver is trusted.
+    bump: str | None = Field(default=None, pattern=r"^(major|minor|patch)$")
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -154,14 +168,13 @@ def _require_superuser(user: UserModel) -> None:
 
 @router.get("/api/v1/skills/curated/", response_model=list[CuratedSkillResponse])
 async def list_curated_skills(
+    include_deprecated: bool = False,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(get_current_user_tenant),
 ) -> list[CuratedSkillResponse]:
-    stmt = (
-        select(CuratedSkill)
-        .where(CuratedSkill.status == "active")
-        .order_by(CuratedSkill.created_at.desc())
-    )
+    stmt = select(CuratedSkill).order_by(CuratedSkill.created_at.desc())
+    if not include_deprecated:
+        stmt = stmt.where(CuratedSkill.status == "active")
     rows = (await db.execute(stmt)).scalars().all()
     return [_curated_to_response(r) for r in rows]
 
@@ -282,7 +295,100 @@ async def list_my_submissions(
     return [_submission_to_response(r) for r in rows]
 
 
-# --- Admin review ---------------------------------------------------------
+# --- Submission edit / withdraw (P2-4 Track D) ----------------------------
+
+
+@router.patch(
+    "/api/v1/skills/submissions/{submission_id}",
+    response_model=SubmissionResponse,
+)
+async def edit_pending_submission(
+    submission_id: str,
+    data: SubmissionEditRequest,
+    current_user: UserModel = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> SubmissionResponse:
+    """Edit a pending submission. Submitter only, pending only."""
+    submission = await db.get(SkillSubmission, submission_id)
+    if submission is None or submission.submitter_tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
+        )
+    if submission.submitter_user_id not in (None, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the original submitter may edit this submission",
+        )
+    if submission.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot edit submission in {submission.status} state",
+        )
+
+    if data.proposed_semver is not None:
+        submission.proposed_semver = data.proposed_semver
+    if data.submission_note is not None:
+        submission.submission_note = data.submission_note
+
+    if data.refresh_snapshot:
+        # Re-snapshot from the current source skill (if it still exists).
+        if submission.source_skill_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot refresh snapshot: submission has no source_skill_id",
+            )
+        skill = await db.get(SkillModel, submission.source_skill_id)
+        if skill is None or skill.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Source skill no longer exists in this tenant",
+            )
+        submission.skill_snapshot = _skill_to_snapshot(
+            skill, submission.proposed_semver
+        )
+
+    await db.commit()
+    logger.info(
+        "Submission %s edited by %s (refresh=%s)",
+        submission.id,
+        current_user.id,
+        data.refresh_snapshot,
+    )
+    return _submission_to_response(submission)
+
+
+@router.post(
+    "/api/v1/skills/submissions/{submission_id}/withdraw",
+    response_model=SubmissionResponse,
+)
+async def withdraw_pending_submission(
+    submission_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> SubmissionResponse:
+    """Withdraw a pending submission. Submitter only, pending only."""
+    submission = await db.get(SkillSubmission, submission_id)
+    if submission is None or submission.submitter_tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
+        )
+    if submission.submitter_user_id not in (None, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the original submitter may withdraw this submission",
+        )
+    if submission.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot withdraw submission in {submission.status} state",
+        )
+    submission.status = "withdrawn"
+    submission.reviewed_at = datetime.now(UTC)
+    await db.commit()
+    logger.info("Submission %s withdrawn by %s", submission.id, current_user.id)
+    return _submission_to_response(submission)
 
 
 @router.get(
@@ -326,10 +432,34 @@ async def admin_approve_submission(
             detail=f"Submission already {submission.status}",
         )
 
+    # P2-4 Track D: semver bump + history. If bump provided, derive next
+    # semver from the most recent ACTIVE curated row for the same
+    # source_skill_id; otherwise trust the submitter's proposed_semver.
+    prior_active = None
+    if submission.source_skill_id is not None:
+        prior_active = (
+            await db.execute(
+                select(CuratedSkill)
+                .where(CuratedSkill.source_skill_id == submission.source_skill_id)
+                .where(CuratedSkill.status == "active")
+                .order_by(CuratedSkill.created_at.desc())
+            )
+        ).scalars().first()
+
+    if data.bump is not None:
+        prior_semver = prior_active.semver if prior_active is not None else None
+        effective_semver = next_semver(prior_semver, data.bump)  # type: ignore[arg-type]
+    else:
+        effective_semver = submission.proposed_semver
+
     payload = dict(submission.skill_snapshot)
-    payload["semver"] = submission.proposed_semver
+    payload["semver"] = effective_semver
     rhash = revision_hash_of(payload)
 
+    # Content-level dedup: unique constraint on revision_hash persists across
+    # all curated rows (including deprecated). If a row (any status) exists
+    # with identical content, reject with 409 — publishing the same payload
+    # twice under different semvers is a no-op by construction.
     existing = (
         await db.execute(
             select(CuratedSkill).where(CuratedSkill.revision_hash == rhash)
@@ -340,14 +470,19 @@ async def admin_approve_submission(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"A curated skill with this content already exists "
-                f"(id={existing.id}, semver={existing.semver})"
+                f"(id={existing.id}, semver={existing.semver}, status={existing.status})"
             ),
         )
 
     now = datetime.now(UTC)
+    # Deprecate the prior active row so history is preserved but only the
+    # latest is user-visible by default.
+    if prior_active is not None:
+        prior_active.status = "deprecated"
+
     curated = CuratedSkill(
         id=f"curated_{uuid.uuid4().hex}",
-        semver=submission.proposed_semver,
+        semver=effective_semver,
         revision_hash=rhash,
         source_skill_id=submission.source_skill_id,
         source_tenant_id=submission.submitter_tenant_id,
@@ -362,12 +497,18 @@ async def admin_approve_submission(
     submission.reviewer_id = current_user.id
     submission.review_note = data.review_note
     submission.reviewed_at = now
+    # Persist the effective semver so the submission record reflects what
+    # was actually shipped.
+    submission.proposed_semver = effective_semver
     await db.commit()
     logger.info(
-        "Submission %s approved as curated %s by %s",
+        "Submission %s approved as curated %s (semver=%s, bump=%s) by %s%s",
         submission.id,
         curated.id,
+        effective_semver,
+        data.bump or "<none>",
         current_user.id,
+        f" (deprecated prior {prior_active.id})" if prior_active else "",
     )
     return _curated_to_response(curated)
 

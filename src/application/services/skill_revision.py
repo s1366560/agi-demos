@@ -73,3 +73,34 @@ def canonical_json(payload: dict[str, Any]) -> str:
 def revision_hash_of(payload: dict[str, Any]) -> str:
     """Return the SHA-256 hex digest of the canonical payload."""
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+# --- Semver helper (P2-4 Track D) -----------------------------------------
+
+from typing import Literal  # noqa: E402
+import re  # noqa: E402
+
+_SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+
+def next_semver(
+    previous: str | None,
+    bump: Literal["major", "minor", "patch"] = "patch",
+) -> str:
+    """Compute the next semantic version.
+
+    Pure function so admin code can preview and backend can re-derive
+    deterministically. When ``previous is None`` the first release is
+    ``0.1.0`` regardless of ``bump`` (we reserve 1.0.0 for explicit major).
+    """
+    if previous is None:
+        return "0.1.0"
+    m = _SEMVER_RE.match(previous.strip())
+    if not m:
+        raise ValueError(f"Invalid semver: {previous!r}")
+    major, minor, patch = (int(x) for x in m.groups())
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
