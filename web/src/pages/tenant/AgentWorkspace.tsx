@@ -16,9 +16,7 @@ import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
-import { ConversationModePanel } from '../../components/agent/ConversationModePanel';
-import { ConversationParticipantsPanel } from '../../components/agent/ConversationParticipantsPanel';
-import { HITLCenterPanel } from '../../components/agent/HITLCenterPanel';
+import { ConversationWorkspacePanel } from '../../components/agent/ConversationWorkspacePanel';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -196,13 +194,13 @@ export const AgentWorkspace: React.FC = () => {
                   setMultiAgentPanelOpen(true);
                 }}
                 data-testid="multi-agent-rail-toggle"
-                aria-label={t('agent.workspace.openMultiAgentRail', 'Open multi-agent panel')}
+                aria-label={t('agent.workspace.openMultiAgentRail', 'Open workspace panel')}
                 className="fixed right-4 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white text-[#171717] shadow-sm hover:bg-[#fafafa] dark:bg-surface-dark dark:text-white dark:border-slate-700"
               >
                 <span className="text-lg leading-none">&#x2261;</span>
               </button>
               <Drawer
-                title={t('agent.workspace.multiAgentRail', 'Multi-agent')}
+                title={t('agent.workspace.multiAgentRail', 'Workspace')}
                 placement="right"
                 open={multiAgentPanelOpen}
                 onClose={() => {
@@ -212,16 +210,12 @@ export const AgentWorkspace: React.FC = () => {
                 destroyOnHidden
                 data-testid="multi-agent-rail-drawer"
               >
-                <div className="flex flex-col gap-4">
-                  {effectiveProjectId && conversationParam ? (
-                    <ConversationModePanel
-                      conversationId={conversationParam}
-                      projectId={effectiveProjectId}
-                    />
-                  ) : null}
-                  <ConversationParticipantsPanel conversationId={conversationParam} />
-                  <HITLCenterPanel conversationId={conversationParam} />
-                </div>
+                {effectiveProjectId && conversationParam ? (
+                  <ConversationWorkspacePanel
+                    conversationId={conversationParam}
+                    projectId={effectiveProjectId}
+                  />
+                ) : null}
               </Drawer>
             </>
           ) : null}
