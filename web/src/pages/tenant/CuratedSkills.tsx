@@ -5,11 +5,17 @@
  *   1. "精选库" — list of admin-approved curated skills with Fork action.
  *   2. "我的提交" — caller's submission history (status + reviewer note).
  *
+ * P2-4 Track D additions:
+ *   - Curated rows are grouped by ``source_skill_id`` so multiple versions
+ *     of the same skill collapse into a single row with a version selector.
+ *   - "包含已弃用版本" toggle surfaces deprecated rows when enabled.
+ *   - Pending submissions expose "撤回" action (submitter-only).
+ *
  * Submitting a private skill for review lives on the SkillList page; this
  * page is the read side for tenants.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,14 +26,17 @@ import {
   Empty,
   List,
   Modal,
+  Popconfirm,
+  Select,
   Skeleton,
   Space,
+  Switch,
   Tabs,
   Tag,
   Typography,
   message,
 } from 'antd';
-import { GitFork, Library } from 'lucide-react';
+import { GitFork, Library, Undo2 } from 'lucide-react';
 
 import {
   curatedSkillAPI,
@@ -45,9 +54,49 @@ function statusColor(status: string): string {
       return 'green';
     case 'rejected':
       return 'red';
+    case 'withdrawn':
+      return 'default';
     default:
       return 'default';
   }
+}
+
+function semverCompareDesc(a: string, b: string): number {
+  const pa = a.split('.').map((x) => parseInt(x, 10) || 0);
+  const pb = b.split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < 3; i += 1) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da !== db) return db - da;
+  }
+  return 0;
+}
+
+interface VersionGroup {
+  key: string;
+  versions: CuratedSkill[];
+}
+
+/** Group curated rows by source_skill_id (fallback: unique row key) and
+ *  sort each group's versions newest-first by semver. */
+function groupBySource(items: CuratedSkill[]): VersionGroup[] {
+  const map = new Map<string, CuratedSkill[]>();
+  items.forEach((c) => {
+    const key = c.source_skill_id ?? `__orphan__:${c.id}`;
+    const arr = map.get(key) ?? [];
+    arr.push(c);
+    map.set(key, arr);
+  });
+  return Array.from(map.entries())
+    .map(([key, versions]) => ({
+      key,
+      versions: [...versions].sort((a, b) => semverCompareDesc(a.semver, b.semver)),
+    }))
+    .sort((a, b) => {
+      const ta = a.versions[0]?.created_at ?? '';
+      const tb = b.versions[0]?.created_at ?? '';
+      return tb.localeCompare(ta);
+    });
 }
 
 function ForkDialog({
@@ -85,7 +134,7 @@ function ForkDialog({
 
   return (
     <Modal
-      title={curated ? `Fork "${(curated.payload.name as string) ?? 'skill'}"` : 'Fork'}
+      title={curated ? `Fork "${(curated.payload.name as string) ?? 'skill'}" v${curated.semver}` : 'Fork'}
       open={open}
       onCancel={onClose}
       onOk={() => {
@@ -125,65 +174,111 @@ function ForkDialog({
   );
 }
 
+function VersionedCuratedRow({
+  group,
+  onFork,
+}: {
+  group: VersionGroup;
+  onFork: (c: CuratedSkill) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string>(group.versions[0]!.id);
+  const selected =
+    group.versions.find((v) => v.id === selectedId) ?? group.versions[0]!;
+  const hasMultiple = group.versions.length > 1;
+  const name = (selected.payload.name as string) ?? 'Unnamed skill';
+  const description = (selected.payload.description as string) ?? '';
+  const isDeprecated = selected.status === 'deprecated';
+
+  return (
+    <List.Item
+      actions={[
+        <Button
+          key="fork"
+          type="primary"
+          icon={<GitFork size={14} />}
+          onClick={() => {
+            onFork(selected);
+          }}
+          disabled={isDeprecated}
+        >
+          Fork 到私有库
+        </Button>,
+      ]}
+    >
+      <List.Item.Meta
+        avatar={<Library size={20} />}
+        title={
+          <Space wrap>
+            <span>{name}</span>
+            {hasMultiple ? (
+              <Select
+                size="small"
+                value={selectedId}
+                onChange={setSelectedId}
+                style={{ minWidth: 110 }}
+                options={group.versions.map((v) => ({
+                  value: v.id,
+                  label: `v${v.semver}${v.status === 'deprecated' ? '（已弃用）' : ''}`,
+                }))}
+              />
+            ) : (
+              <Tag color={isDeprecated ? 'default' : 'blue'}>v{selected.semver}</Tag>
+            )}
+            {isDeprecated ? <Tag>已弃用</Tag> : null}
+          </Space>
+        }
+        description={
+          <Space direction="vertical" size={2}>
+            <Paragraph type="secondary" ellipsis={{ rows: 2 }} className="!mb-0">
+              {description}
+            </Paragraph>
+            <Text type="secondary" className="text-xs">
+              hash: <code>{selected.revision_hash.slice(0, 12)}</code>
+              {hasMultiple ? ` · ${group.versions.length} 个版本` : ''}
+            </Text>
+          </Space>
+        }
+      />
+    </List.Item>
+  );
+}
+
 function CuratedTab() {
+  const [includeDeprecated, setIncludeDeprecated] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ['skills', 'curated'],
-    queryFn: () => curatedSkillAPI.list(),
+    queryKey: ['skills', 'curated', { includeDeprecated }],
+    queryFn: () => curatedSkillAPI.list({ include_deprecated: includeDeprecated }),
   });
   const [forkTarget, setForkTarget] = useState<CuratedSkill | null>(null);
 
-  if (isLoading) return <Skeleton active paragraph={{ rows: 4 }} />;
+  const groups = useMemo(() => groupBySource(data ?? []), [data]);
 
-  const items = data ?? [];
-  if (items.length === 0) {
-    return <Empty description="精选库暂无已发布的 Skill" />;
-  }
+  if (isLoading) return <Skeleton active paragraph={{ rows: 4 }} />;
 
   return (
     <>
-      <List
-        dataSource={items}
-        renderItem={(curated) => {
-          const name = (curated.payload.name as string) ?? 'Unnamed skill';
-          const description = (curated.payload.description as string) ?? '';
-          return (
-            <List.Item
-              actions={[
-                <Button
-                  key="fork"
-                  type="primary"
-                  icon={<GitFork size={14} />}
-                  onClick={() => {
-                    setForkTarget(curated);
-                  }}
-                >
-                  Fork 到私有库
-                </Button>,
-              ]}
-            >
-              <List.Item.Meta
-                avatar={<Library size={20} />}
-                title={
-                  <Space>
-                    <span>{name}</span>
-                    <Tag color="blue">v{curated.semver}</Tag>
-                  </Space>
-                }
-                description={
-                  <Space direction="vertical" size={2}>
-                    <Paragraph type="secondary" ellipsis={{ rows: 2 }} className="!mb-0">
-                      {description}
-                    </Paragraph>
-                    <Text type="secondary" className="text-xs">
-                      hash: <code>{curated.revision_hash.slice(0, 12)}</code>
-                    </Text>
-                  </Space>
-                }
-              />
-            </List.Item>
-          );
-        }}
-      />
+      <Space className="mb-3">
+        <Switch
+          size="small"
+          checked={includeDeprecated}
+          onChange={setIncludeDeprecated}
+        />
+        <Text type="secondary">包含已弃用版本</Text>
+      </Space>
+      {groups.length === 0 ? (
+        <Empty description="精选库暂无已发布的 Skill" />
+      ) : (
+        <List
+          dataSource={groups}
+          renderItem={(group) => (
+            <VersionedCuratedRow
+              key={group.key}
+              group={group}
+              onFork={setForkTarget}
+            />
+          )}
+        />
+      )}
       <ForkDialog
         curated={forkTarget}
         open={forkTarget !== null}
@@ -196,9 +291,21 @@ function CuratedTab() {
 }
 
 function SubmissionsTab() {
+  const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['skills', 'submissions', 'mine'],
     queryFn: () => curatedSkillAPI.listMySubmissions(),
+  });
+
+  const withdrawMutation = useMutation({
+    mutationFn: (id: string) => curatedSkillAPI.withdrawSubmission(id),
+    onSuccess: () => {
+      message.success('已撤回提交');
+      void qc.invalidateQueries({ queryKey: ['skills', 'submissions', 'mine'] });
+    },
+    onError: (err: Error) => {
+      message.error(err.message || '撤回失败');
+    },
   });
 
   if (isLoading) return <Skeleton active paragraph={{ rows: 4 }} />;
@@ -213,8 +320,34 @@ function SubmissionsTab() {
       dataSource={items}
       renderItem={(s: SkillSubmission) => {
         const name = (s.skill_snapshot.name as string) ?? 'Unnamed';
+        const isPending = s.status === 'pending';
         return (
-          <List.Item>
+          <List.Item
+            actions={
+              isPending
+                ? [
+                    <Popconfirm
+                      key="withdraw"
+                      title="撤回此提交？"
+                      description="撤回后状态变为 withdrawn，不再进入审核队列。"
+                      okText="撤回"
+                      cancelText="取消"
+                      onConfirm={() => {
+                        withdrawMutation.mutate(s.id);
+                      }}
+                    >
+                      <Button
+                        size="small"
+                        icon={<Undo2 size={14} />}
+                        loading={withdrawMutation.isPending}
+                      >
+                        撤回
+                      </Button>
+                    </Popconfirm>,
+                  ]
+                : []
+            }
+          >
             <List.Item.Meta
               title={
                 <Space>

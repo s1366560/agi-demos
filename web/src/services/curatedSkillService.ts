@@ -27,6 +27,8 @@ export interface CuratedForkRequest {
   project_id?: string | null;
 }
 
+export type SubmissionStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+
 export interface SkillSubmission {
   id: string;
   submitter_tenant_id: string;
@@ -34,7 +36,7 @@ export interface SkillSubmission {
   source_skill_id: string | null;
   proposed_semver: string;
   submission_note: string | null;
-  status: 'pending' | 'approved' | 'rejected' | string;
+  status: SubmissionStatus | string;
   reviewer_id: string | null;
   review_note: string | null;
   reviewed_at: string | null;
@@ -47,12 +49,24 @@ export interface SkillSubmitPayload {
   submission_note?: string | null;
 }
 
+export interface SubmissionEditPayload {
+  proposed_semver?: string | null;
+  submission_note?: string | null;
+  refresh_snapshot?: boolean;
+}
+
+export type SemverBump = 'major' | 'minor' | 'patch';
+
 export interface ReviewPayload {
   review_note?: string | null;
+  bump?: SemverBump | null;
 }
 
 export const curatedSkillAPI = {
-  list: () => httpClient.get<CuratedSkill[]>('/skills/curated/'),
+  list: (opts: { include_deprecated?: boolean } = {}) =>
+    httpClient.get<CuratedSkill[]>('/skills/curated/', {
+      params: { include_deprecated: opts.include_deprecated ?? false },
+    }),
 
   fork: (id: string, body: CuratedForkRequest) =>
     httpClient.post<{ skill_id: string; parent_curated_id: string }>(
@@ -65,7 +79,13 @@ export const curatedSkillAPI = {
 
   listMySubmissions: () => httpClient.get<SkillSubmission[]>('/skills/submissions/mine'),
 
-  adminList: (statusFilter: 'pending' | 'approved' | 'rejected' = 'pending') =>
+  editSubmission: (submissionId: string, body: SubmissionEditPayload) =>
+    httpClient.patch<SkillSubmission>(`/skills/submissions/${submissionId}`, body),
+
+  withdrawSubmission: (submissionId: string) =>
+    httpClient.post<SkillSubmission>(`/skills/submissions/${submissionId}/withdraw`),
+
+  adminList: (statusFilter: 'pending' | 'approved' | 'rejected' | 'withdrawn' = 'pending') =>
     httpClient.get<SkillSubmission[]>('/admin/skill-submissions/', {
       params: { status_filter: statusFilter },
     }),

@@ -16,6 +16,7 @@ import {
   Input,
   List,
   Modal,
+  Radio,
   Skeleton,
   Space,
   Tabs,
@@ -27,13 +28,27 @@ import { Check, X } from 'lucide-react';
 
 import {
   curatedSkillAPI,
+  type SemverBump,
   type SkillSubmission,
 } from '@/services/curatedSkillService';
 
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
-type StatusFilter = 'pending' | 'approved' | 'rejected';
+type StatusFilter = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+
+/** Preview next semver without contacting the server. Backend is the
+ *  source of truth; this keeps the dialog snappy. */
+function previewNextSemver(prior: string | null, bump: SemverBump): string {
+  if (!prior) return '0.1.0';
+  const parts = prior.split('.').map((x) => parseInt(x, 10) || 0);
+  const ma = parts[0] ?? 0;
+  const mi = parts[1] ?? 0;
+  const pa = parts[2] ?? 0;
+  if (bump === 'major') return `${ma + 1}.0.0`;
+  if (bump === 'minor') return `${ma}.${mi + 1}.0`;
+  return `${ma}.${mi}.${pa + 1}`;
+}
 
 function ReviewDialog({
   submission,
@@ -48,20 +63,25 @@ function ReviewDialog({
 }) {
   const qc = useQueryClient();
   const [note, setNote] = useState('');
+  const [bump, setBump] = useState<SemverBump | 'trust'>('trust');
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!submission) throw new Error('no submission');
-      const body = { review_note: note || null };
       if (mode === 'approve') {
+        const body = {
+          review_note: note || null,
+          bump: bump === 'trust' ? null : bump,
+        };
         return curatedSkillAPI.adminApprove(submission.id, body);
       }
-      return curatedSkillAPI.adminReject(submission.id, body);
+      return curatedSkillAPI.adminReject(submission.id, { review_note: note || null });
     },
     onSuccess: () => {
       message.success(mode === 'approve' ? 'Submission approved' : 'Submission rejected');
       void qc.invalidateQueries({ queryKey: ['admin', 'skill-submissions'] });
       setNote('');
+      setBump('trust');
       onClose();
     },
     onError: (err: Error) => {
@@ -69,12 +89,20 @@ function ReviewDialog({
     },
   });
 
+  const effectiveSemver =
+    submission === null
+      ? ''
+      : bump === 'trust'
+        ? submission.proposed_semver
+        : previewNextSemver(submission.proposed_semver, bump);
+
   return (
     <Modal
       title={mode === 'approve' ? '通过审核' : '驳回提交'}
       open={open}
       onCancel={() => {
         setNote('');
+        setBump('trust');
         onClose();
       }}
       onOk={() => {
@@ -84,12 +112,36 @@ function ReviewDialog({
       okButtonProps={{ danger: mode === 'reject' }}
       confirmLoading={mutation.isPending}
     >
-      <Space direction="vertical" className="w-full">
+      <Space direction="vertical" className="w-full" size="middle">
         <Text type="secondary">
           {mode === 'approve'
             ? '审核通过将把此 Skill 快照发布到精选库。'
             : '驳回提交将关闭此记录并记录你的审核意见。'}
         </Text>
+        {mode === 'approve' ? (
+          <Space direction="vertical" size={4} className="w-full">
+            <Text strong>发布版本号</Text>
+            <Radio.Group
+              value={bump}
+              onChange={(e) => {
+                setBump(e.target.value as SemverBump | 'trust');
+              }}
+            >
+              <Radio value="trust">
+                沿用提交者版本 (v{submission?.proposed_semver ?? '-'})
+              </Radio>
+              <Radio value="patch">覆盖为 patch</Radio>
+              <Radio value="minor">覆盖为 minor</Radio>
+              <Radio value="major">覆盖为 major</Radio>
+            </Radio.Group>
+            <Text type="secondary" className="text-xs">
+              最终发布版本：<Tag color="blue">v{effectiveSemver}</Tag>
+              <span className="ml-2">
+                （若同一来源已有激活版本，旧版本会自动标记为 deprecated）
+              </span>
+            </Text>
+          </Space>
+        ) : null}
         <TextArea
           rows={4}
           value={note}
@@ -235,6 +287,7 @@ export default function AdminSkillReview() {
           { key: 'pending', label: '待审核', children: <SubmissionsList status="pending" /> },
           { key: 'approved', label: '已通过', children: <SubmissionsList status="approved" /> },
           { key: 'rejected', label: '已驳回', children: <SubmissionsList status="rejected" /> },
+          { key: 'withdrawn', label: '已撤回', children: <SubmissionsList status="withdrawn" /> },
         ]}
       />
     </Card>
