@@ -16,6 +16,7 @@ import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
+import { ConversationModePanel } from '../../components/agent/ConversationModePanel';
 import { ConversationParticipantsPanel } from '../../components/agent/ConversationParticipantsPanel';
 import { HITLCenterPanel } from '../../components/agent/HITLCenterPanel';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
@@ -212,6 +213,12 @@ export const AgentWorkspace: React.FC = () => {
                 data-testid="multi-agent-rail-drawer"
               >
                 <div className="flex flex-col gap-4">
+                  {effectiveProjectId && conversationParam ? (
+                    <ConversationModePanel
+                      conversationId={conversationParam}
+                      projectId={effectiveProjectId}
+                    />
+                  ) : null}
                   <ConversationParticipantsPanel conversationId={conversationParam} />
                   <HITLCenterPanel conversationId={conversationParam} />
                 </div>

@@ -32,8 +32,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from .schemas import (
     ConversationResponse,
     CreateConversationRequest,
+    GoalContractPayload,
     PaginatedConversationsResponse,
     UpdateConversationConfigRequest,
+    UpdateConversationModeRequest,
     UpdateConversationTitleRequest,
 )
 from .utils import get_container_with_db
@@ -397,6 +399,116 @@ async def update_conversation_config(
         logger.error(f"Error updating conversation config: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to update conversation config: {e!s}"
+        ) from e
+
+
+@router.patch("/conversations/{conversation_id}/mode", response_model=ConversationResponse)
+async def update_conversation_mode(
+    conversation_id: str,
+    data: UpdateConversationModeRequest,
+    request: Request,
+    project_id: str = Query(..., description="Project ID for authorization"),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationResponse:
+    """Update a conversation's mode override and/or goal contract.
+
+    Allows switching between ``single_agent``, ``multi_agent_shared``,
+    ``multi_agent_isolated`` and ``autonomous`` modes, and persisting the
+    required ``GoalContract`` for autonomous mode. The endpoint preserves the
+    domain invariant that ``effective_mode == AUTONOMOUS`` requires a
+    ``goal_contract`` to be present.
+    """
+    from src.domain.model.agent.conversation.conversation_mode import ConversationMode
+    from src.domain.model.agent.conversation.goal_contract import GoalBudget, GoalContract
+    from src.infrastructure.adapters.secondary.persistence.models import Project as ProjectModel
+
+    try:
+        assert request is not None
+        container = get_container_with_db(request, db)
+        llm = await create_llm_client(tenant_id)
+        agent_service = container.agent_service(llm)
+
+        conversation = await agent_service.get_conversation(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        fields = data.model_fields_set
+
+        if "conversation_mode" in fields:
+            raw_mode = data.conversation_mode
+            if raw_mode is None:
+                conversation.conversation_mode = None
+            else:
+                try:
+                    conversation.conversation_mode = ConversationMode(raw_mode)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            f"Invalid conversation_mode '{raw_mode}'. Must be one of: "
+                            f"{[m.value for m in ConversationMode]}"
+                        ),
+                    ) from exc
+
+        if "goal_contract" in fields and data.goal_contract is not None:
+            payload: GoalContractPayload = data.goal_contract
+            conversation.goal_contract = GoalContract(
+                primary_goal=payload.primary_goal,
+                blocking_categories=frozenset(payload.blocking_categories),
+                operator_guidance=payload.operator_guidance,
+                budget=GoalBudget(
+                    max_turns=payload.budget.max_turns,
+                    max_usd=payload.budget.max_usd,
+                    max_wall_seconds=payload.budget.max_wall_seconds,
+                ),
+                supervisor_tick_seconds=payload.supervisor_tick_seconds,
+            )
+        elif data.clear_goal_contract:
+            conversation.goal_contract = None
+
+        proj = await db.execute(
+            refresh_select_statement(
+                select(ProjectModel.agent_conversation_mode).where(
+                    ProjectModel.id == conversation.project_id
+                )
+            )
+        )
+        project_default = proj.scalar_one_or_none() or ConversationMode.SINGLE_AGENT.value
+        effective_mode = conversation.resolve_mode(project_default)
+
+        if effective_mode == ConversationMode.AUTONOMOUS and conversation.goal_contract is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Autonomous mode requires a goal_contract. "
+                    "Provide `goal_contract` in this request or set a non-autonomous mode."
+                ),
+            )
+
+        conversation.updated_at = datetime.now(UTC)
+        await agent_service._conversation_repo.save(conversation)  # type: ignore[attr-defined]
+        await db.commit()
+
+        return ConversationResponse.from_domain(conversation)
+
+    except HTTPException:
+        await db.rollback()
+        raise
+    except ValueError as e:
+        await db.rollback()
+        logger.warning(f"Invalid goal contract for conversation {conversation_id}: {e}")
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error updating conversation mode: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update conversation mode: {e!s}"
         ) from e
 
 

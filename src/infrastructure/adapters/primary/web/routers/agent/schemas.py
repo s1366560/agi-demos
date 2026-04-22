@@ -47,6 +47,55 @@ class UpdateConversationConfigRequest(BaseModel):
     )
 
 
+class GoalBudgetPayload(BaseModel):
+    """Budget counters mirror of ``GoalBudget`` value object.
+
+    ``None`` values mean "unbounded on that axis". Positive numbers are validated
+    by the domain value object when persisting.
+    """
+
+    max_turns: int | None = Field(default=None, ge=1)
+    max_usd: float | None = Field(default=None, gt=0)
+    max_wall_seconds: int | None = Field(default=None, ge=1)
+
+
+class GoalContractPayload(BaseModel):
+    """Mirror of ``GoalContract`` value object for request/response bodies."""
+
+    primary_goal: str = Field(min_length=1)
+    blocking_categories: list[str] = Field(default_factory=list)
+    operator_guidance: str = ""
+    budget: GoalBudgetPayload = Field(default_factory=GoalBudgetPayload)
+    supervisor_tick_seconds: int = Field(default=120, ge=1)
+
+
+class UpdateConversationModeRequest(BaseModel):
+    """Request to update a conversation's mode and/or goal contract.
+
+    Both fields are optional — omit a field to leave it unchanged. Passing
+    ``null`` for ``goal_contract`` clears the contract (only allowed when the
+    effective mode is not ``autonomous``). Switching to ``autonomous`` requires
+    ``goal_contract`` to be provided (either in this request or already
+    persisted).
+    """
+
+    conversation_mode: str | None = Field(
+        default=None,
+        description="One of: single_agent, multi_agent_shared, multi_agent_isolated, "
+        "autonomous. Omit to leave unchanged; pass null to fall back to project default.",
+    )
+    goal_contract: GoalContractPayload | None = Field(
+        default=None,
+        description="Goal contract for autonomous mode. Omit to leave unchanged; "
+        "pass explicit null (via JSON) to clear.",
+    )
+    clear_goal_contract: bool = Field(
+        default=False,
+        description="Set true to explicitly clear goal_contract "
+        "(distinguishes from omitted field).",
+    )
+
+
 class ConversationResponse(BaseModel):
     """Response with conversation details."""
 
@@ -61,6 +110,8 @@ class ConversationResponse(BaseModel):
     updated_at: str | None = None
     summary: str | None = None
     agent_config: dict[str, Any] | None = None
+    conversation_mode: str | None = None
+    goal_contract: dict[str, Any] | None = None
 
     @classmethod
     def from_domain(cls, conversation: Conversation) -> "ConversationResponse":
@@ -77,6 +128,16 @@ class ConversationResponse(BaseModel):
             updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
             summary=conversation.summary,
             agent_config=conversation.agent_config or None,
+            conversation_mode=(
+                conversation.conversation_mode.value
+                if conversation.conversation_mode is not None
+                else None
+            ),
+            goal_contract=(
+                dict(conversation.goal_contract.to_dict())
+                if conversation.goal_contract is not None
+                else None
+            ),
         )
 
 
