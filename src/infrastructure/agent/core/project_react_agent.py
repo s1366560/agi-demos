@@ -40,10 +40,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+from typing import Any
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
@@ -424,66 +421,6 @@ class ProjectReActAgent:
             self._subagents = await self._load_subagents()
         else:
             self._subagents = []
-
-    def _init_memory_services(
-        self,
-        graph_service: Any,
-        redis_client: Any,
-        llm_client: Any,
-    ) -> tuple[Any, Any, Any]:
-        """Initialize memory recall, capture, and flush services.
-
-        Returns:
-            Tuple of (memory_recall, memory_capture, memory_flush)
-        """
-        memory_recall = None
-        memory_capture = None
-        memory_flush = None
-        try:
-            from src.infrastructure.agent.memory.capture import MemoryCapturePostprocessor
-            from src.infrastructure.agent.memory.recall import MemoryRecallPreprocessor
-            from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
-            from src.infrastructure.memory.chunk_search import ChunkHybridSearch
-
-            session_factory = self._get_session_factory()
-            embedding_service = getattr(graph_service, "embedder", None)
-
-            if embedding_service and session_factory:
-                cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
-                chunk_search = ChunkHybridSearch(
-                    cast("EmbeddingService", cached_embedding),
-                    session_factory,
-                )
-                memory_recall = MemoryRecallPreprocessor(
-                    chunk_search=chunk_search,
-                    graph_search=graph_service,
-                )
-                logger.info(f"ProjectReActAgent[{self.project_key}]: Memory recall enabled")
-
-            if llm_client and session_factory:
-                cached_emb = (
-                    CachedEmbeddingService(embedding_service, redis_client)
-                    if embedding_service
-                    else None
-                )
-                memory_capture = MemoryCapturePostprocessor(
-                    llm_client=llm_client,
-                    session_factory=session_factory,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),
-                )
-                logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
-
-                from src.infrastructure.agent.memory.flush import MemoryFlushService
-
-                memory_flush = MemoryFlushService(
-                    llm_client=llm_client,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),
-                    session_factory=session_factory,
-                )
-        except Exception as e:
-            logger.debug(f"Memory services not available: {e}")
-
-        return memory_recall, memory_capture, memory_flush
 
     def _init_memory_runtime(
         self,
