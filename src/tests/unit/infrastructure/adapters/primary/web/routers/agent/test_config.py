@@ -1,5 +1,6 @@
 """Unit tests for tenant agent config router helpers."""
 
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -662,6 +663,32 @@ class TestHookCatalogAccess:
             "sisyphus-runtime",
             "memory-runtime",
         }
+
+    @pytest.mark.asyncio
+    async def test_hook_catalog_omits_memory_runtime_when_globally_disabled(self) -> None:
+        registry_module = import_module("src.infrastructure.agent.plugins.registry")
+        monkey_registry = registry_module.AgentPluginRegistry()
+
+        with (
+            patch(
+                "src.configuration.config.get_settings",
+                return_value=SimpleNamespace(agent_memory_runtime_mode="disabled"),
+            ),
+            patch.object(registry_module, "_global_plugin_registry", monkey_registry),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            response = await get_hook_catalog(
+                tenant_id="tenant-1",
+                current_user=_make_user(),
+                db=MagicMock(),
+            )
+
+        plugin_names = {hook.plugin_name for hook in response.hooks}
+        assert "sisyphus-runtime" in plugin_names
+        assert "memory-runtime" not in plugin_names
 
 
 @pytest.mark.unit
