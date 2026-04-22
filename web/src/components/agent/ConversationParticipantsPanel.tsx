@@ -8,10 +8,11 @@
  * Vercel-inspired design tokens in .impeccable.md.
  */
 
-import { memo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useConversationParticipants } from '../../hooks/useConversationParticipants';
+import { useMentionCandidates } from '../../hooks/useMentionCandidates';
 
 export interface ConversationParticipantsPanelProps {
   conversationId: string | null;
@@ -28,8 +29,16 @@ const modeLabel = (mode: string) => mode.replace(/_/g, ' ');
 export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelProps>(
   ({ conversationId, onSelectAgent, onRemoveAgent, className }) => {
     const { t } = useTranslation();
-    const { roster, loading, error, removeParticipant, setCoordinator } =
+    const { roster, loading, error, removeParticipant, setCoordinator, addParticipant } =
       useConversationParticipants(conversationId);
+    const { candidates } = useMentionCandidates(conversationId, { enabled: !!conversationId });
+    const [adding, setAdding] = useState(false);
+    const [addError, setAddError] = useState<string | null>(null);
+
+    const availableToAdd = useMemo(() => {
+      const rostered = new Set(roster?.participant_agents ?? []);
+      return candidates.filter((c) => !rostered.has(c.agent_id));
+    }, [candidates, roster?.participant_agents]);
 
     if (!conversationId) {
       return null;
@@ -152,6 +161,53 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
             })}
           </p>
         )}
+        <div className="mt-3 border-t border-[rgba(0,0,0,0.08)] pt-3">
+          {availableToAdd.length === 0 ? (
+            <p className="text-xs text-[#999]">
+              {t('agent.participants.noneAvailable', {
+                defaultValue:
+                  'No more agents available. Add agents to the linked workspace to see them here.',
+              })}
+            </p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-[#666]" htmlFor="add-participant-select">
+                {t('agent.participants.addLabel', { defaultValue: 'Add agent' })}
+              </label>
+              <select
+                id="add-participant-select"
+                data-testid="add-participant-select"
+                disabled={adding}
+                defaultValue=""
+                onChange={async (e) => {
+                  const agentId = e.target.value;
+                  e.target.value = '';
+                  if (!agentId) return;
+                  setAdding(true);
+                  setAddError(null);
+                  try {
+                    await addParticipant({ agent_id: agentId });
+                  } catch (err) {
+                    setAddError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setAdding(false);
+                  }
+                }}
+                className="flex-1 rounded border border-[rgba(0,0,0,0.08)] bg-white px-2 py-1 text-xs text-[#171717] focus:outline-none focus:ring-1 focus:ring-[#0070f3]"
+              >
+                <option value="">
+                  {t('agent.participants.addPlaceholder', { defaultValue: 'Select an agent…' })}
+                </option>
+                {availableToAdd.map((c) => (
+                  <option key={c.agent_id} value={c.agent_id}>
+                    {c.display_name ? `${c.display_name} (${c.agent_id})` : c.agent_id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {addError && <p className="mt-2 text-xs text-[#ee0000]">{addError}</p>}
+        </div>
       </aside>
     );
   }
