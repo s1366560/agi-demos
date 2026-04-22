@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from src.configuration.config import get_settings
 from src.configuration.features import get_feature_gate
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import get_current_user
 
@@ -30,7 +31,15 @@ async def get_system_info(
 ) -> dict[str, Any]:
     """Get system info including edition and features."""
     gate = get_feature_gate()
+    settings = get_settings()
     return {
         "edition": gate.edition,
         "features": gate.get_enabled_features(),
+        "agent_runtime": {
+            "mode": settings.agent_runtime_mode,
+        },
+        "memory_runtime": {
+            "mode": settings.agent_memory_runtime_mode,
+            "failure_persistence_enabled": settings.agent_memory_failure_persistence_enabled,
+        },
     }
