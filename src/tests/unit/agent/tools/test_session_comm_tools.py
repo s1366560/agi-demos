@@ -12,6 +12,7 @@ from src.application.services.session_comm_service import (
     SessionCommService,
 )
 from src.domain.model.agent import (
+    AgentExecutionEvent,
     Conversation,
     ConversationStatus,
     Message,
@@ -59,6 +60,7 @@ def _make_message(
     conv_id: str = "conv-1",
     role: MessageRole = MessageRole.USER,
     content: str = "Hello",
+    created_at: datetime | None = None,
 ) -> Message:
     return Message(
         id=msg_id,
@@ -66,7 +68,7 @@ def _make_message(
         role=role,
         content=content,
         message_type=MessageType.TEXT,
-        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        created_at=created_at or datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 
@@ -90,12 +92,41 @@ def _build_service(
     *,
     conv_repo: AsyncMock | None = None,
     msg_repo: AsyncMock | None = None,
+    event_repo: AsyncMock | None = None,
 ) -> SessionCommService:
     conv_repo = conv_repo or AsyncMock()
     msg_repo = msg_repo or AsyncMock()
     return SessionCommService(
         conversation_repo=conv_repo,
         message_repo=msg_repo,
+        agent_execution_event_repo=event_repo,
+    )
+
+
+def _make_event(
+    *,
+    event_id: str = "evt-1",
+    message_id: str = "msg-1",
+    conv_id: str = "conv-1",
+    event_type: str = "user_message",
+    role: str = "user",
+    content: str = "Hello",
+    created_at: datetime | None = None,
+) -> AgentExecutionEvent:
+    created_at = created_at or datetime(2026, 1, 1, tzinfo=UTC)
+    return AgentExecutionEvent(
+        id=event_id,
+        conversation_id=conv_id,
+        message_id=message_id,
+        event_type=event_type,
+        event_data={
+            "message_id": message_id,
+            "role": role,
+            "content": content,
+        },
+        event_time_us=int(created_at.timestamp() * 1_000_000),
+        event_counter=0,
+        created_at=created_at,
     )
 
 
@@ -181,7 +212,7 @@ class TestSessionCommServiceGetHistory:
         ]
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
 
-        result = await svc.get_session_history("proj-1", "conv-1")
+        result = await svc.get_session_history("proj-1", "conv-1", limit=2)
 
         assert result["conversation"]["id"] == "conv-1"
         assert len(result["messages"]) == 2
@@ -203,6 +234,71 @@ class TestSessionCommServiceGetHistory:
 
         with pytest.raises(PermissionError, match="different project"):
             await svc.get_session_history("proj-1", "conv-1")
+
+    async def test_reads_event_history_when_message_table_is_empty(self) -> None:
+        conv = _make_conversation(message_count=2)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = []
+        event_repo = AsyncMock()
+        event_repo.get_message_events.return_value = [
+            _make_event(message_id="evt-user", content="Hi"),
+            _make_event(
+                event_id="evt-2",
+                message_id="evt-assistant",
+                event_type="assistant_message",
+                role="assistant",
+                content="Hello",
+                created_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ),
+        ]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)
+
+        result = await svc.get_session_history("proj-1", "conv-1", limit=2)
+
+        assert [message["role"] for message in result["messages"]] == ["user", "assistant"]
+        assert [message["content"] for message in result["messages"]] == ["Hi", "Hello"]
+        event_repo.get_message_events.assert_awaited_once_with(
+            conversation_id="conv-1",
+            limit=2,
+        )
+
+    async def test_merges_system_messages_with_event_history(self) -> None:
+        conv = _make_conversation(message_count=3)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = [
+            _make_message(
+                msg_id="system-msg",
+                role=MessageRole.SYSTEM,
+                content="Peer note",
+                created_at=datetime(2026, 1, 1, 0, 0, 2, tzinfo=UTC),
+            )
+        ]
+        event_repo = AsyncMock()
+        event_repo.get_message_events.return_value = [
+            _make_event(message_id="evt-user", content="Hi"),
+            _make_event(
+                event_id="evt-2",
+                message_id="evt-assistant",
+                event_type="assistant_message",
+                role="assistant",
+                content="Hello",
+                created_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            ),
+        ]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)
+
+        result = await svc.get_session_history("proj-1", "conv-1")
+
+        assert [message["role"] for message in result["messages"]] == [
+            "user",
+            "assistant",
+            "system",
+        ]
+        assert result["messages"][-1]["content"] == "Peer note"
 
 
 @pytest.mark.unit
@@ -415,6 +511,26 @@ class TestSessionsHistoryTool:
         data = json.loads(result.output)
         assert data["conversation"]["id"] == "conv-1"
         assert len(data["messages"]) == 1
+
+    async def test_returns_event_history_when_message_table_is_empty(self) -> None:
+        conv = _make_conversation(message_count=1)
+        conv_repo = AsyncMock()
+        conv_repo.find_by_id.return_value = conv
+        msg_repo = AsyncMock()
+        msg_repo.list_by_conversation.return_value = []
+        event_repo = AsyncMock()
+        event_repo.get_message_events.return_value = [
+            _make_event(message_id="evt-user", content="Hi from events")
+        ]
+        svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)
+        configure_session_comm(svc)
+        ctx = _make_ctx()
+
+        result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
+
+        assert not result.is_error
+        data = json.loads(result.output)
+        assert data["messages"][0]["content"] == "Hi from events"
 
     async def test_error_on_cross_project(self) -> None:
         conv = _make_conversation(project_id="other-proj")

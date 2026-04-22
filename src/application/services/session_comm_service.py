@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from src.domain.model.agent import (
+    AgentExecutionEvent,
     Conversation,
     ConversationStatus,
     Message,
@@ -17,6 +18,7 @@ from src.domain.model.agent import (
     MessageType,
 )
 from src.domain.ports.repositories.agent_repository import (
+    AgentExecutionEventRepository,
     ConversationRepository,
     MessageRepository,
 )
@@ -34,9 +36,11 @@ class SessionCommService:
         self,
         conversation_repo: ConversationRepository,
         message_repo: MessageRepository,
+        agent_execution_event_repo: AgentExecutionEventRepository | None = None,
     ) -> None:
         self._conversation_repo = conversation_repo
         self._message_repo = message_repo
+        self._agent_execution_event_repo = agent_execution_event_repo
 
     async def list_sessions(
         self,
@@ -117,25 +121,82 @@ class SessionCommService:
         if conversation.project_id != project_id:
             raise PermissionError("Cannot access conversation from a different project")
 
-        messages: list[Message] = await self._message_repo.list_by_conversation(
+        fetch_count = max(limit + offset, conversation.message_count, 1)
+        db_messages: list[Message] = await self._message_repo.list_by_conversation(
             target_conversation_id,
-            limit=limit,
-            offset=offset,
+            limit=fetch_count,
+            offset=0,
         )
+        event_messages = await self._get_event_history(
+            target_conversation_id,
+            limit=fetch_count,
+        )
+
+        if event_messages:
+            history_messages = [
+                self._history_message_from_event(event) for event in event_messages
+            ]
+            history_messages.extend(
+                self._history_message_from_message(message)
+                for message in db_messages
+                if message.role == MessageRole.SYSTEM
+            )
+        else:
+            history_messages = [
+                self._history_message_from_message(message) for message in db_messages
+            ]
+
+        history_messages.sort(key=lambda item: (item["created_at"], item["id"]))
+        paged_messages = history_messages[offset : offset + limit]
 
         return {
             "conversation": conversation.to_dict(),
-            "messages": [
-                {
-                    "id": msg.id,
-                    "role": msg.role.value,
-                    "content": msg.content,
-                    "message_type": msg.message_type.value,
-                    "created_at": msg.created_at.isoformat(),
-                }
-                for msg in messages
-            ],
-            "total": len(messages),
+            "messages": paged_messages,
+            "total": len(paged_messages),
+        }
+
+    async def _get_event_history(
+        self,
+        target_conversation_id: str,
+        *,
+        limit: int,
+    ) -> list[AgentExecutionEvent]:
+        """Read canonical user/assistant history from the event store when available."""
+        if self._agent_execution_event_repo is None:
+            return []
+        return await self._agent_execution_event_repo.get_message_events(
+            conversation_id=target_conversation_id,
+            limit=limit,
+        )
+
+    @staticmethod
+    def _history_message_from_message(message: Message) -> dict[str, str]:
+        """Serialize a DB-backed message into sessions_history output shape."""
+        return {
+            "id": message.id,
+            "role": message.role.value,
+            "content": message.content,
+            "message_type": message.message_type.value,
+            "created_at": message.created_at.isoformat(),
+        }
+
+    @staticmethod
+    def _history_message_from_event(event: AgentExecutionEvent) -> dict[str, str]:
+        """Serialize a persisted message event into sessions_history output shape."""
+        data = event.event_data
+        role = str(
+            data.get(
+                "role",
+                MessageRole.ASSISTANT.value if str(event.event_type) == "assistant_message" else MessageRole.USER.value,
+            )
+        )
+        message_id = str(data.get("message_id") or event.message_id or event.id)
+        return {
+            "id": message_id,
+            "role": role,
+            "content": str(data.get("content", "")),
+            "message_type": str(data.get("message_type", MessageType.TEXT.value)),
+            "created_at": event.created_at.isoformat(),
         }
 
     async def send_to_session(
@@ -199,7 +260,7 @@ class SessionCommService:
 
         # Persist the conversation projection so sessions_history() returns
         # up-to-date message_count and updated_at.
-        conversation.increment_message_count()
+        _ = conversation.increment_message_count()
         await self._conversation_repo.save(conversation)
 
         return {

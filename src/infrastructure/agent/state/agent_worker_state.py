@@ -1429,6 +1429,9 @@ def _add_session_comm_tools(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as comm_session_factory,
         )
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+            SqlAgentExecutionEventRepository,
+        )
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
             SqlConversationRepository,
         )
@@ -1444,11 +1447,13 @@ def _add_session_comm_tools(
 
         session = comm_session_factory()
         conversation_repo = SqlConversationRepository(session)
+        event_repo = SqlAgentExecutionEventRepository(session)
         message_repo = SqlMessageRepository(session)
 
         service = SessionCommService(
             conversation_repo=conversation_repo,
             message_repo=message_repo,
+            agent_execution_event_repo=event_repo,
         )
         configure_session_comm(service)
         tools[sessions_list_tool.name] = sessions_list_tool

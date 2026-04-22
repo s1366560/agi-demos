@@ -162,46 +162,46 @@ class TestSessionCommToolsWiring:
         mock_send_tool = MagicMock()
         mock_send_tool.name = "sessions_send"
         mock_configure = MagicMock()
+        mock_service_cls = MagicMock()
 
         tools: dict[str, Any] = {}
 
         with (
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.SessionCommService",
-                create=True,
+                "src.application.services.session_comm_service.SessionCommService",
+                mock_service_cls,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.async_session_factory",
+                "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
                 mock_session_factory,
+            ),
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_conversation_repository.SqlConversationRepository",
                 create=True,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.SqlConversationRepository",
+                "src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository.SqlAgentExecutionEventRepository",
                 create=True,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.SqlMessageRepository",
+                "src.infrastructure.adapters.secondary.persistence.sql_message_repository.SqlMessageRepository",
                 create=True,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.configure_session_comm",
+                "src.infrastructure.agent.tools.session_comm_tools.configure_session_comm",
                 mock_configure,
-                create=True,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.sessions_list_tool",
+                "src.infrastructure.agent.tools.session_comm_tools.sessions_list_tool",
                 mock_list_tool,
-                create=True,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.sessions_history_tool",
+                "src.infrastructure.agent.tools.session_comm_tools.sessions_history_tool",
                 mock_history_tool,
-                create=True,
             ),
             patch(
-                "src.infrastructure.agent.state.agent_worker_state.sessions_send_tool",
+                "src.infrastructure.agent.tools.session_comm_tools.sessions_send_tool",
                 mock_send_tool,
-                create=True,
             ),
         ):
             # The function uses lazy imports, so we import here
@@ -217,6 +217,8 @@ class TestSessionCommToolsWiring:
         assert "sessions_history" in tools
         assert "sessions_send" in tools
         assert len(tools) == 3
+        assert mock_service_cls.call_args is not None
+        assert "agent_execution_event_repo" in mock_service_cls.call_args.kwargs
 
     async def test_session_comm_tools_graceful_failure(self) -> None:
         """Import failure is caught silently; tools dict unchanged.
