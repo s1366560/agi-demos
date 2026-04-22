@@ -59,7 +59,7 @@ export const DeviceApprove: React.FC = () => {
             <Space direction="vertical" size={4}>
               <Terminal size={28} strokeWidth={1.5} />
               <Title level={3} style={{ margin: 0 }}>
-                {t('device.signInTitle', 'Sign in to continue')}
+                {t('device.signInTitle')}
               </Title>
               <Paragraph type="secondary" style={{ margin: 0 }}>
                 {t(
@@ -70,10 +70,10 @@ export const DeviceApprove: React.FC = () => {
             </Space>
             <Space>
               <Button type="primary" onClick={() => navigate(loginHref)}>
-                {t('common.signIn', 'Sign in')}
+                {t('common.signIn')}
               </Button>
               <Text copyable={{ text: window.location.origin + ret }} type="secondary">
-                {t('device.copyBackLink', 'Copy return link')}
+                {t('device.copyBackLink')}
               </Text>
             </Space>
           </Space>
@@ -87,7 +87,7 @@ export const DeviceApprove: React.FC = () => {
     const normalized = normalize(code);
     if (!CODE_PATTERN.test(normalized)) {
       setError(
-        t('device.invalidCode', 'Enter the 8-character code shown in your terminal.')
+        t('device.invalidCode')
       );
       return;
     }
@@ -108,14 +108,14 @@ export const DeviceApprove: React.FC = () => {
         <Result
           icon={<CheckCircle2 size={56} color="#0070f3" strokeWidth={1.5} />}
           status="success"
-          title={t('device.approvedTitle', 'Device approved')}
+          title={t('device.approvedTitle')}
           subTitle={t(
             'device.approvedSubtitle',
             'Your terminal should be signed in. You can close this tab.'
           )}
           extra={
             <Button type="primary" onClick={() => navigate('/')}>
-              {t('common.goHome', 'Go home')}
+              {t('common.goHome')}
             </Button>
           }
         />
@@ -133,7 +133,7 @@ export const DeviceApprove: React.FC = () => {
           <Space direction="vertical" size={4}>
             <Terminal size={28} strokeWidth={1.5} />
             <Title level={3} style={{ margin: 0 }}>
-              {t('device.title', 'Connect a device')}
+              {t('device.title')}
             </Title>
             <Paragraph type="secondary" style={{ margin: 0 }}>
               {t(
@@ -146,7 +146,7 @@ export const DeviceApprove: React.FC = () => {
           {error && <Alert type="error" message={error} showIcon />}
 
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Text strong>{t('device.codeLabel', 'Device code')}</Text>
+            <Text strong>{t('device.codeLabel')}</Text>
             <Input
               autoFocus
               size="large"
@@ -166,7 +166,7 @@ export const DeviceApprove: React.FC = () => {
 
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
             <Button onClick={() => navigate('/')}>
-              {t('common.cancel', 'Cancel')}
+              {t('common.cancel')}
             </Button>
             <Button
               type="primary"
@@ -174,7 +174,7 @@ export const DeviceApprove: React.FC = () => {
               disabled={code.length !== CODE_LEN}
               onClick={() => void handleSubmit()}
             >
-              {t('device.approve', 'Approve')}
+              {t('device.approve')}
             </Button>
           </Space>
 
