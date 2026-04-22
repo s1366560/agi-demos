@@ -663,6 +663,25 @@ class AgentPluginRegistry:
             effective_settings.update(override_settings)
         return effective_settings
 
+    @staticmethod
+    def _is_plugin_enabled(
+        plugin_name: str,
+        *,
+        tenant_id: str | None,
+    ) -> bool:
+        """Best-effort plugin enablement check using the runtime manager state store."""
+        if not plugin_name or plugin_name == "__custom__":
+            return True
+        try:
+            from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
+
+            return get_plugin_runtime_manager().is_plugin_enabled(
+                plugin_name,
+                tenant_id=tenant_id,
+            )
+        except Exception:
+            return True
+
     def _resolve_hook_entries(
         self,
         *,
@@ -908,9 +927,20 @@ class AgentPluginRegistry:
         )
 
         current_payload = dict(payload or {})
+        tenant_id = str(current_payload.get("tenant_id")) if current_payload.get("tenant_id") else None
         diagnostics: list[PluginDiagnostic] = []
         for entry in ordered_entries:
             plugin_name = entry.plugin_name
+            if not self._is_plugin_enabled(plugin_name, tenant_id=tenant_id):
+                diagnostics.append(
+                    PluginDiagnostic(
+                        plugin_name=plugin_name,
+                        code="plugin_disabled",
+                        message=f"Skipped disabled plugin: {plugin_name}",
+                        level="info",
+                    )
+                )
+                continue
             if not entry.enabled:
                 continue
 
@@ -1019,6 +1049,16 @@ class AgentPluginRegistry:
         plugin_tools: dict[str, Any] = {}
 
         for plugin_name, factory in tool_factories.items():
+            if not self._is_plugin_enabled(plugin_name, tenant_id=context.tenant_id):
+                diagnostics.append(
+                    PluginDiagnostic(
+                        plugin_name=plugin_name,
+                        code="plugin_disabled",
+                        message=f"Skipped disabled plugin: {plugin_name}",
+                        level="info",
+                    )
+                )
+                continue
             try:
                 produced = factory(context)
                 if inspect.isawaitable(produced):
@@ -1079,6 +1119,16 @@ class AgentPluginRegistry:
         plugin_skills: list[dict[str, Any]] = []
 
         for plugin_name, factory in skill_factories.items():
+            if not self._is_plugin_enabled(plugin_name, tenant_id=context.tenant_id):
+                diagnostics.append(
+                    PluginDiagnostic(
+                        plugin_name=plugin_name,
+                        code="plugin_disabled",
+                        message=f"Skipped disabled plugin: {plugin_name}",
+                        level="info",
+                    )
+                )
+                continue
             try:
                 produced = factory(context)
                 if inspect.isawaitable(produced):

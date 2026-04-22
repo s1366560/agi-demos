@@ -10,11 +10,12 @@ from src.infrastructure.agent.plugins.state_store import PluginStateStore
 
 
 @pytest.mark.unit
-def test_discover_plugins_has_no_builtin_plugins() -> None:
-    """Core discovery should not auto-load built-in channel plugins."""
+def test_discover_plugins_includes_builtin_runtime_plugins() -> None:
+    """Core discovery should expose built-in runtime plugins."""
     discovered, diagnostics = discover_plugins(include_entrypoints=False)
 
-    assert discovered == []
+    names = {plugin.name for plugin in discovered}
+    assert {"sisyphus-runtime", "memory-runtime"}.issubset(names)
     assert all(diagnostic.code != "plugin_discovery_failed" for diagnostic in diagnostics)
 
 

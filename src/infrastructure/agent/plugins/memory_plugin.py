@@ -206,6 +206,11 @@ def _build_memory_tools(context: PluginToolBuildContext) -> dict[str, Any]:
 def register_builtin_memory_plugin(registry: AgentPluginRegistry) -> None:
     """Register the built-in memory runtime plugin."""
     api = PluginRuntimeApi(PLUGIN_NAME, registry=registry)
+    _register_memory_plugin(api)
+
+
+def _register_memory_plugin(api: PluginRuntimeApi) -> None:
+    """Register memory runtime hooks and tools through the runtime API."""
     api.register_hook(
         "before_prompt_build",
         _before_prompt_build,
@@ -237,3 +242,12 @@ def register_builtin_memory_plugin(registry: AgentPluginRegistry) -> None:
         _build_memory_tools,
         overwrite=True,
     )
+
+
+class BuiltinMemoryRuntimePlugin:
+    """Builtin plugin wrapper so discovery/runtime manager can inventory memory-runtime."""
+
+    name = PLUGIN_NAME
+
+    def setup(self, api: PluginRuntimeApi) -> None:
+        _register_memory_plugin(api)

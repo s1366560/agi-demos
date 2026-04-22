@@ -2741,6 +2741,10 @@ class ReActAgent:
             tenant_agent_config_data=tenant_agent_config_data,
             selected_agent=selected_agent,
         )
+        self.config.runtime_hook_overrides = [
+            runtime_hook.to_dict()
+            for runtime_hook in runtime_profile.tenant_agent_config.runtime_hooks
+        ]
         runtime_workspace_manager = self._build_runtime_workspace_manager(selected_agent)
 
         # Phase 5: Skill matching
@@ -2970,10 +2974,6 @@ class ReActAgent:
         config.max_tokens = runtime_profile.effective_max_tokens
         config.max_steps = runtime_profile.effective_max_steps
         config.skill_names = [skill.name for skill in runtime_profile.available_skills]
-        config.runtime_hook_overrides = [
-            runtime_hook.to_dict()
-            for runtime_hook in runtime_profile.tenant_agent_config.runtime_hooks
-        ]
         config.runtime_context = {
             **dict(config.runtime_context),
             "selected_agent_id": selected_agent.id,

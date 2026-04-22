@@ -165,6 +165,15 @@ class PluginRuntimeManager:
         records.sort(key=lambda item: item["name"])
         return records, diagnostics
 
+    def is_plugin_enabled(
+        self,
+        plugin_name: str,
+        *,
+        tenant_id: str | None = None,
+    ) -> bool:
+        """Return whether a plugin is enabled in global or tenant scope."""
+        return self._state_store.is_enabled(plugin_name, tenant_id=tenant_id)
+
     async def set_plugin_enabled(
         self,
         plugin_name: str,

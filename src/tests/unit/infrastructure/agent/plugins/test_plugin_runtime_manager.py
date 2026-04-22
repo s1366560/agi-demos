@@ -105,6 +105,20 @@ def test_runtime_manager_reads_manifest_strict_flag_from_env(
 
 
 @pytest.mark.unit
+def test_list_plugins_includes_builtin_runtime_plugins(tmp_path) -> None:
+    manager = PluginRuntimeManager(
+        registry=AgentPluginRegistry(),
+        state_store=PluginStateStore(base_path=tmp_path),
+    )
+
+    plugins, diagnostics = manager.list_plugins()
+    names = {item["name"] for item in plugins}
+
+    assert diagnostics == []
+    assert {"sisyphus-runtime", "memory-runtime"}.issubset(names)
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_set_plugin_enabled_persists_state_and_reloads(tmp_path) -> None:
     """set_plugin_enabled should persist state and trigger reload."""

@@ -100,6 +100,11 @@ def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
 def register_builtin_sisyphus_plugin(registry: AgentPluginRegistry) -> None:
     """Register built-in Sisyphus runtime hooks with metadata for the UI."""
     api = PluginRuntimeApi(PLUGIN_NAME, registry=registry)
+    _register_sisyphus_plugin(api)
+
+
+def _register_sisyphus_plugin(api: PluginRuntimeApi) -> None:
+    """Register Sisyphus runtime hooks through the runtime API."""
     api.register_hook(
         "on_session_start",
         _on_session_start,
@@ -174,3 +179,12 @@ def register_builtin_sisyphus_plugin(registry: AgentPluginRegistry) -> None:
         },
         overwrite=True,
     )
+
+
+class BuiltinSisyphusRuntimePlugin:
+    """Builtin plugin wrapper so discovery/runtime manager can inventory sisyphus-runtime."""
+
+    name = PLUGIN_NAME
+
+    def setup(self, api: PluginRuntimeApi) -> None:
+        _register_sisyphus_plugin(api)

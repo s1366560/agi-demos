@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.agent.plugins.registry import HookDispatchResult
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -386,7 +387,6 @@ class TestReActAgentWorkspaceDelegation:
         assert "Leader adjudication required" in result
         assert "Tokens used: 42" in result
 
-
     async def test_workspace_authority_skips_non_forced_skill_matching(self):
         agent = _make_react_agent()
         workspace_root_task = MagicMock(id="root-1", workspace_id="ws-1")
@@ -419,7 +419,9 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_load_selected_agent",
-                new=AsyncMock(return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                ),
             ),
             patch.object(
                 agent,
@@ -437,7 +439,11 @@ class TestReActAgentWorkspaceDelegation:
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
-            patch.object(agent, "_stream_match_skill", side_effect=AssertionError("skill matching should be skipped")),
+            patch.object(
+                agent,
+                "_stream_match_skill",
+                side_effect=AssertionError("skill matching should be skipped"),
+            ),
             patch.object(
                 agent,
                 "_stream_resolve_mode",
@@ -455,7 +461,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
             patch.object(agent, "_stream_record_skill_usage", return_value=None),
-            patch.object(agent, "_processor_factory", new=SimpleNamespace(create_for_main=lambda **kwargs: MagicMock())),
+            patch.object(
+                agent,
+                "_processor_factory",
+                new=SimpleNamespace(create_for_main=lambda **kwargs: MagicMock()),
+            ),
         ):
             agent._stream_messages = [{"role": "system", "content": "system"}]
             agent._stream_tools_to_use = []
@@ -474,16 +484,145 @@ class TestReActAgentWorkspaceDelegation:
 
         assert events[-1]["type"] == "complete"
 
+    async def test_stream_passes_tenant_runtime_hook_overrides_to_before_prompt_build(self):
+        agent = _make_react_agent()
+        registry = MagicMock()
+        registry.apply_hook = AsyncMock(
+            return_value=HookDispatchResult(
+                payload={"memory_context": "", "emitted_events": []},
+                diagnostics=[],
+            )
+        )
+        agent.config.plugin_registry = registry
+        agent._stream_skill_state = {
+            "matched_skill": None,
+            "is_forced": False,
+            "should_inject_prompt": False,
+        }
+        runtime_hook = SimpleNamespace(
+            to_dict=lambda: {
+                "plugin_name": "memory-runtime",
+                "hook_name": "before_prompt_build",
+                "enabled": True,
+                "priority": 5,
+            }
+        )
+
+        async def _empty_async_gen(*args, **kwargs):
+            if False:
+                yield args, kwargs
+
+        async def _process_events(**kwargs):
+            del kwargs
+            agent._stream_final_content = "done"
+            agent._stream_success = True
+            yield {"type": "complete", "data": {"content": "done"}}
+
+        with (
+            patch.object(agent, "_stream_detect_plan_mode", side_effect=_empty_async_gen),
+            patch.object(
+                agent,
+                "_stream_decide_route",
+                return_value=(SimpleNamespace(), None, None, {}, None, None),
+            ),
+            patch.object(
+                agent,
+                "_load_selected_agent",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        id="agent-1",
+                        name="Atlas",
+                        allowed_skills=[],
+                    )
+                ),
+            ),
+            patch.object(
+                agent,
+                "_build_runtime_profile",
+                return_value=SimpleNamespace(
+                    available_skills=[],
+                    allow_tools=[],
+                    deny_tools=[],
+                    tenant_agent_config=SimpleNamespace(runtime_hooks=[runtime_hook]),
+                    agent_definition_prompt="",
+                    effective_model="test-model",
+                    effective_temperature=0.2,
+                    effective_max_tokens=1024,
+                    effective_max_steps=4,
+                ),
+            ),
+            patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
+            patch.object(agent, "_stream_match_skill", return_value=iter(())),
+            patch.object(
+                agent,
+                "_stream_resolve_mode",
+                return_value=("build", SimpleNamespace(metadata={})),
+            ),
+            patch.object(agent, "_build_primary_agent_prompt", return_value=""),
+            patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
+            patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_prepare_tools", return_value=[]),
+            patch.object(agent, "_stream_process_events", side_effect=_process_events),
+            patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_record_skill_usage", return_value=None),
+            patch.object(
+                agent,
+                "_processor_factory",
+                new=SimpleNamespace(create_for_main=lambda **kwargs: MagicMock()),
+            ),
+        ):
+            agent._stream_messages = [{"role": "system", "content": "system"}]
+            agent._stream_tools_to_use = []
+            agent._stream_memory_context = ""
+            events = []
+            async for event in agent.stream(
+                conversation_id="conv-1",
+                user_message="Use runtime overrides.",
+                project_id="proj-1",
+                user_id="user-1",
+                tenant_id="tenant-1",
+                conversation_context=[],
+                agent_id="agent-1",
+            ):
+                events.append(event)
+
+        assert events[-1]["type"] == "complete"
+        assert registry.apply_hook.await_args.args[0] == "before_prompt_build"
+        assert registry.apply_hook.await_args.kwargs["runtime_overrides"] == [
+            runtime_hook.to_dict()
+        ]
 
     def test_filter_workspace_root_tools_removes_generic_agent_bypass_tools(self):
         from src.infrastructure.agent.core.processor import ToolDefinition
 
         tools = [
-            ToolDefinition(name="agent_spawn", description="", parameters={"type": "object"}, execute=AsyncMock()),
-            ToolDefinition(name="agent_send", description="", parameters={"type": "object"}, execute=AsyncMock()),
-            ToolDefinition(name="agent_sessions", description="", parameters={"type": "object"}, execute=AsyncMock()),
-            ToolDefinition(name="workspace_chat_send", description="", parameters={"type": "object"}, execute=AsyncMock()),
-            ToolDefinition(name="todoread", description="", parameters={"type": "object"}, execute=AsyncMock()),
+            ToolDefinition(
+                name="agent_spawn",
+                description="",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+            ToolDefinition(
+                name="agent_send",
+                description="",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+            ToolDefinition(
+                name="agent_sessions",
+                description="",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+            ToolDefinition(
+                name="workspace_chat_send",
+                description="",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+            ToolDefinition(
+                name="todoread", description="", parameters={"type": "object"}, execute=AsyncMock()
+            ),
         ]
 
         filtered = _make_react_agent()._filter_workspace_root_tools(
@@ -497,8 +636,15 @@ class TestReActAgentWorkspaceDelegation:
         from src.infrastructure.agent.core.processor import ToolDefinition
 
         tools = [
-            ToolDefinition(name="agent_spawn", description="", parameters={"type": "object"}, execute=AsyncMock()),
-            ToolDefinition(name="todoread", description="", parameters={"type": "object"}, execute=AsyncMock()),
+            ToolDefinition(
+                name="agent_spawn",
+                description="",
+                parameters={"type": "object"},
+                execute=AsyncMock(),
+            ),
+            ToolDefinition(
+                name="todoread", description="", parameters={"type": "object"}, execute=AsyncMock()
+            ),
         ]
 
         filtered = _make_react_agent()._filter_workspace_root_tools(
