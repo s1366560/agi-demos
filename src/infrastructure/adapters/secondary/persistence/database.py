@@ -117,6 +117,10 @@ async def initialize_database() -> None:
 
         await conn.run_sync(Base.metadata.create_all)
 
+    # ``create_all()`` can bootstrap databases that are then stamped past
+    # follow-up migrations, so repair any drift in the event timeline table
+    # before marking the schema current.
+    await update_agent_events_schema()
     await _stamp_alembic_head()
     logger.info("Database schema initialized successfully")
 
@@ -164,9 +168,26 @@ async def update_agent_events_schema() -> None:
     This should be called once during deployment for existing databases.
     """
 
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH,
+    )
+
     logger.info("Updating agent_execution_events schema...")
 
     async with engine.begin() as conn:
+        # Keep correlation IDs wide enough for prefixed UUIDs such as "cron:<uuid>".
+        try:
+            await conn.execute(
+                refresh_select_statement(text(
+                    "ALTER TABLE agent_execution_events "
+                    "ALTER COLUMN correlation_id "
+                    f"TYPE VARCHAR({AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH})"
+                ))
+            )
+            logger.info("Widened agent_execution_events.correlation_id")
+        except Exception as e:
+            logger.info(f"correlation_id column may already be updated: {e}")
+
         # Create unique constraint on (conversation_id, event_time_us, event_counter)
         try:
             await conn.execute(
@@ -201,6 +222,18 @@ async def update_agent_events_schema() -> None:
                 ))
             )
             logger.info("Created index ix_agent_events_msg_time")
+        except Exception as e:
+            logger.info(f"Index may already exist: {e}")
+
+        # Create index on correlation_id for request-scoped event lookups.
+        try:
+            await conn.execute(
+                refresh_select_statement(text(
+                    "CREATE INDEX IF NOT EXISTS ix_agent_events_corr_id "
+                    "ON agent_execution_events (correlation_id)"
+                ))
+            )
+            logger.info("Created index ix_agent_events_corr_id")
         except Exception as e:
             logger.info(f"Index may already exist: {e}")
 

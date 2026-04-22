@@ -800,3 +800,37 @@ async def test_persist_events_updates_conversation_projection_fields() -> None:
     assert any("UPDATE conversations" in sql for sql in executed_sql)
     assert any("message_count" in sql for sql in executed_sql)
     assert any("updated_at" in sql for sql in executed_sql)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_events_keeps_prefixed_correlation_id() -> None:
+    """Actor persistence should pass through prefixed correlation IDs unchanged."""
+    session = MagicMock()
+    existing_result = MagicMock()
+    existing_result.scalars.return_value.all.return_value = []
+    insert_result = MagicMock()
+    insert_result.one_or_none.return_value = ("assistant_message", 123)
+    session.execute = AsyncMock(side_effect=[existing_result, insert_result, MagicMock()])
+
+    begin_ctx = AsyncMock()
+    begin_ctx.__aenter__.return_value = None
+    begin_ctx.__aexit__.return_value = None
+    session.begin.return_value = begin_ctx
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    correlation_id = "cron:0e464e94-b2e8-4dbe-8a13-08b203ba6667"
+
+    with patch.object(execution, "async_session_factory", return_value=session_ctx):
+        await execution._persist_events(
+            conversation_id="conv-1",
+            message_id="msg-1",
+            events=[{"type": "complete", "data": {"content": "final answer"}}],
+            correlation_id=correlation_id,
+        )
+
+    insert_stmt = session.execute.await_args_list[1].args[0]
+    assert insert_stmt.compile().params["correlation_id"] == correlation_id

@@ -27,7 +27,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 try:
-    from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
+    from pgvector.sqlalchemy import Vector
 except ImportError:
     Vector = None
 
@@ -45,6 +45,9 @@ class IdGeneratorMixin:
     def generate_id(cls) -> str:
         """Generate a unique UUID string for entity identification."""
         return str(uuid.uuid4())
+
+
+AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH = 100
 
 
 class User(Base):
@@ -1079,7 +1082,10 @@ class AgentExecutionEvent(Base):
     event_time_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
     event_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # correlation_id links all events from a single user request
-    correlation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(
+        String(AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     conversation: Mapped["Conversation"] = relationship(foreign_keys=[conversation_id])
