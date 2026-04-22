@@ -559,3 +559,113 @@ class TestSqlConversationRepositoryTransaction:
         c2 = await v2_conversation_repo.find_by_id("conv-tx-2")
         assert c1 is not None
         assert c2 is not None
+
+
+class TestSqlConversationRepositoryMultiAgent:
+    """Track B (P2-3 phase-2) — persist the multi-agent collaboration fields."""
+
+    @pytest.mark.asyncio
+    async def test_save_and_reload_multi_agent_fields(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
+        """Round-trip roster / mode / coordinator / focused / goal_contract."""
+        from src.domain.model.agent.conversation.conversation_mode import ConversationMode
+        from src.domain.model.agent.conversation.goal_contract import GoalContract
+
+        goal = GoalContract(
+            primary_goal="Ship Track B phase-2",
+            blocking_categories=frozenset({"payment", "delete"}),
+            operator_guidance="Coordinator drives; workers declare progress.",
+        )
+        conversation = Conversation(
+            id="conv-multi-agent-1",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Multi-agent room",
+            status=ConversationStatus.ACTIVE,
+            agent_config={},
+            metadata={},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+            participant_agents=["agent-alpha", "agent-beta"],
+            conversation_mode=ConversationMode.AUTONOMOUS,
+            coordinator_agent_id="agent-alpha",
+            focused_agent_id="agent-beta",
+            goal_contract=goal,
+        )
+
+        await v2_conversation_repo.save(conversation)
+
+        reloaded = await v2_conversation_repo.find_by_id("conv-multi-agent-1")
+        assert reloaded is not None
+        assert reloaded.participant_agents == ["agent-alpha", "agent-beta"]
+        assert reloaded.conversation_mode == ConversationMode.AUTONOMOUS
+        assert reloaded.coordinator_agent_id == "agent-alpha"
+        assert reloaded.focused_agent_id == "agent-beta"
+        assert reloaded.goal_contract is not None
+        assert reloaded.goal_contract.primary_goal == "Ship Track B phase-2"
+        assert reloaded.goal_contract.blocking_categories == frozenset(
+            {"payment", "delete"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_save_without_multi_agent_fields_defaults(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
+        """Legacy single-agent write path — empty roster / None mode / None contract."""
+        conversation = Conversation(
+            id="conv-legacy-1",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Legacy",
+            status=ConversationStatus.ACTIVE,
+            agent_config={},
+            metadata={},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+        )
+        await v2_conversation_repo.save(conversation)
+
+        reloaded = await v2_conversation_repo.find_by_id("conv-legacy-1")
+        assert reloaded is not None
+        assert reloaded.participant_agents == []
+        assert reloaded.conversation_mode is None
+        assert reloaded.coordinator_agent_id is None
+        assert reloaded.focused_agent_id is None
+        assert reloaded.goal_contract is None
+
+    @pytest.mark.asyncio
+    async def test_upsert_updates_roster(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
+        """Second save with roster changes must overwrite the persisted list."""
+        conversation = Conversation(
+            id="conv-upsert-roster",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Upsert",
+            status=ConversationStatus.ACTIVE,
+            agent_config={},
+            metadata={},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+            participant_agents=["agent-a"],
+        )
+        await v2_conversation_repo.save(conversation)
+
+        conversation.participant_agents = ["agent-a", "agent-b"]
+        conversation.updated_at = datetime.now(UTC)
+        await v2_conversation_repo.save(conversation)
+
+        reloaded = await v2_conversation_repo.find_by_id("conv-upsert-roster")
+        assert reloaded is not None
+        assert reloaded.participant_agents == ["agent-a", "agent-b"]

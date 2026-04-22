@@ -84,6 +84,9 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
             "tool_results": tool_results_db,
             "meta": message.metadata,
             "created_at": message.created_at,
+            # Multi-agent (Track B)
+            "sender_agent_id": message.sender_agent_id,
+            "mentions": list(message.mentions),
         }
 
         # Use PostgreSQL ON CONFLICT for upsert
@@ -99,6 +102,8 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
                     "tool_calls": tool_calls_db,
                     "tool_results": tool_results_db,
                     "meta": message.metadata,
+                    "sender_agent_id": message.sender_agent_id,
+                    "mentions": list(message.mentions),
                 },
             )
         )
@@ -120,13 +125,15 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
     ) -> list[Message]:
         """List messages for a conversation in chronological order."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBMessage)
-                .where(DBMessage.conversation_id == conversation_id)
-                .order_by(DBMessage.created_at.asc())
-                .offset(offset)
-                .limit(limit)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMessage)
+                    .where(DBMessage.conversation_id == conversation_id)
+                    .order_by(DBMessage.created_at.asc())
+                    .offset(offset)
+                    .limit(limit)
+                )
+            )
         )
         db_messages = result.scalars().all()
         return [d for m in db_messages if (d := self._to_domain(m)) is not None]
@@ -138,13 +145,15 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
     ) -> list[Message]:
         """List recent messages across all conversations in a project."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBMessage)
-                .join(DBMessage.conversation)
-                .where(DBConversation.project_id == project_id)
-                .order_by(DBMessage.created_at.desc())
-                .limit(limit)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMessage)
+                    .join(DBMessage.conversation)
+                    .where(DBConversation.project_id == project_id)
+                    .order_by(DBMessage.created_at.desc())
+                    .limit(limit)
+                )
+            )
         )
         db_messages = result.scalars().all()
         return [d for m in db_messages if (d := self._to_domain(m)) is not None]
@@ -152,20 +161,24 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
     async def count_by_conversation(self, conversation_id: str) -> int:
         """Count messages in a conversation."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(func.count())
-                .select_from(DBMessage)
-                .where(DBMessage.conversation_id == conversation_id)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(func.count())
+                    .select_from(DBMessage)
+                    .where(DBMessage.conversation_id == conversation_id)
+                )
+            )
         )
         return result.scalar() or 0
 
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all messages in a conversation."""
         await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                delete(DBMessage).where(DBMessage.conversation_id == conversation_id)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    delete(DBMessage).where(DBMessage.conversation_id == conversation_id)
+                )
+            )
         )
         await self._session.flush()
 
@@ -215,6 +228,8 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
             tool_results=tool_results,
             metadata=db_message.meta or {},
             created_at=db_message.created_at,
+            sender_agent_id=getattr(db_message, "sender_agent_id", None),
+            mentions=list(getattr(db_message, "mentions", None) or []),
         )
 
     def _to_db(self, domain_entity: Message) -> DBMessage:
@@ -252,6 +267,8 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
             tool_results=tool_results_db,
             meta=domain_entity.metadata,
             created_at=domain_entity.created_at,
+            sender_agent_id=domain_entity.sender_agent_id,
+            mentions=list(domain_entity.mentions),
         )
 
     def _update_fields(self, db_model: DBMessage, domain_entity: Message) -> None:

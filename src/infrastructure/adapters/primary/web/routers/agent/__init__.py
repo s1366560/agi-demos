@@ -17,6 +17,7 @@ from . import (
     hitl,
     marketplace_router,
     messages,
+    participants,
     patterns,
     plans,
     subagent_router,
@@ -75,6 +76,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 # Include all sub-routers (fully modular structure)
 router.include_router(commands.router)
 router.include_router(conversations.router)
+router.include_router(participants.router)
 router.include_router(messages.router)
 router.include_router(tools.router)
 router.include_router(patterns.router)

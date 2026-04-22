@@ -458,9 +458,7 @@ class BlackboardFileModel(Base):
     uploader_type: Mapped[str] = mapped_column(String(10), nullable=False)
     uploader_id: Mapped[str] = mapped_column(String, nullable=False)
     uploader_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workspace: Mapped["WorkspaceModel"] = relationship(back_populates="blackboard_files")
 
@@ -554,16 +552,10 @@ class WorkspaceTaskSessionAttemptModel(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    workspace_task: Mapped["WorkspaceTaskModel"] = relationship(
-        foreign_keys=[workspace_task_id]
-    )
-    root_goal_task: Mapped["WorkspaceTaskModel"] = relationship(
-        foreign_keys=[root_goal_task_id]
-    )
+    workspace_task: Mapped["WorkspaceTaskModel"] = relationship(foreign_keys=[workspace_task_id])
+    root_goal_task: Mapped["WorkspaceTaskModel"] = relationship(foreign_keys=[root_goal_task_id])
     workspace: Mapped["WorkspaceModel"] = relationship(foreign_keys=[workspace_id])
-    conversation: Mapped[Optional["Conversation"]] = relationship(
-        foreign_keys=[conversation_id]
-    )
+    conversation: Mapped[Optional["Conversation"]] = relationship(foreign_keys=[conversation_id])
     worker_agent: Mapped[Optional["AgentDefinitionModel"]] = relationship(
         foreign_keys=[worker_agent_id]
     )
@@ -893,6 +885,15 @@ class Conversation(Base):
     fork_context_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     merge_strategy: Mapped[str] = mapped_column(String(20), default="result_only", nullable=False)
 
+    # Multi-agent collaboration (P2-3 phase-2, Track B · Agent First).
+    # ``participant_agents`` was dark-launched by migration b1a2c3d4e5f6.
+    # The remaining 4 columns were added by migration b2c3d4e5f6a7.
+    participant_agents: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    conversation_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    coordinator_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    focused_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    goal_contract: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
     project: Mapped["Project"] = relationship(foreign_keys=[project_id])
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
@@ -938,6 +939,13 @@ class Message(Base):
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     original_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Multi-agent collaboration (P2-3 phase-2, Track B · Agent First).
+    # ``sender_agent_id`` identifies which agent produced an assistant
+    # message (NULL = user or legacy single-agent assistant); ``mentions``
+    # is the structured @mention list from the frontend picker.
+    sender_agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mentions: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
     executions: Mapped[list["AgentExecution"]] = relationship(
@@ -1404,9 +1412,7 @@ class CuratedSkill(Base):
     approved_by: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    approved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), default="active", server_default="active", nullable=False, index=True
@@ -3124,9 +3130,7 @@ class PlanModel(Base):
         back_populates="plan", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        Index("ix_workspace_plans_workspace", "workspace_id"),
-    )
+    __table_args__ = (Index("ix_workspace_plans_workspace", "workspace_id"),)
 
 
 class PlanNodeModel(Base):

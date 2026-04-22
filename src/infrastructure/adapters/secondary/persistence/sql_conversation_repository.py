@@ -29,6 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_mode import AgentMode
+from src.domain.model.agent.conversation.conversation_mode import ConversationMode
+from src.domain.model.agent.conversation.goal_contract import GoalContract
 from src.domain.model.agent.merge_strategy import MergeStrategy
 from src.domain.ports.repositories.agent_repository import ConversationRepository
 from src.infrastructure.adapters.secondary.common.base_repository import (
@@ -99,6 +101,20 @@ class SqlConversationRepository(
             "fork_source_id": conversation.fork_source_id,
             "fork_context_snapshot": conversation.fork_context_snapshot,
             "merge_strategy": conversation.merge_strategy.value,
+            # Multi-agent (Track B)
+            "participant_agents": list(conversation.participant_agents),
+            "conversation_mode": (
+                conversation.conversation_mode.value
+                if conversation.conversation_mode is not None
+                else None
+            ),
+            "coordinator_agent_id": conversation.coordinator_agent_id,
+            "focused_agent_id": conversation.focused_agent_id,
+            "goal_contract": (
+                conversation.goal_contract.to_dict()
+                if conversation.goal_contract is not None
+                else None
+            ),
         }
 
         # Use PostgreSQL ON CONFLICT for upsert
@@ -121,6 +137,20 @@ class SqlConversationRepository(
                     "fork_source_id": conversation.fork_source_id,
                     "fork_context_snapshot": conversation.fork_context_snapshot,
                     "merge_strategy": conversation.merge_strategy.value,
+                    # Multi-agent (Track B)
+                    "participant_agents": list(conversation.participant_agents),
+                    "conversation_mode": (
+                        conversation.conversation_mode.value
+                        if conversation.conversation_mode is not None
+                        else None
+                    ),
+                    "coordinator_agent_id": conversation.coordinator_agent_id,
+                    "focused_agent_id": conversation.focused_agent_id,
+                    "goal_contract": (
+                        conversation.goal_contract.to_dict()
+                        if conversation.goal_contract is not None
+                        else None
+                    ),
                 },
             )
         )
@@ -202,7 +232,9 @@ class SqlConversationRepository(
             .limit(limit)
         )
 
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_conversations = result.scalars().all()
         return [d for c in db_conversations if (d := self._to_domain(c)) is not None]
 
@@ -260,7 +292,9 @@ class SqlConversationRepository(
             .limit(limit)
         )
 
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_conversations = result.scalars().all()
         return [d for c in db_conversations if (d := self._to_domain(c)) is not None]
 
@@ -276,9 +310,11 @@ class SqlConversationRepository(
         # Override to use direct delete instead of BaseRepository's delete
         # This ensures CASCADE works properly
         await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                delete(DBConversation).where(DBConversation.id == conversation_id)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    delete(DBConversation).where(DBConversation.id == conversation_id)
+                )
+            )
         )
         await self._session.flush()
         return True
@@ -303,7 +339,9 @@ class SqlConversationRepository(
         )
         if status:
             query = query.where(DBConversation.status == status.value)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         return result.scalar() or 0
 
     # === Conversion methods ===
@@ -320,6 +358,13 @@ class SqlConversationRepository(
         """
         if db_conversation is None:
             return None
+
+        # Multi-agent (Track B) — safe decode with defaults for legacy rows.
+        mode_raw = getattr(db_conversation, "conversation_mode", None)
+        conv_mode = ConversationMode(mode_raw) if mode_raw else None
+        goal_raw = getattr(db_conversation, "goal_contract", None)
+        goal_contract = GoalContract.from_dict(goal_raw) if isinstance(goal_raw, dict) else None
+        participant_agents = list(getattr(db_conversation, "participant_agents", None) or [])
 
         return Conversation(
             id=db_conversation.id,
@@ -344,6 +389,12 @@ class SqlConversationRepository(
             merge_strategy=MergeStrategy(db_conversation.merge_strategy)
             if db_conversation.merge_strategy
             else MergeStrategy.RESULT_ONLY,
+            # Multi-agent
+            participant_agents=participant_agents,
+            conversation_mode=conv_mode,
+            coordinator_agent_id=getattr(db_conversation, "coordinator_agent_id", None),
+            focused_agent_id=getattr(db_conversation, "focused_agent_id", None),
+            goal_contract=goal_contract,
         )
 
     def _to_db(self, domain_entity: Conversation) -> DBConversation:
@@ -378,4 +429,18 @@ class SqlConversationRepository(
             fork_source_id=domain_entity.fork_source_id,
             fork_context_snapshot=domain_entity.fork_context_snapshot,
             merge_strategy=domain_entity.merge_strategy.value,
+            # Multi-agent (Track B)
+            participant_agents=list(domain_entity.participant_agents),
+            conversation_mode=(
+                domain_entity.conversation_mode.value
+                if domain_entity.conversation_mode is not None
+                else None
+            ),
+            coordinator_agent_id=domain_entity.coordinator_agent_id,
+            focused_agent_id=domain_entity.focused_agent_id,
+            goal_contract=(
+                domain_entity.goal_contract.to_dict()
+                if domain_entity.goal_contract is not None
+                else None
+            ),
         )
