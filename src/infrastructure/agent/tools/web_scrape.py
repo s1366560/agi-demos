@@ -140,12 +140,15 @@ def _ws_format_result(
     url: str,
     description: str,
     content: str,
+    status_code: int | None = None,
 ) -> str:
     """Format scrape result as readable string."""
     lines: list[str] = [
         f"Title: {title}",
         f"URL: {url}",
     ]
+    if status_code is not None:
+        lines.append(f"HTTP Status: {status_code}")
     if description:
         lines.append(f"Description: {description[:200]}...")
     lines.append("")
@@ -296,11 +299,12 @@ async def web_scrape_tool(
                     ignore_https_errors=True,
                 )
                 page = await context.new_page()
-                await page.goto(
+                response = await page.goto(
                     url,
                     wait_until="domcontentloaded",
                     timeout=settings.playwright_timeout,
                 )
+                status_code = response.status if response is not None else None
 
                 title = await page.title()
                 description = await _ws_extract_meta_description(page)
@@ -324,13 +328,14 @@ async def web_scrape_tool(
                     url,
                     description,
                     content,
+                    status_code=status_code,
                 )
                 await context.close()
 
                 return ToolResult(
                     output=formatted,
                     title=f"Scraped: {title[:60]}",
-                    metadata={"url": url, "title": title},
+                    metadata={"url": url, "title": title, "status_code": status_code},
                 )
             finally:
                 await browser.close()

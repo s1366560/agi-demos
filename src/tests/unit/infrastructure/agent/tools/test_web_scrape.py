@@ -4,6 +4,8 @@ This test module focuses on security validation since web_scrape
 interacts with external websites and must prevent SSRF attacks.
 """
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.web_scrape import (
@@ -306,6 +308,52 @@ class TestWebScrapeToolExecute:
         result = await web_scrape_tool.execute(ctx, url="http://localhost")
         assert result.is_error
         assert "blocked" in result.output.lower()
+
+    async def test_execute_includes_http_status_for_404(self) -> None:
+        """404 pages should expose the HTTP status in output and metadata."""
+        ctx = _make_ctx()
+        mock_response = SimpleNamespace(status=404)
+        mock_page = AsyncMock()
+        mock_page.goto.return_value = mock_response
+        mock_page.title.return_value = "Missing page"
+        mock_page.query_selector.return_value = None
+        mock_page.inner_text.return_value = "Requested page content fallback"
+
+        mock_context = AsyncMock()
+        mock_context.new_page.return_value = mock_page
+
+        mock_browser = AsyncMock()
+        mock_browser.new_context.return_value = mock_context
+
+        mock_playwright = AsyncMock()
+        mock_playwright.chromium.launch.return_value = mock_browser
+
+        class _PlaywrightCM:
+            async def __aenter__(self):
+                return mock_playwright
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        with (
+            patch(
+                "src.infrastructure.agent.tools.web_scrape.async_playwright",
+                return_value=_PlaywrightCM(),
+            ),
+            patch(
+                "src.infrastructure.agent.tools.web_scrape.get_settings",
+                return_value=SimpleNamespace(
+                    playwright_headless=True,
+                    playwright_timeout=5000,
+                    playwright_max_content_length=2000,
+                ),
+            ),
+        ):
+            result = await web_scrape_tool.execute(ctx, url="https://example.com/missing")
+
+        assert not result.is_error
+        assert "HTTP Status: 404" in result.output
+        assert result.metadata["status_code"] == 404
 
 
 class TestWebScrapeToolUnwantedElements:

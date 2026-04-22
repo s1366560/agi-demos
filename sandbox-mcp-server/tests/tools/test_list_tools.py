@@ -4,8 +4,8 @@ TDD approach: Write tests first, expect failures, then implement.
 """
 
 import os
+
 import pytest
-from pathlib import Path
 
 from src.tools.file_tools import list_directory
 

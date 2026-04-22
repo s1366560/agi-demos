@@ -354,6 +354,7 @@ async def read_file(
             metadata={
                 "total_lines": total_lines,
                 "offset": offset,
+                "offset_unit": "lines",
                 "lines_returned": len(selected_lines),
                 **path_metadata,
             },
@@ -463,6 +464,7 @@ async def batch_read(
             "successful": len(results),
             "failed": len(errors),
             "offset": offset,
+            "offset_unit": "lines",
             "limit": limit,
             "raw": raw,
             "stop_on_error": stop_on_error,
@@ -1119,7 +1121,7 @@ def _walk_directory(
     Collects paths into `items` list. Stops descending into excluded
     directories and respects max_depth.
     """
-    if current_depth > max_depth:
+    if current_depth >= max_depth:
         return
     if len(items) >= _MAX_RECURSIVE_ENTRIES:
         return

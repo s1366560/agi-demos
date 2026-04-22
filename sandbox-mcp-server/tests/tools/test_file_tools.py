@@ -106,6 +106,28 @@ class TestReadTool:
         assert "hello" in result["content"][0]["text"]
         assert result["metadata"]["resolved_path"] == str(sample.resolve())
 
+    @pytest.mark.asyncio
+    async def test_read_file_offset_is_line_based(self, tmp_path):
+        """Offset should skip whole lines, not raw bytes."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        sample = workspace / "multibyte.txt"
+        sample.write_text("第一行\nsecond line\nthird line\n", encoding="utf-8")
+
+        result = await read_file(
+            file_path="multibyte.txt",
+            offset=1,
+            limit=1,
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        text = result["content"][0]["text"]
+        assert "second line" in text
+        assert "第一行" not in text
+        assert result["metadata"]["offset"] == 1
+        assert result["metadata"]["offset_unit"] == "lines"
+
 
 class TestGlobTool:
     """Regression tests for glob path normalization."""
