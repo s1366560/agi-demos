@@ -23,7 +23,6 @@ import { restApi } from '@/services/agent/restApi';
 import { workspaceService } from '@/services/workspaceService';
 
 import { ConversationModePanel } from './ConversationModePanel';
-import { ConversationParticipantsPanel } from './ConversationParticipantsPanel';
 import { HITLCenterPanel } from './HITLCenterPanel';
 
 import type { Workspace } from '@/types/workspace';
@@ -86,6 +85,16 @@ export const ConversationWorkspacePanel = memo<ConversationWorkspacePanelProps>(
       return `/tenant/${tenantId}/workspaces/${workspaceId}`;
     }, [workspaceId, tenantId]);
 
+    const rosterHref = useMemo(() => {
+      if (!workspaceId || !tenantId) return null;
+      const params = new URLSearchParams({
+        workspaceId,
+        tab: 'members',
+        conversationId,
+      });
+      return `/tenant/${tenantId}/projects/${projectId}/blackboard?${params.toString()}`;
+    }, [workspaceId, tenantId, projectId, conversationId]);
+
     return (
       <div className="flex flex-col gap-4" data-testid="conversation-workspace-panel">
         <div className="rounded-md border border-[rgba(0,0,0,0.08)] bg-[#fafafa] p-3 dark:border-slate-700 dark:bg-slate-800">
@@ -144,7 +153,23 @@ export const ConversationWorkspacePanel = memo<ConversationWorkspacePanelProps>(
 
         <div>
           <SectionLabel>{t('agent.workspace.section.participants', 'Participants')}</SectionLabel>
-          <ConversationParticipantsPanel conversationId={conversationId} />
+          {rosterHref ? (
+            <Link
+              to={rosterHref}
+              className="inline-flex items-center gap-1 rounded-md border border-[rgba(0,0,0,0.08)] bg-white px-2 py-1 text-[11px] font-medium text-[#171717] hover:bg-[#f5f5f5] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              data-testid="conversation-workspace-manage-roster-link"
+            >
+              {t('agent.workspace.section.manageRoster', 'Manage roster in Blackboard')}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          ) : (
+            <p className="text-xs text-[#999]">
+              {t(
+                'agent.workspace.section.participantsUnlinked',
+                'Link this conversation to a workspace to manage participants.'
+              )}
+            </p>
+          )}
         </div>
 
         <Divider className="!my-0" />

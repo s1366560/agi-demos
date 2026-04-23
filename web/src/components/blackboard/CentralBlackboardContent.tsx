@@ -21,6 +21,7 @@ import {
   statusBadgeTone,
 } from './blackboardUtils';
 import { CollaborationOverviewTab } from './tabs/CollaborationOverviewTab';
+import { ConversationRosterSection } from './tabs/ConversationRosterSection';
 import { DiscussionTab } from './tabs/DiscussionTab';
 import { GoalsTab } from './tabs/GoalsTab';
 import { NotesTab } from './tabs/NotesTab';
@@ -228,6 +229,7 @@ export function CentralBlackboardContent({
                 {activeTab === 'members' && (
                   <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
                     <MemberPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
+                    <ConversationRosterSection projectId={projectId} workspaceId={workspaceId} />
                   </div>
                 )}
 

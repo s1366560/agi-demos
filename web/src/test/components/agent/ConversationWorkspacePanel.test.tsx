@@ -33,9 +33,6 @@ vi.mock('@/services/workspaceService', () => ({
 vi.mock('@/components/agent/ConversationModePanel', () => ({
   ConversationModePanel: () => <div data-testid="stub-mode-panel" />,
 }));
-vi.mock('@/components/agent/ConversationParticipantsPanel', () => ({
-  ConversationParticipantsPanel: () => <div data-testid="stub-participants-panel" />,
-}));
 vi.mock('@/components/agent/HITLCenterPanel', () => ({
   HITLCenterPanel: () => <div data-testid="stub-hitl-panel" />,
 }));
@@ -95,13 +92,33 @@ describe('ConversationWorkspacePanel', () => {
     expect(screen.getByText('linked')).toBeInTheDocument();
   });
 
-  it('renders all three section stubs (mode, participants, hitl)', async () => {
-    getConversation.mockResolvedValue({ id: 'c1', workspace_id: null });
+  it('renders mode + hitl stubs and a roster deep-link (not an inline roster) when linked', async () => {
+    getConversation.mockResolvedValue({ id: 'c1', workspace_id: 'ws1' });
+    getWorkspace.mockResolvedValue({ id: 'ws1', name: 'WS', description: '' });
 
     renderPanel();
 
     expect(await screen.findByTestId('stub-mode-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('stub-participants-panel')).toBeInTheDocument();
     expect(screen.getByTestId('stub-hitl-panel')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('conversation-workspace-manage-roster-link')).toHaveAttribute(
+        'href',
+        '/tenant/t1/projects/p1/blackboard?workspaceId=ws1&tab=members&conversationId=c1'
+      )
+    );
+  });
+
+  it('shows the unlinked-roster hint when there is no workspace link', async () => {
+    getConversation.mockResolvedValue({ id: 'c1', workspace_id: null });
+
+    renderPanel();
+
+    await waitFor(() => expect(getConversation).toHaveBeenCalled());
+    expect(
+      screen.getByText('Link this conversation to a workspace to manage participants.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('conversation-workspace-manage-roster-link')
+    ).not.toBeInTheDocument();
   });
 });
