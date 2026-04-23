@@ -16,7 +16,9 @@ import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
+import { ConversationModePanel } from '@/components/agent/ConversationModePanel';
 import { ConversationParticipantsPanel } from '@/components/agent/ConversationParticipantsPanel';
+import { HITLCenterPanel } from '@/components/agent/HITLCenterPanel';
 import { useWorkspaceConversations } from '@/hooks/useWorkspaceConversations';
 
 export interface ConversationRosterSectionProps {
@@ -132,8 +134,27 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="border-t border-[rgba(0,0,0,0.08)] px-3 py-3">
-                    <ConversationParticipantsPanel conversationId={c.id} />
+                  <div className="space-y-4 border-t border-[rgba(0,0,0,0.08)] px-3 py-3">
+                    <section data-testid={`roster-mode-${c.id}`}>
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#666]">
+                        {t('blackboard.rosters.section.mode', { defaultValue: 'Mode' })}
+                      </div>
+                      <ConversationModePanel conversationId={c.id} projectId={projectId} />
+                    </section>
+                    <section data-testid={`roster-participants-${c.id}`}>
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#666]">
+                        {t('blackboard.rosters.section.participants', {
+                          defaultValue: 'Participants',
+                        })}
+                      </div>
+                      <ConversationParticipantsPanel conversationId={c.id} />
+                    </section>
+                    <section data-testid={`roster-hitl-${c.id}`}>
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#666]">
+                        {t('blackboard.rosters.section.hitl', { defaultValue: 'HITL Center' })}
+                      </div>
+                      <HITLCenterPanel conversationId={c.id} />
+                    </section>
                   </div>
                 )}
               </li>

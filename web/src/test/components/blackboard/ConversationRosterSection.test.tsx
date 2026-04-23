@@ -25,9 +25,21 @@ vi.mock('@/services/agentService', () => ({
   },
 }));
 
+vi.mock('@/components/agent/ConversationModePanel', () => ({
+  ConversationModePanel: ({ conversationId }: { conversationId: string }) => (
+    <div data-testid={`mode-panel-${conversationId}`} />
+  ),
+}));
+
 vi.mock('@/components/agent/ConversationParticipantsPanel', () => ({
   ConversationParticipantsPanel: ({ conversationId }: { conversationId: string }) => (
     <div data-testid={`inner-panel-${conversationId}`} />
+  ),
+}));
+
+vi.mock('@/components/agent/HITLCenterPanel', () => ({
+  HITLCenterPanel: ({ conversationId }: { conversationId: string | null }) => (
+    <div data-testid={`hitl-panel-${conversationId ?? 'none'}`} />
   ),
 }));
 
@@ -60,7 +72,7 @@ describe('ConversationRosterSection', () => {
     expect(screen.queryByText('Other WS')).not.toBeInTheDocument();
   });
 
-  it('auto-expands the conversation referenced by ?conversationId', async () => {
+  it('auto-expands the conversation referenced by ?conversationId and renders all three panels', async () => {
     listConversations.mockResolvedValue({
       items: [{ id: 'c1', title: 'Auto', workspace_id: 'ws1' }],
     });
@@ -70,6 +82,8 @@ describe('ConversationRosterSection', () => {
     await waitFor(() =>
       expect(screen.getByTestId('inner-panel-c1')).toBeInTheDocument()
     );
+    expect(screen.getByTestId('mode-panel-c1')).toBeInTheDocument();
+    expect(screen.getByTestId('hitl-panel-c1')).toBeInTheDocument();
   });
 
   it('toggles open on click', async () => {

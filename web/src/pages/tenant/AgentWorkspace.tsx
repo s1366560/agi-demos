@@ -8,15 +8,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { Drawer, Empty as AntEmpty } from 'antd';
+import { Empty as AntEmpty } from 'antd';
 
 import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
-import { ConversationWorkspacePanel } from '../../components/agent/ConversationWorkspacePanel';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -37,7 +36,6 @@ export const AgentWorkspace: React.FC = () => {
     conversation?: string | undefined;
   }>();
   const [searchParams] = useSearchParams();
-  const [multiAgentPanelOpen, setMultiAgentPanelOpen] = useState(false);
 
   // Store subscriptions - select only what we need
   const user = useAuthStore((state) => state.user);
@@ -187,37 +185,17 @@ export const AgentWorkspace: React.FC = () => {
           />
           <ContextDetailPanel />
           {conversationParam ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setMultiAgentPanelOpen(true);
-                }}
-                data-testid="multi-agent-rail-toggle"
-                aria-label={t('agent.workspace.openMultiAgentRail', 'Open workspace panel')}
-                className="fixed right-4 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white text-[#171717] shadow-sm hover:bg-[#fafafa] dark:bg-surface-dark dark:text-white dark:border-slate-700"
-              >
-                <span className="text-lg leading-none">&#x2261;</span>
-              </button>
-              <Drawer
-                title={t('agent.workspace.multiAgentRail', 'Workspace')}
-                placement="right"
-                open={multiAgentPanelOpen}
-                onClose={() => {
-                  setMultiAgentPanelOpen(false);
-                }}
-                size="default"
-                destroyOnHidden
-                data-testid="multi-agent-rail-drawer"
-              >
-                {effectiveProjectId && conversationParam ? (
-                  <ConversationWorkspacePanel
-                    conversationId={conversationParam}
-                    projectId={effectiveProjectId}
-                  />
-                ) : null}
-              </Drawer>
-            </>
+            <BlackboardRailLink
+              tenantId={urlTenantId ?? null}
+              projectId={effectiveProjectId}
+              conversationId={conversationParam}
+              workspaceId={effectiveWorkspaceId ?? null}
+              label={t('agent.workspace.openInBlackboard', 'Open in Blackboard')}
+              ariaLabel={t(
+                'agent.workspace.openMultiAgentRail',
+                'Open conversation controls in Blackboard'
+              )}
+            />
           ) : null}
         </>
       ) : (
@@ -233,3 +211,44 @@ export const AgentWorkspace: React.FC = () => {
 };
 
 export default AgentWorkspace;
+
+interface BlackboardRailLinkProps {
+  tenantId: string | null;
+  projectId: string;
+  conversationId: string;
+  workspaceId: string | null;
+  label: string;
+  ariaLabel: string;
+}
+
+const BlackboardRailLink: React.FC<BlackboardRailLinkProps> = ({
+  tenantId,
+  projectId,
+  conversationId,
+  workspaceId,
+  label,
+  ariaLabel,
+}) => {
+  const href = useMemo(() => {
+    if (!tenantId) return null;
+    const params = new URLSearchParams({ tab: 'members', conversationId });
+    if (workspaceId) params.set('workspaceId', workspaceId);
+    return `/tenant/${tenantId}/projects/${projectId}/blackboard?${params.toString()}`;
+  }, [tenantId, projectId, conversationId, workspaceId]);
+
+  if (!href) return null;
+
+  return (
+    <Link
+      to={href}
+      data-testid="blackboard-rail-link"
+      aria-label={ariaLabel}
+      className="fixed right-4 top-1/2 -translate-y-1/2 z-20 flex h-10 items-center gap-1 rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 text-[12px] font-medium text-[#171717] shadow-sm hover:bg-[#fafafa] dark:bg-surface-dark dark:text-white dark:border-slate-700"
+    >
+      <span aria-hidden="true" className="text-base leading-none">
+        &#x2261;
+      </span>
+      <span className="hidden sm:inline">{label}</span>
+    </Link>
+  );
+};
