@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../EmptyState';
+import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 import type { BlackboardNoteCard } from '../blackboardUtils';
 
@@ -13,6 +14,11 @@ export function NotesTab({ notes }: NotesTabProps) {
 
   return (
     <div className="space-y-4">
+      <HostedProjectionBadge
+        labelKey="blackboard.notesSurfaceHint"
+        fallbackLabel="workspace note projection"
+      />
+
       {notes.map((note) => (
         <article
           key={note.id}

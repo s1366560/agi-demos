@@ -10,6 +10,7 @@ import {
 import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
 
 import { EmptyState } from '../EmptyState';
+import { HostedProjectionBadge } from '../HostedProjectionBadge';
 import { StatBadge } from '../StatBadge';
 
 import type { TopologyEdge, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
@@ -92,12 +93,18 @@ export function StatusTab({
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.pendingAdjudicationTitle', 'Pending leader adjudication')}
             </h3>
-              <p className="mt-1 text-xs text-text-secondary dark:text-text-muted">
+            <p className="mt-1 text-xs text-text-secondary dark:text-text-muted">
               {t(
                 'blackboard.pendingAdjudicationDescription',
                 'Worker-reported results that still require Sisyphus to make the final task decision.'
               )}
             </p>
+            <div className="mt-2">
+              <HostedProjectionBadge
+                labelKey="blackboard.pendingAdjudicationSurfaceHint"
+                fallbackLabel="workspace task projection"
+              />
+            </div>
           </div>
           <span className="rounded-full border border-info-border bg-info-bg px-3 py-1 text-xs font-semibold text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
             {String(stats.pendingAdjudicationTasks)}

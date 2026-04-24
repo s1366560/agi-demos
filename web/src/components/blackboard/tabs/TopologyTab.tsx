@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../EmptyState';
+import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 import type { TopologyEdge, TopologyNode } from '@/types/workspace';
 
@@ -20,6 +21,11 @@ export function TopologyTab({
 
   return (
     <div className="space-y-5">
+      <HostedProjectionBadge
+        labelKey="blackboard.topologySurfaceHint"
+        fallbackLabel="workspace topology projection"
+      />
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <div className="rounded-2xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
           <div className="mb-4 flex items-center justify-between gap-3">

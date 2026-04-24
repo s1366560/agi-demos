@@ -7,6 +7,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useWorkspaceStore } from '@/stores/workspace';
 
+import { HostedProjectionBadge } from '../HostedProjectionBadge';
+
 import type { WorkspaceAgent, WorkspaceMessage } from '@/types/workspace';
 
 export interface CollaborationOverviewTabProps {
@@ -21,8 +23,8 @@ function formatTime(dateStr: string): string {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 3600000) return `${String(Math.floor(diff / 60000))}m ago`;
+  if (diff < 86400000) return `${String(Math.floor(diff / 3600000))}h ago`;
   return date.toLocaleDateString();
 }
 
@@ -51,7 +53,7 @@ export function CollaborationOverviewTab({
     if (filterAgent !== 'all') {
       filtered = filtered.filter(
         (m: WorkspaceMessage) =>
-          m.sender_id === filterAgent || (m.mentions && m.mentions.includes(filterAgent)),
+          m.sender_id === filterAgent || m.mentions.includes(filterAgent),
       );
     }
     return filtered.slice().reverse();
@@ -70,7 +72,7 @@ export function CollaborationOverviewTab({
   const commLinks = useMemo(() => {
     const links = new Map<string, { from: string; to: string; count: number }>();
     for (const msg of agentMessages) {
-      const targets = (msg.mentions || []).filter((m: string) => agentMap.has(m));
+      const targets = msg.mentions.filter((m: string) => agentMap.has(m));
       for (const target of targets) {
         const key = `${msg.sender_id}→${target}`;
         const existing = links.get(key);
@@ -106,6 +108,12 @@ export function CollaborationOverviewTab({
               'Overview of messages exchanged between agents in this workspace.',
             )}
           </p>
+          <div className="mt-2">
+            <HostedProjectionBadge
+              labelKey="blackboard.collaborationSurfaceHint"
+              fallbackLabel="workspace chat projection"
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-text-secondary dark:text-text-muted" />
@@ -186,7 +194,7 @@ export function CollaborationOverviewTab({
                       <div
                         className="h-full rounded-full transition-all"
                         style={{
-                          width: `${pct}%`,
+                          width: `${String(pct)}%`,
                           backgroundColor: getAgentColor(link.from),
                           opacity: 0.7,
                         }}
@@ -217,7 +225,7 @@ export function CollaborationOverviewTab({
       ) : (
         <div className="space-y-2">
           {agentMessages.map((msg: WorkspaceMessage) => {
-            const mentionedAgents = (msg.mentions || []).filter((m: string) => agentMap.has(m));
+            const mentionedAgents = msg.mentions.filter((m: string) => agentMap.has(m));
             return (
               <div
                 key={msg.id}

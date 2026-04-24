@@ -16,10 +16,12 @@ import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { ConversationModePanel } from '@/components/agent/ConversationModePanel';
-import { ConversationParticipantsPanel } from '@/components/agent/ConversationParticipantsPanel';
-import { HITLCenterPanel } from '@/components/agent/HITLCenterPanel';
 import { useWorkspaceConversations } from '@/hooks/useWorkspaceConversations';
+
+import { ConversationModePanel } from '../../agent/ConversationModePanel';
+import { ConversationParticipantsPanel } from '../../agent/ConversationParticipantsPanel';
+import { HITLCenterPanel } from '../../agent/HITLCenterPanel';
+import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 export interface ConversationRosterSectionProps {
   projectId: string;
@@ -46,20 +48,21 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
     const sorted = useMemo(
       () =>
         [...conversations].sort((a, b) => {
-          const ua = a.updated_at ?? a.created_at ?? '';
-          const ub = b.updated_at ?? b.created_at ?? '';
+          const ua = a.updated_at ?? a.created_at;
+          const ub = b.updated_at ?? b.created_at;
           return ub.localeCompare(ua);
         }),
       [conversations]
     );
 
-    const toggle = (id: string) =>
+    const toggle = (id: string) => {
       setExpanded((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
         else next.add(id);
         return next;
       });
+    };
 
     return (
       <section
@@ -68,12 +71,22 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
         className={className ?? 'mt-6'}
       >
         <header className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
-            {t('blackboard.rosters.title', { defaultValue: 'Conversation Rosters' })}
-          </h3>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
+              {t('blackboard.rosters.title', { defaultValue: 'Conversation Rosters' })}
+            </h3>
+            <div className="mt-2">
+              <HostedProjectionBadge
+                labelKey="blackboard.rosters.surfaceHint"
+                fallbackLabel="conversation participation projection"
+              />
+            </div>
+          </div>
           <button
             type="button"
-            onClick={() => void refresh()}
+            onClick={() => {
+              void refresh();
+            }}
             className="rounded px-2 py-0.5 text-xs text-[#666] hover:bg-[#fafafa] hover:text-[#0070f3]"
           >
             {t('common.refresh', { defaultValue: 'Refresh' })}
@@ -110,7 +123,9 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
               >
                 <button
                   type="button"
-                  onClick={() => toggle(c.id)}
+                  onClick={() => {
+                    toggle(c.id);
+                  }}
                   aria-expanded={isOpen}
                   className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
                 >

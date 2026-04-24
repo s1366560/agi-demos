@@ -42,6 +42,9 @@ describe('GoalsTab', () => {
     expect(screen.getAllByText('目标已创建').length).toBeGreaterThan(0);
     expect(screen.getByText('生成 root task')).toBeInTheDocument();
     expect(screen.getByText('事件流日志')).toBeInTheDocument();
+    const boundaryBadge = screen.getByText('blackboard.executionFeedbackSurfaceHint').closest('div');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });
 
   it('shows live child-task execution counts once orchestration is underway', async () => {

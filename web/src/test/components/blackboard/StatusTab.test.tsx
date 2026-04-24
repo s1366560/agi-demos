@@ -52,5 +52,8 @@ describe('StatusTab', () => {
         return text.includes('Worker A') && text.includes('blackboard.pendingAdjudicationWorker');
       })[0]
     ).toBeInTheDocument();
+    const boundaryBadge = screen.getByText('blackboard.pendingAdjudicationSurfaceHint').closest('div');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });
 });

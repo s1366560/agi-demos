@@ -86,6 +86,19 @@ describe('ConversationRosterSection', () => {
     expect(screen.getByTestId('hitl-panel-c1')).toBeInTheDocument();
   });
 
+  it('marks roster hosting as a hosted non-authoritative projection', async () => {
+    listConversations.mockResolvedValue({
+      items: [{ id: 'c1', title: 'Auto', workspace_id: 'ws1' }],
+    });
+
+    renderAt();
+
+    const boundaryBadge = await screen.findByText('conversation participation projection');
+    const boundaryContainer = boundaryBadge.closest('div');
+    expect(boundaryContainer).toHaveAttribute('data-blackboard-boundary', 'hosted');
+    expect(boundaryContainer).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
+  });
+
   it('toggles open on click', async () => {
     listConversations.mockResolvedValue({
       items: [{ id: 'c1', title: 'Click me', workspace_id: 'ws1' }],

@@ -33,6 +33,8 @@ import {
 import { ObjectiveList } from '@/components/workspace/objectives/ObjectiveList';
 import { TaskBoard } from '@/components/workspace/TaskBoard';
 
+import { HostedProjectionBadge } from '../HostedProjectionBadge';
+
 import type { CyberObjective, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
 
 export interface GoalsTabProps {
@@ -801,6 +803,10 @@ export function GoalsTab({
               自动编排反馈
             </h3>
           </div>
+          <HostedProjectionBadge
+            labelKey="blackboard.executionFeedbackSurfaceHint"
+            fallbackLabel="workspace objective and task projection"
+          />
           <div className="grid gap-3 lg:grid-cols-2">
             {executionFeedback.map((item) => (
               <article
