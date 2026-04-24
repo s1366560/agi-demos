@@ -3003,12 +3003,19 @@ class ReActAgent:
             "trace_id": selection_context.metadata.get("trace_id"),
         }
         if workspace_root_task is not None:
+            from src.infrastructure.agent.workspace.runtime_role_contract import (
+                WORKSPACE_SESSION_ROLE_KEY,
+                derive_workspace_session_role,
+            )
+
             config.runtime_context = {
                 **dict(config.runtime_context),
                 "workspace_id": getattr(workspace_root_task, "workspace_id", project_id),
                 "root_goal_task_id": getattr(workspace_root_task, "id", ""),
                 "task_authority": "workspace",
-                "workspace_session_role": ("worker" if has_workspace_binding else "leader"),
+                WORKSPACE_SESSION_ROLE_KEY: derive_workspace_session_role(
+                    has_workspace_binding=has_workspace_binding
+                ),
             }
         # Set session_id for announce message polling (P0.5)
         config.session_id = conversation_id

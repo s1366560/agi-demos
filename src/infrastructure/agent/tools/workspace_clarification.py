@@ -37,6 +37,12 @@ from src.infrastructure.agent.orchestration.orchestrator import (
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_LEADER,
+    WORKSPACE_ROLE_WORKER,
+    require_workspace_session_role,
+    runtime_context_string,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +64,7 @@ def configure_workspace_clarification(orchestrator: AgentOrchestrator) -> None:
 
 def _runtime_string(ctx: ToolContext, key: str) -> str | None:
     runtime = getattr(ctx, "runtime_context", None) or {}
-    value = runtime.get(key) if isinstance(runtime, dict) else None
+    value = runtime_context_string(ctx, key) if isinstance(runtime, dict) else None
     return str(value) if value not in (None, "") else None
 
 
@@ -232,11 +238,15 @@ async def workspace_request_clarification_tool(
     blocking: bool = True,
     timeout_seconds: float | None = None,
 ) -> ToolResult:
-    role = _runtime_string(ctx, "workspace_session_role")
-    if role != "worker":
+    role_error = require_workspace_session_role(
+        ctx,
+        expected_role=WORKSPACE_ROLE_WORKER,
+        action_label="workspace_request_clarification",
+    )
+    if role_error:
         return _deny(
-            "workspace_request_clarification may only be called from a worker session",
-            role=role or "none",
+            role_error,
+            role=_runtime_string(ctx, "workspace_session_role") or "none",
         )
 
     workspace_id = _runtime_string(ctx, "workspace_id") or ""
@@ -354,11 +364,15 @@ async def workspace_respond_clarification_tool(
     correlation_id: str,
     answer: str,
 ) -> ToolResult:
-    role = _runtime_string(ctx, "workspace_session_role")
-    if role != "leader":
+    role_error = require_workspace_session_role(
+        ctx,
+        expected_role=WORKSPACE_ROLE_LEADER,
+        action_label="workspace_respond_clarification",
+    )
+    if role_error:
         return _deny(
-            "workspace_respond_clarification may only be called from a leader session",
-            role=role or "none",
+            role_error,
+            role=_runtime_string(ctx, "workspace_session_role") or "none",
         )
 
     workspace_id = _runtime_string(ctx, "workspace_id") or ""

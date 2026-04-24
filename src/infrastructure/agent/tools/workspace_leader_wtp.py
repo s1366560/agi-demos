@@ -38,6 +38,11 @@ from src.infrastructure.agent.orchestration.orchestrator import (
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_LEADER,
+    require_workspace_session_role,
+    runtime_context_string,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,20 +56,15 @@ def configure_workspace_leader_wtp(orchestrator: AgentOrchestrator) -> None:
 
 
 def _runtime_string(ctx: ToolContext, key: str) -> str:
-    value = ctx.runtime_context.get(key)
-    return value.strip() if isinstance(value, str) else ""
+    return runtime_context_string(ctx, key)
 
 
 def _require_leader_role(ctx: ToolContext) -> str | None:
-    role = _runtime_string(ctx, "workspace_session_role")
-    if role != "leader":
-        return (
-            "workspace_assign_task / workspace_cancel_task may only be called from "
-            f"a workspace leader session (current role: {role or 'none'})"
-        )
-    if not _runtime_string(ctx, "workspace_id"):
-        return "workspace_id is missing from runtime_context — is this a workspace session?"
-    return None
+    return require_workspace_session_role(
+        ctx,
+        expected_role=WORKSPACE_ROLE_LEADER,
+        action_label="workspace_assign_task / workspace_cancel_task",
+    )
 
 
 def _deny(error: str, **extra: Any) -> ToolResult:
