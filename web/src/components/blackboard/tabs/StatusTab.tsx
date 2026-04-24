@@ -9,6 +9,7 @@ import {
 
 import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
 
+import { DerivedSurfaceBadge } from '../DerivedSurfaceBadge';
 import { EmptyState } from '../EmptyState';
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
 import { StatBadge } from '../StatBadge';
@@ -52,6 +53,12 @@ export function StatusTab({
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.statusOverviewTitle', 'Status and presence')}
             </h3>
+            <div className="mt-2">
+              <DerivedSurfaceBadge
+                labelKey="blackboard.statusOverviewDerivedHint"
+                fallbackLabel="workspace execution summary"
+              />
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {[

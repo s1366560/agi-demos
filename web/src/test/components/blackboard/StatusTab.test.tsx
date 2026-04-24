@@ -55,5 +55,9 @@ describe('StatusTab', () => {
     const boundaryBadge = screen.getByText('blackboard.pendingAdjudicationSurfaceHint').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
+
+    const derivedBadge = screen.getByText('blackboard.statusOverviewDerivedHint').closest('div');
+    expect(derivedBadge).toHaveAttribute('data-blackboard-surface', 'derived');
+    expect(derivedBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });
 });

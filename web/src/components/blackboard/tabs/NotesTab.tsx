@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { DerivedSurfaceBadge } from '../DerivedSurfaceBadge';
 import { EmptyState } from '../EmptyState';
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
@@ -17,6 +18,10 @@ export function NotesTab({ notes }: NotesTabProps) {
       <HostedProjectionBadge
         labelKey="blackboard.notesSurfaceHint"
         fallbackLabel="workspace note projection"
+      />
+      <DerivedSurfaceBadge
+        labelKey="blackboard.notesDerivedHint"
+        fallbackLabel="aggregated note summary"
       />
 
       {notes.map((note) => (

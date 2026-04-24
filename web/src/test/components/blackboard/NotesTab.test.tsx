@@ -7,8 +7,12 @@ describe('NotesTab', () => {
   it('marks notes as a hosted non-authoritative projection', () => {
     render(<NotesTab notes={[]} />);
 
-    const boundaryBadge = screen.getByText('blackboard.notesSurfaceHint').closest('div');
-    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
-    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
+    const hostedBadge = screen.getByText('blackboard.notesSurfaceHint').closest('div');
+    expect(hostedBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
+    expect(hostedBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
+
+    const derivedBadge = screen.getByText('blackboard.notesDerivedHint').closest('div');
+    expect(derivedBadge).toHaveAttribute('data-blackboard-surface', 'derived');
+    expect(derivedBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });
 });
