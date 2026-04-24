@@ -177,18 +177,27 @@ describe('CentralBlackboardContent', () => {
     render(<CentralBlackboardContent {...defaultProps({ activeTab: 'members' })} />);
 
     expect(screen.getByText('Member panel')).toBeInTheDocument();
+    const boundaryBadge = screen.getByText('blackboard.membersSurfaceHint').closest('div');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', HOSTED);
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', NON_AUTHORITATIVE);
   });
 
   it('renders GeneList when activeTab is genes', () => {
     render(<CentralBlackboardContent {...defaultProps({ activeTab: 'genes' })} />);
 
     expect(screen.getByText('Gene list')).toBeInTheDocument();
+    const boundaryBadge = screen.getByText('blackboard.genesSurfaceHint').closest('div');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', HOSTED);
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', NON_AUTHORITATIVE);
   });
 
   it('renders SharedFileBrowser when activeTab is files', () => {
     render(<CentralBlackboardContent {...defaultProps({ activeTab: 'files' })} />);
 
     expect(screen.getByText('Shared files browser')).toBeInTheDocument();
+    const boundaryBadge = screen.getByText('blackboard.filesSurfaceHint').closest('div');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', OWNED);
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', AUTHORITATIVE);
   });
 
   it('renders PresenceBar when activeTab is status', () => {
@@ -207,6 +216,9 @@ describe('CentralBlackboardContent', () => {
     render(<CentralBlackboardContent {...defaultProps({ activeTab: 'settings' })} />);
 
     expect(screen.getByText('Workspace settings')).toBeInTheDocument();
+    const boundaryBadge = screen.getByText('blackboard.settingsSurfaceHint').closest('div');
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', HOSTED);
+    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', NON_AUTHORITATIVE);
   });
 
   it('calls onActiveTabChange when a different tab is clicked', () => {

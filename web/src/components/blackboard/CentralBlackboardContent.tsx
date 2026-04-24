@@ -21,6 +21,8 @@ import {
   buildBlackboardStats,
   statusBadgeTone,
 } from './blackboardUtils';
+import { HostedProjectionBadge } from './HostedProjectionBadge';
+import { OwnedSurfaceBadge } from './OwnedSurfaceBadge';
 import { CollaborationOverviewTab } from './tabs/CollaborationOverviewTab';
 import { ConversationRosterSection } from './tabs/ConversationRosterSection';
 import { DiscussionTab } from './tabs/DiscussionTab';
@@ -233,31 +235,49 @@ export function CentralBlackboardContent({
 
                 {activeTab === 'members' && (
                   <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
-                    <MemberPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
+                    <HostedProjectionBadge
+                      labelKey="blackboard.membersSurfaceHint"
+                      fallbackLabel="workspace membership projection"
+                    />
+                    <div className="mt-4">
+                      <MemberPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
+                    </div>
                     <ConversationRosterSection projectId={projectId} workspaceId={workspaceId} />
                   </div>
                 )}
 
                 {activeTab === 'genes' && (
                   <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
-                    <GeneList
-                      genes={genes}
-                      onDelete={(geneId) => {
-                        void actions.handleDeleteGene(geneId);
-                      }}
-                      onToggleActive={(geneId, isActive) => {
-                        void actions.handleToggleGeneActive(geneId, isActive);
-                      }}
+                    <HostedProjectionBadge
+                      labelKey="blackboard.genesSurfaceHint"
+                      fallbackLabel="workspace gene projection"
                     />
+                    <div className="mt-4">
+                      <GeneList
+                        genes={genes}
+                        onDelete={(geneId) => {
+                          void actions.handleDeleteGene(geneId);
+                        }}
+                        onToggleActive={(geneId, isActive) => {
+                          void actions.handleToggleGeneActive(geneId, isActive);
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
 
                 {activeTab === 'files' && (
-                  <SharedFileBrowser
-                    tenantId={tenantId}
-                    projectId={projectId}
-                    workspaceId={workspaceId}
-                  />
+                  <div className="space-y-4">
+                    <OwnedSurfaceBadge
+                      labelKey="blackboard.filesSurfaceHint"
+                      fallbackLabel="blackboard file workspace"
+                    />
+                    <SharedFileBrowser
+                      tenantId={tenantId}
+                      projectId={projectId}
+                      workspaceId={workspaceId}
+                    />
+                  </div>
                 )}
 
                 {activeTab === 'status' && (
@@ -299,11 +319,17 @@ export function CentralBlackboardContent({
 
                 {activeTab === 'settings' && (
                   <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
-                    <WorkspaceSettingsPanel
-                      tenantId={tenantId}
-                      projectId={projectId}
-                      workspaceId={workspaceId}
+                    <HostedProjectionBadge
+                      labelKey="blackboard.settingsSurfaceHint"
+                      fallbackLabel="workspace settings projection"
                     />
+                    <div className="mt-4">
+                      <WorkspaceSettingsPanel
+                        tenantId={tenantId}
+                        projectId={projectId}
+                        workspaceId={workspaceId}
+                      />
+                    </div>
                   </div>
                 )}
         </div>

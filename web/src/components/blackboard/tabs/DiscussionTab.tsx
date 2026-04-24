@@ -7,6 +7,7 @@ import { Input, Popconfirm } from 'antd';
 import { formatDateTime } from '@/utils/date';
 
 import { EmptyState } from '../EmptyState';
+import { OwnedSurfaceBadge } from '../OwnedSurfaceBadge';
 
 import type { BlackboardPost, BlackboardReply } from '@/types/workspace';
 
@@ -91,9 +92,17 @@ function ThreadListView({
     <div className="space-y-0">
       {/* BBS header bar */}
       <div className="flex items-center justify-between border-b border-border-light pb-3 dark:border-border-dark">
-        <h3 className="text-base font-semibold text-text-primary dark:text-text-inverse">
-          {t('blackboard.discussionPosts', 'Threads')}
-        </h3>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-text-primary dark:text-text-inverse">
+            {t('blackboard.discussionPosts', 'Threads')}
+          </h3>
+          <div className="mt-2">
+            <OwnedSurfaceBadge
+              labelKey="blackboard.discussionSurfaceHint"
+              fallbackLabel="blackboard discussion content"
+            />
+          </div>
+        </div>
         <button
           type="button"
           onClick={onToggleCompose}
