@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -19,8 +20,13 @@ from src.application.services.workspace_task_service import (
 from src.application.services.workspace_task_session_attempt_service import (
     WorkspaceTaskSessionAttemptService,
 )
-from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskPriority
+from src.domain.model.workspace.workspace_task import (
+    WorkspaceTask,
+    WorkspaceTaskPriority,
+    WorkspaceTaskStatus,
+)
 from src.domain.model.workspace.workspace_task_session_attempt import (
+    WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
 from src.domain.model.workspace_plan import PlanNode
@@ -51,7 +57,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_sessio
 from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
+    CURRENT_ATTEMPT_ID,
+    CURRENT_ATTEMPT_WORKER_BINDING_ID,
     DERIVED_FROM_INTERNAL_PLAN_STEP,
+    EXECUTION_STATE,
     LAST_WORKER_REPORT_SUMMARY,
     LINEAGE_SOURCE,
     ROOT_GOAL_TASK_ID,
@@ -72,6 +81,17 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
 
 SUPERVISOR_TICK_EVENT = "supervisor_tick"
 logger = logging.getLogger(__name__)
+
+
+def _build_dispatch_execution_state(*, actor_id: str) -> dict[str, str]:
+    return {
+        "phase": "in_progress",
+        "last_agent_reason": "workspace_plan.dispatch.project_attempt",
+        "last_agent_action": "start",
+        "updated_by_actor_type": "agent",
+        "updated_by_actor_id": actor_id,
+        "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+    }
 
 
 def make_supervisor_tick_handler(
@@ -250,6 +270,25 @@ def _make_sql_dispatcher(
             attempt = await attempt_service.mark_running(attempt.id)
             should_schedule = True
 
+        await _ensure_root_started_for_dispatch(
+            task_service=task_service,
+            command_service=command_service,
+            workspace_id=workspace_id,
+            root_task_id=root_task_id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+        )
+        existing_task = await _project_dispatch_attempt_to_task(
+            command_service=command_service,
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            task=existing_task,
+            attempt=attempt,
+            worker_agent_id=binding.agent_id,
+            worker_binding_id=binding.id,
+            leader_agent_id=leader_agent_id,
+        )
+
         node.workspace_task_id = existing_task.id
         node.metadata = {
             **dict(node.metadata or {}),
@@ -277,6 +316,79 @@ def _make_sql_dispatcher(
         return attempt.id
 
     return _dispatch
+
+
+async def _ensure_root_started_for_dispatch(
+    *,
+    task_service: WorkspaceTaskService,
+    command_service: WorkspaceTaskCommandService,
+    workspace_id: str,
+    root_task_id: str,
+    actor_user_id: str,
+    leader_agent_id: str,
+) -> None:
+    root_task = await task_service.get_task(
+        workspace_id=workspace_id,
+        task_id=root_task_id,
+        actor_user_id=actor_user_id,
+    )
+    if root_task.status is not WorkspaceTaskStatus.TODO:
+        return
+    _ = await command_service.start_task(
+        workspace_id=workspace_id,
+        task_id=root_task.id,
+        actor_user_id=actor_user_id,
+        actor_type="agent",
+        actor_agent_id=leader_agent_id,
+        reason="workspace_plan.dispatch.start_root",
+        authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
+    )
+
+
+async def _project_dispatch_attempt_to_task(
+    *,
+    command_service: WorkspaceTaskCommandService,
+    workspace_id: str,
+    actor_user_id: str,
+    task: WorkspaceTask,
+    attempt: WorkspaceTaskSessionAttempt,
+    worker_agent_id: str,
+    worker_binding_id: str,
+    leader_agent_id: str,
+) -> WorkspaceTask:
+    """Synchronize a durable dispatch onto the legacy task projection.
+
+    Durable V2 is the source of truth, but the blackboard UI still reads the
+    compatibility ``WorkspaceTask`` rows. Project the running attempt before
+    the async worker launcher fills in conversation details so dispatched work
+    never appears stuck at TODO.
+    """
+
+    metadata_patch: dict[str, object] = {
+        CURRENT_ATTEMPT_ID: attempt.id,
+        "current_attempt_number": attempt.attempt_number,
+        "current_attempt_worker_agent_id": worker_agent_id,
+        CURRENT_ATTEMPT_WORKER_BINDING_ID: worker_binding_id,
+        "last_attempt_status": WorkspaceTaskSessionAttemptStatus.RUNNING.value,
+        EXECUTION_STATE: _build_dispatch_execution_state(actor_id=leader_agent_id),
+    }
+    target_status = (
+        WorkspaceTaskStatus.IN_PROGRESS
+        if task.status in {WorkspaceTaskStatus.TODO, WorkspaceTaskStatus.BLOCKED}
+        else None
+    )
+    return await command_service.update_task(
+        workspace_id=workspace_id,
+        task_id=task.id,
+        actor_user_id=actor_user_id,
+        status=target_status,
+        metadata=metadata_patch,
+        actor_type="agent",
+        actor_agent_id=leader_agent_id,
+        workspace_agent_binding_id=worker_binding_id,
+        reason="workspace_plan.dispatch.project_attempt",
+        authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
+    )
 
 
 def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:

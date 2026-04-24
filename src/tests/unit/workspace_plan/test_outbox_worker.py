@@ -38,6 +38,9 @@ from src.infrastructure.agent.workspace.workspace_goal_runtime import (
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
+    CURRENT_ATTEMPT_ID,
+    CURRENT_ATTEMPT_WORKER_BINDING_ID,
+    EXECUTION_STATE,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
     WORKSPACE_PLAN_ID,
@@ -431,9 +434,23 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     task = await SqlWorkspaceTaskRepository(db_session).find_by_id(leaf.workspace_task_id)
     assert task is not None
     assert task.assignee_agent_id == "worker-agent"
+    assert task.status.value == "in_progress"
+    root_task = await SqlWorkspaceTaskRepository(db_session).find_by_id("root-task-1")
+    assert root_task is not None
+    assert root_task.status.value == "in_progress"
     assert task.metadata[ROOT_GOAL_TASK_ID] == "root-task-1"
     assert task.metadata[WORKSPACE_PLAN_ID] == plan.id
     assert task.metadata[WORKSPACE_PLAN_NODE_ID] == leaf.id
+    assert task.metadata[CURRENT_ATTEMPT_ID] == leaf.current_attempt_id
+    assert task.metadata["current_attempt_number"] == 1
+    assert task.metadata["current_attempt_worker_agent_id"] == "worker-agent"
+    assert task.metadata[CURRENT_ATTEMPT_WORKER_BINDING_ID] == "worker-binding-1"
+    assert task.metadata["last_attempt_status"] == "running"
+    assert task.metadata[EXECUTION_STATE]["phase"] == "in_progress"
+    assert task.metadata[EXECUTION_STATE]["last_agent_reason"] == (
+        "workspace_plan.dispatch.project_attempt"
+    )
+    assert task.metadata[EXECUTION_STATE]["last_agent_action"] == "start"
     assert launched and launched[0]["attempt_id"] == leaf.current_attempt_id
 
     async def report_session_factory() -> AsyncIterator[AsyncSession]:
@@ -580,7 +597,7 @@ async def _seed_workspace_only(db_session: AsyncSession) -> None:
                 title="Root goal",
                 description="Root goal for V2 dispatch",
                 created_by="worker-user-1",
-                status="in_progress",
+                status="todo",
                 priority=0,
                 metadata_json={
                     AUTONOMY_SCHEMA_VERSION_KEY: 1,

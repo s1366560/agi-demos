@@ -336,6 +336,39 @@ def _role(task: dict[str, Any]) -> str:
     return str(metadata.get("task_role") or "")
 
 
+def _dispatch_projection_mismatches(
+    tasks: list[dict[str, Any]],
+    plan_snapshot: dict[str, Any],
+) -> list[dict[str, str]]:
+    task_by_id = {str(task.get("id")): task for task in tasks if task.get("id")}
+    plan = plan_snapshot.get("plan") or {}
+    mismatches: list[dict[str, str]] = []
+    for node in plan.get("nodes") or []:
+        if node.get("execution") != "dispatched":
+            continue
+        task_id = str(node.get("workspace_task_id") or "")
+        if not task_id:
+            continue
+        task = task_by_id.get(task_id)
+        if task is None:
+            mismatches.append({"node_id": str(node.get("id") or ""), "task_id": task_id})
+            continue
+        metadata = task.get("metadata") or {}
+        node_attempt_id = str(node.get("current_attempt_id") or "")
+        task_attempt_id = str(metadata.get("current_attempt_id") or "")
+        if _status(task) == "todo" or (node_attempt_id and task_attempt_id != node_attempt_id):
+            mismatches.append(
+                {
+                    "node_id": str(node.get("id") or ""),
+                    "task_id": task_id,
+                    "node_attempt_id": node_attempt_id,
+                    "task_attempt_id": task_attempt_id,
+                    "task_status": _status(task),
+                }
+            )
+    return mismatches
+
+
 def summarize_state(
     tasks: list[dict[str, Any]],
     plan_snapshot: dict[str, Any],
@@ -351,6 +384,7 @@ def summarize_state(
     plan = plan_snapshot.get("plan") or {}
     nodes = plan.get("nodes") or []
     events = plan_snapshot.get("events") or []
+    projection_mismatches = _dispatch_projection_mismatches(tasks, plan_snapshot)
     return {
         "root_status": _status(root) if root else "missing",
         "child_count": len(children),
@@ -362,6 +396,8 @@ def summarize_state(
         "plan_status": plan.get("status"),
         "plan_node_count": len(nodes),
         "dag_edge_count": sum(len(node.get("depends_on") or []) for node in nodes),
+        "dispatch_projection_mismatch_count": len(projection_mismatches),
+        "dispatch_projection_mismatches": projection_mismatches,
         "reconciled": any(
             event.get("event_type") == "root_auto_completed_plan_reconciled" for event in events
         ),
@@ -415,6 +451,11 @@ def wait_for_completion(
         plan = get_plan(client, workspace_id)
         last_state = summarize_state(tasks, plan, root_task_id)
         log(f"[{scenario}] state: {json.dumps(last_state, ensure_ascii=False)}")
+        if last_state["dispatch_projection_mismatch_count"]:
+            raise RuntimeError(
+                f"{scenario} durable dispatch projection mismatch: "
+                f"{last_state['dispatch_projection_mismatches']}"
+            )
         if is_scenario_done(
             last_state,
             min_children=min_children,
