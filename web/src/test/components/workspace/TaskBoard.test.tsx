@@ -97,8 +97,10 @@ describe('TaskBoard', () => {
         title: 'Draft checklist',
         status: 'in_progress',
         workspace_id: 'ws-1',
+        pending_leader_adjudication: true,
+        current_attempt_number: 2,
+        current_attempt_worker_binding_id: 'binding-1',
         metadata: {
-          pending_leader_adjudication: true,
           last_worker_report_type: 'completed',
           last_worker_report_summary: 'Checklist drafted successfully',
           last_worker_report_artifacts: ['artifact:checklist'],
@@ -106,7 +108,16 @@ describe('TaskBoard', () => {
         },
       },
     ] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([
+      {
+        id: 'binding-1',
+        workspace_id: 'ws-1',
+        agent_id: 'worker-a',
+        display_name: 'Worker A',
+        is_active: true,
+        created_at: '2026-04-23T00:00:00Z',
+      },
+    ] as any);
 
     render(<TaskBoard workspaceId="ws-1" />);
 
@@ -118,6 +129,8 @@ describe('TaskBoard', () => {
     expect(
       screen.getByText(/workspaceDetail\.taskBoard\.reportVerifications: worker_report:completed/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/workspaceDetail\.taskBoard\.workerLabel: Worker A/i)).toBeInTheDocument();
+    expect(screen.getByText(/workspaceDetail\.taskBoard\.attemptNumber #2/i)).toBeInTheDocument();
   });
 
   it('uses workspace binding ids for assigned agent selection state', async () => {

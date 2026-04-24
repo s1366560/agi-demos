@@ -2,6 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+import {
+  getPendingLeaderAdjudicationSummary,
+  hasPendingLeaderAdjudication,
+} from '@/utils/workspaceTaskProjection';
 
 import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
 
@@ -26,40 +30,6 @@ export interface StatusTabProps {
   statusBadgeTone: (status: string | undefined) => string;
 }
 
-function resolveAttemptWorkerLabel(
-  task: WorkspaceTask,
-  agents: WorkspaceAgent[]
-): string | null {
-  const workerBindingId =
-    typeof task.current_attempt_worker_binding_id === 'string'
-      ? task.current_attempt_worker_binding_id
-      : typeof task.metadata.current_attempt_worker_binding_id === 'string'
-        ? task.metadata.current_attempt_worker_binding_id
-        : '';
-  if (workerBindingId) {
-    const binding = agents.find((agent) => agent.id === workerBindingId);
-    if (binding) {
-      return binding.display_name ?? binding.label ?? binding.agent_id;
-    }
-  }
-
-  const workerAgentId =
-    typeof task.current_attempt_worker_agent_id === 'string'
-      ? task.current_attempt_worker_agent_id
-      : typeof task.metadata.current_attempt_worker_agent_id === 'string'
-        ? task.metadata.current_attempt_worker_agent_id
-        : '';
-  if (workerAgentId) {
-    const binding = agents.find((agent) => agent.agent_id === workerAgentId);
-    if (binding) {
-      return binding.display_name ?? binding.label ?? binding.agent_id;
-    }
-    return workerAgentId;
-  }
-
-  return null;
-}
-
 export function StatusTab({
   stats,
   topologyEdges,
@@ -71,9 +41,7 @@ export function StatusTab({
   statusBadgeTone,
 }: StatusTabProps) {
   const { t } = useTranslation();
-  const pendingAdjudicationTasks = tasks.filter(
-    (task) => task.pending_leader_adjudication === true || task.metadata.pending_leader_adjudication === true
-  );
+  const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication);
 
   return (
     <div className="space-y-5">
@@ -139,41 +107,11 @@ export function StatusTab({
         {pendingAdjudicationTasks.length > 0 ? (
           <div className="mt-4 space-y-3">
             {pendingAdjudicationTasks.map((task) => {
-              const reportType =
-                typeof task.metadata.last_worker_report_type === 'string'
-                  ? task.metadata.last_worker_report_type
-                  : '';
-              const reportSummary =
-                typeof task.metadata.last_worker_report_summary === 'string'
-                  ? task.metadata.last_worker_report_summary
-                  : '';
-              const reportArtifacts = Array.isArray(task.metadata.last_worker_report_artifacts)
-                ? task.metadata.last_worker_report_artifacts
-                    .filter((item): item is string => typeof item === 'string' && item.length > 0)
-                    .slice(0, 3)
-                : [];
-              const reportVerifications = Array.isArray(task.metadata.last_worker_report_verifications)
-                ? task.metadata.last_worker_report_verifications
-                    .filter((item): item is string => typeof item === 'string' && item.length > 0)
-                    .slice(0, 3)
-                : [];
-              const currentConversationId =
-                typeof task.current_attempt_conversation_id === 'string'
-                  ? task.current_attempt_conversation_id
-                  : typeof task.metadata.current_attempt_conversation_id === 'string'
-                    ? task.metadata.current_attempt_conversation_id
-                    : '';
-              const currentAttemptNumber =
-                typeof task.current_attempt_number === 'number'
-                  ? task.current_attempt_number
-                  : typeof task.metadata.current_attempt_number === 'number'
-                    ? task.metadata.current_attempt_number
-                    : undefined;
-              const currentAttemptWorkerLabel = resolveAttemptWorkerLabel(task, agents);
-              const conversationHref = currentConversationId
+              const adjudication = getPendingLeaderAdjudicationSummary(task, agents);
+              const conversationHref = adjudication.attemptConversationId
                 ? buildAgentWorkspacePath({
                     tenantId,
-                    conversationId: currentConversationId,
+                    conversationId: adjudication.attemptConversationId,
                     projectId,
                     workspaceId,
                   })
@@ -189,33 +127,33 @@ export function StatusTab({
                       {task.title}
                     </div>
                     <span className="rounded-full border border-info-border bg-surface-light px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-surface-dark dark:text-status-text-info-dark">
-                      {reportType
-                        ? reportType.replace(/_/g, ' ')
+                      {adjudication.reportTypeLabel
+                        ? adjudication.reportTypeLabel
                         : t('blackboard.pendingAdjudicationFallback', 'candidate result')}
                     </span>
                   </div>
-                  {reportSummary && (
+                  {adjudication.reportSummary && (
                     <p className="mt-2 text-xs leading-5 text-text-secondary dark:text-text-muted">
-                      {reportSummary}
+                      {adjudication.reportSummary}
                     </p>
                   )}
                   <div className="mt-2 space-y-1 text-[11px] text-text-secondary dark:text-text-muted">
-                    {reportArtifacts.length > 0 && (
+                    {adjudication.reportArtifacts.length > 0 && (
                       <p>
                         {t('blackboard.pendingAdjudicationArtifacts', 'Artifacts')}:{' '}
-                        {reportArtifacts.join(', ')}
+                        {adjudication.reportArtifacts.join(', ')}
                       </p>
                     )}
-                    {reportVerifications.length > 0 && (
+                    {adjudication.reportVerifications.length > 0 && (
                       <p>
                         {t('blackboard.pendingAdjudicationChecks', 'Checks')}:{' '}
-                        {reportVerifications.join(', ')}
+                        {adjudication.reportVerifications.join(', ')}
                       </p>
                     )}
-                    {currentAttemptWorkerLabel && (
+                    {adjudication.workerLabel && (
                       <p>
                         {t('blackboard.pendingAdjudicationWorker', 'Worker')}:{' '}
-                        {currentAttemptWorkerLabel}
+                        {adjudication.workerLabel}
                       </p>
                     )}
                     {conversationHref && (
@@ -228,8 +166,8 @@ export function StatusTab({
                             'blackboard.pendingAdjudicationOpenConversation',
                             'View attempt conversation'
                           )}
-                          {currentAttemptNumber
-                            ? ` (#${String(currentAttemptNumber)})`
+                          {adjudication.attemptNumber
+                            ? ` (#${String(adjudication.attemptNumber)})`
                             : ''}
                         </Link>
                       </p>

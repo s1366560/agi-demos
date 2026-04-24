@@ -22,6 +22,10 @@ def test_to_response_projects_current_attempt_fields() -> None:
             "current_attempt_worker_agent_id": "agent-1",
             "last_attempt_status": "rejected",
             "pending_leader_adjudication": True,
+            "last_worker_report_type": "completed",
+            "last_worker_report_summary": "Worker delivered the checklist",
+            "last_worker_report_artifacts": ["artifact:1", "", 3],
+            "last_worker_report_verifications": ["verification:1", None],
         },
         created_at=datetime.now(UTC),
     )
@@ -35,3 +39,7 @@ def test_to_response_projects_current_attempt_fields() -> None:
     assert response.current_attempt_worker_agent_id == "agent-1"
     assert response.last_attempt_status == "rejected"
     assert response.pending_leader_adjudication is True
+    assert response.last_worker_report_type == "completed"
+    assert response.last_worker_report_summary == "Worker delivered the checklist"
+    assert response.last_worker_report_artifacts == ["artifact:1"]
+    assert response.last_worker_report_verifications == ["verification:1"]

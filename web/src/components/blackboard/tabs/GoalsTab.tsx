@@ -24,6 +24,11 @@ import {
 import { workspaceAutonomyService } from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+import {
+  getPendingLeaderAdjudicationSummary,
+  getTaskAttemptConversationId,
+  getTaskAttemptNumber,
+} from '@/utils/workspaceTaskProjection';
 
 import { ObjectiveList } from '@/components/workspace/objectives/ObjectiveList';
 import { TaskBoard } from '@/components/workspace/TaskBoard';
@@ -78,7 +83,10 @@ interface ChildTaskLogEntry {
   childTaskId: string;
   title: string;
   assigneeLabel: string;
+  workerLabel: string | null;
   status: WorkspaceTask['status'];
+  pendingAdjudication: boolean;
+  reportTypeLabel: string;
   events: FeedbackLogEntry[];
   conversationId?: string | undefined;
   attemptNumber?: number | undefined;
@@ -430,6 +438,7 @@ function buildChildTaskLogs(
     .filter((task) => task.metadata.root_goal_task_id === item.rootTask?.id)
     .sort((left, right) => left.created_at.localeCompare(right.created_at))
     .map((task) => {
+      const adjudication = getPendingLeaderAdjudicationSummary(task, agents);
       const events: FeedbackLogEntry[] = [
         {
           id: `${task.id}-created`,
@@ -474,24 +483,17 @@ function buildChildTaskLogs(
         });
       }
 
-      const conversationIdRaw =
-        task.current_attempt_conversation_id ?? task.metadata.current_attempt_conversation_id;
-      const attemptNumberRaw =
-        task.current_attempt_number ?? task.metadata.current_attempt_number;
-      const conversationId =
-        typeof conversationIdRaw === 'string' && conversationIdRaw.length > 0
-          ? conversationIdRaw
-          : undefined;
-      const attemptNumber =
-        typeof attemptNumberRaw === 'number' && Number.isFinite(attemptNumberRaw)
-          ? attemptNumberRaw
-          : undefined;
+      const conversationId = getTaskAttemptConversationId(task);
+      const attemptNumber = getTaskAttemptNumber(task);
 
       return {
         childTaskId: task.id,
         title: task.title,
         assigneeLabel: resolveAssigneeLabel(task, agents),
+        workerLabel: adjudication.workerLabel,
         status: task.status,
+        pendingAdjudication: adjudication.pending,
+        reportTypeLabel: adjudication.reportTypeLabel,
         events: events.reverse(),
         conversationId,
         attemptNumber,
@@ -523,7 +525,10 @@ function ChildTaskLogCard({
       `task_id: ${child.childTaskId}`,
       `title: ${child.title}`,
       `assignee: ${child.assigneeLabel}`,
+      ...(child.workerLabel ? [`worker: ${child.workerLabel}`] : []),
       `status: ${child.status}`,
+      ...(child.pendingAdjudication ? ['pending_adjudication: true'] : []),
+      ...(child.attemptNumber ? [`attempt: ${String(child.attemptNumber)}`] : []),
       `event: ${entry.label}`,
       `timestamp: ${entry.timestamp}`,
     ].join('\n');
@@ -562,6 +567,17 @@ function ChildTaskLogCard({
               <span className="rounded-full border border-current/15 px-2 py-0.5 text-[10px] opacity-80">
                 {child.assigneeLabel}
               </span>
+              {child.workerLabel && child.workerLabel !== child.assigneeLabel && (
+                <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary dark:border-primary-300/20 dark:bg-primary-300/10 dark:text-primary-100">
+                  Worker {child.workerLabel}
+                </span>
+              )}
+              {child.pendingAdjudication && (
+                <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-medium text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+                  Pending adjudication
+                  {child.reportTypeLabel ? ` · ${child.reportTypeLabel}` : ''}
+                </span>
+              )}
             </div>
           </div>
         </button>

@@ -177,4 +177,75 @@ describe('GoalsTab', () => {
     clipboardWriteText.mockRestore();
     vi.useRealTimers();
   });
+
+  it('surfaces pending adjudication summary in child task logs', async () => {
+    render(
+      <GoalsTab
+        objectives={[
+          {
+            id: 'objective-2',
+            workspace_id: 'ws-1',
+            title: 'Close review loop',
+            obj_type: 'objective',
+            progress: 0,
+            created_at: '2026-04-17T05:00:00Z',
+          },
+        ]}
+        tasks={[
+          {
+            id: 'root-2',
+            workspace_id: 'ws-1',
+            title: 'Close review loop',
+            status: 'in_progress',
+            created_at: '2026-04-17T05:00:10Z',
+            metadata: {
+              task_role: 'goal_root',
+              objective_id: 'objective-2',
+            },
+          },
+          {
+            id: 'child-9',
+            workspace_id: 'ws-1',
+            title: 'Summarize review findings',
+            status: 'done',
+            assignee_agent_id: 'worker-z',
+            workspace_agent_id: 'binding-z',
+            current_attempt_number: 4,
+            current_attempt_conversation_id: 'conv-9',
+            current_attempt_worker_binding_id: 'binding-z',
+            pending_leader_adjudication: true,
+            last_worker_report_type: 'needs_review',
+            created_at: '2026-04-17T05:00:20Z',
+            updated_at: '2026-04-17T05:03:20Z',
+            completed_at: '2026-04-17T05:03:20Z',
+            metadata: {
+              task_role: 'execution_task',
+              root_goal_task_id: 'root-2',
+            },
+          },
+        ] as never}
+        agents={[
+          { id: 'binding-z', agent_id: 'worker-z', display_name: 'Worker Z' },
+        ] as never}
+        completionRatio={1}
+        workspaceId="ws-1"
+        tenantId="t-1"
+        projectId="p-1"
+        onDeleteObjective={vi.fn()}
+        onProjectObjective={vi.fn()}
+        onCreateObjective={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /展开详细日志/i }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /summarize review findings/i }));
+    });
+
+    expect(screen.getByText(/Pending adjudication · needs review/i)).toBeInTheDocument();
+    expect(screen.getByText(/跳转到会话 #4/i)).toBeInTheDocument();
+  });
 });

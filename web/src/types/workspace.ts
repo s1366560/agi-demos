@@ -97,6 +97,10 @@ export interface WorkspaceTask {
   current_attempt_worker_agent_id?: string | undefined;
   last_attempt_status?: string | undefined;
   pending_leader_adjudication?: boolean | undefined;
+  last_worker_report_type?: string | undefined;
+  last_worker_report_summary?: string | undefined;
+  last_worker_report_artifacts?: string[] | undefined;
+  last_worker_report_verifications?: string[] | undefined;
   status: WorkspaceTaskStatus;
   priority?: WorkspaceTaskPriority | undefined;
   estimated_effort?: string | undefined;

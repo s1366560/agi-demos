@@ -1,4 +1,5 @@
 import { deriveObjectiveProgressPct } from '@/utils/objectiveProgress';
+import { hasPendingLeaderAdjudication } from '@/utils/workspaceTaskProjection';
 
 import type {
   BlackboardPost,
@@ -141,9 +142,7 @@ export function buildBlackboardStats(
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((task) => task.status === 'done').length;
   const blockedTasks = tasks.filter((task) => task.status === 'blocked').length;
-  const pendingAdjudicationTasks = tasks.filter(
-    (task) => task.pending_leader_adjudication === true || task.metadata.pending_leader_adjudication === true
-  ).length;
+  const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication).length;
   const activeAgents = agents.filter(
     (agent) => agent.is_active || agent.status === 'running' || agent.status === 'busy'
   ).length;

@@ -103,6 +103,10 @@ class WorkspaceTaskResponse(BaseModel):
     current_attempt_worker_agent_id: str | None = None
     last_attempt_status: str | None = None
     pending_leader_adjudication: bool = False
+    last_worker_report_type: str | None = None
+    last_worker_report_summary: str | None = None
+    last_worker_report_artifacts: list[str] = Field(default_factory=list)
+    last_worker_report_verifications: list[str] = Field(default_factory=list)
     status: WorkspaceTaskStatus
     metadata: dict[str, Any]
     created_at: datetime
@@ -122,6 +126,10 @@ def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
     current_attempt_worker_agent_id = task.metadata.get("current_attempt_worker_agent_id")
     last_attempt_status = task.metadata.get("last_attempt_status")
     pending_leader_adjudication = task.metadata.get("pending_leader_adjudication")
+    last_worker_report_type = task.metadata.get("last_worker_report_type")
+    last_worker_report_summary = task.metadata.get("last_worker_report_summary")
+    last_worker_report_artifacts = task.metadata.get("last_worker_report_artifacts")
+    last_worker_report_verifications = task.metadata.get("last_worker_report_verifications")
     return WorkspaceTaskResponse(
         id=task.id,
         workspace_id=task.workspace_id,
@@ -152,6 +160,30 @@ def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
         ),
         last_attempt_status=last_attempt_status if isinstance(last_attempt_status, str) else None,
         pending_leader_adjudication=(pending_leader_adjudication is True),
+        last_worker_report_type=(
+            last_worker_report_type if isinstance(last_worker_report_type, str) else None
+        ),
+        last_worker_report_summary=(
+            last_worker_report_summary if isinstance(last_worker_report_summary, str) else None
+        ),
+        last_worker_report_artifacts=(
+            [
+                item
+                for item in last_worker_report_artifacts
+                if isinstance(item, str) and len(item) > 0
+            ][:3]
+            if isinstance(last_worker_report_artifacts, list)
+            else []
+        ),
+        last_worker_report_verifications=(
+            [
+                item
+                for item in last_worker_report_verifications
+                if isinstance(item, str) and len(item) > 0
+            ][:3]
+            if isinstance(last_worker_report_verifications, list)
+            else []
+        ),
         status=task.status,
         metadata=task.metadata,
         created_at=task.created_at,

@@ -16,6 +16,11 @@ import { useWorkspaceAgents, useWorkspaceTasks } from '@/stores/workspace';
 
 import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 
+import {
+  formatTaskProjectionLabel,
+  getPendingLeaderAdjudicationSummary,
+} from '@/utils/workspaceTaskProjection';
+
 import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import type { WorkspaceTask, WorkspaceTaskPriority, WorkspaceTaskStatus } from '@/types/workspace';
@@ -29,14 +34,6 @@ interface RootGoalDisplayState {
   goalHealth: string;
   remediationStatus: string;
   verificationGrade: string;
-}
-
-interface PendingLeaderAdjudicationDetails {
-  pending: boolean;
-  reportType: string;
-  reportSummary: string;
-  reportArtifacts: string[];
-  reportVerifications: string[];
 }
 
 const PRIORITY_TONES: Record<string, string> = {
@@ -146,34 +143,7 @@ function getRootGoalDisplayState(metadata: Record<string, unknown> | undefined):
 }
 
 function formatMetadataLabel(value: string): string {
-  return value.replace(/_/g, ' ');
-}
-
-function getPendingLeaderAdjudicationDetails(
-  metadata: Record<string, unknown> | undefined
-): PendingLeaderAdjudicationDetails {
-  const safeMetadata = metadata ?? {};
-  return {
-    pending: safeMetadata.pending_leader_adjudication === true,
-    reportType:
-      typeof safeMetadata.last_worker_report_type === 'string'
-        ? safeMetadata.last_worker_report_type
-        : '',
-    reportSummary:
-      typeof safeMetadata.last_worker_report_summary === 'string'
-        ? safeMetadata.last_worker_report_summary
-        : '',
-    reportArtifacts: Array.isArray(safeMetadata.last_worker_report_artifacts)
-      ? safeMetadata.last_worker_report_artifacts
-          .filter((item): item is string => typeof item === 'string' && item.length > 0)
-          .slice(0, 3)
-      : [],
-    reportVerifications: Array.isArray(safeMetadata.last_worker_report_verifications)
-      ? safeMetadata.last_worker_report_verifications
-          .filter((item): item is string => typeof item === 'string' && item.length > 0)
-          .slice(0, 3)
-      : [],
-  };
+  return formatTaskProjectionLabel(value);
 }
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
@@ -466,13 +436,13 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                       getRootGoalDisplayState(task.metadata as Record<string, unknown> | undefined);
                     const {
                       pending,
-                      reportType,
+                      reportTypeLabel,
                       reportSummary,
                       reportArtifacts,
                       reportVerifications,
-                    } = getPendingLeaderAdjudicationDetails(
-                      task.metadata as Record<string, unknown> | undefined
-                    );
+                      workerLabel,
+                      attemptNumber,
+                    } = getPendingLeaderAdjudicationSummary(task, agents);
                     const priorityTone =
                       PRIORITY_TONES[task.priority || ''] ??
                       'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary';
@@ -577,10 +547,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                                 'Waiting for Sisyphus to review the worker result.'
                               )}
                             </p>
-                            {reportType && (
+                            {reportTypeLabel && (
                               <p className="mt-1">
                                 {t('workspaceDetail.taskBoard.workerReportType', 'Worker report')}:{' '}
-                                {formatMetadataLabel(reportType)}
+                                {reportTypeLabel}
                               </p>
                             )}
                             {reportSummary && <p className="mt-1 line-clamp-3">{reportSummary}</p>}
@@ -594,6 +564,18 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                               <p className="mt-1 line-clamp-2">
                                 {t('workspaceDetail.taskBoard.reportVerifications', 'Checks')}:{' '}
                                 {reportVerifications.join(', ')}
+                              </p>
+                            )}
+                            {workerLabel && (
+                              <p className="mt-1 line-clamp-2">
+                                {t('workspaceDetail.taskBoard.workerLabel', 'Worker')}:{' '}
+                                {workerLabel}
+                              </p>
+                            )}
+                            {attemptNumber && (
+                              <p className="mt-1 line-clamp-2">
+                                {t('workspaceDetail.taskBoard.attemptNumber', 'Attempt')} #
+                                {String(attemptNumber)}
                               </p>
                             )}
                           </div>
