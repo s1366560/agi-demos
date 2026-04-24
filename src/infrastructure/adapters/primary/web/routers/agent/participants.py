@@ -241,6 +241,33 @@ async def _roster_response(
     )
 
 
+async def _assert_workspace_roster_projection(
+    conversation: Conversation,
+    request: Request,
+    db: AsyncSession,
+) -> None:
+    """Ensure workspace-linked roster entries remain a valid projection.
+
+    This applies the same workspace-binding subset invariant used by the
+    conversation routes so participant mutations cannot drift from the
+    canonical workspace agent roster.
+    """
+    from src.application.services.agent.workspace_roster_validator import (
+        WorkspaceRosterValidator,
+    )
+
+    if not conversation.workspace_id or not conversation.participant_agents:
+        return
+
+    validator = WorkspaceRosterValidator(
+        workspace_agent_repository=get_container_with_db(request, db).workspace_agent_repository()
+    )
+    try:
+        await validator.assert_valid(conversation)
+    except ParticipantNotPresentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 # === Endpoints ===
 
 
@@ -312,6 +339,7 @@ async def add_participant(
     except ParticipantNotPresentError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
+    await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
     await db.commit()
     return await _roster_response(conversation, effective_mode, request=request, db=db)
@@ -345,6 +373,7 @@ async def remove_participant(
     except CoordinatorRequiredError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
+    await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
     await db.commit()
     return await _roster_response(conversation, effective_mode, request=request, db=db)
@@ -379,6 +408,7 @@ async def set_coordinator(
     except ParticipantNotPresentError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
+    await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
     await db.commit()
     return await _roster_response(conversation, effective_mode, request=request, db=db)
@@ -408,6 +438,7 @@ async def set_focused_agent(
     except ParticipantNotPresentError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
+    await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
     await db.commit()
     return await _roster_response(conversation, effective_mode, request=request, db=db)

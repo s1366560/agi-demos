@@ -5,11 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from src.domain.model.agent.conversation.conversation import Conversation
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.infrastructure.adapters.primary.web.routers.agent.participants import (
+    _assert_workspace_roster_projection,
     _roster_response,
     list_mention_candidates,
     set_focused_agent,
@@ -126,6 +128,7 @@ async def test_set_focused_agent_updates_conversation_and_returns_roster() -> No
     conv_repo.save = AsyncMock()
     workspace_agent_repo = MagicMock()
     workspace_agent_repo.find_by_workspace_and_agent_id = AsyncMock(return_value=_binding())
+    workspace_agent_repo.find_by_workspace = AsyncMock(return_value=[_binding()])
     container = SimpleNamespace(workspace_agent_repository=lambda: workspace_agent_repo)
 
     with (
@@ -151,3 +154,27 @@ async def test_set_focused_agent_updates_conversation_and_returns_roster() -> No
     db.commit.assert_awaited_once()
     assert conversation.focused_agent_id == "agent-1"
     assert response.focused_agent_id == "agent-1"
+
+
+@pytest.mark.asyncio
+async def test_workspace_roster_projection_raises_http_422_for_unbound_participant() -> None:
+    conversation = _conversation()
+    conversation.participant_agents = ["agent-1", "ghost"]
+    workspace_agent_repo = MagicMock()
+    workspace_agent_repo.find_by_workspace = AsyncMock(return_value=[_binding()])
+    container = SimpleNamespace(workspace_agent_repository=lambda: workspace_agent_repo)
+    request = MagicMock()
+    db = MagicMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await _assert_workspace_roster_projection(conversation, request, db)
+
+    assert isinstance(exc_info.value, HTTPException)
+    assert exc_info.value.status_code == 422
+    assert "ghost" in str(exc_info.value.detail)

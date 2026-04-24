@@ -30,6 +30,16 @@ from src.application.schemas.workspace_agent_autonomy import (
     GoalCandidateRecordModel,
     SourceBreakdownItemModel,
 )
+from src.application.services.workspace_goal_sensing_contract import (
+    ADOPT_EXISTING_GOAL,
+    BLACKBOARD_SIGNAL,
+    CONVERGED_SIGNAL,
+    DEFER,
+    EXISTING_OBJECTIVE,
+    EXISTING_ROOT_TASK,
+    FORMALIZE_NEW_GOAL,
+    MESSAGE_SIGNAL,
+)
 from src.domain.model.workspace.blackboard_post import BlackboardPost
 from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace_message import WorkspaceMessage
@@ -106,12 +116,12 @@ class WorkspaceGoalSensingService:
             candidates.append(
                 _DraftCandidate(
                     text=task.title,
-                    source_type="existing_root_task",
+                    source_type=EXISTING_ROOT_TASK,
                     source_ref=f"task:{task.id}",
                     score=1.0,
                     freshness=self._freshness_score(task.updated_at or task.created_at, now),
                     urgency=self._priority_score(task),
-                    decision="adopt_existing_goal",
+                    decision=cast(CandidateDecision, ADOPT_EXISTING_GOAL),
                     candidate_kind="existing",
                 )
             )
@@ -127,7 +137,7 @@ class WorkspaceGoalSensingService:
             candidates.append(
                 _DraftCandidate(
                     text=objective.title,
-                    source_type="existing_objective",
+                    source_type=EXISTING_OBJECTIVE,
                     source_ref=f"objective:{objective.id}",
                     score=0.9,
                     freshness=self._freshness_score(
@@ -135,7 +145,7 @@ class WorkspaceGoalSensingService:
                         now,
                     ),
                     urgency=max(0.4, 1.0 - objective.progress),
-                    decision="adopt_existing_goal",
+                    decision=cast(CandidateDecision, ADOPT_EXISTING_GOAL),
                     candidate_kind="existing",
                 )
             )
@@ -152,12 +162,12 @@ class WorkspaceGoalSensingService:
             candidates.append(
                 _DraftCandidate(
                     text=text,
-                    source_type="blackboard_signal",
+                    source_type=BLACKBOARD_SIGNAL,
                     source_ref=f"blackboard:{post.id}",
                     score=_INFERRED_POST_EVIDENCE,
                     freshness=self._freshness_score(post.updated_at or post.created_at, now),
                     urgency=0.8 if post.is_pinned else 0.6,
-                    decision="defer",
+                    decision=cast(CandidateDecision, DEFER),
                     candidate_kind="inferred",
                 )
             )
@@ -173,12 +183,12 @@ class WorkspaceGoalSensingService:
             candidates.append(
                 _DraftCandidate(
                     text=message.content,
-                    source_type="message_signal",
+                    source_type=MESSAGE_SIGNAL,
                     source_ref=f"message:{message.id}",
                     score=_INFERRED_MESSAGE_EVIDENCE,
                     freshness=self._freshness_score(message.created_at, now),
                     urgency=0.6,
-                    decision="defer",
+                    decision=cast(CandidateDecision, DEFER),
                     candidate_kind="inferred",
                 )
             )
@@ -204,7 +214,7 @@ class WorkspaceGoalSensingService:
             )
             if converged:
                 evidence_strength = min(1.0, primary.score + 0.15)
-                source_type = "converged_signal"
+                source_type = cast(SignalSource, CONVERGED_SIGNAL)
 
             # Agent-First: sensing never promotes inferred candidates to
             # formalize/reject here. The Leader agent decides via an explicit
@@ -235,7 +245,7 @@ class WorkspaceGoalSensingService:
                     freshness=max(item.freshness for item in group),
                     urgency=max(item.urgency for item in group),
                     user_intent_confidence=evidence_strength,
-                    formalizable=decision == "formalize_new_goal",
+                    formalizable=decision == FORMALIZE_NEW_GOAL,
                     decision=decision,
                 )
             )
@@ -243,7 +253,7 @@ class WorkspaceGoalSensingService:
         return sorted(
             candidates,
             key=lambda candidate: (
-                candidate.decision != "adopt_existing_goal",
+                candidate.decision != ADOPT_EXISTING_GOAL,
                 -candidate.evidence_strength,
                 -candidate.urgency,
                 -candidate.freshness,
