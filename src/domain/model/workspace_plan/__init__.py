@@ -24,6 +24,7 @@ from src.domain.model.workspace_plan.acceptance import (
     EvidenceRef,
     VerificationReport,
 )
+from src.domain.model.workspace_plan.event import WorkspacePlanEvent
 from src.domain.model.workspace_plan.goal_progress import GoalProgress
 from src.domain.model.workspace_plan.plan import Plan, PlanStatus
 from src.domain.model.workspace_plan.plan_node import (
@@ -66,6 +67,7 @@ __all__ = [
     "TaskExecution",
     "TaskIntent",
     "VerificationReport",
+    "WorkspacePlanEvent",
     "allowed_execution_next",
     "allowed_intent_next",
     "can_transition_execution",

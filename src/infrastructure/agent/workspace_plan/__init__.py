@@ -10,6 +10,8 @@ Submodules:
 * :mod:`supervisor` — async single-writer :class:`WorkspaceSupervisorPort`
 * :mod:`repository` — in-memory and SQL :class:`PlanRepositoryPort` impls
 * :mod:`adapter`    — bi-directional ``PlanNode`` ↔ ``WorkspaceTask`` mapping
+* :mod:`outbox_handlers` — job handlers for durable plan progression
+* :mod:`outbox_worker` — durable worker loop for plan outbox jobs
 * :mod:`orchestrator` — the L5 façade wiring everything together
 
 Gated behind the ``WORKSPACE_V2_*`` feature flags so legacy runtime is untouched.
@@ -17,11 +19,19 @@ Gated behind the ``WORKSPACE_V2_*`` feature flags so legacy runtime is untouched
 
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
-from src.infrastructure.agent.workspace_plan.factory import build_default_orchestrator
+from src.infrastructure.agent.workspace_plan.factory import (
+    build_default_orchestrator,
+    build_sql_orchestrator,
+)
 from src.infrastructure.agent.workspace_plan.orchestrator import (
     OrchestratorConfig,
     WorkspaceOrchestrator,
 )
+from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    SUPERVISOR_TICK_EVENT,
+    make_supervisor_tick_handler,
+)
+from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxWorker
 from src.infrastructure.agent.workspace_plan.planner import LLMGoalPlanner
 from src.infrastructure.agent.workspace_plan.progress import ProgressProjector
 from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepository
@@ -35,6 +45,7 @@ from src.infrastructure.agent.workspace_plan.verifier import (
 )
 
 __all__ = [
+    "SUPERVISOR_TICK_EVENT",
     "AcceptanceCriterionVerifier",
     "CapabilityAllocator",
     "CmdCriterionRunner",
@@ -47,6 +58,9 @@ __all__ = [
     "RegexCriterionRunner",
     "SchemaCriterionRunner",
     "WorkspaceOrchestrator",
+    "WorkspacePlanOutboxWorker",
     "WorkspaceSupervisor",
     "build_default_orchestrator",
+    "build_sql_orchestrator",
+    "make_supervisor_tick_handler",
 ]

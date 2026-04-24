@@ -112,6 +112,114 @@ export interface WorkspaceTask {
   updated_at?: string | undefined;
 }
 
+export type WorkspacePlanStatus = 'draft' | 'active' | 'suspended' | 'completed' | 'abandoned';
+export type WorkspacePlanNodeKind = 'goal' | 'milestone' | 'task' | 'verify';
+export type WorkspacePlanTaskIntent = 'todo' | 'in_progress' | 'blocked' | 'done';
+export type WorkspacePlanTaskExecution =
+  | 'idle'
+  | 'dispatched'
+  | 'running'
+  | 'reported'
+  | 'verifying';
+
+export interface WorkspacePlanAcceptanceCriterion {
+  kind: string;
+  spec: Record<string, unknown>;
+  required: boolean;
+  description?: string | null | undefined;
+}
+
+export interface WorkspacePlanCapabilityHint {
+  name: string;
+  weight: number;
+}
+
+export interface WorkspacePlanNode {
+  id: string;
+  parent_id: string | null;
+  kind: WorkspacePlanNodeKind;
+  title: string;
+  description: string;
+  depends_on: string[];
+  acceptance_criteria: WorkspacePlanAcceptanceCriterion[];
+  recommended_capabilities: WorkspacePlanCapabilityHint[];
+  intent: WorkspacePlanTaskIntent;
+  execution: WorkspacePlanTaskExecution;
+  progress: {
+    percent: number;
+    confidence: number;
+    note: string;
+  };
+  assignee_agent_id: string | null;
+  current_attempt_id: string | null;
+  workspace_task_id: string | null;
+  priority: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at?: string | null | undefined;
+  completed_at?: string | null | undefined;
+}
+
+export interface WorkspacePlan {
+  id: string;
+  workspace_id: string;
+  goal_id: string;
+  status: WorkspacePlanStatus;
+  created_at: string;
+  updated_at?: string | null | undefined;
+  nodes: WorkspacePlanNode[];
+  counts: Record<string, number>;
+}
+
+export interface WorkspacePlanBlackboardEntry {
+  plan_id: string;
+  key: string;
+  value: unknown;
+  published_by: string;
+  version: number;
+  schema_ref?: string | null | undefined;
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkspacePlanOutboxItem {
+  id: string;
+  plan_id: string;
+  workspace_id: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  max_attempts: number;
+  lease_owner?: string | null | undefined;
+  lease_expires_at?: string | null | undefined;
+  last_error?: string | null | undefined;
+  next_attempt_at?: string | null | undefined;
+  processed_at?: string | null | undefined;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at?: string | null | undefined;
+}
+
+export interface WorkspacePlanEvent {
+  id: string;
+  plan_id: string;
+  workspace_id: string;
+  node_id?: string | null | undefined;
+  attempt_id?: string | null | undefined;
+  event_type: string;
+  source: string;
+  actor_id?: string | null | undefined;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface WorkspacePlanSnapshot {
+  workspace_id: string;
+  plan: WorkspacePlan | null;
+  blackboard: WorkspacePlanBlackboardEntry[];
+  outbox: WorkspacePlanOutboxItem[];
+  events: WorkspacePlanEvent[];
+}
+
 export interface TopologyNode {
   id: string;
   workspace_id: string;

@@ -203,7 +203,7 @@ class SchemaCriterionRunner(CriterionRunner):
         else:
             value = raw
         try:
-            import jsonschema  # type: ignore[import-not-found]
+            import jsonschema
 
             jsonschema.validate(value, schema)
             return CriterionResult(
@@ -223,7 +223,7 @@ class SchemaCriterionRunner(CriterionRunner):
             )
 
     def _shallow_check(
-        self, criterion: AcceptanceCriterion, schema: dict, value: Any
+        self, criterion: AcceptanceCriterion, schema: dict[str, Any], value: object
     ) -> CriterionResult:
         # jsonschema not installed — check type + required keys only.
         sch_type = schema.get("type")

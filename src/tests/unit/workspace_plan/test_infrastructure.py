@@ -544,6 +544,30 @@ class TestOrchestratorFeatureFlag:
         assert plan.workspace_id == "ws"
         assert sup.started == ["ws"]
 
+    async def test_start_goal_can_skip_long_lived_supervisor_for_job_scoped_wiring(self) -> None:
+        repo = InMemoryPlanRepository()
+        sup = _NoopSupervisor()
+        orch = WorkspaceOrchestrator(
+            planner=LLMGoalPlanner(decomposer=None),
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            supervisor=sup,
+            plan_repo=repo,
+            config=OrchestratorConfig(enabled=True),
+        )
+
+        plan = await orch.start_goal(
+            workspace_id="ws",
+            title="goal",
+            start_supervisor=False,
+        )
+        report = await orch.tick_once("ws")
+
+        assert plan.workspace_id == "ws"
+        assert sup.started == []
+        assert report.workspace_id == "ws"
+
 
 class _NoopSupervisor:
     def __init__(self) -> None:

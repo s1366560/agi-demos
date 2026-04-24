@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Request
 from sqlalchemy import select
@@ -103,16 +103,15 @@ def _legacy_builtin_conflict_name(agent_id: str) -> str:
 
 
 async def _rename_legacy_sisyphus_name_conflict(db: AsyncSession) -> AgentDefinitionModel | None:
-    conflicting_row = (
-        await db.execute(
-            refresh_select_statement(
-                select(AgentDefinitionModel)
-                .where(AgentDefinitionModel.name == BUILTIN_SISYPHUS_NAME)
-                .where(AgentDefinitionModel.id != BUILTIN_SISYPHUS_ID)
-                .limit(1)
-            )
+    result = await db.execute(
+        refresh_select_statement(
+            select(AgentDefinitionModel)
+            .where(AgentDefinitionModel.name == BUILTIN_SISYPHUS_NAME)
+            .where(AgentDefinitionModel.id != BUILTIN_SISYPHUS_ID)
+            .limit(1)
         )
-    ).scalar_one_or_none()
+    )
+    conflicting_row = cast(AgentDefinitionModel | None, result.scalar_one_or_none())
     if conflicting_row is None:
         return None
 
@@ -188,8 +187,12 @@ async def ensure_workspace_leader_binding(
                 avg_execution_time_ms=builtin_agent.avg_execution_time_ms,
                 success_rate=builtin_agent.success_rate,
                 metadata_json=builtin_agent.metadata,
-                session_policy=builtin_agent.session_policy.to_dict() if builtin_agent.session_policy else None,
-                delegate_config=builtin_agent.delegate_config.to_dict() if builtin_agent.delegate_config else None,
+                session_policy=builtin_agent.session_policy.to_dict()
+                if builtin_agent.session_policy
+                else None,
+                delegate_config=builtin_agent.delegate_config.to_dict()
+                if builtin_agent.delegate_config
+                else None,
                 created_at=builtin_agent.created_at,
                 updated_at=builtin_agent.updated_at,
             )
@@ -223,9 +226,7 @@ async def _is_on_cooldown(workspace_id: str, root_task_id: str) -> bool:
             extra={"workspace_id": workspace_id, "root_task_id": root_task_id},
         )
         return False
-    key = _AUTO_TRIGGER_COOLDOWN_KEY.format(
-        workspace_id=workspace_id, root_task_id=root_task_id
-    )
+    key = _AUTO_TRIGGER_COOLDOWN_KEY.format(workspace_id=workspace_id, root_task_id=root_task_id)
     try:
         return bool(await redis_client.exists(key))
     except Exception:
@@ -242,9 +243,7 @@ async def _mark_cooldown(workspace_id: str, root_task_id: str) -> None:
         redis_client = await get_redis_client()
     except Exception:
         return
-    key = _AUTO_TRIGGER_COOLDOWN_KEY.format(
-        workspace_id=workspace_id, root_task_id=root_task_id
-    )
+    key = _AUTO_TRIGGER_COOLDOWN_KEY.format(workspace_id=workspace_id, root_task_id=root_task_id)
     try:
         await redis_client.set(key, "1", ex=AUTO_TRIGGER_COOLDOWN_SECONDS)
     except Exception:
@@ -286,10 +285,12 @@ async def _select_root_task_needing_progress(
     """
     from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 
-    _PRE_EXECUTION_STATUSES = frozenset({
-        WorkspaceTaskStatus.TODO,
-        WorkspaceTaskStatus.DISPATCHED,
-    })
+    _PRE_EXECUTION_STATUSES = frozenset(
+        {
+            WorkspaceTaskStatus.TODO,
+            WorkspaceTaskStatus.DISPATCHED,
+        }
+    )
 
     prioritized = sorted(root_tasks, key=_root_task_sort_key)
     for root_task in prioritized:
@@ -307,8 +308,7 @@ async def _select_root_task_needing_progress(
         # report not yet adjudicated). This ensures the tick fires so the
         # auto-adjudication step can close them out.
         if any(
-            isinstance(c.metadata, dict)
-            and c.metadata.get("pending_leader_adjudication") is True
+            isinstance(c.metadata, dict) and c.metadata.get("pending_leader_adjudication") is True
             for c in children
         ):
             return root_task, True
@@ -989,23 +989,39 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0912, PL
     )
 
     title = root_task.title
+    description = root_task.description or ""
     if isinstance(objective_id, str) and objective_id:
         objective = await container.cyber_objective_repository().find_by_id(objective_id)
         if objective is not None:
             title = objective.title
+            description = objective.description or description
+
+    try:
+        from src.infrastructure.agent.workspace.goal_runtime import (
+            kickoff_v2_plan_if_enabled,
+        )
+
+        await kickoff_v2_plan_if_enabled(
+            workspace_id=workspace_id,
+            title=title,
+            description=description,
+            created_by=current_user.id,
+            root_task_id=root_task.id,
+            leader_agent_id=leader_binding.agent_id,
+        )
+    except Exception:
+        logger.warning(
+            "workspace_v2.kickoff_failed",
+            exc_info=True,
+            extra={"workspace_id": workspace_id, "root_task_id": root_task.id},
+        )
 
     mention = _format_agent_mention(leader_binding.display_name, leader_binding.agent_id)
     remediation_status = (
-        (root_task.metadata or {}).get("remediation_status") or "none"
-        if has_children
-        else "none"
+        (root_task.metadata or {}).get("remediation_status") or "none" if has_children else "none"
     )
 
-    if (
-        remediation_status == "ready_for_completion"
-        and has_children
-        and _auto_complete_enabled()
-    ):
+    if remediation_status == "ready_for_completion" and has_children and _auto_complete_enabled():
         auto_outcome = await _try_auto_complete_root(
             request=request,
             db=db,

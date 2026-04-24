@@ -9,6 +9,7 @@ import type {
   WorkspaceAgent,
   WorkspaceCreateRequest,
   WorkspaceMember,
+  WorkspacePlanSnapshot,
   WorkspaceTask,
   WorkspaceUpdateRequest,
 } from '@/types/workspace';
@@ -57,6 +58,7 @@ const taskBase = (workspaceId: string) => `/workspaces/${workspaceId}/tasks`;
 
 const topologyBase = (workspaceId: string) => `/workspaces/${workspaceId}/topology`;
 const autonomyBase = (workspaceId: string) => `/workspaces/${workspaceId}/autonomy`;
+const planBase = (workspaceId: string) => `/workspaces/${workspaceId}/plan`;
 
 function normalizeListResponse<T>(
   payload: unknown,
@@ -320,9 +322,7 @@ export const workspaceBlackboardService = {
     workspaceId: string,
     postId: string
   ): Promise<void> => {
-    await apiFetch.delete(
-      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`
-    );
+    await apiFetch.delete(`${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`);
   },
 
   pinPost: async (
@@ -448,6 +448,28 @@ export const workspaceAutonomyService = {
       force: options.force ?? false,
     });
     return response.json() as Promise<WorkspaceAutonomyTickResult>;
+  },
+};
+
+export const workspacePlanService = {
+  getSnapshot: async (
+    workspaceId: string,
+    options: { outboxLimit?: number; eventLimit?: number } = {}
+  ): Promise<WorkspacePlanSnapshot> => {
+    const params = new URLSearchParams();
+    if (options.outboxLimit !== undefined) {
+      params.set('outbox_limit', String(options.outboxLimit));
+    }
+    if (options.eventLimit !== undefined) {
+      params.set('event_limit', String(options.eventLimit));
+    }
+    const query = params.toString();
+    const response = await apiFetch.get(`${planBase(workspaceId)}${query ? `?${query}` : ''}`, {
+      retry: {
+        maxRetries: 1,
+      },
+    });
+    return response.json() as Promise<WorkspacePlanSnapshot>;
   },
 };
 

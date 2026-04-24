@@ -100,14 +100,12 @@ async function createProject(
       agent_conversation_mode: conversationMode,
     }),
   });
-  expect(resp.ok, `createProject failed: ${resp.status} ${await resp.text()}`).toBeTruthy();
-  return (await resp.json()) as ProjectResponse;
+  const text = await resp.text();
+  expect(resp.ok, `createProject failed: ${resp.status} ${text}`).toBeTruthy();
+  return JSON.parse(text) as ProjectResponse;
 }
 
-async function createConversation(
-  token: string,
-  projectId: string
-): Promise<ConversationResponse> {
+async function createConversation(token: string, projectId: string): Promise<ConversationResponse> {
   const resp = await fetch(`${API_BASE}/api/v1/agent/conversations`, {
     method: 'POST',
     headers: {
@@ -119,11 +117,9 @@ async function createConversation(
       title: 'E2E multi-agent conversation',
     }),
   });
-  expect(
-    resp.ok,
-    `createConversation failed: ${resp.status} ${await resp.text()}`
-  ).toBeTruthy();
-  return (await resp.json()) as ConversationResponse;
+  const text = await resp.text();
+  expect(resp.ok, `createConversation failed: ${resp.status} ${text}`).toBeTruthy();
+  return JSON.parse(text) as ConversationResponse;
 }
 
 async function authedFetch(
@@ -167,11 +163,9 @@ test.describe('multi-agent conversation flow (API)', () => {
       `/api/v1/agent/conversations/${conversation.id}/participants`,
       { agent_id: 'agent-alpha', role: 'reviewer' }
     );
-    expect(
-      addResp.ok,
-      `add participant failed: ${addResp.status} ${await addResp.text()}`
-    ).toBeTruthy();
-    const withOne = (await addResp.json()) as RosterResponse;
+    const addText = await addResp.text();
+    expect(addResp.ok, `add participant failed: ${addResp.status} ${addText}`).toBeTruthy();
+    const withOne = JSON.parse(addText) as RosterResponse;
     expect(withOne.participant_agents).toContain('agent-alpha');
 
     // Add agent-beta
@@ -195,9 +189,7 @@ test.describe('multi-agent conversation flow (API)', () => {
     );
     expect(listResp.ok).toBeTruthy();
     const list = (await listResp.json()) as RosterResponse;
-    expect(list.participant_agents).toEqual(
-      expect.arrayContaining(['agent-alpha', 'agent-beta'])
-    );
+    expect(list.participant_agents).toEqual(expect.arrayContaining(['agent-alpha', 'agent-beta']));
 
     // DELETE with reason
     const removeResp = await authedFetch(

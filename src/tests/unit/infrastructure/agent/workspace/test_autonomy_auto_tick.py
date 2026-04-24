@@ -124,6 +124,15 @@ class TestWorkerReportHook:
         schedule_idx = source.index("schedule_autonomy_tick")
         assert commit_idx < schedule_idx
 
+    def test_autonomy_tick_kicks_off_v2_plan_before_legacy_message(self) -> None:
+        """The explicit/auto tick path must feed the durable plan before dispatch."""
+        import inspect
+
+        source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
+        kickoff_idx = source.index("kickoff_v2_plan_if_enabled")
+        message_idx = source.index("message_service.send_message")
+        assert kickoff_idx < message_idx
+
 
 class TestInflightDedup:
     @pytest.mark.asyncio

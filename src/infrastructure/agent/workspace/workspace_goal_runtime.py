@@ -92,6 +92,8 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REPLAN_ATTEMPT_COUNT,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
+    WORKSPACE_PLAN_ID,
+    WORKSPACE_PLAN_NODE_ID,
 )
 
 logger = logging.getLogger(__name__)
@@ -584,9 +586,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     try:
         children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task.id)
     except Exception:
-        logger.warning(
-            "auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True
-        )
+        logger.warning("auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True)
         return None
     execution_children = [
         c
@@ -611,9 +611,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
             generated_by_agent_id=leader_agent_id or str(actor_user_id),
         )
     except Exception:
-        logger.warning(
-            "auto_complete_ready_root: ensure_goal_evidence failed", exc_info=True
-        )
+        logger.warning("auto_complete_ready_root: ensure_goal_evidence failed", exc_info=True)
         return None
 
     refreshed = await task_repo.find_by_id(root_task.id)
@@ -808,6 +806,88 @@ def _build_execution_state(
         "updated_by_actor_id": actor_id,
         "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
+
+
+async def _mark_workspace_plan_node_reported(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    root_goal_task_id: str,
+    actor_user_id: str,
+    task_metadata: Mapping[str, Any],
+    attempt_id: str,
+    worker_agent_id: str,
+    leader_agent_id: str | None,
+) -> None:
+    """Mirror terminal legacy worker reports into the durable V2 plan state."""
+    plan_id = task_metadata.get(WORKSPACE_PLAN_ID)
+    node_id = task_metadata.get(WORKSPACE_PLAN_NODE_ID)
+    if not isinstance(plan_id, str) or not plan_id:
+        return
+    if not isinstance(node_id, str) or not node_id:
+        return
+
+    try:
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
+            SqlWorkspacePlanEventRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+            SqlWorkspacePlanOutboxRepository,
+        )
+        from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
+        from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+            SUPERVISOR_TICK_EVENT,
+        )
+
+        await SqlWorkspacePlanEventRepository(db).append(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+            actor_id=worker_agent_id,
+            event_type="worker_report_terminal",
+            source="worker_report",
+            payload={
+                "report_type": task_metadata.get("last_worker_report_type"),
+                "summary": task_metadata.get(LAST_WORKER_REPORT_SUMMARY),
+                "artifacts": task_metadata.get("last_worker_report_artifacts", []),
+                "verifications": task_metadata.get("last_worker_report_verifications", []),
+                "reported_at": task_metadata.get("last_worker_reported_at"),
+            },
+        )
+        orchestrator = build_sql_orchestrator(db)
+        await orchestrator.mark_worker_reported(
+            workspace_id=workspace_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+        )
+        _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            event_type=SUPERVISOR_TICK_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "root_task_id": root_goal_task_id,
+                "actor_user_id": actor_user_id,
+                "leader_agent_id": leader_agent_id,
+            },
+            metadata={
+                "source": "worker_report",
+                "node_id": node_id,
+                "attempt_id": attempt_id,
+            },
+        )
+    except Exception:
+        logger.warning(
+            "workspace_v2.worker_report_sync_failed",
+            extra={
+                "event": "workspace_v2.worker_report_sync_failed",
+                "workspace_id": workspace_id,
+                "plan_id": plan_id,
+                "node_id": node_id,
+            },
+            exc_info=True,
+        )
 
 
 def _parse_worker_report_payload(
@@ -1178,6 +1258,12 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                 raise ValueError("Worker report does not match the task assignee")
 
             metadata = dict(task.metadata)
+            v2_plan_linked = (
+                isinstance(metadata.get(WORKSPACE_PLAN_ID), str)
+                and bool(metadata.get(WORKSPACE_PLAN_ID))
+                and isinstance(metadata.get(WORKSPACE_PLAN_NODE_ID), str)
+                and bool(metadata.get(WORKSPACE_PLAN_NODE_ID))
+            )
             evidence_refs = metadata.get("evidence_refs")
             if isinstance(evidence_refs, list):
                 prior_refs = [str(ref) for ref in evidence_refs if ref]
@@ -1216,20 +1302,25 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
             metadata["last_worker_report_verifications"] = list(dict.fromkeys(report_verifications))
             metadata["last_worker_reported_at"] = reported_at
             metadata["last_worker_report_fingerprint"] = report_fingerprint
-            metadata[PENDING_LEADER_ADJUDICATION] = report_type in _WORKER_TERMINAL_REPORT_TYPES
+            metadata[PENDING_LEADER_ADJUDICATION] = (
+                report_type in _WORKER_TERMINAL_REPORT_TYPES and not v2_plan_linked
+            )
             if report_id:
                 metadata["last_worker_report_id"] = report_id
             metadata[CURRENT_ATTEMPT_ID] = resolved_attempt.id
             metadata["last_attempt_id"] = resolved_attempt.id
             metadata["current_attempt_number"] = resolved_attempt.attempt_number
             phase = "in_progress"
-            action = (
-                "await_leader_adjudication"
-                if report_type in _WORKER_TERMINAL_REPORT_TYPES
-                else "start"
-            )
+            if report_type in _WORKER_TERMINAL_REPORT_TYPES:
+                action = (
+                    "await_plan_verification" if v2_plan_linked else "await_leader_adjudication"
+                )
+            else:
+                action = "start"
             metadata["last_attempt_status"] = (
-                WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
+                "awaiting_plan_verification"
+                if report_type in _WORKER_TERMINAL_REPORT_TYPES and v2_plan_linked
+                else WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
                 if report_type in _WORKER_TERMINAL_REPORT_TYPES
                 else WorkspaceTaskSessionAttemptStatus.RUNNING.value
             )
@@ -1310,6 +1401,16 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                         dict.fromkeys([*prior_verifications, *report_verifications])
                     ),
                     conversation_id=conversation_id,
+                )
+                await _mark_workspace_plan_node_reported(
+                    db=db,
+                    workspace_id=workspace_id,
+                    root_goal_task_id=root_goal_task_id,
+                    actor_user_id=actor_user_id,
+                    task_metadata=metadata,
+                    attempt_id=resolved_attempt.id,
+                    worker_agent_id=effective_worker_agent_id,
+                    leader_agent_id=leader_agent_id,
                 )
             elif resolved_attempt.status == WorkspaceTaskSessionAttemptStatus.PENDING:
                 await attempt_service.mark_running(resolved_attempt.id)
@@ -1450,7 +1551,9 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     metadata["current_attempt_number"] = new_attempt.attempt_number
                     worker_binding_id = task.get_workspace_agent_binding_id()
                     if worker_binding_id is None and task.assignee_agent_id:
-                        binding = await SqlWorkspaceAgentRepository(db).find_by_workspace_and_agent_id(
+                        binding = await SqlWorkspaceAgentRepository(
+                            db
+                        ).find_by_workspace_and_agent_id(
                             workspace_id=workspace_id,
                             agent_id=task.assignee_agent_id,
                         )

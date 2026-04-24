@@ -84,6 +84,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     webhooks,
     workspace_autonomy,
     workspace_chat,
+    workspace_plans,
     workspace_tasks,
     workspaces,
 )
@@ -104,12 +105,14 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
+    initialize_workspace_plan_outbox_worker,
     shutdown_attempt_recovery,
     shutdown_autonomy_idle_waker,
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
     shutdown_telemetry_services,
+    shutdown_workspace_plan_outbox_worker,
     sync_health_checker_providers,
 )
 from src.infrastructure.adapters.primary.web.startup.graph import (
@@ -142,7 +145,7 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
@@ -208,8 +211,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
             set_workspace_supervisor,
         )
 
-        configure_wtp_publisher(redis_client)
-        workspace_supervisor = WorkspaceSupervisor(redis_client)
+        redis_for_wtp: Any = redis_client
+        configure_wtp_publisher(redis_for_wtp)
+        workspace_supervisor = WorkspaceSupervisor(redis_for_wtp)
         await workspace_supervisor.start()
         set_workspace_supervisor(workspace_supervisor)
         app.state.workspace_supervisor = workspace_supervisor
@@ -218,6 +222,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Start attempt recovery service (restart-safe orphaned-attempt watchdog)
     await initialize_attempt_recovery()
+
+    # Start Workspace Plan V2 durable outbox worker
+    await initialize_workspace_plan_outbox_worker()
 
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
@@ -255,6 +262,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Stop workspace autonomy idle waker
     await shutdown_autonomy_idle_waker()
+
+    # Stop Workspace Plan V2 durable outbox worker
+    await shutdown_workspace_plan_outbox_worker()
 
     # Stop attempt recovery service
     await shutdown_attempt_recovery()
@@ -447,6 +457,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(tasks.router)
     app.include_router(workspace_autonomy.router)
     app.include_router(workspace_tasks.router)
+    app.include_router(workspace_plans.router)
     app.include_router(workspaces.router)
     app.include_router(cron.router)
     app.include_router(ai_tools.router)

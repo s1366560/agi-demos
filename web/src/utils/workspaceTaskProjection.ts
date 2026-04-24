@@ -10,8 +10,8 @@ export interface PendingLeaderAdjudicationProjection {
 
 export interface PendingLeaderAdjudicationSummary extends PendingLeaderAdjudicationProjection {
   reportTypeLabel: string;
-  attemptConversationId?: string;
-  attemptNumber?: number;
+  attemptConversationId?: string | undefined;
+  attemptNumber?: number | undefined;
   workerLabel: string | null;
 }
 
@@ -23,7 +23,9 @@ function readFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function getTaskMetadata(task: { metadata?: Record<string, unknown> | undefined }): Record<string, unknown> {
+function getTaskMetadata(task: {
+  metadata?: Record<string, unknown> | undefined;
+}): Record<string, unknown> {
   return task.metadata ?? {};
 }
 
@@ -33,26 +35,34 @@ export function formatTaskProjectionLabel(value: string): string {
 
 export function getTaskAttemptConversationId(task: WorkspaceTask): string | undefined {
   const metadata = getTaskMetadata(task);
-  return readNonEmptyString(task.current_attempt_conversation_id)
-    ?? readNonEmptyString(metadata.current_attempt_conversation_id);
+  return (
+    readNonEmptyString(task.current_attempt_conversation_id) ??
+    readNonEmptyString(metadata.current_attempt_conversation_id)
+  );
 }
 
 export function getTaskAttemptNumber(task: WorkspaceTask): number | undefined {
   const metadata = getTaskMetadata(task);
-  return readFiniteNumber(task.current_attempt_number)
-    ?? readFiniteNumber(metadata.current_attempt_number);
+  return (
+    readFiniteNumber(task.current_attempt_number) ??
+    readFiniteNumber(metadata.current_attempt_number)
+  );
 }
 
 export function getTaskAttemptWorkerBindingId(task: WorkspaceTask): string | undefined {
   const metadata = getTaskMetadata(task);
-  return readNonEmptyString(task.current_attempt_worker_binding_id)
-    ?? readNonEmptyString(metadata.current_attempt_worker_binding_id);
+  return (
+    readNonEmptyString(task.current_attempt_worker_binding_id) ??
+    readNonEmptyString(metadata.current_attempt_worker_binding_id)
+  );
 }
 
 export function getTaskAttemptWorkerAgentId(task: WorkspaceTask): string | undefined {
   const metadata = getTaskMetadata(task);
-  return readNonEmptyString(task.current_attempt_worker_agent_id)
-    ?? readNonEmptyString(metadata.current_attempt_worker_agent_id);
+  return (
+    readNonEmptyString(task.current_attempt_worker_agent_id) ??
+    readNonEmptyString(metadata.current_attempt_worker_agent_id)
+  );
 }
 
 export function resolveTaskAttemptWorkerLabel(
@@ -81,10 +91,7 @@ export function resolveTaskAttemptWorkerLabel(
 
 export function hasPendingLeaderAdjudication(task: WorkspaceTask): boolean {
   const metadata = getTaskMetadata(task);
-  return (
-    task.pending_leader_adjudication === true
-    || metadata.pending_leader_adjudication === true
-  );
+  return task.pending_leader_adjudication === true || metadata.pending_leader_adjudication === true;
 }
 
 export function getPendingLeaderAdjudicationProjection(
@@ -100,31 +107,31 @@ export function getPendingLeaderAdjudicationProjection(
   return {
     pending: hasPendingLeaderAdjudication(task),
     reportType:
-      readNonEmptyString(task.last_worker_report_type)
-      ?? readNonEmptyString(metadata.last_worker_report_type)
-      ?? '',
+      readNonEmptyString(task.last_worker_report_type) ??
+      readNonEmptyString(metadata.last_worker_report_type) ??
+      '',
     reportSummary:
-      readNonEmptyString(task.last_worker_report_summary)
-      ?? readNonEmptyString(metadata.last_worker_report_summary)
-      ?? '',
+      readNonEmptyString(task.last_worker_report_summary) ??
+      readNonEmptyString(metadata.last_worker_report_summary) ??
+      '',
     reportArtifacts: explicitArtifacts
       ? explicitArtifacts
           .filter((item): item is string => typeof item === 'string' && item.length > 0)
           .slice(0, 3)
       : Array.isArray(metadata.last_worker_report_artifacts)
-      ? metadata.last_worker_report_artifacts
-          .filter((item): item is string => typeof item === 'string' && item.length > 0)
-          .slice(0, 3)
-      : [],
+        ? metadata.last_worker_report_artifacts
+            .filter((item): item is string => typeof item === 'string' && item.length > 0)
+            .slice(0, 3)
+        : [],
     reportVerifications: explicitVerifications
       ? explicitVerifications
           .filter((item): item is string => typeof item === 'string' && item.length > 0)
           .slice(0, 3)
       : Array.isArray(metadata.last_worker_report_verifications)
-      ? metadata.last_worker_report_verifications
-          .filter((item): item is string => typeof item === 'string' && item.length > 0)
-          .slice(0, 3)
-      : [],
+        ? metadata.last_worker_report_verifications
+            .filter((item): item is string => typeof item === 'string' && item.length > 0)
+            .slice(0, 3)
+        : [],
   };
 }
 

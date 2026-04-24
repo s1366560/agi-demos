@@ -3214,6 +3214,107 @@ class PlanNodeModel(Base):
     )
 
 
+class WorkspacePlanBlackboardEntryModel(Base):
+    """Append-only typed artifact entry for workspace plan coordination."""
+
+    __tablename__ = "workspace_plan_blackboard_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(500), nullable=False)
+    value_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    published_by: Mapped[str] = mapped_column(String, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_id",
+            "key",
+            "version",
+            name="uq_workspace_plan_blackboard_plan_key_version",
+        ),
+        Index("ix_workspace_plan_blackboard_plan", "plan_id"),
+        Index("ix_workspace_plan_blackboard_plan_key", "plan_id", "key"),
+    )
+
+
+class WorkspacePlanEventModel(Base):
+    """Append-only event log for durable workspace plan progression."""
+
+    __tablename__ = "workspace_plan_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="system")
+    actor_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_plan_events_plan_created", "plan_id", "created_at"),
+        Index("ix_workspace_plan_events_workspace_created", "workspace_id", "created_at"),
+        Index("ix_workspace_plan_events_node", "plan_id", "node_id", "created_at"),
+        Index("ix_workspace_plan_events_attempt", "attempt_id"),
+    )
+
+
+class WorkspacePlanOutboxModel(Base):
+    """Durable work queue record for autonomous workspace plan progression."""
+
+    __tablename__ = "workspace_plan_outbox"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_plan_outbox_plan", "plan_id"),
+        Index("ix_workspace_plan_outbox_workspace_status", "workspace_id", "status"),
+        Index("ix_workspace_plan_outbox_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_workspace_plan_outbox_lease", "lease_owner", "lease_expires_at"),
+    )
+
+
 class PendingReviewModel(Base):
     """HITL ``blocking_human_only`` pending review (Track B P2-3 phase-2)."""
 
@@ -3237,9 +3338,7 @@ class PendingReviewModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolution_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 

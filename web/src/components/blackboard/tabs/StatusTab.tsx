@@ -14,6 +14,8 @@ import { EmptyState } from '../EmptyState';
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
 import { StatBadge } from '../StatBadge';
 
+import { PlanRunSnapshotSection } from './PlanRunSnapshotSection';
+
 import type { TopologyEdge, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
 
 export interface StatusTabProps {
@@ -93,6 +95,8 @@ export function StatusTab({
           </div>
         </div>
       </section>
+
+      <PlanRunSnapshotSection workspaceId={workspaceId} />
 
       <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex items-center justify-between gap-3">

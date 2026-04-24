@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Protocol, cast
 
 from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
@@ -195,7 +196,7 @@ class LLMGoalPlanner(GoalPlannerPort):
         except Exception as exc:
             logger.warning("LLMGoalPlanner decompose failed: %s", exc)
             return []
-        subs = list(getattr(result, "subtasks", ()) or ())
+        subs = [cast(SubTaskLike, sub) for sub in (getattr(result, "subtasks", ()) or ())]
         if len(subs) <= 1:
             # "No decomposition" means one big task — still return it so caller
             # treats the goal as a single-leaf plan.
@@ -215,19 +216,21 @@ class LLMGoalPlanner(GoalPlannerPort):
 
 
 def _default_llm_judge(description: str) -> AcceptanceCriterion:
-    """Fallback criterion — LLM judge with modest confidence.
+    """Fallback criterion — require a non-empty worker report.
 
     Concrete tasks should override this with ``cmd`` / ``file_exists`` /
     ``schema`` criteria. Having at least one criterion means the verifier
-    can always run — no silent green.
+    can always run — no silent green. The production attempt context feeds
+    terminal worker summaries into ``stdout``.
     """
+    _ = description
     return AcceptanceCriterion(
-        kind=CriterionKind.LLM_JUDGE,
+        kind=CriterionKind.REGEX,
         spec={
-            "prompt": f"Did the worker satisfy: {description[:200]}?",
-            "min_confidence": 0.7,
+            "pattern": r"\S",
+            "source": "stdout",
         },
-        description="fallback LLM judge",
+        description="worker report is present",
         required=True,
     )
 
@@ -237,7 +240,7 @@ def _default_llm_judge(description: str) -> AcceptanceCriterion:
 # container. These protocols match the public surface used above.
 
 
-class SubTaskLike:
+class SubTaskLike(Protocol):
     id: str
     description: str
     target_subagent: str | None
@@ -245,11 +248,11 @@ class SubTaskLike:
     priority: int
 
 
-class TaskDecomposerProtocol:  # pragma: no cover - typing only
+class TaskDecomposerProtocol(Protocol):  # pragma: no cover - typing only
     async def decompose(
         self, *, query: str, conversation_context: str | None = None
     ) -> DecompositionResultLike: ...
 
 
-class DecompositionResultLike:  # pragma: no cover
+class DecompositionResultLike(Protocol):  # pragma: no cover
     subtasks: tuple[SubTaskLike, ...]

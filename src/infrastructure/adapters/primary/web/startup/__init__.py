@@ -28,6 +28,10 @@ from .sandbox_reaper import initialize_sandbox_idle_reaper, shutdown_sandbox_idl
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
 from .websocket import initialize_websocket_manager
 from .workflow import initialize_workflow_engine
+from .workspace_plan_outbox import (
+    initialize_workspace_plan_outbox_worker,
+    shutdown_workspace_plan_outbox_worker,
+)
 
 __all__ = [
     "get_channel_manager",
@@ -44,6 +48,7 @@ __all__ = [
     "initialize_telemetry",
     "initialize_websocket_manager",
     "initialize_workflow_engine",
+    "initialize_workspace_plan_outbox_worker",
     "reload_channel_manager_connections",
     "set_message_router",
     "shutdown_attempt_recovery",
@@ -52,5 +57,6 @@ __all__ = [
     "shutdown_docker_services",
     "shutdown_sandbox_idle_reaper",
     "shutdown_telemetry_services",
+    "shutdown_workspace_plan_outbox_worker",
     "sync_health_checker_providers",
 ]

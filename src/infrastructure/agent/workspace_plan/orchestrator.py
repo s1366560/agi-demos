@@ -36,6 +36,7 @@ from src.domain.ports.services.progress_projector_port import ProgressProjectorP
 from src.domain.ports.services.task_allocator_port import TaskAllocatorPort
 from src.domain.ports.services.verifier_port import VerifierPort
 from src.domain.ports.services.workspace_supervisor_port import (
+    TickReport,
     WorkspaceSupervisorPort,
 )
 
@@ -79,6 +80,7 @@ class WorkspaceOrchestrator:
         blackboard: BlackboardPort | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
+        super().__init__()
         self._planner = planner
         self._allocator = allocator
         self._verifier = verifier
@@ -103,6 +105,7 @@ class WorkspaceOrchestrator:
         created_by: str = "",
         available_agents: tuple[str, ...] = (),
         conversation_context: str | None = None,
+        start_supervisor: bool = True,
     ) -> Plan:
         """Create or refresh a plan for ``workspace_id`` and start supervision."""
         if not self._config.enabled:
@@ -113,7 +116,8 @@ class WorkspaceOrchestrator:
             PlanStatus.ACTIVE,
         ):
             logger.info("reusing active plan %s for workspace %s", existing.id, workspace_id)
-            await self._supervisor.start(workspace_id)
+            if start_supervisor:
+                await self._supervisor.start(workspace_id)
             return existing
 
         plan = await self._planner.plan(
@@ -134,7 +138,8 @@ class WorkspaceOrchestrator:
         if errors:
             logger.warning("plan %s has validation errors: %s", plan.id, errors)
         await self._repo.save(plan)
-        await self._supervisor.start(workspace_id)
+        if start_supervisor:
+            await self._supervisor.start(workspace_id)
         return plan
 
     async def stop_goal(self, workspace_id: str) -> None:
@@ -170,7 +175,7 @@ class WorkspaceOrchestrator:
             return
         # Intent stays IN_PROGRESS until verifier rules it DONE/BLOCKED.
         with contextlib.suppress(Exception):
-            transition_intent(node.intent, TaskIntent.IN_PROGRESS)
+            _ = transition_intent(node.intent, TaskIntent.IN_PROGRESS)
         from dataclasses import replace
 
         plan.replace_node(
@@ -184,10 +189,16 @@ class WorkspaceOrchestrator:
         # Kick supervisor so it verifies ASAP rather than waiting for heartbeat.
         kick = getattr(self._supervisor, "kick", None)
         if callable(kick):
-            kick(workspace_id)
+            _ = kick(workspace_id)
 
     async def current_progress(self, workspace_id: str) -> GoalProgress | None:
         plan = await self._repo.get_by_workspace(workspace_id)
         if plan is None:
             return None
         return self._projector.project(plan)
+
+    async def tick_once(self, workspace_id: str) -> TickReport:
+        """Run one supervision step without starting a long-lived loop."""
+        if not self._config.enabled:
+            return TickReport(workspace_id=workspace_id)
+        return await self._supervisor.tick(workspace_id)

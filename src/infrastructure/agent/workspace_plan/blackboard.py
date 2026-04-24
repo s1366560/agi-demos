@@ -19,20 +19,24 @@ Replace with a Redis Stream-backed implementation in production; the
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from typing import override
 
 from src.domain.ports.services.blackboard_port import BlackboardEntry, BlackboardPort
 
 
 class InMemoryBlackboard(BlackboardPort):
     def __init__(self) -> None:
+        super().__init__()
         # plan_id -> key -> latest entry
         self._store: dict[str, dict[str, BlackboardEntry]] = {}
         self._version_seq: dict[str, dict[str, int]] = {}
         self._subscribers: dict[str, list[asyncio.Queue[BlackboardEntry]]] = {}
         self._lock = asyncio.Lock()
 
+    @override
     async def put(self, entry: BlackboardEntry) -> int:
         async with self._lock:
             plan_bucket = self._store.setdefault(entry.plan_id, {})
@@ -43,18 +47,19 @@ class InMemoryBlackboard(BlackboardPort):
             seq_bucket[entry.key] = next_version
             subs = list(self._subscribers.get(entry.plan_id, ()))
         for q in subs:
-            try:
+            with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait(stored)
-            except asyncio.QueueFull:  # pragma: no cover - bounded queues
-                pass
         return next_version
 
+    @override
     async def get(self, plan_id: str, key: str) -> BlackboardEntry | None:
         return self._store.get(plan_id, {}).get(key)
 
+    @override
     async def list(self, plan_id: str) -> list[BlackboardEntry]:
         return list(self._store.get(plan_id, {}).values())
 
+    @override
     async def subscribe(
         self, plan_id: str, keys: tuple[str, ...] | None = None
     ) -> AsyncIterator[BlackboardEntry]:

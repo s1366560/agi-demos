@@ -41,6 +41,12 @@ LINEAGE_SOURCE: Final[str] = "lineage_source"
 DERIVED_FROM_INTERNAL_PLAN_STEP: Final[str] = "derived_from_internal_plan_step"
 """Step id in the internal plan that produced this execution task."""
 
+WORKSPACE_PLAN_ID: Final[str] = "workspace_plan_id"
+"""Durable V2 ``Plan.id`` that authored this compatibility task."""
+
+WORKSPACE_PLAN_NODE_ID: Final[str] = "workspace_plan_node_id"
+"""Durable V2 ``PlanNode.id`` that authored this compatibility task."""
+
 AUTONOMY_SCHEMA_VERSION_KEY: Final[str] = "autonomy_schema_version"
 """Schema version key for validator forward-compat; see ``autonomy_schema.py``."""
 
@@ -96,4 +102,6 @@ __all__ = [
     "ROOT_GOAL_TASK_ID",
     "TASK_ROLE",
     "WORKSPACE_AGENT_BINDING_ID",
+    "WORKSPACE_PLAN_ID",
+    "WORKSPACE_PLAN_NODE_ID",
 ]

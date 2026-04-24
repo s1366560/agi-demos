@@ -29,9 +29,11 @@ from typing import Any
 from src.domain.model.workspace_plan import (
     GoalProgress,
     PlanNode,
+    PlanNodeId,
     PlanStatus,
     TaskExecution,
     TaskIntent,
+    VerificationReport,
     transition_execution,
     transition_intent,
 )
@@ -71,6 +73,9 @@ artifacts, stdout)."""
 ProgressSink = Callable[[GoalProgress], Awaitable[None]]
 """Called on every tick with the fresh :class:`GoalProgress` snapshot."""
 
+PlanEventSink = Callable[[str, PlanNode, str, dict[str, Any]], Awaitable[None]]
+"""Called for durable, auditable plan lifecycle events."""
+
 
 class WorkspaceSupervisor(WorkspaceSupervisorPort):
     """Async single-writer supervisor. One instance per process is fine — it
@@ -89,6 +94,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         dispatcher: Dispatcher,
         attempt_context: AttemptContextProvider,
         progress_sink: ProgressSink | None = None,
+        event_sink: PlanEventSink | None = None,
         heartbeat_seconds: float = 10.0,
     ) -> None:
         self._repo = plan_repo
@@ -100,6 +106,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         self._dispatcher = dispatcher
         self._attempt_context = attempt_context
         self._progress_sink = progress_sink
+        self._event_sink = event_sink
         self._heartbeat = heartbeat_seconds
 
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -185,6 +192,13 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 plan.replace_node(_force_execution(node, TaskExecution.VERIFYING))
                 ctx = await self._attempt_context(workspace_id, node)
                 report = await self._verifier.verify(ctx)
+                await self._emit_event(
+                    errors,
+                    workspace_id,
+                    node,
+                    "verification_completed",
+                    _verification_payload(report),
+                )
                 verifies_ran += 1
                 if report.passed:
                     plan.replace_node(
@@ -226,26 +240,26 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 errors.append(f"allocate: {exc}")
                 allocations = []
             for alloc in allocations:
-                node = plan.nodes.get(_pid(alloc.node_id))
-                if node is None:
+                alloc_node = plan.nodes.get(_pid(alloc.node_id))
+                if alloc_node is None:
                     continue
                 try:
-                    attempt_id = await self._dispatcher(workspace_id, alloc, node)
+                    attempt_id = await self._dispatcher(workspace_id, alloc, alloc_node)
                 except Exception as exc:
-                    errors.append(f"dispatch({node.id}): {exc}")
+                    errors.append(f"dispatch({alloc_node.id}): {exc}")
                     continue
                 if not attempt_id:
                     continue
                 updated = replace(
-                    node,
+                    alloc_node,
                     intent=TaskIntent.IN_PROGRESS,
                     execution=TaskExecution.DISPATCHED,
                     assignee_agent_id=alloc.agent_id,
                     current_attempt_id=attempt_id,
                 )
                 try:
-                    transition_intent(node.intent, TaskIntent.IN_PROGRESS)
-                    transition_execution(node.execution, TaskExecution.DISPATCHED)
+                    transition_intent(alloc_node.intent, TaskIntent.IN_PROGRESS)
+                    transition_execution(alloc_node.execution, TaskExecution.DISPATCHED)
                 except Exception:
                     # If the node already moved (e.g. concurrent worker_report),
                     # skip. Single-writer means this is rare but possible when
@@ -279,13 +293,26 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             errors=tuple(errors),
         )
 
+    async def _emit_event(
+        self,
+        errors: list[str],
+        workspace_id: str,
+        node: PlanNode,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self._event_sink is None:
+            return
+        try:
+            await self._event_sink(workspace_id, node, event_type, payload)
+        except Exception as exc:
+            errors.append(f"event_sink({event_type}:{node.id}): {exc}")
+
 
 # --- helpers ---------------------------------------------------------
 
 
-def _pid(value: str) -> Any:
-    from src.domain.model.workspace_plan import PlanNodeId
-
+def _pid(value: str) -> PlanNodeId:
     return PlanNodeId(value)
 
 
@@ -298,6 +325,30 @@ def _force_intent(node: PlanNode, target: TaskIntent, *, summary: str = "") -> P
     if summary:
         meta["last_verification_summary"] = summary
     return replace(node, intent=target, metadata=meta)
+
+
+def _verification_payload(report: VerificationReport) -> dict[str, Any]:
+    return {
+        "attempt_id": report.attempt_id,
+        "passed": report.passed,
+        "hard_fail": report.hard_fail,
+        "summary": report.summary(),
+        "ran_at": report.ran_at.isoformat().replace("+00:00", "Z"),
+        "results": [
+            {
+                "kind": result.criterion.kind.value,
+                "required": result.criterion.required,
+                "passed": result.passed,
+                "confidence": result.confidence,
+                "message": result.message,
+                "evidence": [
+                    {"kind": evidence.kind, "ref": evidence.ref, "note": evidence.note}
+                    for evidence in result.evidence
+                ],
+            }
+            for result in report.results
+        ],
+    }
 
 
 # --- optional Ray actor wrapper --------------------------------------

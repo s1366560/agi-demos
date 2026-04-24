@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   workspaceBlackboardService,
+  workspacePlanService,
   workspaceService,
   workspaceTaskService,
   workspaceTopologyService,
@@ -99,6 +100,36 @@ describe('workspaceService', () => {
       workspace_agent_id: 'binding-1',
     });
     expect(result.assignee_agent_id).toBe('agent-1');
+  });
+
+  it('loads durable workspace plan snapshot via workspace scoped endpoint', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.get).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({
+        workspace_id: 'ws-1',
+        plan: { id: 'plan-1', workspace_id: 'ws-1', goal_id: 'goal-1', status: 'active' },
+        blackboard: [],
+        outbox: [],
+        events: [],
+      }),
+    } as Response);
+
+    const result = await workspacePlanService.getSnapshot('ws-1', {
+      outboxLimit: 8,
+      eventLimit: 8,
+    });
+
+    expect(apiFetch.get).toHaveBeenCalledWith(
+      '/workspaces/ws-1/plan?outbox_limit=8&event_limit=8',
+      {
+        retry: { maxRetries: 1 },
+      }
+    );
+    expect(result.plan?.id).toBe('plan-1');
   });
 
   it('updates workspace agent binding via tenant/project/workspace route', async () => {

@@ -1,0 +1,117 @@
+"""Workspace Plan V2 durable outbox worker startup."""
+
+from __future__ import annotations
+
+import logging
+import os
+
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
+from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    SUPERVISOR_TICK_EVENT,
+    make_supervisor_tick_handler,
+)
+from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxWorker
+
+logger = logging.getLogger(__name__)
+
+_ENABLED_ENV = "WORKSPACE_PLAN_OUTBOX_ENABLED"
+_POLL_ENV = "WORKSPACE_PLAN_OUTBOX_POLL_SECONDS"
+_BATCH_ENV = "WORKSPACE_PLAN_OUTBOX_BATCH_SIZE"
+_LEASE_ENV = "WORKSPACE_PLAN_OUTBOX_LEASE_SECONDS"
+
+_worker: WorkspacePlanOutboxWorker | None = None
+
+
+def _enabled(config: OrchestratorConfig) -> bool:
+    if not config.enabled:
+        return False
+    raw = os.environ.get(_ENABLED_ENV)
+    if raw is None:
+        return True
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw.strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+async def initialize_workspace_plan_outbox_worker() -> WorkspacePlanOutboxWorker | None:
+    """Start the durable Workspace Plan V2 outbox worker when V2 is enabled."""
+    global _worker
+
+    config = OrchestratorConfig.from_env()
+    if not _enabled(config):
+        logger.info(
+            "workspace_plan_outbox.disabled",
+            extra={"event": "workspace_plan_outbox.disabled"},
+        )
+        return None
+    if _worker is not None:
+        return _worker
+
+    try:
+        _worker = WorkspacePlanOutboxWorker(
+            session_factory=async_session_factory,
+            handlers={
+                SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(config=config),
+            },
+            poll_interval_seconds=_float_env(_POLL_ENV, 2.0),
+            batch_size=_int_env(_BATCH_ENV, 10),
+            lease_seconds=_int_env(_LEASE_ENV, 60),
+        )
+        _worker.start()
+        logger.info(
+            "workspace_plan_outbox.started",
+            extra={"event": "workspace_plan_outbox.started", "worker_id": _worker.worker_id},
+        )
+        return _worker
+    except Exception:
+        logger.warning(
+            "workspace_plan_outbox.start_failed",
+            exc_info=True,
+            extra={"event": "workspace_plan_outbox.start_failed"},
+        )
+        _worker = None
+        return None
+
+
+async def shutdown_workspace_plan_outbox_worker() -> None:
+    """Stop the durable Workspace Plan V2 outbox worker."""
+    global _worker
+    if _worker is None:
+        return
+    try:
+        await _worker.stop()
+    except Exception:
+        logger.warning(
+            "workspace_plan_outbox.stop_failed",
+            exc_info=True,
+            extra={"event": "workspace_plan_outbox.stop_failed"},
+        )
+    finally:
+        _worker = None
+
+
+__all__ = [
+    "initialize_workspace_plan_outbox_worker",
+    "shutdown_workspace_plan_outbox_worker",
+]

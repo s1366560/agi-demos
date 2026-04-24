@@ -1,14 +1,13 @@
-"""V2 legacy bridge — best-effort kickoff of WorkspaceOrchestrator.
+"""V2 legacy bridge — best-effort kickoff of durable WorkspaceOrchestrator.
 
 When ``settings.workspace_v2_enabled`` is True this module is called
-immediately after the legacy decomposer runs. It creates a parallel V2
-``Plan`` in the in-memory repository so the multi-agent architecture
+immediately after the legacy decomposer runs. It creates a parallel durable V2
+``Plan`` and enqueues a supervisor tick so the multi-agent architecture
 (planner → allocator → verifier → projector → blackboard) receives the
 same goals that the legacy ``WorkspaceTask`` tree does.
 
 The bridge is *best-effort*:
 
-* Process-local singleton cache of the orchestrator (via ``build_default_orchestrator``)
 * All exceptions are swallowed and logged — legacy autonomy must never
   regress on V2 errors
 * No-op when the flag is off (zero overhead)
@@ -22,26 +21,26 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+    SqlWorkspacePlanOutboxRepository,
+)
+from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
+from src.infrastructure.agent.workspace_plan.outbox_handlers import SUPERVISOR_TICK_EVENT
+
 if TYPE_CHECKING:
     from src.infrastructure.agent.workspace_plan.orchestrator import WorkspaceOrchestrator
 
 logger = logging.getLogger(__name__)
 
+# Test hook only. Production uses SQL-backed, request-scoped orchestrators.
 _orchestrator_singleton: WorkspaceOrchestrator | None = None
 
 
-def _get_orchestrator() -> WorkspaceOrchestrator | None:
+def set_orchestrator_singleton_for_testing(orchestrator: WorkspaceOrchestrator | None) -> None:
+    """Test hook — inject an in-memory orchestrator and bypass SQL wiring."""
     global _orchestrator_singleton
-    if _orchestrator_singleton is not None:
-        return _orchestrator_singleton
-    try:
-        from src.infrastructure.agent.workspace_plan import build_default_orchestrator
-
-        _orchestrator_singleton = build_default_orchestrator()
-        return _orchestrator_singleton
-    except Exception:
-        logger.warning("v2_bridge: failed to build WorkspaceOrchestrator", exc_info=True)
-        return None
+    _orchestrator_singleton = orchestrator
 
 
 def reset_orchestrator_singleton_for_testing() -> None:
@@ -56,6 +55,8 @@ async def kickoff_v2_plan_if_enabled(
     title: str,
     description: str = "",
     created_by: str = "",
+    root_task_id: str | None = None,
+    leader_agent_id: str | None = None,
 ) -> None:
     """Fire-and-forget V2 plan kickoff; no-op when the flag is off.
 
@@ -71,17 +72,42 @@ async def kickoff_v2_plan_if_enabled(
         logger.debug("v2_bridge: settings unreadable; skipping kickoff", exc_info=True)
         return
 
-    orchestrator = _get_orchestrator()
-    if orchestrator is None or not orchestrator.enabled:
-        return
-
     try:
-        await orchestrator.start_goal(
-            workspace_id=workspace_id,
-            title=title,
-            description=description,
-            created_by=created_by,
-        )
+        if _orchestrator_singleton is not None:
+            if not _orchestrator_singleton.enabled:
+                return
+            _ = await _orchestrator_singleton.start_goal(
+                workspace_id=workspace_id,
+                title=title,
+                description=description,
+                created_by=created_by,
+            )
+            return
+
+        async with async_session_factory() as db:
+            orchestrator = build_sql_orchestrator(db)
+            if not orchestrator.enabled:
+                return
+            plan = await orchestrator.start_goal(
+                workspace_id=workspace_id,
+                title=title,
+                description=description,
+                created_by=created_by,
+                start_supervisor=False,
+            )
+            _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
+                plan_id=plan.id,
+                workspace_id=workspace_id,
+                event_type=SUPERVISOR_TICK_EVENT,
+                payload={
+                    "workspace_id": workspace_id,
+                    "root_task_id": root_task_id,
+                    "actor_user_id": created_by,
+                    "leader_agent_id": leader_agent_id,
+                },
+                metadata={"source": "v2_bridge"},
+            )
+            await db.commit()
     except Exception:
         logger.warning(
             "v2_bridge: start_goal failed for workspace=%s",
@@ -90,4 +116,8 @@ async def kickoff_v2_plan_if_enabled(
         )
 
 
-__all__ = ["kickoff_v2_plan_if_enabled", "reset_orchestrator_singleton_for_testing"]
+__all__ = [
+    "kickoff_v2_plan_if_enabled",
+    "reset_orchestrator_singleton_for_testing",
+    "set_orchestrator_singleton_for_testing",
+]

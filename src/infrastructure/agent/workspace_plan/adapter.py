@@ -34,7 +34,7 @@ class LegacyTaskView:
     description: str | None
     status: str
     priority: int
-    metadata: dict
+    metadata: dict[str, object]
 
 
 _LEGACY_TO_INTENT = {

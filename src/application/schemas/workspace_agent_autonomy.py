@@ -12,6 +12,9 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REPLAN_ATTEMPT_COUNT,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
+    WORKSPACE_AGENT_BINDING_ID,
+    WORKSPACE_PLAN_ID,
+    WORKSPACE_PLAN_NODE_ID,
 )
 
 AUTONOMY_SCHEMA_VERSION = 1
@@ -25,6 +28,7 @@ ExecutionAction = Literal[
     "created",
     "reprioritized",
     "await_leader_adjudication",
+    "await_plan_verification",
     "blocked",
     "completed",
     "start",
@@ -156,6 +160,9 @@ class ExecutionTaskMetadataModel(ContractModel):
     parent_task_id: str | None = None
     lineage_source: Literal["human", "agent"]
     derived_from_internal_plan_step: str | None = None
+    workspace_agent_binding_id: str | None = None
+    workspace_plan_id: str | None = None
+    workspace_plan_node_id: str | None = None
     current_attempt_id: str | None = None
     last_attempt_id: str | None = None
     current_attempt_number: int | None = Field(default=None, ge=1)
@@ -174,6 +181,9 @@ class ExecutionTaskMetadataModel(ContractModel):
     last_worker_report_fingerprint: str | None = None
     last_worker_report_id: str | None = None
     pending_leader_adjudication: bool | None = None
+    durable_plan_verdict: str | None = None
+    durable_plan_verification_summary: str | None = None
+    durable_plan_verified_at: str | None = None
     last_leader_adjudication_status: str | None = None
     last_leader_adjudicated_at: str | None = None
     last_mutation_actor: LastMutationActorModel | None = None
@@ -197,8 +207,11 @@ def has_autonomy_metadata(metadata: dict[str, Any] | None) -> bool:
             REPLAN_ATTEMPT_COUNT,
             EXECUTION_STATE,
             ROOT_GOAL_TASK_ID,
+            WORKSPACE_AGENT_BINDING_ID,
             "objective_id",
             "root_goal_policy",
             DERIVED_FROM_INTERNAL_PLAN_STEP,
+            WORKSPACE_PLAN_ID,
+            WORKSPACE_PLAN_NODE_ID,
         )
     )

@@ -33,6 +33,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenants,
     topology,
     workspace_autonomy,
+    workspace_plans,
     workspace_tasks,
     workspaces,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "tenants",
     "topology",
     "workspace_autonomy",
+    "workspace_plans",
     "workspace_tasks",
     "workspaces",
 ]
