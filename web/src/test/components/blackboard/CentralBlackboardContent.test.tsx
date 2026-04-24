@@ -2,6 +2,12 @@ import { fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
+import {
+  AUTHORITATIVE,
+  HOSTED,
+  NON_AUTHORITATIVE,
+  OWNED,
+} from '@/components/blackboard/blackboardSurfaceContract';
 import { render, screen, within } from '@/test/utils';
 
 import type { CentralBlackboardContentProps } from '@/components/blackboard/CentralBlackboardContent';
@@ -135,6 +141,8 @@ describe('CentralBlackboardContent', () => {
     const tabs = within(tablists[0]).getAllByRole('tab');
 
     expect(tabs.length).toBeGreaterThan(0);
+    expect(tabs[0]).toHaveAttribute('data-blackboard-boundary');
+    expect(tabs[0]).toHaveAttribute('data-blackboard-authority');
   });
 
   it('renders ObjectiveList + TaskBoard when activeTab is goals', () => {
@@ -142,6 +150,21 @@ describe('CentralBlackboardContent', () => {
 
     expect(screen.getByText('Objective list')).toBeInTheDocument();
     expect(screen.getByText('Task board')).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('data-blackboard-boundary', HOSTED);
+    expect(screen.getByRole('tabpanel')).toHaveAttribute(
+      'data-blackboard-authority',
+      NON_AUTHORITATIVE
+    );
+  });
+
+  it('marks discussion as an owned authoritative blackboard surface', () => {
+    render(<CentralBlackboardContent {...defaultProps({ activeTab: 'discussion' })} />);
+
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('data-blackboard-boundary', OWNED);
+    expect(screen.getByRole('tabpanel')).toHaveAttribute(
+      'data-blackboard-authority',
+      AUTHORITATIVE
+    );
   });
 
   it('renders CollaborationOverviewTab when activeTab is collaboration', () => {

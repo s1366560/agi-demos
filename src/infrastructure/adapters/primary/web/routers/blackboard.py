@@ -22,6 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
+from src.application.services.workspace_surface_contract import (
+    AUTHORITY_CLASS_KEY,
+    BLACKBOARD_OWNERSHIP_METADATA,
+    SURFACE_BOUNDARY_KEY,
+)
 from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
 from src.domain.model.workspace.blackboard_file import BlackboardFile
@@ -37,7 +42,6 @@ router = APIRouter(
     tags=["blackboard"],
 )
 
-
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     app_container = request.app.state.container
     return DIContainer(
@@ -49,6 +53,22 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 
 def _service_from_request(request: Request, db: AsyncSession) -> BlackboardService:
     return get_container_with_db(request, db).blackboard_service()
+
+
+def _blackboard_event_metadata(tenant_id: str, project_id: str) -> dict[str, Any]:
+    return {
+        "tenant_id": tenant_id,
+        "project_id": project_id,
+        **BLACKBOARD_OWNERSHIP_METADATA,
+    }
+
+
+def _blackboard_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **payload,
+        SURFACE_BOUNDARY_KEY: BLACKBOARD_OWNERSHIP_METADATA[SURFACE_BOUNDARY_KEY],
+        AUTHORITY_CLASS_KEY: BLACKBOARD_OWNERSHIP_METADATA[AUTHORITY_CLASS_KEY],
+    }
 
 
 def _map_error(exc: Exception) -> HTTPException:
@@ -176,18 +196,17 @@ async def create_post(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_CREATED,
-            payload={
-                "workspace_id": workspace_id,
-                "post_id": post.id,
-                "author_id": post.author_id,
-                "title": post.title,
-                "status": post.status.value,
-                "is_pinned": post.is_pinned,
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "workspace_id": workspace_id,
+                    "post_id": post.id,
+                    "author_id": post.author_id,
+                    "title": post.title,
+                    "status": post.status.value,
+                    "is_pinned": post.is_pinned,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return _to_post_response(post)
     except Exception as exc:
@@ -275,13 +294,12 @@ async def update_post(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
-            payload={
-                "post": _to_post_response(post).model_dump(mode="json"),
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "post": _to_post_response(post).model_dump(mode="json"),
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return _to_post_response(post)
     except Exception as exc:
@@ -313,11 +331,8 @@ async def delete_post(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_DELETED,
-            payload={"post_id": post_id},
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload({"post_id": post_id}),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return {"success": deleted}
     except Exception as exc:
@@ -537,14 +552,13 @@ async def pin_post(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
-            payload={
-                "post": _to_post_response(post).model_dump(mode="json"),
-                "action": "pin",
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "post": _to_post_response(post).model_dump(mode="json"),
+                    "action": "pin",
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return _to_post_response(post)
     except Exception as exc:
@@ -576,14 +590,13 @@ async def unpin_post(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
-            payload={
-                "post": _to_post_response(post).model_dump(mode="json"),
-                "action": "unpin",
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "post": _to_post_response(post).model_dump(mode="json"),
+                    "action": "unpin",
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return _to_post_response(post)
     except Exception as exc:
@@ -622,14 +635,13 @@ async def create_reply(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_REPLY_CREATED,
-            payload={
-                "reply": _to_reply_response(reply).model_dump(mode="json"),
-                "post_id": post_id,
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "reply": _to_reply_response(reply).model_dump(mode="json"),
+                    "post_id": post_id,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return _to_reply_response(reply)
     except Exception as exc:
@@ -694,15 +706,14 @@ async def update_reply(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
-            payload={
-                "reply": _to_reply_response(reply).model_dump(mode="json"),
-                "post_id": post_id,
-                "action": "reply_updated",
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "reply": _to_reply_response(reply).model_dump(mode="json"),
+                    "post_id": post_id,
+                    "action": "reply_updated",
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return _to_reply_response(reply)
     except Exception as exc:
@@ -736,14 +747,13 @@ async def delete_reply(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_REPLY_DELETED,
-            payload={
-                "reply_id": reply_id,
-                "post_id": post_id,
-            },
-            metadata={
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-            },
+            payload=_blackboard_event_payload(
+                {
+                    "reply_id": reply_id,
+                    "post_id": post_id,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return {"success": deleted}
     except Exception as exc:

@@ -22,6 +22,7 @@ export interface UseConversationParticipantsResult {
   addParticipant: (payload: AddParticipantRequest) => Promise<RosterResponse | null>;
   removeParticipant: (agentId: string) => Promise<RosterResponse | null>;
   setCoordinator: (agentId: string | null) => Promise<RosterResponse | null>;
+  setFocusedAgent: (agentId: string | null) => Promise<RosterResponse | null>;
 }
 
 export function useConversationParticipants(
@@ -89,5 +90,24 @@ export function useConversationParticipants(
     [conversationId]
   );
 
-  return { roster, loading, error, refresh, addParticipant, removeParticipant, setCoordinator };
+  const setFocusedAgent = useCallback(
+    async (agentId: string | null) => {
+      if (!conversationId) return null;
+      const next = await participantsService.setFocusedAgent(conversationId, agentId);
+      setRoster(next);
+      return next;
+    },
+    [conversationId]
+  );
+
+  return {
+    roster,
+    loading,
+    error,
+    refresh,
+    addParticipant,
+    removeParticipant,
+    setCoordinator,
+    setFocusedAgent,
+  };
 }

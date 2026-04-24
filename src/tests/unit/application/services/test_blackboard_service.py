@@ -7,6 +7,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.application.services.workspace_surface_contract import (
+    AUTHORITATIVE,
+    OWNED,
+    SENSING_CAPABLE,
+    SIGNAL_ROLE_KEY,
+    SURFACE_BOUNDARY_KEY,
+)
 from src.domain.model.workspace.blackboard_post import BlackboardPost
 from src.domain.model.workspace.blackboard_reply import BlackboardReply
 from src.domain.model.workspace.workspace import Workspace
@@ -158,6 +165,37 @@ class TestBlackboardPosts:
         assert unpinned.is_pinned is False
         assert mock_blackboard_repo.save_post.await_count == 2
 
+    @pytest.mark.unit
+    async def test_create_post_stamps_owned_blackboard_metadata(
+        self,
+        blackboard_service,
+        mock_blackboard_repo: MagicMock,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            user_id="editor-1",
+            role=WorkspaceRole.EDITOR,
+        )
+        mock_blackboard_repo.save_post.side_effect = lambda saved: saved
+
+        created = await blackboard_service.create_post(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="ws-1",
+            actor_user_id="editor-1",
+            title="Need help",
+            content="Can someone help?",
+            metadata={"custom": "value"},
+        )
+
+        assert created.metadata["custom"] == "value"
+        assert created.metadata["surface_owner"] == "blackboard"
+        assert created.metadata[SURFACE_BOUNDARY_KEY] == OWNED
+        assert created.metadata["authority_class"] == AUTHORITATIVE
+        assert created.metadata[SIGNAL_ROLE_KEY] == SENSING_CAPABLE
+
 
 class TestBlackboardReplies:
     @pytest.mark.unit
@@ -233,3 +271,54 @@ class TestBlackboardReplies:
                 post_id="post-1",
                 actor_user_id="viewer-1",
             )
+
+    @pytest.mark.unit
+    async def test_update_reply_preserves_owned_blackboard_metadata(
+        self,
+        blackboard_service,
+        mock_blackboard_repo: MagicMock,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        post = BlackboardPost(
+            id="post-1",
+            workspace_id="ws-1",
+            author_id="editor-1",
+            title="Thread",
+            content="Body",
+            created_at=datetime.now(UTC),
+        )
+        reply = BlackboardReply(
+            id="reply-1",
+            post_id="post-1",
+            workspace_id="ws-1",
+            author_id="editor-1",
+            content="hello",
+            metadata={"old": "value"},
+            created_at=datetime.now(UTC),
+        )
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            user_id="editor-1",
+            role=WorkspaceRole.EDITOR,
+        )
+        mock_blackboard_repo.find_post_by_id.return_value = post
+        mock_blackboard_repo.list_replies_by_post.return_value = [reply]
+        mock_blackboard_repo.save_reply.side_effect = lambda saved: saved
+
+        updated = await blackboard_service.update_reply(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="ws-1",
+            post_id="post-1",
+            reply_id="reply-1",
+            actor_user_id="editor-1",
+            content="updated",
+            metadata={"custom": "value"},
+        )
+
+        assert updated.metadata["custom"] == "value"
+        assert updated.metadata["surface_owner"] == "blackboard"
+        assert updated.metadata[SURFACE_BOUNDARY_KEY] == OWNED
+        assert updated.metadata["authority_class"] == AUTHORITATIVE
+        assert updated.metadata[SIGNAL_ROLE_KEY] == SENSING_CAPABLE

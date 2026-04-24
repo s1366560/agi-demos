@@ -18,6 +18,7 @@ import {
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
 import { BlackboardErrorBoundary } from '@/components/blackboard/BlackboardErrorBoundary';
+import { NON_AUTHORITATIVE } from '@/components/blackboard/blackboardSurfaceContract';
 import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
 
@@ -193,6 +194,12 @@ export function Blackboard() {
                   'Shared goals, tasks, discussions, and topology for the active workspace.'
                 )}
             </div>
+            <div className="mt-1 text-xs text-text-muted dark:text-text-muted">
+              {t(
+                'blackboard.shellHint',
+                'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
+              )}
+            </div>
           </div>
 
           <div className="flex w-full items-center sm:w-auto sm:min-w-[260px]">
@@ -254,7 +261,11 @@ export function Blackboard() {
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          data-blackboard-surface="shell"
+          data-blackboard-authority={NON_AUTHORITATIVE}
+        >
           {surfaceLoading || !canRenderBoard ? (
             <LoadingShell />
           ) : (

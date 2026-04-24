@@ -105,4 +105,14 @@ export const participantsService = {
       { agent_id: agentId }
     );
   },
+
+  async setFocusedAgent(
+    conversationId: string,
+    agentId: string | null
+  ): Promise<RosterResponse> {
+    return httpClient.patch<RosterResponse>(
+      `${base(conversationId)}/focused`,
+      { agent_id: agentId }
+    );
+  },
 };

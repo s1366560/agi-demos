@@ -288,6 +288,11 @@ describe('Blackboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
+    expect(screen.getByText('blackboard.shellHint')).toBeInTheDocument();
+    expect(screen.getByTestId('central-blackboard-content').parentElement).toHaveAttribute(
+      'data-blackboard-surface',
+      'shell'
+    );
   });
 
   // 6. Deep-links to a tab via ?tab= search param

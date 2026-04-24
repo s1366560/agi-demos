@@ -13,7 +13,25 @@ vi.mock('react-i18next', () => ({
 }));
 
 const refresh = vi.fn().mockResolvedValue(undefined);
-let mockRoster: { effective_mode: string } | null = { effective_mode: 'single_agent' };
+let mockRoster:
+  | {
+      effective_mode: string;
+      participant_agents?: string[];
+      participant_bindings?: Array<{
+        agent_id: string;
+        display_name: string | null;
+        label: string | null;
+      }>;
+      coordinator_agent_id?: string | null;
+      focused_agent_id?: string | null;
+    }
+  | null = {
+  effective_mode: 'single_agent',
+  participant_agents: [],
+  participant_bindings: [],
+  coordinator_agent_id: null,
+  focused_agent_id: null,
+};
 
 vi.mock('@/hooks/useConversationParticipants', () => ({
   useConversationParticipants: () => ({
@@ -57,7 +75,13 @@ import { ConversationModePanel } from '@/components/agent/ConversationModePanel'
 describe('ConversationModePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRoster = { effective_mode: 'single_agent' };
+    mockRoster = {
+      effective_mode: 'single_agent',
+      participant_agents: [],
+      participant_bindings: [],
+      coordinator_agent_id: null,
+      focused_agent_id: null,
+    };
     getConversation.mockResolvedValue({
       id: 'c1',
       workspace_id: null,
@@ -71,6 +95,11 @@ describe('ConversationModePanel', () => {
     expect(screen.getByTestId('conversation-mode-panel')).toBeInTheDocument();
     expect(screen.getByText('Single')).toBeInTheDocument();
     expect(screen.getByText('Autonomous')).toBeInTheDocument();
+    expect(screen.getByTestId('conversation-mode-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('conversation-mode-panel')).toHaveAttribute(
+      'data-runtime-role-contract',
+      'derived'
+    );
   });
 
   it('PATCHes the new mode when operator picks a non-autonomous option', async () => {
@@ -102,11 +131,19 @@ describe('ConversationModePanel', () => {
   });
 
   it('renders the workspace-task picker in autonomous mode when conversation.workspace_id is set', async () => {
-    mockRoster = { effective_mode: 'autonomous' };
+    mockRoster = {
+      effective_mode: 'autonomous',
+      participant_agents: ['leader-1'],
+      participant_bindings: [
+        { agent_id: 'leader-1', display_name: 'Leader One', label: null },
+      ],
+      coordinator_agent_id: 'leader-1',
+      focused_agent_id: null,
+    };
     getConversation.mockResolvedValue({
       id: 'c1',
       workspace_id: 'ws1',
-      linked_workspace_task_id: null,
+      linked_workspace_task_id: 't1',
     });
     listTasks.mockResolvedValue([
       { id: 't1', title: 'Ship rollout', status: 'in_progress' },
@@ -121,10 +158,19 @@ describe('ConversationModePanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('conversation-task-picker')).toBeInTheDocument();
     });
+    expect(screen.getByTestId('conversation-linked-task-summary')).toHaveTextContent(
+      'Linked task: Ship rollout · in_progress'
+    );
   });
 
   it('does not render the task picker when workspace_id is absent', async () => {
-    mockRoster = { effective_mode: 'autonomous' };
+    mockRoster = {
+      effective_mode: 'autonomous',
+      participant_agents: [],
+      participant_bindings: [],
+      coordinator_agent_id: null,
+      focused_agent_id: null,
+    };
     getConversation.mockResolvedValue({
       id: 'c1',
       workspace_id: null,
@@ -136,5 +182,28 @@ describe('ConversationModePanel', () => {
     await waitFor(() => expect(getConversation).toHaveBeenCalled());
     expect(screen.queryByTestId('conversation-task-picker')).not.toBeInTheDocument();
     expect(listTasks).not.toHaveBeenCalled();
+  });
+
+  it('renders coordinator and focused summaries for isolated mode', async () => {
+    mockRoster = {
+      effective_mode: 'multi_agent_isolated',
+      participant_agents: ['agent-a', 'agent-b'],
+      participant_bindings: [
+        { agent_id: 'agent-a', display_name: 'Coordinator A', label: null },
+        { agent_id: 'agent-b', display_name: 'Focused B', label: null },
+      ],
+      coordinator_agent_id: 'agent-a',
+      focused_agent_id: 'agent-b',
+    };
+
+    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+
+    expect(screen.getByText('Coordinator: Coordinator A')).toBeInTheDocument();
+    expect(screen.getByText('Focused agent: Focused B')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'In isolated mode, routing prefers the focused agent before coordinator fallback.'
+      )
+    ).toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from src.application.services.workspace_surface_contract import BLACKBOARD_OWNERSHIP_METADATA
 from src.domain.model.workspace.blackboard_post import BlackboardPost, BlackboardPostStatus
 from src.domain.model.workspace.blackboard_reply import BlackboardReply
 from src.domain.model.workspace.workspace import Workspace
@@ -62,7 +63,7 @@ class BlackboardService:
             content=content,
             status=status,
             is_pinned=is_pinned,
-            metadata=dict(metadata or {}),
+            metadata=self._merge_blackboard_metadata(metadata),
             created_at=now,
             updated_at=now,
         )
@@ -139,7 +140,7 @@ class BlackboardService:
         if is_pinned is not None:
             post.is_pinned = is_pinned
         if metadata is not None:
-            post.metadata = dict(metadata)
+            post.metadata = self._merge_blackboard_metadata(metadata)
         post.updated_at = datetime.now(UTC)
         return await self._blackboard_repo.save_post(post)
 
@@ -228,7 +229,7 @@ class BlackboardService:
             workspace_id=workspace.id,
             author_id=actor_user_id,
             content=content,
-            metadata=dict(metadata or {}),
+            metadata=self._merge_blackboard_metadata(metadata),
             created_at=now,
             updated_at=now,
         )
@@ -285,7 +286,7 @@ class BlackboardService:
             raise ValueError("Blackboard reply does not belong to workspace")
         reply.content = content
         if metadata is not None:
-            reply.metadata = dict(metadata)
+            reply.metadata = self._merge_blackboard_metadata(metadata)
         reply.updated_at = datetime.now(UTC)
         return await self._blackboard_repo.save_reply(reply)
 
@@ -375,3 +376,10 @@ class BlackboardService:
         if role == WorkspaceRole.EDITOR:
             return 200
         return 100
+
+    @staticmethod
+    def _merge_blackboard_metadata(metadata: Mapping[str, object] | None) -> dict[str, object]:
+        merged = dict(metadata or {})
+        for key, value in BLACKBOARD_OWNERSHIP_METADATA.items():
+            merged[key] = value
+        return merged

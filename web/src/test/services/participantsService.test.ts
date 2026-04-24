@@ -9,6 +9,7 @@ vi.mock('@/services/client/httpClient', () => ({
     get: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
+    patch: vi.fn(),
   },
 }));
 
@@ -132,5 +133,24 @@ describe('participantsService', () => {
       params: { include_inactive: false },
     });
     expect(result.candidates[0]?.workspace_agent_id).toBe('binding-1');
+  });
+
+  it('setFocusedAgent PATCHes the focused endpoint', async () => {
+    (httpClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      conversation_id: 'c1',
+      conversation_mode: 'multi_agent_isolated',
+      effective_mode: 'multi_agent_isolated',
+      participant_agents: ['agent-1'],
+      participant_bindings: [],
+      coordinator_agent_id: null,
+      focused_agent_id: 'agent-1',
+    });
+
+    await participantsService.setFocusedAgent('c1', 'agent-1');
+
+    expect(httpClient.patch).toHaveBeenCalledWith(
+      '/agent/conversations/c1/participants/focused',
+      { agent_id: 'agent-1' }
+    );
   });
 });

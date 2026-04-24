@@ -14,6 +14,7 @@ import { MemberPanel } from '@/components/workspace/MemberPanel';
 import { ObjectiveCreateModal } from '@/components/workspace/objectives/ObjectiveCreateModal';
 
 
+import { BLACKBOARD_TAB_META } from './blackboardSurfaceContract';
 import { BlackboardTabBar } from './BlackboardTabBar';
 import {
   buildBlackboardNotes,
@@ -140,6 +141,7 @@ export function CentralBlackboardContent({
       ),
     [t, topologyNodes],
   );
+  const activeTabMeta = BLACKBOARD_TAB_META[activeTab];
 
   return (
     <>
@@ -167,6 +169,8 @@ export function CentralBlackboardContent({
           role="tabpanel"
           aria-labelledby={`blackboard-tab-${activeTab}`}
           tabIndex={0}
+          data-blackboard-boundary={activeTabMeta.boundary}
+          data-blackboard-authority={activeTabMeta.authority}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4 focus-visible:outline-none sm:px-6 sm:py-5"
         >
           {activeTab === 'goals' && (

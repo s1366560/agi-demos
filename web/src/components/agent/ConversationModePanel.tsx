@@ -12,14 +12,17 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useTranslation } from 'react-i18next';
 
 import { Segmented, Select, message } from 'antd';
 
-import { useConversationParticipants } from '@/hooks/useConversationParticipants';
-import { agentService } from '@/services/agentService';
 import { restApi } from '@/services/agent/restApi';
+import { agentService } from '@/services/agentService';
 import { workspaceTaskService } from '@/services/workspaceService';
+
+import { useConversationParticipants } from '@/hooks/useConversationParticipants';
+
 import type { Conversation } from '@/types/agent/core';
 import type { WorkspaceTask } from '@/types/workspace';
 
@@ -42,6 +45,21 @@ const MODE_OPTIONS: Array<{ value: Mode; labelKey: string; fallback: string }> =
   { value: 'autonomous', labelKey: 'agent.workspace.mode.autonomous', fallback: 'Autonomous' },
 ];
 
+function resolveParticipantLabel(
+  agentId: string | null | undefined,
+  participantBindings:
+    | Array<{
+        agent_id: string;
+        display_name: string | null;
+        label: string | null;
+      }>
+    | undefined
+): string | null {
+  if (!agentId) return null;
+  const binding = participantBindings?.find((item) => item.agent_id === agentId);
+  return binding?.display_name || binding?.label || agentId;
+}
+
 export const ConversationModePanel = memo<ConversationModePanelProps>(
   ({ conversationId, projectId, className }) => {
     const { t } = useTranslation();
@@ -58,7 +76,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
       try {
         const conv = await restApi.getConversation(conversationId, projectId);
         setConversation(conv);
-      } catch (err) {
+      } catch (err: unknown) {
         // non-fatal — panel degrades to mode-only UI.
         console.error('[ConversationModePanel] load conversation failed', err);
       }
@@ -77,12 +95,16 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
       setTaskLoading(true);
       void workspaceTaskService
         .list(ws)
-        .then((items) => setTasks(items ?? []))
-        .catch((err) => {
+        .then((items) => {
+          setTasks(items);
+        })
+        .catch((err: unknown) => {
           console.error('[ConversationModePanel] load workspace tasks failed', err);
           setTasks([]);
         })
-        .finally(() => setTaskLoading(false));
+        .finally(() => {
+          setTaskLoading(false);
+        });
     }, [conversation?.workspace_id]);
 
     const handleModeChange = useCallback(
@@ -96,7 +118,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
           await refresh();
           await loadConversation();
           message.success(t('agent.workspace.mode.updated', 'Mode updated'));
-        } catch (err) {
+        } catch (err: unknown) {
           message.error(
             (err as Error).message ||
               t('agent.workspace.mode.updateFailed', 'Failed to update mode')
@@ -118,7 +140,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
           });
           await loadConversation();
           message.success(t('agent.workspace.task.updated', 'Linked task updated'));
-        } catch (err) {
+        } catch (err: unknown) {
           message.error(
             (err as Error).message ||
               t('agent.workspace.task.updateFailed', 'Failed to update linked task')
@@ -142,28 +164,78 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
     const taskOptions = useMemo(
       () =>
         tasks.map((task) => ({
-          label: `${task.title}${task.status ? ` · ${task.status}` : ''}`,
+          label: `${task.title} · ${task.status}`,
           value: task.id,
         })),
       [tasks]
     );
+    const focusedLabel = resolveParticipantLabel(
+      roster?.focused_agent_id,
+      roster?.participant_bindings
+    );
+    const coordinatorLabel = resolveParticipantLabel(
+      roster?.coordinator_agent_id,
+      roster?.participant_bindings
+    );
+    const linkedTask = tasks.find((task) => task.id === conversation?.linked_workspace_task_id) ?? null;
+    const participantCount = roster?.participant_agents.length ?? 0;
 
     const showTaskPicker =
       effectiveMode === 'autonomous' && !!conversation?.workspace_id;
 
     return (
-      <div className={className} data-testid="conversation-mode-panel">
+      <div
+        className={className}
+        data-testid="conversation-mode-panel"
+        data-runtime-role-contract="derived"
+      >
         <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#666]">
           {t('agent.workspace.mode.label', 'Mode')}
         </div>
         <Segmented<Mode>
           value={effectiveMode}
           options={modeOptions}
-          onChange={(next) => void handleModeChange(next as Mode)}
+          onChange={(next) => {
+            void handleModeChange(next);
+          }}
           disabled={submitting}
           block
           data-testid="conversation-mode-toggle"
         />
+
+        <div
+          className="mt-3 rounded-md border border-[rgba(0,0,0,0.08)] bg-[#fafafa] px-3 py-2"
+          data-testid="conversation-mode-summary"
+        >
+          <div className="text-[11px] font-medium uppercase tracking-wide text-[#666]">
+            {t('agent.workspace.mode.summaryLabel', 'Actor model')}
+          </div>
+          <div className="mt-2 space-y-1 text-xs text-[#444]">
+            <div>{`${t('agent.workspace.mode.participantsLabel', 'Participants')}: ${String(participantCount)}`}</div>
+            {coordinatorLabel ? (
+              <div>{`${t('agent.workspace.mode.coordinatorLabel', 'Coordinator')}: ${coordinatorLabel}`}</div>
+            ) : null}
+            {effectiveMode === 'multi_agent_isolated' && focusedLabel ? (
+              <div>{`${t('agent.workspace.mode.focusedLabel', 'Focused agent')}: ${focusedLabel}`}</div>
+            ) : null}
+            <div className="text-[#666]">
+              {effectiveMode === 'autonomous'
+                ? t(
+                    'agent.workspace.mode.derivedRoleAutonomous',
+                    'Leader/worker runtime role is derived from attempt context and the linked workspace task.'
+                  )
+                : effectiveMode === 'multi_agent_isolated'
+                  ? t(
+                      'agent.workspace.mode.derivedRoleIsolated',
+                      'In isolated mode, routing prefers the focused agent before coordinator fallback.'
+                    )
+                  : t(
+                      'agent.workspace.mode.derivedRoleShared',
+                      'Conversation roles stay conversation-scoped; runtime authority is still derived at execution time.'
+                    )}
+            </div>
+          </div>
+        </div>
 
         {showTaskPicker ? (
           <div className="mt-4" data-testid="conversation-task-picker">
@@ -171,8 +243,10 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
               {t('agent.workspace.task.label', 'Linked workspace task')}
             </div>
             <Select<string | null>
-              value={conversation?.linked_workspace_task_id ?? null}
-              onChange={(next) => void handleTaskChange(next ?? null)}
+              value={conversation.linked_workspace_task_id ?? null}
+              onChange={(next) => {
+                void handleTaskChange(next ?? null);
+              }}
               options={taskOptions}
               loading={taskLoading}
               disabled={submitting}
@@ -187,6 +261,11 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
                 'Goal, budget and termination are driven by the linked task.'
               )}
             </div>
+            {linkedTask ? (
+              <div className="mt-2 text-[11px] text-[#666]" data-testid="conversation-linked-task-summary">
+                {`${t('agent.workspace.task.summaryLabel', 'Linked task')}: ${linkedTask.title} · ${linkedTask.status}`}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

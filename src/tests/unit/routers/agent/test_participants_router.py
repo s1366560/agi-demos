@@ -12,6 +12,7 @@ from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.infrastructure.adapters.primary.web.routers.agent.participants import (
     _roster_response,
     list_mention_candidates,
+    set_focused_agent,
 )
 
 
@@ -111,3 +112,42 @@ async def test_list_mention_candidates_includes_workspace_binding_projection() -
     assert response.workspace_id == "ws-1"
     assert response.source == "workspace"
     assert response.candidates[0].workspace_agent_id == "binding-1"
+
+
+@pytest.mark.asyncio
+async def test_set_focused_agent_updates_conversation_and_returns_roster() -> None:
+    conversation = _conversation()
+    project = SimpleNamespace(owner_id="user-1")
+    request = MagicMock()
+    db = MagicMock()
+    db.commit = AsyncMock()
+    current_user = SimpleNamespace(id="user-1")
+    conv_repo = MagicMock()
+    conv_repo.save = AsyncMock()
+    workspace_agent_repo = MagicMock()
+    workspace_agent_repo.find_by_workspace_and_agent_id = AsyncMock(return_value=_binding())
+    container = SimpleNamespace(workspace_agent_repository=lambda: workspace_agent_repo)
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(conv_repo, conversation, project)),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
+        ),
+    ):
+        response = await set_focused_agent(
+            conversation_id="conv-1",
+            data=SimpleNamespace(agent_id="agent-1"),
+            request=request,
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    conv_repo.save.assert_awaited_once_with(conversation)
+    db.commit.assert_awaited_once()
+    assert conversation.focused_agent_id == "agent-1"
+    assert response.focused_agent_id == "agent-1"

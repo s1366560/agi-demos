@@ -73,6 +73,17 @@ def _deny(error: str, **extra: Any) -> ToolResult:
     return ToolResult(output=json.dumps(payload), is_error=True)
 
 
+def _append_tool_result(output: ToolResult, extra_key: str, extra_value: Any) -> ToolResult:
+    try:
+        parsed_output = json.loads(output.output)
+    except (TypeError, ValueError):
+        enriched: dict[str, Any] = {"output": output.output}
+    else:
+        enriched = parsed_output if isinstance(parsed_output, dict) else {"output": parsed_output}
+    enriched[extra_key] = extra_value
+    return ToolResult(output=json.dumps(enriched, indent=2), is_error=output.is_error)
+
+
 async def _send_envelope(
     ctx: ToolContext,
     envelope: WtpEnvelope,
@@ -85,6 +96,13 @@ async def _send_envelope(
 
     sender_agent_ref = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _runtime_string(ctx, "selected_agent_name") or ctx.agent_name
+    leader_binding_id = _runtime_string(ctx, "workspace_agent_binding_id")
+    metadata = envelope.to_metadata()
+    if leader_binding_id:
+        metadata = {
+            **metadata,
+            "workspace_agent_binding_id": leader_binding_id,
+        }
 
     try:
         result = await _orchestrator.send_message(
@@ -95,7 +113,7 @@ async def _send_envelope(
             project_id=ctx.project_id or None,
             tenant_id=ctx.tenant_id,
             message_type=envelope.default_message_type(),
-            metadata=envelope.to_metadata(),
+            metadata=metadata,
         )
     except Exception:
         logger.exception(
@@ -133,6 +151,8 @@ async def _send_envelope(
         actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
         if actor_user_id:
             enriched_metadata.setdefault("actor_user_id", actor_user_id)
+        if leader_binding_id:
+            enriched_metadata.setdefault("workspace_agent_binding_id", leader_binding_id)
         enriched_envelope = WtpEnvelope(
             verb=envelope.verb,
             workspace_id=envelope.workspace_id,
@@ -147,7 +167,7 @@ async def _send_envelope(
     except Exception:
         logger.debug("workspace_leader_wtp: enrichment failed; publishing raw")
         enriched_envelope = envelope
-    await publish_envelope_default(enriched_envelope)
+    _ = await publish_envelope_default(enriched_envelope)
 
     await ctx.emit(
         AgentMessageSentEvent(
@@ -294,7 +314,6 @@ async def workspace_assign_task_tool(
     # Failures are logged upstream; the envelope was already durably published.
     launch_info: dict[str, Any] = {"scheduled": False}
     try:
-        from src.application.services.workspace_task_service import WorkspaceTaskService
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
@@ -305,8 +324,7 @@ async def workspace_assign_task_tool(
 
         async with async_session_factory() as db:
             task_repo = SqlWorkspaceTaskRepository(db)
-            svc = WorkspaceTaskService(task_repo=task_repo)
-            task = await svc.get_task(task_id)
+            task = await task_repo.find_by_id(task_id)
         if task is None:
             launch_info = {"scheduled": False, "reason": "task_not_found"}
         else:
@@ -329,12 +347,7 @@ async def workspace_assign_task_tool(
         )
         launch_info = {"scheduled": False, "error": str(exc)}
 
-    try:
-        enriched = json.loads(tool_result.output)
-    except (TypeError, ValueError):
-        enriched = {"output": tool_result.output}
-    enriched["launch"] = launch_info
-    return ToolResult(output=json.dumps(enriched, indent=2), is_error=tool_result.is_error)
+    return _append_tool_result(tool_result, "launch", launch_info)
 
 
 # --- Cancel -------------------------------------------------------------------

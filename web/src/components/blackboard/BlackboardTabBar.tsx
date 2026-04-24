@@ -3,6 +3,8 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { BLACKBOARD_TAB_META } from './blackboardSurfaceContract';
+
 
 export type BlackboardTab =
   | 'goals'
@@ -130,6 +132,8 @@ export function BlackboardTabBar({
           onClick={() => {
             onTabChange(tab.key);
           }}
+          data-blackboard-boundary={BLACKBOARD_TAB_META[tab.key].boundary}
+          data-blackboard-authority={BLACKBOARD_TAB_META[tab.key].authority}
           className={`${buttonBase} ${
             activeTab === tab.key
               ? 'bg-primary/10 font-medium text-primary'

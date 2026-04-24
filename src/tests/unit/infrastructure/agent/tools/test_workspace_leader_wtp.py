@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.domain.model.workspace.wtp_envelope import WtpVerb
 from src.infrastructure.agent.orchestration.orchestrator import SendResult
 from src.infrastructure.agent.orchestration.send_denied import (
     SendDenied,
@@ -28,6 +27,7 @@ def _leader_ctx(**overrides: Any) -> Any:
         "selected_agent_name": "leader-bot",
         "workspace_id": "ws-1",
         "root_goal_task_id": "root-1",
+        "workspace_agent_binding_id": "binding-leader-1",
         "workspace_session_role": "leader",
     }
     rc.update(overrides.get("runtime_context", {}) or {})
@@ -168,6 +168,7 @@ class TestAssignTask:
         meta = call.kwargs["metadata"]
         assert meta["wtp_verb"] == "task.assign"
         assert call.kwargs["to_agent_id"] == "worker-agent-id"
+        assert meta["workspace_agent_binding_id"] == "binding-leader-1"
 
     async def test_send_denied_propagates(self, mock_orchestrator):
         mock_orchestrator.send_message.return_value = _denied()
@@ -211,3 +212,4 @@ class TestCancelTask:
         call = mock_orchestrator.send_message.await_args
         meta = call.kwargs["metadata"]
         assert meta["wtp_verb"] == "task.cancel"
+        assert meta["workspace_agent_binding_id"] == "binding-leader-1"

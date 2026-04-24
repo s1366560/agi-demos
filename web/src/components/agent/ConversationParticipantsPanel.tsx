@@ -30,8 +30,15 @@ const modeLabel = (mode: string) => mode.replace(/_/g, ' ');
 export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelProps>(
   ({ conversationId, onSelectAgent, onRemoveAgent, className }) => {
     const { t } = useTranslation();
-    const { roster, loading, error, removeParticipant, setCoordinator, addParticipant } =
-      useConversationParticipants(conversationId);
+    const {
+      roster,
+      loading,
+      error,
+      removeParticipant,
+      setCoordinator,
+      setFocusedAgent,
+      addParticipant,
+    } = useConversationParticipants(conversationId);
     const { candidates } = useMentionCandidates(conversationId, { enabled: !!conversationId });
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
@@ -108,6 +115,12 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
               const binding = participantBindingMap.get(agentId);
               const participantLabel =
                 binding?.display_name || binding?.label || agentId;
+              const sourceLabel =
+                binding?.source === 'workspace'
+                  ? t('agent.participants.sourceWorkspace', { defaultValue: 'workspace' })
+                  : t('agent.participants.sourceConversation', {
+                      defaultValue: 'conversation',
+                    });
               return (
                 <li
                   key={agentId}
@@ -121,6 +134,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                     {participantLabel}
                   </button>
                   <div className="flex items-center gap-1">
+                    <span className={badgeBase}>{sourceLabel}</span>
                     {isCoordinator && (
                       <span className={badgeBase}>
                         {t('agent.participants.coordinator', {
@@ -132,6 +146,23 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                       <span className={badgeBase}>
                         {t('agent.participants.focused', { defaultValue: 'focused' })}
                       </span>
+                    )}
+                    {effective_mode === 'multi_agent_isolated' && !isFocused && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void setFocusedAgent(agentId);
+                        }}
+                        className="rounded px-2 py-0.5 text-xs text-[#666] hover:bg-[#fafafa] hover:text-[#0070f3]"
+                        title={t('agent.participants.setFocused', {
+                          defaultValue: 'Set as focused agent',
+                        })}
+                        aria-label={t('agent.participants.setFocusedFor', {
+                          defaultValue: `Set ${participantLabel} as focused agent`,
+                        })}
+                      >
+                        ◎
+                      </button>
                     )}
                     {!isCoordinator && (
                       <button
@@ -179,6 +210,16 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
             })}
           </p>
         )}
+        {effective_mode === 'multi_agent_isolated' &&
+          !focused_agent_id &&
+          participant_agents.length > 0 && (
+            <p className="mt-3 text-xs text-[#666]">
+              {t('agent.participants.isolatedSuggestsFocused', {
+                defaultValue:
+                  'Isolated mode works best with one focused agent. Click ◎ on a participant to set it.',
+              })}
+            </p>
+          )}
         <div className="mt-3 border-t border-[rgba(0,0,0,0.08)] pt-3">
           {availableToAdd.length === 0 ? (
             <p className="text-xs text-[#999]">

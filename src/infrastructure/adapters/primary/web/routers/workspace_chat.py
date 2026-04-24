@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.application.services.workspace_message_service import WorkspaceMessageService
+from src.application.services.workspace_surface_contract import (
+    SIGNAL_ROLE_KEY,
+    SURFACE_BOUNDARY_KEY,
+    WORKSPACE_CHAT_EVENT_METADATA,
+)
 from src.domain.model.workspace.workspace_message import MessageSenderType, WorkspaceMessage
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -19,7 +24,6 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages",
     tags=["workspace-chat"],
 )
-
 
 def get_message_service(
     request: Request, db: AsyncSession = Depends(get_db)
@@ -38,7 +42,12 @@ def get_message_service(
             redis_client,
             workspace_id=workspace_id,
             event_type=event_type,
-            payload=payload,
+            payload={
+                **payload,
+                SURFACE_BOUNDARY_KEY: WORKSPACE_CHAT_EVENT_METADATA[SURFACE_BOUNDARY_KEY],
+                SIGNAL_ROLE_KEY: WORKSPACE_CHAT_EVENT_METADATA[SIGNAL_ROLE_KEY],
+            },
+            metadata=dict(WORKSPACE_CHAT_EVENT_METADATA),
         )
 
     return container.workspace_message_service(
@@ -190,7 +199,7 @@ def _fire_mention_routing(
         return SqlConversationRepository(db)
 
     def agent_service_factory(db: AsyncSession, llm: object) -> object:
-        return container.with_db(db).agent_service(llm)
+        return container.with_db(db).agent_service(cast(Any, llm))
 
     def message_service_factory(
         db: AsyncSession,

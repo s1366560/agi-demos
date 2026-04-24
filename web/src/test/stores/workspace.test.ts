@@ -10,6 +10,13 @@ import {
   workspaceTaskService,
   workspaceTopologyService,
 } from '@/services/workspaceService';
+import {
+  AUTHORITATIVE,
+  HOSTED,
+  NON_AUTHORITATIVE,
+  OWNED,
+  SENSING_CAPABLE,
+} from '@/components/blackboard/blackboardSurfaceContract';
 import { useWorkspaceReplies, useWorkspaceStore } from '@/stores/workspace';
 
 vi.mock('@/services/workspaceService', () => ({
@@ -230,6 +237,134 @@ describe('workspace store', () => {
       expect.objectContaining({ id: 'reply-live' }),
     ]);
     expect(useWorkspaceStore.getState().loadedReplyPostIds['post-1']).toBe(true);
+  });
+
+  it('handleBlackboardEvent tolerates owned-surface contract fields on post payloads', () => {
+    useWorkspaceStore.setState({
+      posts: [],
+    });
+
+    useWorkspaceStore.getState().handleBlackboardEvent({
+      type: 'blackboard_post_created',
+      data: {
+        post: {
+          id: 'post-1',
+          workspace_id: 'ws-1',
+          author_id: 'u-1',
+          title: 'Owned post',
+          content: 'Hello',
+          status: 'open',
+          is_pinned: false,
+          metadata: {},
+          created_at: '2026-03-30T10:00:00Z',
+          updated_at: '2026-03-30T10:00:00Z',
+        },
+        surface_boundary: OWNED,
+        authority_class: AUTHORITATIVE,
+      },
+    });
+
+    expect(useWorkspaceStore.getState().posts).toEqual([
+      expect.objectContaining({ id: 'post-1', title: 'Owned post' }),
+    ]);
+  });
+
+  it('handleBlackboardEvent ignores non-owned blackboard payloads when boundary metadata is explicit', () => {
+    useWorkspaceStore.setState({
+      posts: [
+        {
+          id: 'post-1',
+          workspace_id: 'ws-1',
+          author_id: 'u-1',
+          title: 'Existing',
+          content: 'hello',
+          status: 'open',
+          is_pinned: false,
+          metadata: {},
+          created_at: '2026-03-30T10:00:00Z',
+          updated_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleBlackboardEvent({
+      type: 'blackboard_post_updated',
+      data: {
+        post: {
+          id: 'post-1',
+          workspace_id: 'ws-1',
+          author_id: 'u-1',
+          title: 'Should be ignored',
+          content: 'hello',
+          status: 'open',
+          is_pinned: false,
+          metadata: {},
+          created_at: '2026-03-30T10:00:00Z',
+          updated_at: '2026-03-30T10:01:00Z',
+        },
+        surface_boundary: HOSTED,
+        authority_class: NON_AUTHORITATIVE,
+      },
+    });
+
+    expect(useWorkspaceStore.getState().posts).toEqual([
+      expect.objectContaining({ id: 'post-1', title: 'Existing' }),
+    ]);
+  });
+
+  it('handleChatEvent accepts hosted sensing chat payloads', () => {
+    useWorkspaceStore.setState({
+      chatMessages: [],
+    });
+
+    useWorkspaceStore.getState().handleChatEvent({
+      type: 'workspace_message_created',
+      data: {
+        message: {
+          id: 'msg-1',
+          workspace_id: 'ws-1',
+          content: 'hello',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+        surface_boundary: HOSTED,
+        signal_role: SENSING_CAPABLE,
+      },
+    });
+
+    expect(useWorkspaceStore.getState().chatMessages).toEqual([
+      expect.objectContaining({ id: 'msg-1', content: 'hello' }),
+    ]);
+  });
+
+  it('handleChatEvent ignores non-hosted or non-sensing chat payloads when metadata is explicit', () => {
+    useWorkspaceStore.setState({
+      chatMessages: [
+        {
+          id: 'msg-1',
+          workspace_id: 'ws-1',
+          content: 'existing',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleChatEvent({
+      type: 'workspace_message_created',
+      data: {
+        message: {
+          id: 'msg-2',
+          workspace_id: 'ws-1',
+          content: 'should be ignored',
+          created_at: '2026-03-30T10:01:00Z',
+        },
+        surface_boundary: OWNED,
+        signal_role: AUTHORITATIVE,
+      },
+    });
+
+    expect(useWorkspaceStore.getState().chatMessages).toEqual([
+      expect.objectContaining({ id: 'msg-1', content: 'existing' }),
+    ]);
   });
 
   it('loadReplies lets canonical API reply data win over earlier live payloads', async () => {

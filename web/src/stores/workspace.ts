@@ -12,6 +12,11 @@ import {
   workspaceChatService,
 } from '@/services/workspaceService';
 
+import {
+  isHostedSensingChatEventData,
+  isOwnedBlackboardEventData,
+} from '@/components/blackboard/blackboardSurfaceContract';
+
 import { getErrorMessage } from '@/types/common';
 import type {
   BlackboardPost,
@@ -936,6 +941,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleBlackboardEvent: (event) => {
         const { type, data } = event;
+        if (!isOwnedBlackboardEventData(data)) {
+          return;
+        }
         if (type === 'blackboard_post_created' || type === 'blackboard_post_updated') {
           const post = data.post as BlackboardPost;
           set((state) => ({
@@ -1095,6 +1103,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleChatEvent: (event) => {
         const { type, data } = event;
+        if (!isHostedSensingChatEventData(data)) {
+          return;
+        }
         if (type === 'workspace_message_created') {
           const msg = data.message as WorkspaceMessage | undefined;
           if (msg && !get().chatMessages.some((m) => m.id === msg.id)) {

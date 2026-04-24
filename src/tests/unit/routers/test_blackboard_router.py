@@ -6,6 +6,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.application.services.workspace_surface_contract import (
+    AUTHORITATIVE,
+    OWNED,
+    SENSING_CAPABLE,
+    SIGNAL_ROLE_KEY,
+    SURFACE_BOUNDARY_KEY,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     Tenant,
@@ -91,6 +98,12 @@ class TestBlackboardRouter:
         assert len(payload["items"]) == 1
         assert payload["items"][0]["id"] == created["id"]
         assert publish_mock.await_count == 1
+        publish_kwargs = publish_mock.await_args.kwargs
+        assert publish_kwargs["metadata"][SURFACE_BOUNDARY_KEY] == OWNED
+        assert publish_kwargs["metadata"]["authority_class"] == AUTHORITATIVE
+        assert publish_kwargs["metadata"][SIGNAL_ROLE_KEY] == SENSING_CAPABLE
+        assert publish_kwargs["payload"][SURFACE_BOUNDARY_KEY] == OWNED
+        assert publish_kwargs["payload"]["authority_class"] == AUTHORITATIVE
 
     @pytest.mark.asyncio
     async def test_viewer_cannot_create_but_can_list(self, test_db, client, test_user):
@@ -108,7 +121,12 @@ class TestBlackboardRouter:
         assert list_response.json()["items"] == []
 
     @pytest.mark.asyncio
-    async def test_pin_and_reply_flow(self, test_db, client, test_user):
+    async def test_pin_and_reply_flow(self, test_db, client, test_user, monkeypatch):
+        publish_mock = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.blackboard.publish_workspace_event",
+            publish_mock,
+        )
         await _seed_workspace_membership(test_db, role="owner")
         base = f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/workspaces/{WORKSPACE_ID}/blackboard"
 
@@ -134,3 +152,9 @@ class TestBlackboardRouter:
         replies = replies_response.json()["items"]
         assert len(replies) == 1
         assert replies[0]["id"] == reply_id
+        assert publish_mock.await_count >= 3
+        for call in publish_mock.await_args_list:
+            assert call.kwargs["metadata"][SURFACE_BOUNDARY_KEY] == OWNED
+            assert call.kwargs["metadata"]["authority_class"] == AUTHORITATIVE
+            assert call.kwargs["payload"][SURFACE_BOUNDARY_KEY] == OWNED
+            assert call.kwargs["payload"]["authority_class"] == AUTHORITATIVE
