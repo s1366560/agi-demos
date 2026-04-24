@@ -74,6 +74,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
     SqlWorkspaceTaskSessionAttemptRepository,
 )
+from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
@@ -395,7 +396,7 @@ async def _maybe_handle_root_remediation(
             )
             refreshed = await task_repo.find_by_id(root_task_id)
             return refreshed or root_task
-        await _replan_execution_tasks(
+        replanned = await _replan_execution_tasks(
             workspace_id=workspace_id,
             actor_user_id=actor_user_id,
             root_task=root_task,
@@ -406,11 +407,12 @@ async def _maybe_handle_root_remediation(
             task_decomposer=task_decomposer,
             user_query=user_query,
         )
-        await _increment_root_replan_attempt(
-            root_task=root_task,
-            task_repo=task_repo,
-            next_attempt_count=attempts + 1,
-        )
+        if replanned:
+            await _increment_root_replan_attempt(
+                root_task=root_task,
+                task_repo=task_repo,
+                next_attempt_count=attempts + 1,
+            )
         refreshed = await task_repo.find_by_id(root_task_id)
         return refreshed or root_task
 
@@ -722,6 +724,15 @@ async def _maybe_bootstrap_execution_tasks(
         )
 
 
+def _is_workspace_plan_linked_task(task: WorkspaceTask) -> bool:
+    metadata = getattr(task, "metadata", None)
+    if not isinstance(metadata, Mapping):
+        return False
+    plan_id = metadata.get(WORKSPACE_PLAN_ID)
+    node_id = metadata.get(WORKSPACE_PLAN_NODE_ID)
+    return isinstance(plan_id, str) and bool(plan_id) and isinstance(node_id, str) and bool(node_id)
+
+
 async def _replan_execution_tasks(
     *,
     workspace_id: str,
@@ -733,14 +744,38 @@ async def _replan_execution_tasks(
     leader_agent_id: str | None,
     task_decomposer: TaskDecomposerProtocol | None,
     user_query: str,
-) -> None:
+) -> bool:
     root_task_id = getattr(root_task, "id", None)
     root_title = getattr(root_task, "title", "")
     if not isinstance(root_task_id, str) or not root_task_id:
-        return
+        return False
 
     existing_children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
-    for child in existing_children:
+    plan_linked_children = [child for child in existing_children if _is_workspace_plan_linked_task(child)]
+    children_to_replace = [
+        child for child in existing_children if not _is_workspace_plan_linked_task(child)
+    ]
+    if plan_linked_children:
+        for child in children_to_replace:
+            _ = await command_service.delete_task(
+                workspace_id=workspace_id,
+                task_id=child.id,
+                actor_user_id=actor_user_id,
+                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
+            )
+        logger.info(
+            "workspace_goal_runtime.replan_skipped_for_durable_plan",
+            extra={
+                "event": "workspace_goal_runtime.replan_skipped_for_durable_plan",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+                "plan_linked_child_count": len(plan_linked_children),
+                "legacy_child_deleted_count": len(children_to_replace),
+            },
+        )
+        return False
+
+    for child in children_to_replace:
         _ = await command_service.delete_task(
             workspace_id=workspace_id,
             task_id=child.id,
@@ -789,6 +824,7 @@ async def _replan_execution_tasks(
         leader_agent_id=leader_agent_id,
         reason="workspace_goal_runtime.replan_assign_execution_tasks",
     )
+    return True
 
 
 def _build_execution_state(
@@ -1157,8 +1193,24 @@ async def _assign_execution_tasks_to_workers(
         )
         return
 
+    effective_leader_agent_id = leader_agent_id
+    if any(binding.agent_id == BUILTIN_SISYPHUS_ID for binding in active_bindings):
+        if leader_agent_id != BUILTIN_SISYPHUS_ID:
+            logger.warning(
+                "_assign_execution_tasks_to_workers: corrected leader identity to builtin",
+                extra={
+                    "event": "workspace_assign.corrected_leader_agent_id",
+                    "workspace_id": workspace_id,
+                    "requested_leader_agent_id": leader_agent_id,
+                    "effective_leader_agent_id": BUILTIN_SISYPHUS_ID,
+                    "created_count": len(created_tasks),
+                    "reason": reason,
+                },
+            )
+        effective_leader_agent_id = BUILTIN_SISYPHUS_ID
+
     worker_bindings = [
-        binding for binding in active_bindings if binding.agent_id != leader_agent_id
+        binding for binding in active_bindings if binding.agent_id != effective_leader_agent_id
     ]
     if not worker_bindings:
         # Do NOT fall back to assigning the leader as worker — that violates
@@ -1171,7 +1223,7 @@ async def _assign_execution_tasks_to_workers(
             extra={
                 "event": "workspace_assign.no_worker_members",
                 "workspace_id": workspace_id,
-                "leader_agent_id": leader_agent_id,
+                "leader_agent_id": effective_leader_agent_id,
                 "created_count": len(created_tasks),
                 "active_binding_count": len(active_bindings),
                 "reason": reason,
@@ -1196,9 +1248,9 @@ async def _assign_execution_tasks_to_workers(
             actor_user_id=actor_user_id,
             workspace_agent_id=binding.id,
             actor_type="agent",
-            actor_agent_id=leader_agent_id,
+            actor_agent_id=effective_leader_agent_id,
             reason=reason,
-            authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
+            authority=WorkspaceTaskAuthorityContext.leader(effective_leader_agent_id),
         )
 
 

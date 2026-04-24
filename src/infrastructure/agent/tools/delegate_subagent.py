@@ -19,6 +19,7 @@ import json
 import logging
 import time
 from collections.abc import Callable, Coroutine
+from contextvars import ContextVar
 from typing import Any
 
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -49,7 +50,6 @@ def _supports_on_event_arg(callback: Callable[..., Coroutine[Any, Any, str]]) ->
     )
 
 
-
 # ---------------------------------------------------------------------------
 # @tool_define versions (new pattern)
 # ---------------------------------------------------------------------------
@@ -63,6 +63,41 @@ _delegate_subagent_descriptions: dict[str, str] = {}
 _delegate_delegation_depth: int = 0
 _delegate_max_active_runs: int | None = None
 _delegate_max_concurrency: int = 5
+
+
+class _NestedToolRuntimeContext:
+    """Runtime context bridge for nested ToolDefinitions.
+
+    The processor calls wrapper ToolDefinitions without ``ctx`` on the legacy
+    path, but it still injects runtime context into ``_tool_instance`` when that
+    object exposes ``set_runtime_context``.
+    """
+
+    def __init__(self, *, conversation_id: str, agent_name: str = "subagent") -> None:
+        super().__init__()
+        self._conversation_id = conversation_id
+        self._agent_name = agent_name
+        self._context_var: ContextVar[ToolContext | None] = ContextVar(
+            f"{__name__}.nested_tool_context.{id(self)}",
+            default=None,
+        )
+
+    def set_runtime_context(self, ctx: ToolContext) -> None:
+        _ = self._context_var.set(ctx)
+
+    def get_context(self) -> ToolContext:
+        ctx = self._context_var.get()
+        if ctx is not None:
+            return ctx
+        return ToolContext(
+            session_id=self._conversation_id,
+            message_id="nested-tool",
+            call_id="nested-tool",
+            agent_name=self._agent_name,
+            conversation_id=self._conversation_id,
+            abort_signal=asyncio.Event(),
+            messages=[],
+        )
 
 
 def configure_delegate_subagent(
@@ -90,9 +125,7 @@ def configure_delegate_subagent(
     _delegate_subagent_names = subagent_names or []
     _delegate_subagent_descriptions = subagent_descriptions or {}
     _delegate_delegation_depth = delegation_depth
-    _delegate_max_active_runs = (
-        max_active_runs if max_active_runs and max_active_runs > 0 else None
-    )
+    _delegate_max_active_runs = max_active_runs if max_active_runs and max_active_runs > 0 else None
     _delegate_max_concurrency = max_concurrency
 
 
@@ -108,8 +141,7 @@ def configure_delegate_subagent(
             "subagent_name": {
                 "type": "string",
                 "description": (
-                    "Name of the SubAgent to delegate to. "
-                    "Choose the best match for the task."
+                    "Name of the SubAgent to delegate to. Choose the best match for the task."
                 ),
             },
             "task": {
@@ -320,10 +352,7 @@ async def _register_single_run(
         return None
     active = registry.count_active_runs(conv_id)
     if _delegate_max_active_runs is not None and active >= _delegate_max_active_runs:
-        return (
-            f"Error: active SubAgent run limit reached "
-            f"({active}/{_delegate_max_active_runs})"
-        )
+        return f"Error: active SubAgent run limit reached ({active}/{_delegate_max_active_runs})"
     run = registry.create_run(
         conversation_id=conv_id,
         subagent_name=subagent_name,
@@ -332,9 +361,7 @@ async def _register_single_run(
     )
     running = registry.mark_running(conv_id, run.run_id)
     if running:
-        await ctx.emit(
-            {"type": "subagent_started", "data": running.to_event_data()}
-        )
+        await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     return run.run_id
 
 
@@ -357,9 +384,7 @@ async def _finalize_success(
         execution_time_ms=elapsed_ms,
     )
     if completed:
-        await ctx.emit(
-            {"type": "subagent_completed", "data": completed.to_event_data()}
-        )
+        await ctx.emit({"type": "subagent_completed", "data": completed.to_event_data()})
 
 
 async def _finalize_failure(
@@ -381,9 +406,7 @@ async def _finalize_failure(
         execution_time_ms=elapsed_ms,
     )
     if failed:
-        await ctx.emit(
-            {"type": "subagent_failed", "data": failed.to_event_data()}
-        )
+        await ctx.emit({"type": "subagent_failed", "data": failed.to_event_data()})
 
 
 def _parse_tasks(tasks: Any) -> tuple[list[dict[str, Any]], str | None]:
@@ -453,9 +476,7 @@ async def _register_parallel_runs_new(
         run_ids[idx] = run.run_id
         running = registry.mark_running(conv_id, run.run_id)
         if running:
-            await ctx.emit(
-                {"type": "subagent_started", "data": running.to_event_data()}
-            )
+            await ctx.emit({"type": "subagent_started", "data": running.to_event_data()})
     return run_ids
 
 
@@ -481,12 +502,14 @@ async def _execute_all_new(
     processed: list[dict[str, Any]] = []
     for i, r in enumerate(raw_results):
         if isinstance(r, Exception):
-            processed.append({
-                "index": i,
-                "subagent": tasks[i].get("subagent_name", "unknown"),
-                "success": False,
-                "error": str(r),
-            })
+            processed.append(
+                {
+                    "index": i,
+                    "subagent": tasks[i].get("subagent_name", "unknown"),
+                    "success": False,
+                    "error": str(r),
+                }
+            )
         elif isinstance(r, dict):
             processed.append(r)
         else:
@@ -593,19 +616,24 @@ def make_nested_delegate_tool_defs(
     the originals in a ``finally`` block.
     """
     from src.infrastructure.agent.processor.processor import ToolDefinition
-    from src.infrastructure.agent.tools.context import ToolContext
 
     # References to the @tool_define ToolInfo objects (module-level singletons)
     single_info = delegate_subagent_tool
     parallel_info = parallel_delegate_subagent_tool
+    single_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
+    parallel_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
 
     # -- helpers to snapshot / restore module globals -----------------------
 
     _delegate_global_names = [
-        "_delegate_execute_callback", "_delegate_run_registry",
-        "_delegate_conversation_id", "_delegate_subagent_names",
-        "_delegate_subagent_descriptions", "_delegate_delegation_depth",
-        "_delegate_max_active_runs", "_delegate_max_concurrency",
+        "_delegate_execute_callback",
+        "_delegate_run_registry",
+        "_delegate_conversation_id",
+        "_delegate_subagent_names",
+        "_delegate_subagent_descriptions",
+        "_delegate_delegation_depth",
+        "_delegate_max_active_runs",
+        "_delegate_max_concurrency",
     ]
 
     _mod = __import__(__name__)
@@ -624,9 +652,12 @@ def make_nested_delegate_tool_defs(
 
     def _make_delegate_tool(
         tool_info: Any,
+        runtime_context: _NestedToolRuntimeContext,
     ) -> Callable[..., Any]:
         """Wrap a delegate @tool_define for nested scope."""
-        async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
+
+        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
+            active_ctx = ctx if ctx is not None else runtime_context.get_context()
             snap = _snapshot(_delegate_global_names)
             try:
                 configure_delegate_subagent(
@@ -639,9 +670,10 @@ def make_nested_delegate_tool_defs(
                     max_active_runs=max_active_runs,
                     max_concurrency=max_concurrency,
                 )
-                return await tool_info.execute(ctx, **kwargs)
+                return await tool_info.execute(active_ctx, **kwargs)
             finally:
                 _restore(snap)
+
         return _execute
 
     # -- assemble ToolDefinition list --------------------------------------
@@ -652,7 +684,8 @@ def make_nested_delegate_tool_defs(
             name=single_info.name,
             description=single_info.description,
             parameters=single_info.parameters,
-            execute=_make_delegate_tool(single_info),
+            execute=_make_delegate_tool(single_info, single_runtime),
+            _tool_instance=single_runtime,
         )
     )
 
@@ -662,7 +695,8 @@ def make_nested_delegate_tool_defs(
                 name=parallel_info.name,
                 description=parallel_info.description,
                 parameters=parallel_info.parameters,
-                execute=_make_delegate_tool(parallel_info),
+                execute=_make_delegate_tool(parallel_info, parallel_runtime),
+                _tool_instance=parallel_runtime,
             )
         )
 

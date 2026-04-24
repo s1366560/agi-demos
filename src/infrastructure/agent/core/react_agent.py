@@ -24,7 +24,7 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2074,6 +2074,25 @@ class ReActAgent:
             tool for tool in tools_to_use if tool.name not in cls._WORKSPACE_ROOT_TOOL_BYPASS_NAMES
         ]
 
+    @staticmethod
+    def _filter_tools_by_name_policy(
+        tools_to_use: list[ToolDefinition],
+        *,
+        allow_tools: Sequence[str] | None,
+        deny_tools: Sequence[str] | None,
+    ) -> list[ToolDefinition]:
+        """Apply final hard allow/deny filtering to the executable tool list."""
+        raw_allow: set[str] = {name for name in (allow_tools or ()) if name}
+        allow: set[str] = set() if "*" in raw_allow else raw_allow
+        deny: set[str] = {name for name in (deny_tools or ()) if name}
+        if not allow and not deny:
+            return tools_to_use
+        return [
+            tool
+            for tool in tools_to_use
+            if (not allow or tool.name in allow) and tool.name not in deny
+        ]
+
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self,
         tools_to_use: list[ToolDefinition],
@@ -2984,6 +3003,11 @@ class ReActAgent:
             leader_agent_id=selected_agent.id,
             actor_user_id=user_id,
         )
+        tools_to_use = self._filter_tools_by_name_policy(
+            tools_to_use,
+            allow_tools=runtime_profile.allow_tools,
+            deny_tools=runtime_profile.deny_tools,
+        )
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(self.config, selection_context)
@@ -2999,6 +3023,8 @@ class ReActAgent:
             "allowed_skills": list(selected_agent.allowed_skills)
             if selected_agent.allowed_skills
             else [],
+            "allowed_tools": list(runtime_profile.allow_tools),
+            "denied_tools": list(runtime_profile.deny_tools),
             "route_id": selection_context.metadata.get("route_id"),
             "trace_id": selection_context.metadata.get("trace_id"),
         }

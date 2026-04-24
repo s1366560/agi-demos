@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,6 +19,36 @@ from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
+
+
+class _NestedToolRuntimeContext:
+    """Runtime context bridge for nested session ToolDefinitions."""
+
+    def __init__(self, *, conversation_id: str, agent_name: str = "subagent") -> None:
+        super().__init__()
+        self._conversation_id = conversation_id
+        self._agent_name = agent_name
+        self._context_var: ContextVar[ToolContext | None] = ContextVar(
+            f"{__name__}.nested_tool_context.{id(self)}",
+            default=None,
+        )
+
+    def set_runtime_context(self, ctx: ToolContext) -> None:
+        _ = self._context_var.set(ctx)
+
+    def get_context(self) -> ToolContext:
+        ctx = self._context_var.get()
+        if ctx is not None:
+            return ctx
+        return ToolContext(
+            session_id=self._conversation_id,
+            message_id="nested-tool",
+            call_id="nested-tool",
+            agent_name=self._agent_name,
+            conversation_id=self._conversation_id,
+            abort_signal=asyncio.Event(),
+            messages=[],
+        )
 
 
 def _resolve_spawn_callback_signature(
@@ -2769,6 +2800,12 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
     overview_info = sessions_overview_tool
     wait_info = sessions_wait_tool
     control_info = subagents_control_tool
+    list_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
+    history_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
+    timeline_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
+    overview_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
+    wait_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
+    control_runtime = _NestedToolRuntimeContext(conversation_id=conversation_id)
 
     # -- helpers to snapshot / restore module globals -----------------------
 
@@ -2834,10 +2871,12 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
 
     def _make_sess_tool(
         tool_info: Any,
+        runtime_context: _NestedToolRuntimeContext,
     ) -> Callable[..., Awaitable[Any]]:
         """Wrap a session @tool_define for nested scope (list/history/timeline)."""
 
-        async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
+        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
+            active_ctx = ctx if ctx is not None else runtime_context.get_context()
             snap = _snapshot(_sess_global_names)
             try:
                 configure_session_tools(
@@ -2852,14 +2891,17 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                     max_active_runs_per_lineage=max_active_runs_per_lineage,
                     max_children_per_requester=max_children_per_requester,
                 )
-                return await tool_info.execute(ctx, **kwargs)
+                return await tool_info.execute(active_ctx, **kwargs)
             finally:
                 _restore(snap)
 
         return _execute
 
-    def _make_overview_tool() -> Callable[..., Awaitable[Any]]:
-        async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
+    def _make_overview_tool(
+        runtime_context: _NestedToolRuntimeContext,
+    ) -> Callable[..., Awaitable[Any]]:
+        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
+            active_ctx = ctx if ctx is not None else runtime_context.get_context()
             snap = _snapshot(_overview_global_names)
             try:
                 configure_sessions_overview(
@@ -2869,28 +2911,34 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                     visibility_default=visibility_default,
                     observability_provider=observability_stats_provider,
                 )
-                return await overview_info.execute(ctx, **kwargs)
+                return await overview_info.execute(active_ctx, **kwargs)
             finally:
                 _restore(snap)
 
         return _execute
 
-    def _make_wait_tool() -> Callable[..., Awaitable[Any]]:
-        async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
+    def _make_wait_tool(
+        runtime_context: _NestedToolRuntimeContext,
+    ) -> Callable[..., Awaitable[Any]]:
+        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
+            active_ctx = ctx if ctx is not None else runtime_context.get_context()
             snap = _snapshot(_wait_global_names)
             try:
                 configure_sessions_wait(
                     run_registry=run_registry,
                     conversation_id=conversation_id,
                 )
-                return await wait_info.execute(ctx, **kwargs)
+                return await wait_info.execute(active_ctx, **kwargs)
             finally:
                 _restore(snap)
 
         return _execute
 
-    def _make_ctrl_tool() -> Callable[..., Awaitable[Any]]:
-        async def _execute(ctx: ToolContext, **kwargs: Any) -> Any:
+    def _make_ctrl_tool(
+        runtime_context: _NestedToolRuntimeContext,
+    ) -> Callable[..., Awaitable[Any]]:
+        async def _execute(ctx: ToolContext | None = None, **kwargs: Any) -> Any:
+            active_ctx = ctx if ctx is not None else runtime_context.get_context()
             snap = _snapshot(_ctrl_global_names)
             try:
                 configure_subagents_control(
@@ -2907,7 +2955,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                     delegation_depth=delegation_depth,
                     max_delegation_depth=max_delegation_depth,
                 )
-                return await control_info.execute(ctx, **kwargs)
+                return await control_info.execute(active_ctx, **kwargs)
             finally:
                 _restore(snap)
 
@@ -2916,10 +2964,10 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
     # -- assemble ToolDefinition list --------------------------------------
 
     result: list[ToolDefinition] = []
-    for info, factory in [
-        (list_info, _make_sess_tool(list_info)),
-        (history_info, _make_sess_tool(history_info)),
-        (timeline_info, _make_sess_tool(timeline_info)),
+    for info, factory, runtime in [
+        (list_info, _make_sess_tool(list_info, list_runtime), list_runtime),
+        (history_info, _make_sess_tool(history_info, history_runtime), history_runtime),
+        (timeline_info, _make_sess_tool(timeline_info, timeline_runtime), timeline_runtime),
     ]:
         result.append(
             ToolDefinition(
@@ -2927,6 +2975,7 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
                 description=info.description,
                 parameters=info.parameters,
                 execute=factory,
+                _tool_instance=runtime,
             )
         )
 
@@ -2935,7 +2984,8 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
             name=overview_info.name,
             description=overview_info.description,
             parameters=overview_info.parameters,
-            execute=_make_overview_tool(),
+            execute=_make_overview_tool(overview_runtime),
+            _tool_instance=overview_runtime,
         )
     )
     result.append(
@@ -2943,7 +2993,8 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
             name=wait_info.name,
             description=wait_info.description,
             parameters=wait_info.parameters,
-            execute=_make_wait_tool(),
+            execute=_make_wait_tool(wait_runtime),
+            _tool_instance=wait_runtime,
         )
     )
     result.append(
@@ -2951,7 +3002,8 @@ def make_nested_session_tool_defs(  # noqa: C901, PLR0913, PLR0915
             name=control_info.name,
             description=control_info.description,
             parameters=control_info.parameters,
-            execute=_make_ctrl_tool(),
+            execute=_make_ctrl_tool(control_runtime),
+            _tool_instance=control_runtime,
         )
     )
 

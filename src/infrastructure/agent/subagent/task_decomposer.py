@@ -1,8 +1,9 @@
 """
-TaskDecomposer - LLM-driven task decomposition for parallel SubAgent execution.
+TaskDecomposer - LLM-driven task decomposition for SubAgent execution.
 
-Analyzes complex user queries and decomposes them into independent sub-tasks
-that can be assigned to different SubAgents and executed in parallel.
+Analyzes complex user queries and decomposes them into executable sub-tasks.
+Those tasks may be independent work items or dependent DAG phases that need to
+run in prerequisite order.
 """
 
 from __future__ import annotations
@@ -63,9 +64,9 @@ def _build_decomposition_tool_schema(
             "function": {
                 "name": "decompose_task",
                 "description": (
-                    "Decompose a complex task into independent sub-tasks "
-                    "that can be executed in parallel by specialized agents. "
-                    "If the task is simple, return a single sub-task."
+                    "Decompose a complex task into executable sub-tasks. "
+                    "Use depends_on for prerequisite relationships so the result can "
+                    "form a DAG. If the task is simple, return a single sub-task."
                 ),
                 "parameters": {
                     "type": "object",
@@ -114,12 +115,17 @@ def _build_decomposition_tool_schema(
     ]
 
 
-_DECOMPOSITION_SYSTEM_PROMPT = """You are a task decomposition expert. Analyze the user's request and break it down into independent sub-tasks when beneficial.
+_DECOMPOSITION_SYSTEM_PROMPT = """You are a task decomposition expert. Analyze the user's request and break it down into executable sub-tasks when beneficial.
 
 Rules:
-- Only decompose if the task has genuinely independent parts
-- Keep it simple: 2-4 sub-tasks maximum
-- If the task is simple or sequential, return a single sub-task
+- You must call decompose_task exactly once
+- Decompose when the task has separable phases, deliverables, or verification steps
+- If the request explicitly asks for a DAG, multiple child tasks, or named phases, preserve those handoff points as sub-tasks
+- Software delivery tasks usually split into requirements/API contract, implementation, tests, and documentation/review when those deliverables are in scope
+- Dependent phases are valid sub-tasks; represent prerequisites with depends_on
+- Keep it simple: {max_subtasks} sub-tasks maximum
+- If the request explicitly asks for four phases and max_subtasks allows it, return four sub-tasks
+- If the task is simple or is purely sequential without separable handoff points, return a single sub-task
 - Mark dependencies between tasks using depends_on
 - Independent tasks with no dependencies can run in parallel
 
@@ -127,12 +133,31 @@ Available agents: {agents}
 """
 
 
+_DECOMPOSITION_REPAIR_PROMPT = """The previous decomposition produced a single sub-task.
+
+Re-evaluate the original task and call decompose_task exactly once:
+- If the original task explicitly asks for a DAG, multiple child tasks, named phases, or separable deliverables, return a multi-node DAG up to the maximum.
+- If the original task truly has no separable handoff points, return one sub-task.
+- Preserve prerequisite relationships with depends_on.
+
+Original task:
+{query}
+
+Previous reasoning:
+{reasoning}
+
+Previous subtasks:
+{subtasks_json}
+"""
+
+
 class TaskDecomposer:
     """Decomposes complex tasks into parallelizable sub-tasks using LLM analysis.
 
     The decomposer makes a single LLM call to determine whether a task
-    should be split and how. It is conservative by default - only
-    decomposing when there are clearly independent sub-tasks.
+    should be split and how. It is conservative by default, but it preserves
+    explicit deliverable boundaries and dependency edges when the request asks
+    for a DAG or names separable phases.
     """
 
     def __init__(
@@ -148,6 +173,7 @@ class TaskDecomposer:
             available_agent_names: Names of available SubAgents.
             max_subtasks: Maximum number of sub-tasks to produce.
         """
+        super().__init__()
         self._llm_client = llm_client
         self._agent_names = available_agent_names or []
         self._max_subtasks = max_subtasks
@@ -178,7 +204,8 @@ class TaskDecomposer:
 
         tools = _build_decomposition_tool_schema(self._agent_names)
         system_prompt = _DECOMPOSITION_SYSTEM_PROMPT.format(
-            agents=", ".join(self._agent_names) if self._agent_names else "auto-detect"
+            agents=", ".join(self._agent_names) if self._agent_names else "auto-detect",
+            max_subtasks=self._max_subtasks,
         )
 
         messages = [{"role": "system", "content": system_prompt}]
@@ -193,13 +220,18 @@ class TaskDecomposer:
             messages.append({"role": "user", "content": query})
 
         try:
-            response = await self._llm_client.generate(
-                messages=messages,
-                tools=tools,
-                temperature=0.0,
-                max_tokens=512,
-            )
-            return self._parse_response(response, query)
+            response = await self._generate_decomposition(messages=messages, tools=tools)
+            result = self._parse_response(response, query)
+            if len(result.subtasks) <= 1 and self._max_subtasks > 1:
+                repaired = await self._repair_single_task_decomposition(
+                    query=query,
+                    initial_result=result,
+                    tools=tools,
+                    system_prompt=system_prompt,
+                )
+                if len(repaired.subtasks) > len(result.subtasks):
+                    return repaired
+            return result
 
         except Exception as e:
             logger.warning(f"[TaskDecomposer] Decomposition failed: {e}")
@@ -208,19 +240,90 @@ class TaskDecomposer:
                 reasoning=f"Decomposition failed: {e}",
             )
 
+    async def _generate_decomposition(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        try:
+            return await self._llm_client.generate(
+                messages=messages,
+                tools=tools,
+                temperature=0.0,
+                max_tokens=1024,
+                tool_choice={"type": "function", "function": {"name": "decompose_task"}},
+            )
+        except Exception as forced_exc:
+            logger.debug(
+                "[TaskDecomposer] Forced tool-choice decomposition failed; retrying without "
+                "tool_choice: %s",
+                forced_exc,
+            )
+            return await self._llm_client.generate(
+                messages=messages,
+                tools=tools,
+                temperature=0.0,
+                max_tokens=1024,
+            )
+
+    async def _repair_single_task_decomposition(
+        self,
+        *,
+        query: str,
+        initial_result: DecompositionResult,
+        tools: list[dict[str, Any]],
+        system_prompt: str,
+    ) -> DecompositionResult:
+        subtasks_json = json.dumps(
+            [
+                {
+                    "id": subtask.id,
+                    "description": subtask.description,
+                    "target_agent": subtask.target_subagent or "auto",
+                    "depends_on": list(subtask.dependencies),
+                    "priority": subtask.priority,
+                }
+                for subtask in initial_result.subtasks
+            ],
+            ensure_ascii=False,
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": _DECOMPOSITION_REPAIR_PROMPT.format(
+                    query=query,
+                    reasoning=initial_result.reasoning or "none",
+                    subtasks_json=subtasks_json,
+                ),
+            },
+        ]
+        try:
+            response = await self._generate_decomposition(messages=messages, tools=tools)
+        except Exception as exc:
+            logger.debug("[TaskDecomposer] Single-task repair failed: %s", exc)
+            return initial_result
+        repaired = self._parse_response(response, query)
+        if len(repaired.subtasks) <= 1:
+            return initial_result
+        return repaired
+
     def _parse_response(self, response: dict[str, Any], original_query: str) -> DecompositionResult:
         """Parse LLM response into DecompositionResult."""
         tool_calls = response.get("tool_calls", [])
         if not tool_calls:
+            content_args = self._parse_json_content(response.get("content"))
+            if content_args is not None:
+                return self._parse_arguments(content_args, original_query)
             return DecompositionResult(
                 subtasks=(SubTask(id="t1", description=original_query),),
                 reasoning="LLM did not decompose",
             )
 
         tool_call = tool_calls[0]
-        func = tool_call if isinstance(tool_call, dict) else tool_call.__dict__
-        function_data = func.get("function", func)
-        args_raw = function_data.get("arguments", "{}")
+        function_data = self._read_field(tool_call, "function", tool_call)
+        args_raw = self._read_field(function_data, "arguments", "{}")
 
         if isinstance(args_raw, str):
             try:
@@ -233,6 +336,45 @@ class TaskDecomposer:
         else:
             args = args_raw
 
+        if not isinstance(args, dict):
+            return DecompositionResult(
+                subtasks=(SubTask(id="t1", description=original_query),),
+                reasoning="Failed to parse decomposition",
+            )
+
+        return self._parse_arguments(args, original_query)
+
+    def _read_field(self, source: object, key: str, default: object) -> object:
+        if isinstance(source, dict):
+            return source.get(key, default)
+        return getattr(source, key, default)
+
+    def _parse_json_content(self, content: object) -> dict[str, Any] | None:
+        if not isinstance(content, str) or not content.strip():
+            return None
+        text = content.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if len(lines) >= 3:
+                text = "\n".join(lines[1:-1]).strip()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start < 0 or end <= start:
+                return None
+            try:
+                parsed = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                return None
+        return parsed if isinstance(parsed, dict) else None
+
+    def _parse_arguments(
+        self,
+        args: dict[str, Any],
+        original_query: str,
+    ) -> DecompositionResult:
         raw_tasks = args.get("subtasks", [])
         reasoning = args.get("reasoning", "")
 

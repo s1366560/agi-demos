@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import Request
@@ -25,6 +25,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspacePlanOutboxModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
+from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.workspace.goal_runtime import v2_bridge
 from src.infrastructure.agent.workspace.goal_runtime.v2_bridge import (
     kickoff_v2_plan_if_enabled,
@@ -120,6 +121,26 @@ class _WorkspaceServiceStub:
         return object()
 
 
+class _FakeDecomposer:
+    async def decompose(
+        self,
+        query: str,
+        conversation_context: str | None = None,
+    ) -> DecompositionResult:
+        return DecompositionResult(
+            subtasks=(
+                SubTask(id="api", description="Define API contract"),
+                SubTask(
+                    id="tests",
+                    description="Write tests for the API contract",
+                    dependencies=("api",),
+                ),
+            ),
+            reasoning=f"query={query}; context={conversation_context}",
+            is_decomposed=True,
+        )
+
+
 async def test_kickoff_noop_when_flag_disabled() -> None:
     with _patch_settings(False), patch.object(v2_bridge, "build_sql_orchestrator") as fake_build:
         await kickoff_v2_plan_if_enabled(
@@ -185,6 +206,36 @@ async def test_kickoff_creates_durable_plan_and_outbox_when_flag_enabled(
         "leader_agent_id": None,
     }
     assert outbox_items[0].metadata_json == {"source": "v2_bridge"}
+
+
+async def test_kickoff_uses_workspace_decomposer_to_create_dag(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace(db_session)
+
+    with (
+        _patch_settings(True),
+        _patch_session_factory(db_session),
+        patch.object(
+            v2_bridge,
+            "_build_workspace_task_decomposer",
+            new=AsyncMock(return_value=_FakeDecomposer()),
+        ) as decomposer_builder,
+    ):
+        await kickoff_v2_plan_if_enabled(
+            workspace_id="ws-abc",
+            title="Build a typed feature flag utility",
+            description="Plan API contract, implementation, tests, and review as a DAG.",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    decomposer_builder.assert_awaited_once()
+    plan = await SqlPlanRepository(db_session).get_by_workspace("ws-abc")
+    assert plan is not None
+    task_nodes = plan.leaf_tasks()
+    assert len(task_nodes) == 2
+    assert sum(len(node.depends_on) for node in task_nodes) == 1
 
 
 async def test_kickoff_worker_and_snapshot_api_flow_end_to_end(

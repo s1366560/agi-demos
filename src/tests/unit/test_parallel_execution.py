@@ -8,6 +8,7 @@ Tests for:
 """
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -183,6 +184,70 @@ class TestTaskDecomposer:
         assert result.is_decomposed is False
         assert len(result.subtasks) == 1
 
+    async def test_decompose_repairs_single_task_when_request_needs_dag(self, mock_llm_client):
+        mock_llm_client.generate.side_effect = [
+            {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "decompose_task",
+                            "arguments": json.dumps(
+                                {
+                                    "subtasks": [
+                                        {"id": "t1", "description": "Complete the whole feature"},
+                                    ],
+                                    "reasoning": "Initial lazy decomposition",
+                                }
+                            ),
+                        }
+                    }
+                ],
+            },
+            {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "decompose_task",
+                            "arguments": json.dumps(
+                                {
+                                    "subtasks": [
+                                        {"id": "t1", "description": "Define API contract"},
+                                        {
+                                            "id": "t2",
+                                            "description": "Implement utility",
+                                            "depends_on": ["t1"],
+                                        },
+                                        {
+                                            "id": "t3",
+                                            "description": "Add tests",
+                                            "depends_on": ["t2"],
+                                        },
+                                        {
+                                            "id": "t4",
+                                            "description": "Document and review",
+                                            "depends_on": ["t3"],
+                                        },
+                                    ],
+                                    "reasoning": "Request explicitly needs a delivery DAG",
+                                }
+                            ),
+                        }
+                    }
+                ],
+            },
+        ]
+
+        decomposer = TaskDecomposer(llm_client=mock_llm_client, max_subtasks=4)
+        result = await decomposer.decompose(
+            "Plan a DAG with requirements, implementation, tests, and documentation"
+        )
+
+        assert result.is_decomposed is True
+        assert len(result.subtasks) == 4
+        assert result.subtasks[-1].dependencies == ("t3",)
+
     async def test_decompose_no_llm_client(self):
         decomposer = TaskDecomposer(llm_client=None)
         result = await decomposer.decompose("Do something")
@@ -208,6 +273,115 @@ class TestTaskDecomposer:
         decomposer = TaskDecomposer(llm_client=mock_llm_client)
         result = await decomposer.decompose("Simple task")
         assert result.is_decomposed is False
+
+    async def test_prompt_allows_dependent_dag_phases(self, mock_llm_client):
+        mock_llm_client.generate.return_value = {
+            "content": "",
+            "tool_calls": [],
+        }
+        decomposer = TaskDecomposer(llm_client=mock_llm_client)
+        await decomposer.decompose("Plan API, implement, test, and review")
+
+        messages = mock_llm_client.generate.await_args.kwargs["messages"]
+        system_prompt = messages[0]["content"]
+        assert "Dependent phases are valid sub-tasks" in system_prompt
+        assert "depends_on" in system_prompt
+
+    async def test_decompose_forces_tool_call_choice(self, mock_llm_client):
+        mock_llm_client.generate.return_value = {
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "decompose_task",
+                        "arguments": json.dumps(
+                            {
+                                "subtasks": [
+                                    {"id": "t1", "description": "Define API contract"},
+                                    {
+                                        "id": "t2",
+                                        "description": "Implement utility",
+                                        "depends_on": ["t1"],
+                                    },
+                                ],
+                                "reasoning": "Use a dependent delivery DAG",
+                            }
+                        ),
+                    }
+                }
+            ],
+        }
+
+        decomposer = TaskDecomposer(llm_client=mock_llm_client)
+        await decomposer.decompose("Plan a DAG and implement it")
+
+        kwargs = mock_llm_client.generate.await_args.kwargs
+        assert kwargs["tool_choice"] == {
+            "type": "function",
+            "function": {"name": "decompose_task"},
+        }
+        assert kwargs["max_tokens"] == 1024
+
+    async def test_decompose_parses_json_content_fallback(self, mock_llm_client):
+        mock_llm_client.generate.return_value = {
+            "content": json.dumps(
+                {
+                    "subtasks": [
+                        {"id": "t1", "description": "Write requirements"},
+                        {
+                            "id": "t2",
+                            "description": "Build feature",
+                            "depends_on": ["t1"],
+                        },
+                    ],
+                    "reasoning": "Provider returned JSON content instead of a tool call",
+                }
+            ),
+            "tool_calls": [],
+        }
+
+        decomposer = TaskDecomposer(llm_client=mock_llm_client)
+        result = await decomposer.decompose("Write requirements then build feature")
+
+        assert result.is_decomposed is True
+        assert len(result.subtasks) == 2
+        assert result.subtasks[1].dependencies == ("t1",)
+
+    async def test_decompose_parses_object_style_tool_call(self, mock_llm_client):
+        mock_llm_client.generate.return_value = {
+            "content": "",
+            "tool_calls": [
+                SimpleNamespace(
+                    function=SimpleNamespace(
+                        arguments=json.dumps(
+                            {
+                                "subtasks": [
+                                    {"id": "t1", "description": "Define API contract"},
+                                    {
+                                        "id": "t2",
+                                        "description": "Implement utility",
+                                        "depends_on": ["t1"],
+                                    },
+                                    {
+                                        "id": "t3",
+                                        "description": "Test utility",
+                                        "depends_on": ["t2"],
+                                    },
+                                ],
+                                "reasoning": "Object-style LiteLLM tool call",
+                            }
+                        )
+                    )
+                )
+            ],
+        }
+
+        decomposer = TaskDecomposer(llm_client=mock_llm_client)
+        result = await decomposer.decompose("Plan a dependent DAG")
+
+        assert result.is_decomposed is True
+        assert len(result.subtasks) == 3
+        assert result.subtasks[2].dependencies == ("t2",)
 
     async def test_decompose_max_subtasks_limit(self, mock_llm_client):
         mock_llm_client.generate.return_value = {

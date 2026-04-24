@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from fastapi import Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_agent_autonomy import is_goal_root_task
@@ -37,6 +40,10 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_sisyphus_agent,
 )
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    WORKSPACE_PLAN_ID,
+    WORKSPACE_PLAN_NODE_ID,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +60,14 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # Redis cooldown remains the secondary guard against repeat triggers once the
 # tick itself completes.
 _inflight_ticks: dict[str, asyncio.Task[Any]] = {}
+
+
+class _WorkspaceTaskChildrenRepository(Protocol):
+    async def find_by_root_goal_task_id(
+        self,
+        workspace_id: str,
+        root_goal_task_id: str,
+    ) -> Sequence[WorkspaceTask]: ...
 
 
 def _auto_tick_enabled() -> bool:
@@ -140,14 +155,13 @@ async def ensure_workspace_leader_binding(
     workspace_id: str,
 ) -> tuple[WorkspaceAgent, bool]:
     container = _resolve_container(request, db)
-    bindings = await container.workspace_agent_repository().find_by_workspace(
+    workspace_agent_repo = container.workspace_agent_repository()
+    existing_builtin_binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
         workspace_id=workspace_id,
-        active_only=True,
-        limit=1,
-        offset=0,
+        agent_id=BUILTIN_SISYPHUS_ID,
     )
-    if bindings:
-        return bindings[0], False
+    if existing_builtin_binding is not None and existing_builtin_binding.is_active:
+        return existing_builtin_binding, False
 
     builtin_row = await db.get(AgentDefinitionModel, BUILTIN_SISYPHUS_ID)
     if builtin_row is None:
@@ -199,22 +213,59 @@ async def ensure_workspace_leader_binding(
         )
         await db.flush()
 
-    binding = await container.workspace_agent_repository().save(
-        WorkspaceAgent(
-            id=WorkspaceAgent.generate_id(),
+    if existing_builtin_binding is not None:
+        restored_binding = await workspace_agent_repo.save(
+            replace(
+                existing_builtin_binding,
+                display_name=existing_builtin_binding.display_name or BUILTIN_SISYPHUS_DISPLAY_NAME,
+                description=existing_builtin_binding.description
+                or "Auto-bound builtin workspace leader",
+                config={
+                    **existing_builtin_binding.config,
+                    "auto_bound_builtin": True,
+                    "workspace_role": "leader",
+                },
+                is_active=True,
+                label=existing_builtin_binding.label or "Leader",
+                status=existing_builtin_binding.status or "idle",
+                updated_at=datetime.now(UTC),
+            )
+        )
+        return restored_binding, False
+
+    new_binding = WorkspaceAgent(
+        id=WorkspaceAgent.generate_id(),
+        workspace_id=workspace_id,
+        agent_id=BUILTIN_SISYPHUS_ID,
+        display_name=BUILTIN_SISYPHUS_DISPLAY_NAME,
+        description="Auto-bound builtin workspace leader",
+        config={"auto_bound_builtin": True, "workspace_role": "leader"},
+        is_active=True,
+        label="Leader",
+        status="idle",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    try:
+        async with db.begin_nested():
+            binding = await workspace_agent_repo.save(new_binding)
+        return binding, True
+    except IntegrityError:
+        logger.info(
+            "workspace_leader_binding.race_lost",
+            extra={
+                "event": "workspace_leader_binding.race_lost",
+                "workspace_id": workspace_id,
+                "agent_id": BUILTIN_SISYPHUS_ID,
+            },
+        )
+        raced_binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
             workspace_id=workspace_id,
             agent_id=BUILTIN_SISYPHUS_ID,
-            display_name=BUILTIN_SISYPHUS_DISPLAY_NAME,
-            description="Auto-bound builtin workspace leader",
-            config={"auto_bound_builtin": True, "workspace_role": "leader"},
-            is_active=True,
-            label="Leader",
-            status="idle",
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
         )
-    )
-    return binding, True
+        if raced_binding is not None:
+            return raced_binding, False
+        raise
 
 
 async def _is_on_cooldown(workspace_id: str, root_task_id: str) -> bool:
@@ -660,6 +711,177 @@ def _build_message_service(
     )
 
 
+async def _reconcile_durable_plan_after_root_auto_complete(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    root_task_id: str,
+    actor_user_id: str,
+) -> bool:
+    """Mark the side-by-side V2 plan completed after legacy root closeout.
+
+    Legacy autonomy remains the authority that launches workers and closes the
+    root task. Durable V2 is an observable/recoverable projection, so when the
+    authoritative root is auto-completed we reconcile the projection instead of
+    letting the plan stay visually active forever.
+    """
+    from src.domain.model.workspace_plan import PlanStatus
+    from src.domain.model.workspace_plan.plan_node import (
+        Progress,
+        TaskExecution,
+        TaskIntent,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
+        SqlPlanRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
+        SqlWorkspacePlanEventRepository,
+    )
+
+    plan_repo = SqlPlanRepository(db)
+    plan = await plan_repo.get_by_workspace(workspace_id)
+    if plan is None or plan.status is PlanStatus.COMPLETED:
+        return False
+
+    now = datetime.now(UTC)
+    reconciled_node_count = 0
+    for node in list(plan.nodes.values()):
+        already_closed = (
+            node.intent is TaskIntent.DONE
+            and node.execution is TaskExecution.IDLE
+            and node.progress.percent >= 100.0
+        )
+        if already_closed:
+            continue
+
+        metadata = dict(node.metadata)
+        metadata["completed_by_root_auto_complete"] = root_task_id
+        plan.replace_node(
+            replace(
+                node,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                progress=Progress(
+                    percent=100.0,
+                    confidence=1.0,
+                    note="Closed after legacy workspace root auto-completed.",
+                ),
+                metadata=metadata,
+                updated_at=now,
+                completed_at=node.completed_at or now,
+            )
+        )
+        reconciled_node_count += 1
+
+    plan.status = PlanStatus.COMPLETED
+    plan.updated_at = now
+    await plan_repo.save(plan)
+    await SqlWorkspacePlanEventRepository(db).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        actor_id=actor_user_id,
+        event_type="root_auto_completed_plan_reconciled",
+        source="legacy_autonomy",
+        payload={
+            "root_task_id": root_task_id,
+            "reconciled_node_count": reconciled_node_count,
+        },
+    )
+    return True
+
+
+async def _safe_reconcile_durable_plan_after_root_auto_complete(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    root_task_id: str,
+    actor_user_id: str,
+) -> None:
+    try:
+        reconciled = await _reconcile_durable_plan_after_root_auto_complete(
+            db=db,
+            workspace_id=workspace_id,
+            root_task_id=root_task_id,
+            actor_user_id=actor_user_id,
+        )
+        if reconciled:
+            logger.info(
+                "autonomy_tick.plan_reconciled_after_root_auto_complete",
+                extra={
+                    "event": "autonomy_tick.plan_reconciled_after_root_auto_complete",
+                    "workspace_id": workspace_id,
+                    "root_task_id": root_task_id,
+                },
+            )
+    except Exception:
+        logger.warning(
+            "autonomy_tick.plan_reconcile_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.plan_reconcile_failed",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+            },
+        )
+
+
+def _is_workspace_plan_linked_task(task: WorkspaceTask) -> bool:
+    metadata = getattr(task, "metadata", None)
+    if not isinstance(metadata, Mapping):
+        return False
+    plan_id = metadata.get(WORKSPACE_PLAN_ID)
+    node_id = metadata.get(WORKSPACE_PLAN_NODE_ID)
+    return isinstance(plan_id, str) and bool(plan_id) and isinstance(node_id, str) and bool(node_id)
+
+
+async def _root_has_workspace_plan_linked_children(
+    *,
+    task_repo: _WorkspaceTaskChildrenRepository,
+    workspace_id: str,
+    root_task_id: str,
+) -> bool:
+    try:
+        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
+    except Exception:
+        logger.warning(
+            "autonomy_tick.plan_linked_children_lookup_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.plan_linked_children_lookup_failed",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+            },
+        )
+        return False
+    return any(_is_workspace_plan_linked_task(child) for child in children)
+
+
+async def _durable_plan_allows_root_auto_complete(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+) -> bool:
+    """Return True only when no active durable plan can still dispatch work."""
+    from src.domain.model.workspace_plan import PlanStatus
+    from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
+        SqlPlanRepository,
+    )
+
+    try:
+        plan = await SqlPlanRepository(db).get_by_workspace(workspace_id)
+    except Exception:
+        logger.warning(
+            "autonomy_tick.plan_auto_complete_gate_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.plan_auto_complete_gate_failed",
+                "workspace_id": workspace_id,
+            },
+        )
+        return False
+    return plan is None or plan.status is PlanStatus.COMPLETED
+
+
 async def _try_auto_complete_root(
     *,
     request: Request | None,
@@ -692,6 +914,9 @@ async def _try_auto_complete_root(
         WorkspaceAutonomyOrchestrator,
     )
 
+    if not await _durable_plan_allows_root_auto_complete(db=db, workspace_id=workspace_id):
+        return None
+
     command_service = WorkspaceTaskCommandService(task_service)
     task_repo = container.workspace_task_repository()
     try:
@@ -717,6 +942,13 @@ async def _try_auto_complete_root(
 
     if completed is None or completed.status.value != "done":
         return None
+
+    await _safe_reconcile_durable_plan_after_root_auto_complete(
+        db=db,
+        workspace_id=workspace_id,
+        root_task_id=root_task.id,
+        actor_user_id=current_user.id,
+    )
 
     try:
         publisher = WorkspaceTaskEventPublisher(await get_redis_client())
@@ -824,7 +1056,7 @@ def _build_autonomy_mention_content(mention: str, title: str, remediation_status
     )
 
 
-async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0912, PLR0915
+async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PLR0912, PLR0915
     *,
     request: Request | None = None,
     db: AsyncSession,
@@ -996,32 +1228,12 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0912, PL
             title = objective.title
             description = objective.description or description
 
-    try:
-        from src.infrastructure.agent.workspace.goal_runtime import (
-            kickoff_v2_plan_if_enabled,
-        )
-
-        await kickoff_v2_plan_if_enabled(
-            workspace_id=workspace_id,
-            title=title,
-            description=description,
-            created_by=current_user.id,
-            root_task_id=root_task.id,
-            leader_agent_id=leader_binding.agent_id,
-        )
-    except Exception:
-        logger.warning(
-            "workspace_v2.kickoff_failed",
-            exc_info=True,
-            extra={"workspace_id": workspace_id, "root_task_id": root_task.id},
-        )
-
     mention = _format_agent_mention(leader_binding.display_name, leader_binding.agent_id)
     remediation_status = (
         (root_task.metadata or {}).get("remediation_status") or "none" if has_children else "none"
     )
 
-    if remediation_status == "ready_for_completion" and has_children and _auto_complete_enabled():
+    if has_children and _auto_complete_enabled():
         auto_outcome = await _try_auto_complete_root(
             request=request,
             db=db,
@@ -1038,6 +1250,42 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0912, PL
         )
         if auto_outcome is not None:
             return auto_outcome
+
+    if remediation_status != "ready_for_completion":
+        try:
+            from src.infrastructure.agent.workspace.goal_runtime import (
+                kickoff_v2_plan_if_enabled,
+            )
+
+            await kickoff_v2_plan_if_enabled(
+                workspace_id=workspace_id,
+                title=title,
+                description=description,
+                created_by=current_user.id,
+                root_task_id=root_task.id,
+                leader_agent_id=leader_binding.agent_id,
+            )
+        except Exception:
+            logger.warning(
+                "workspace_v2.kickoff_failed",
+                exc_info=True,
+                extra={"workspace_id": workspace_id, "root_task_id": root_task.id},
+            )
+
+    if (
+        remediation_status != "ready_for_completion"
+        and await _root_has_workspace_plan_linked_children(
+            task_repo=task_repo,
+            workspace_id=workspace_id,
+            root_task_id=root_task.id,
+        )
+    ):
+        await _mark_cooldown(workspace_id, root_task.id)
+        return {
+            "triggered": False,
+            "root_task_id": root_task.id,
+            "reason": "durable_plan_active",
+        }
 
     content = _build_autonomy_mention_content(mention, title, remediation_status)
     message_service = _build_message_service(request, db, container)

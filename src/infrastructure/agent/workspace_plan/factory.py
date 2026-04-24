@@ -38,7 +38,7 @@ from src.infrastructure.agent.workspace_plan.orchestrator import (
     OrchestratorConfig,
     WorkspaceOrchestrator,
 )
-from src.infrastructure.agent.workspace_plan.planner import LLMGoalPlanner
+from src.infrastructure.agent.workspace_plan.planner import LLMGoalPlanner, TaskDecomposerProtocol
 from src.infrastructure.agent.workspace_plan.progress import ProgressProjector
 from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepository
 from src.infrastructure.agent.workspace_plan.supervisor import (
@@ -161,6 +161,7 @@ def _payload_string(payload: dict[str, Any], key: str) -> str | None:
 def build_default_orchestrator(
     *,
     config: OrchestratorConfig | None = None,
+    decomposer: TaskDecomposerProtocol | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a default, side-effect-free :class:`WorkspaceOrchestrator`.
 
@@ -170,7 +171,7 @@ def build_default_orchestrator(
     """
     cfg = config or OrchestratorConfig.from_env()
     plan_repo = InMemoryPlanRepository()
-    planner = LLMGoalPlanner(decomposer=None)
+    planner = LLMGoalPlanner(decomposer=decomposer)
     allocator = CapabilityAllocator()
     verifier = AcceptanceCriterionVerifier()
     projector = ProgressProjector()
@@ -202,6 +203,7 @@ def build_sql_orchestrator(
     db: AsyncSession,
     *,
     config: OrchestratorConfig | None = None,
+    decomposer: TaskDecomposerProtocol | None = None,
     agent_pool: AgentPoolProvider | None = None,
     dispatcher: Dispatcher | None = None,
     attempt_context: AttemptContextProvider | None = None,
@@ -217,7 +219,7 @@ def build_sql_orchestrator(
     """
     cfg = config or OrchestratorConfig.from_env()
     plan_repo = SqlPlanRepository(db)
-    planner = LLMGoalPlanner(decomposer=None)
+    planner = LLMGoalPlanner(decomposer=decomposer)
     allocator = CapabilityAllocator()
     verifier = AcceptanceCriterionVerifier()
     projector = ProgressProjector()

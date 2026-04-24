@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from src.infrastructure.agent.core.react_agent import ReActAgent
+from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.agent.routing.execution_router import ExecutionPath
 
 
@@ -19,6 +20,19 @@ class _MockTool:
 
     def get_parameters_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
+
+
+async def _noop_tool(**_kwargs: Any) -> str:
+    return "ok"
+
+
+def _tool_def(name: str) -> ToolDefinition:
+    return ToolDefinition(
+        name=name,
+        description="tool",
+        parameters={"type": "object", "properties": {}},
+        execute=_noop_tool,
+    )
 
 
 @pytest.mark.unit
@@ -156,3 +170,34 @@ def test_build_tool_selection_context_carries_domain_lane_metadata() -> None:
     assert selection_context.metadata.get("route_id") == "route_123"
     assert selection_context.metadata.get("trace_id") == "trace_123"
     assert selection_context.metadata.get("routing_metadata", {}).get("router_mode_enabled") is True
+
+
+@pytest.mark.unit
+def test_final_tool_policy_filters_core_and_late_injected_tools() -> None:
+    """Selected-agent allowlists should constrain the final executable tools."""
+    tools = [
+        _tool_def("read"),
+        _tool_def("workspace_report_complete"),
+        _tool_def("delegate_subagent"),
+    ]
+
+    filtered = ReActAgent._filter_tools_by_name_policy(
+        tools,
+        allow_tools=["workspace_report_complete"],
+        deny_tools=[],
+    )
+
+    assert [tool.name for tool in filtered] == ["workspace_report_complete"]
+
+
+@pytest.mark.unit
+def test_final_tool_policy_treats_wildcard_allow_as_unrestricted() -> None:
+    tools = [_tool_def("read"), _tool_def("bash"), _tool_def("workspace_report_complete")]
+
+    filtered = ReActAgent._filter_tools_by_name_policy(
+        tools,
+        allow_tools=["*"],
+        deny_tools=["bash"],
+    )
+
+    assert [tool.name for tool in filtered] == ["read", "workspace_report_complete"]

@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.infrastructure.adapters.primary.web.routers import (
     workspace_leader_bootstrap as bootstrap,
 )
@@ -29,10 +30,154 @@ class _FakeTaskRepo:
     def __init__(self, children_map: dict[str, list[Any]]) -> None:
         self._children_map = children_map
 
-    async def find_by_root_goal_task_id(
-        self, workspace_id: str, root_task_id: str
-    ) -> list[Any]:
+    async def find_by_root_goal_task_id(self, workspace_id: str, root_task_id: str) -> list[Any]:
         return self._children_map.get(root_task_id, [])
+
+
+class _FakeWorkspaceAgentRepo:
+    def __init__(self, bindings: list[WorkspaceAgent]) -> None:
+        self.bindings = list(bindings)
+        self.saved: list[WorkspaceAgent] = []
+
+    async def find_by_workspace_and_agent_id(
+        self, workspace_id: str, agent_id: str
+    ) -> WorkspaceAgent | None:
+        return next(
+            (
+                binding
+                for binding in self.bindings
+                if binding.workspace_id == workspace_id and binding.agent_id == agent_id
+            ),
+            None,
+        )
+
+    async def save(self, binding: WorkspaceAgent) -> WorkspaceAgent:
+        self.saved.append(binding)
+        for index, existing in enumerate(self.bindings):
+            if existing.id == binding.id:
+                self.bindings[index] = binding
+                return binding
+        self.bindings.append(binding)
+        return binding
+
+
+class _FakeContainer:
+    def __init__(self, workspace_agent_repo: _FakeWorkspaceAgentRepo) -> None:
+        self._workspace_agent_repo = workspace_agent_repo
+
+    def workspace_agent_repository(self) -> _FakeWorkspaceAgentRepo:
+        return self._workspace_agent_repo
+
+
+class _FakeNestedTransaction:
+    async def __aenter__(self) -> _FakeNestedTransaction:
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
+        return False
+
+
+class _FakeDb:
+    def __init__(self, builtin_exists: bool = True) -> None:
+        self.builtin_exists = builtin_exists
+        self.added: list[Any] = []
+        self.flush_count = 0
+
+    async def get(self, model: Any, key: str) -> object | None:
+        return object() if self.builtin_exists else None
+
+    def add(self, row: Any) -> None:
+        self.added.append(row)
+
+    def begin_nested(self) -> _FakeNestedTransaction:
+        return _FakeNestedTransaction()
+
+    async def flush(self) -> None:
+        self.flush_count += 1
+
+
+@pytest.mark.unit
+class TestEnsureWorkspaceLeaderBinding:
+    async def test_prefers_existing_builtin_leader_over_worker(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        worker = WorkspaceAgent(
+            id="worker-binding",
+            workspace_id="ws-1",
+            agent_id="worker-agent",
+            display_name="Worker",
+        )
+        builtin = WorkspaceAgent(
+            id="leader-binding",
+            workspace_id="ws-1",
+            agent_id=bootstrap.BUILTIN_SISYPHUS_ID,
+            display_name=bootstrap.BUILTIN_SISYPHUS_DISPLAY_NAME,
+        )
+        repo = _FakeWorkspaceAgentRepo([worker, builtin])
+        container = _FakeContainer(repo)
+        monkeypatch.setattr(bootstrap, "_resolve_container", lambda request, db: container)
+
+        binding, created = await bootstrap.ensure_workspace_leader_binding(
+            db=_FakeDb(), workspace_id="ws-1"
+        )
+
+        assert binding is builtin
+        assert created is False
+        assert repo.saved == []
+
+    async def test_creates_builtin_leader_when_only_worker_is_bound(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        repo = _FakeWorkspaceAgentRepo(
+            [
+                WorkspaceAgent(
+                    id="worker-binding",
+                    workspace_id="ws-1",
+                    agent_id="worker-agent",
+                    display_name="Worker",
+                )
+            ]
+        )
+        container = _FakeContainer(repo)
+        monkeypatch.setattr(bootstrap, "_resolve_container", lambda request, db: container)
+
+        binding, created = await bootstrap.ensure_workspace_leader_binding(
+            db=_FakeDb(), workspace_id="ws-1"
+        )
+
+        assert binding.agent_id == bootstrap.BUILTIN_SISYPHUS_ID
+        assert binding.display_name == bootstrap.BUILTIN_SISYPHUS_DISPLAY_NAME
+        assert binding.config["workspace_role"] == "leader"
+        assert created is True
+        assert repo.saved == [binding]
+
+    async def test_reactivates_existing_builtin_leader_binding(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        inactive = WorkspaceAgent(
+            id="leader-binding",
+            workspace_id="ws-1",
+            agent_id=bootstrap.BUILTIN_SISYPHUS_ID,
+            display_name=None,
+            config={"custom": "kept"},
+            is_active=False,
+        )
+        repo = _FakeWorkspaceAgentRepo([inactive])
+        container = _FakeContainer(repo)
+        monkeypatch.setattr(bootstrap, "_resolve_container", lambda request, db: container)
+
+        binding, created = await bootstrap.ensure_workspace_leader_binding(
+            db=_FakeDb(), workspace_id="ws-1"
+        )
+
+        assert binding.id == inactive.id
+        assert binding.is_active is True
+        assert binding.display_name == bootstrap.BUILTIN_SISYPHUS_DISPLAY_NAME
+        assert binding.config["custom"] == "kept"
+        assert binding.config["workspace_role"] == "leader"
+        assert binding.config["auto_bound_builtin"] is True
+        assert created is False
+        assert repo.saved == [binding]
 
 
 @pytest.mark.unit
@@ -41,9 +186,7 @@ class TestRootTaskSortKey:
         ready = _FakeRootTask(id="r1", metadata={"remediation_status": "ready_for_completion"})
         replan = _FakeRootTask(id="r2", metadata={"remediation_status": "replan_required"})
         none = _FakeRootTask(id="r3", metadata={"remediation_status": "none"})
-        sorted_tasks = sorted(
-            [none, replan, ready], key=bootstrap._root_task_sort_key
-        )
+        sorted_tasks = sorted([none, replan, ready], key=bootstrap._root_task_sort_key)
         assert [t.id for t in sorted_tasks] == ["r1", "r2", "r3"]
 
     def test_missing_metadata_defaults_to_lowest_priority(self) -> None:
@@ -58,10 +201,12 @@ class TestSelectRootTaskNeedingProgress:
     async def test_prefers_root_without_children(self) -> None:
         with_kids = _FakeRootTask(id="r-kids", metadata={"remediation_status": "none"})
         no_kids = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({
-            "r-kids": [_FakeChildTask(status="in_progress")],
-            "r-empty": [],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "r-kids": [_FakeChildTask(status="in_progress")],
+                "r-empty": [],
+            }
+        )
 
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo,
@@ -72,14 +217,14 @@ class TestSelectRootTaskNeedingProgress:
         assert has_children is False
 
     async def test_ready_for_completion_beats_empty_root(self) -> None:
-        ready = _FakeRootTask(
-            id="r-ready", metadata={"remediation_status": "ready_for_completion"}
-        )
+        ready = _FakeRootTask(id="r-ready", metadata={"remediation_status": "ready_for_completion"})
         empty = _FakeRootTask(id="r-empty", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({
-            "r-ready": [_FakeChildTask(status="done")],
-            "r-empty": [],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "r-ready": [_FakeChildTask(status="done")],
+                "r-empty": [],
+            }
+        )
 
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo, workspace_id="ws-1", root_tasks=[empty, ready]
@@ -90,10 +235,12 @@ class TestSelectRootTaskNeedingProgress:
     async def test_returns_none_when_all_stable(self) -> None:
         stable_a = _FakeRootTask(id="a", metadata={"remediation_status": "none"})
         stable_b = _FakeRootTask(id="b", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({
-            "a": [_FakeChildTask(status="in_progress")],
-            "b": [_FakeChildTask(status="done")],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "a": [_FakeChildTask(status="in_progress")],
+                "b": [_FakeChildTask(status="done")],
+            }
+        )
 
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo, workspace_id="ws-1", root_tasks=[stable_a, stable_b]
@@ -104,12 +251,14 @@ class TestSelectRootTaskNeedingProgress:
     async def test_returns_root_when_children_in_todo(self) -> None:
         """Root with TODO children needs progress (worker sessions must launch)."""
         root = _FakeRootTask(id="r-todo", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({
-            "r-todo": [
-                _FakeChildTask(id="c1", status="todo"),
-                _FakeChildTask(id="c2", status="in_progress"),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "r-todo": [
+                    _FakeChildTask(id="c1", status="todo"),
+                    _FakeChildTask(id="c2", status="in_progress"),
+                ],
+            }
+        )
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo, workspace_id="ws-1", root_tasks=[root]
         )
@@ -119,33 +268,39 @@ class TestSelectRootTaskNeedingProgress:
     async def test_force_returns_root_even_when_stable(self) -> None:
         """force=True overrides the 'all children active' check."""
         root = _FakeRootTask(id="r-stable", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({
-            "r-stable": [_FakeChildTask(status="in_progress")],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "r-stable": [_FakeChildTask(status="in_progress")],
+            }
+        )
         task, has_children = await bootstrap._select_root_task_needing_progress(
-            task_repo=repo, workspace_id="ws-1", root_tasks=[root], force=True,
+            task_repo=repo,
+            workspace_id="ws-1",
+            root_tasks=[root],
+            force=True,
         )
         assert task is not None and task.id == "r-stable"
         assert has_children is True
 
-
     async def test_returns_root_when_children_pending_adjudication(self) -> None:
         """Children with pending_leader_adjudication=True trigger the tick."""
         root = _FakeRootTask(id="r-adj", metadata={"remediation_status": "none"})
-        repo = _FakeTaskRepo({
-            "r-adj": [
-                _FakeChildTask(
-                    id="c1",
-                    status="in_progress",
-                    metadata={"pending_leader_adjudication": True},
-                ),
-                _FakeChildTask(
-                    id="c2",
-                    status="in_progress",
-                    metadata={"pending_leader_adjudication": True},
-                ),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "r-adj": [
+                    _FakeChildTask(
+                        id="c1",
+                        status="in_progress",
+                        metadata={"pending_leader_adjudication": True},
+                    ),
+                    _FakeChildTask(
+                        id="c2",
+                        status="in_progress",
+                        metadata={"pending_leader_adjudication": True},
+                    ),
+                ],
+            }
+        )
         task, has_children = await bootstrap._select_root_task_needing_progress(
             task_repo=repo, workspace_id="ws-1", root_tasks=[root]
         )
@@ -340,15 +495,11 @@ class TestSweepOrphanExecutionTasks:
             metadata={"task_role": "execution_task"},
         )
 
-        dispatched, captured = await self._run(
-            monkeypatch, children=[orphan], leader_agent_id=None
-        )
+        dispatched, captured = await self._run(monkeypatch, children=[orphan], leader_agent_id=None)
         assert dispatched == 0
         assert captured == []
 
-    async def test_dispatch_failure_does_not_raise(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_dispatch_failure_does_not_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from src.domain.model.workspace.workspace_task import (
             WorkspaceTask,
             WorkspaceTaskPriority,
@@ -408,19 +559,21 @@ class TestAutoAdjudicatePendingReports:
 
         monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
 
-        repo = _FakeTaskRepo({
-            "root-1": [
-                _FakeChildTask(
-                    id="c1",
-                    status="in_progress",
-                    metadata={
-                        "pending_leader_adjudication": True,
-                        "last_worker_report_type": "completed",
-                        "current_attempt_id": "att-1",
-                    },
-                ),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "root-1": [
+                    _FakeChildTask(
+                        id="c1",
+                        status="in_progress",
+                        metadata={
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "completed",
+                            "current_attempt_id": "att-1",
+                        },
+                    ),
+                ],
+            }
+        )
 
         count = await bootstrap._auto_adjudicate_pending_reports(
             task_repo=repo,
@@ -447,27 +600,29 @@ class TestAutoAdjudicatePendingReports:
 
         monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
 
-        repo = _FakeTaskRepo({
-            "root-1": [
-                _FakeChildTask(
-                    id="c1",
-                    status="in_progress",
-                    metadata={
-                        "pending_leader_adjudication": True,
-                        "last_worker_report_type": "blocked",
-                        "current_attempt_id": "att-2",
-                    },
-                ),
-                _FakeChildTask(
-                    id="c2",
-                    status="in_progress",
-                    metadata={
-                        "pending_leader_adjudication": True,
-                        "last_worker_report_type": "failed",
-                    },
-                ),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "root-1": [
+                    _FakeChildTask(
+                        id="c1",
+                        status="in_progress",
+                        metadata={
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "blocked",
+                            "current_attempt_id": "att-2",
+                        },
+                    ),
+                    _FakeChildTask(
+                        id="c2",
+                        status="in_progress",
+                        metadata={
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "failed",
+                        },
+                    ),
+                ],
+            }
+        )
 
         count = await bootstrap._auto_adjudicate_pending_reports(
             task_repo=repo,
@@ -494,16 +649,18 @@ class TestAutoAdjudicatePendingReports:
 
         monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
 
-        repo = _FakeTaskRepo({
-            "root-1": [
-                _FakeChildTask(id="c1", status="done", metadata={}),
-                _FakeChildTask(
-                    id="c2",
-                    status="in_progress",
-                    metadata={"pending_leader_adjudication": False},
-                ),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "root-1": [
+                    _FakeChildTask(id="c1", status="done", metadata={}),
+                    _FakeChildTask(
+                        id="c2",
+                        status="in_progress",
+                        metadata={"pending_leader_adjudication": False},
+                    ),
+                ],
+            }
+        )
 
         count = await bootstrap._auto_adjudicate_pending_reports(
             task_repo=repo,
@@ -515,9 +672,7 @@ class TestAutoAdjudicatePendingReports:
         assert count == 0
         assert adjudicated_calls == []
 
-    async def test_skips_unknown_report_type(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_skips_unknown_report_type(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adjudicated_calls: list[dict[str, Any]] = []
 
         async def _fake_adjudicate(**kwargs: Any) -> str:
@@ -528,18 +683,20 @@ class TestAutoAdjudicatePendingReports:
 
         monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _fake_adjudicate)
 
-        repo = _FakeTaskRepo({
-            "root-1": [
-                _FakeChildTask(
-                    id="c1",
-                    status="in_progress",
-                    metadata={
-                        "pending_leader_adjudication": True,
-                        "last_worker_report_type": "progress_update",
-                    },
-                ),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "root-1": [
+                    _FakeChildTask(
+                        id="c1",
+                        status="in_progress",
+                        metadata={
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "progress_update",
+                        },
+                    ),
+                ],
+            }
+        )
 
         count = await bootstrap._auto_adjudicate_pending_reports(
             task_repo=repo,
@@ -566,26 +723,28 @@ class TestAutoAdjudicatePendingReports:
 
         monkeypatch.setattr(wgr, "adjudicate_workspace_worker_report", _flaky_adjudicate)
 
-        repo = _FakeTaskRepo({
-            "root-1": [
-                _FakeChildTask(
-                    id="c1",
-                    status="in_progress",
-                    metadata={
-                        "pending_leader_adjudication": True,
-                        "last_worker_report_type": "completed",
-                    },
-                ),
-                _FakeChildTask(
-                    id="c2",
-                    status="in_progress",
-                    metadata={
-                        "pending_leader_adjudication": True,
-                        "last_worker_report_type": "completed",
-                    },
-                ),
-            ],
-        })
+        repo = _FakeTaskRepo(
+            {
+                "root-1": [
+                    _FakeChildTask(
+                        id="c1",
+                        status="in_progress",
+                        metadata={
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "completed",
+                        },
+                    ),
+                    _FakeChildTask(
+                        id="c2",
+                        status="in_progress",
+                        metadata={
+                            "pending_leader_adjudication": True,
+                            "last_worker_report_type": "completed",
+                        },
+                    ),
+                ],
+            }
+        )
 
         count = await bootstrap._auto_adjudicate_pending_reports(
             task_repo=repo,

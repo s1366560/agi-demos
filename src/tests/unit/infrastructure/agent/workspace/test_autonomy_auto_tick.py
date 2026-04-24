@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -132,6 +133,105 @@ class TestWorkerReportHook:
         kickoff_idx = source.index("kickoff_v2_plan_if_enabled")
         message_idx = source.index("message_service.send_message")
         assert kickoff_idx < message_idx
+
+    def test_ready_for_completion_auto_complete_precedes_v2_kickoff(self) -> None:
+        """Root auto-completion must be attempted before any side-by-side kickoff."""
+        import inspect
+
+        source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
+        auto_complete_idx = source.index("_try_auto_complete_root")
+        kickoff_idx = source.index("kickoff_v2_plan_if_enabled")
+        assert auto_complete_idx < kickoff_idx
+        assert 'if remediation_status != "ready_for_completion"' in source
+
+    def test_auto_complete_reconciles_durable_plan_before_commit(self) -> None:
+        """Legacy root completion must reconcile the V2 projection before publish/commit."""
+        import inspect
+
+        source = inspect.getsource(wlb._try_auto_complete_root)
+        reconcile_idx = source.index("_safe_reconcile_durable_plan_after_root_auto_complete")
+        publish_idx = source.index("publisher = WorkspaceTaskEventPublisher")
+        commit_idx = source.index("await db.commit()")
+        assert reconcile_idx < publish_idx < commit_idx
+
+    def test_durable_plan_children_suppress_legacy_leader_message(self) -> None:
+        """Once V2 has compat tasks, the tick must not ask Sisyphus to replan."""
+        import inspect
+
+        source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
+        lookup_idx = source.index("_root_has_workspace_plan_linked_children")
+        message_idx = source.index("message_service.send_message")
+        assert lookup_idx < message_idx
+        assert '"reason": "durable_plan_active"' in source
+
+    @pytest.mark.asyncio
+    async def test_root_has_workspace_plan_linked_children(self) -> None:
+        plan_child = MagicMock()
+        plan_child.metadata = {
+            "workspace_plan_id": "plan-1",
+            "workspace_plan_node_id": "node-1",
+        }
+        legacy_child = MagicMock()
+        legacy_child.metadata = {"root_goal_task_id": "root-1"}
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[legacy_child, plan_child])
+
+        assert (
+            await wlb._root_has_workspace_plan_linked_children(
+                task_repo=task_repo,
+                workspace_id="ws-1",
+                root_task_id="root-1",
+            )
+            is True
+        )
+
+    @pytest.mark.asyncio
+    async def test_durable_plan_gate_blocks_active_plan(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.domain.model.workspace_plan import PlanStatus
+
+        plan = MagicMock()
+        plan.status = PlanStatus.ACTIVE
+        repo = MagicMock()
+        repo.get_by_workspace = AsyncMock(return_value=plan)
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_plan_repository"
+            ".SqlPlanRepository",
+            lambda _db: repo,
+        )
+
+        assert (
+            await wlb._durable_plan_allows_root_auto_complete(
+                db=MagicMock(),
+                workspace_id="ws-1",
+            )
+            is False
+        )
+
+    @pytest.mark.asyncio
+    async def test_durable_plan_gate_allows_completed_plan(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.domain.model.workspace_plan import PlanStatus
+
+        plan = MagicMock()
+        plan.status = PlanStatus.COMPLETED
+        repo = MagicMock()
+        repo.get_by_workspace = AsyncMock(return_value=plan)
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_plan_repository"
+            ".SqlPlanRepository",
+            lambda _db: repo,
+        )
+
+        assert (
+            await wlb._durable_plan_allows_root_auto_complete(
+                db=MagicMock(),
+                workspace_id="ws-1",
+            )
+            is True
+        )
 
 
 class TestInflightDedup:

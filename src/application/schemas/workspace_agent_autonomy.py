@@ -169,6 +169,9 @@ class ExecutionTaskMetadataModel(ContractModel):
     current_attempt_conversation_id: str | None = None
     current_attempt_worker_agent_id: str | None = None
     current_attempt_worker_binding_id: str | None = None
+    delegated_subagent_name: str | None = None
+    delegated_subagent_id: str | None = None
+    delegated_task_text: str | None = None
     last_attempt_status: str | None = None
     execution_state: ExecutionStateModel | None = None
     evidence_refs: list[str] = Field(default_factory=list)

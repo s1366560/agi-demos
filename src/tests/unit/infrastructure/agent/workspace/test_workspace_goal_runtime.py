@@ -9,9 +9,12 @@ import pytest
 from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    _assign_execution_tasks_to_workers,
     _launch_workspace_retry_attempt,
+    _replan_execution_tasks,
     _split_title_description,
     adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
@@ -465,6 +468,50 @@ class TestWorkspaceGoalRuntime:
             assert start_calls[0]["reason"] == (
                 "workspace_goal_runtime.bootstrap_execution_tasks.start_root"
             )
+
+    async def test_assign_corrects_worker_context_leader_to_builtin_sisyphus(self) -> None:
+        created_tasks = [MagicMock(id="child-1"), MagicMock(id="child-2")]
+        workspace_agent_repo = MagicMock()
+        workspace_agent_repo.find_by_workspace = AsyncMock(
+            return_value=[
+                MagicMock(
+                    id="bind-worker",
+                    agent_id="worker-agent",
+                    display_name="Worker",
+                    label="worker",
+                ),
+                MagicMock(
+                    id="bind-sisyphus",
+                    agent_id=BUILTIN_SISYPHUS_ID,
+                    display_name="Sisyphus",
+                    label="leader",
+                ),
+            ]
+        )
+        command_service = MagicMock()
+        assign_calls: list[dict[str, object]] = []
+
+        async def assign_task_to_agent(**kwargs: object) -> object:
+            assign_calls.append(dict(kwargs))
+            return MagicMock(id=kwargs["task_id"])
+
+        command_service.assign_task_to_agent = AsyncMock(side_effect=assign_task_to_agent)
+
+        await _assign_execution_tasks_to_workers(
+            workspace_id="ws-1",
+            actor_user_id="u-1",
+            created_tasks=created_tasks,
+            workspace_agent_repo=workspace_agent_repo,
+            command_service=command_service,
+            leader_agent_id="worker-agent",
+            reason="workspace_goal_runtime.bootstrap_assign_execution_tasks",
+        )
+
+        assert [call["workspace_agent_id"] for call in assign_calls] == [
+            "bind-worker",
+            "bind-worker",
+        ]
+        assert all(call["actor_agent_id"] == BUILTIN_SISYPHUS_ID for call in assign_calls)
 
     async def test_apply_worker_report_uses_leader_side_task_mutations(self) -> None:
         task = MagicMock()
@@ -1515,6 +1562,46 @@ class TestWorkspaceGoalRuntime:
             assert delete_calls[0]["task_id"] == "child-old"
             assert create_calls[0]["reason"] == "workspace_goal_runtime.replan_execution_tasks"
             assert task_repo_cls.return_value.save.await_count >= 1
+
+    async def test_replan_preserves_durable_plan_children(self) -> None:
+        root_task = MagicMock()
+        root_task.id = "root-1"
+        root_task.title = "Ship the DAG-backed implementation"
+
+        plan_child = MagicMock()
+        plan_child.id = "child-plan"
+        plan_child.metadata = {
+            "workspace_plan_id": "plan-1",
+            "workspace_plan_node_id": "node-1",
+        }
+
+        legacy_child = MagicMock()
+        legacy_child.id = "child-legacy"
+        legacy_child.metadata = {"root_goal_task_id": "root-1"}
+
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[plan_child, legacy_child])
+
+        command_service = MagicMock()
+        command_service.delete_task = AsyncMock(return_value=True)
+        command_service.create_task = AsyncMock()
+
+        replanned = await _replan_execution_tasks(
+            workspace_id="ws-1",
+            actor_user_id="u-1",
+            root_task=root_task,
+            task_repo=task_repo,
+            workspace_agent_repo=MagicMock(),
+            command_service=command_service,
+            leader_agent_id="leader-1",
+            task_decomposer=AsyncMock(),
+            user_query="Ship the DAG-backed implementation",
+        )
+
+        assert replanned is False
+        command_service.create_task.assert_not_awaited()
+        command_service.delete_task.assert_awaited_once()
+        assert command_service.delete_task.await_args.kwargs["task_id"] == "child-legacy"
 
     async def test_ready_for_completion_completes_root_when_evidence_exists(self) -> None:
         workspace = MagicMock()
