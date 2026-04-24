@@ -289,6 +289,10 @@ describe('Blackboard', () => {
       expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
     expect(screen.getByText('blackboard.shellHint')).toBeInTheDocument();
+    const sensingBadge = screen.getByText('blackboard.shellSensingHint').closest('div');
+    expect(sensingBadge).toHaveAttribute('data-blackboard-surface', 'sensing');
+    expect(sensingBadge).toHaveAttribute('data-blackboard-signal-role', 'sensing-capable');
+    expect(sensingBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
     expect(screen.getByTestId('central-blackboard-content').parentElement).toHaveAttribute(
       'data-blackboard-surface',
       'shell'

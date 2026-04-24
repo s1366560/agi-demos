@@ -21,6 +21,7 @@ import { BlackboardErrorBoundary } from '@/components/blackboard/BlackboardError
 import { NON_AUTHORITATIVE } from '@/components/blackboard/blackboardSurfaceContract';
 import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
+import { SensingSurfaceBadge } from '@/components/blackboard/SensingSurfaceBadge';
 
 
 function LoadingShell() {
@@ -199,6 +200,12 @@ export function Blackboard() {
                 'blackboard.shellHint',
                 'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
               )}
+            </div>
+            <div className="mt-2">
+              <SensingSurfaceBadge
+                labelKey="blackboard.shellSensingHint"
+                fallbackLabel="workspace shell sync"
+              />
             </div>
           </div>
 
