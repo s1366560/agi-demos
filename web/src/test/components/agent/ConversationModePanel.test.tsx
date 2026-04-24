@@ -206,4 +206,33 @@ describe('ConversationModePanel', () => {
       )
     ).toBeInTheDocument();
   });
+
+  it('prefers conversation participation projection over roster fallback when available', async () => {
+    mockRoster = {
+      effective_mode: 'multi_agent_isolated',
+      participant_agents: ['stale-a'],
+      participant_bindings: [
+        { agent_id: 'agent-a', display_name: 'Coordinator A', label: null },
+        { agent_id: 'agent-b', display_name: 'Focused B', label: null },
+      ],
+      coordinator_agent_id: 'stale-a',
+      focused_agent_id: 'stale-b',
+    };
+    getConversation.mockResolvedValue({
+      id: 'c1',
+      workspace_id: null,
+      linked_workspace_task_id: null,
+      participant_agents: ['agent-a', 'agent-b'],
+      coordinator_agent_id: 'agent-a',
+      focused_agent_id: 'agent-b',
+    });
+
+    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Participants: 2')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Coordinator: Coordinator A')).toBeInTheDocument();
+    expect(screen.getByText('Focused agent: Focused B')).toBeInTheDocument();
+  });
 });

@@ -142,7 +142,7 @@ export function buildBlackboardStats(
   const completedTasks = tasks.filter((task) => task.status === 'done').length;
   const blockedTasks = tasks.filter((task) => task.status === 'blocked').length;
   const pendingAdjudicationTasks = tasks.filter(
-    (task) => task.metadata.pending_leader_adjudication === true
+    (task) => task.pending_leader_adjudication === true || task.metadata.pending_leader_adjudication === true
   ).length;
   const activeAgents = agents.filter(
     (agent) => agent.is_active || agent.status === 'running' || agent.status === 'busy'

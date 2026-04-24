@@ -90,6 +90,13 @@ export interface WorkspaceTask {
   assignee_user_id?: string | undefined;
   assignee_agent_id?: string | undefined;
   workspace_agent_id?: string | undefined;
+  current_attempt_id?: string | undefined;
+  current_attempt_number?: number | undefined;
+  current_attempt_conversation_id?: string | undefined;
+  current_attempt_worker_binding_id?: string | undefined;
+  current_attempt_worker_agent_id?: string | undefined;
+  last_attempt_status?: string | undefined;
+  pending_leader_adjudication?: boolean | undefined;
   status: WorkspaceTaskStatus;
   priority?: WorkspaceTaskPriority | undefined;
   estimated_effort?: string | undefined;

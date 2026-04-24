@@ -96,6 +96,13 @@ class WorkspaceTaskResponse(BaseModel):
     assignee_user_id: str | None
     assignee_agent_id: str | None
     workspace_agent_id: str | None = None
+    current_attempt_id: str | None = None
+    current_attempt_number: int | None = None
+    current_attempt_conversation_id: str | None = None
+    current_attempt_worker_binding_id: str | None = None
+    current_attempt_worker_agent_id: str | None = None
+    last_attempt_status: str | None = None
+    pending_leader_adjudication: bool = False
     status: WorkspaceTaskStatus
     metadata: dict[str, Any]
     created_at: datetime
@@ -108,6 +115,13 @@ class WorkspaceTaskResponse(BaseModel):
 
 
 def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
+    current_attempt_id = task.metadata.get("current_attempt_id")
+    current_attempt_number = task.metadata.get("current_attempt_number")
+    current_attempt_conversation_id = task.metadata.get("current_attempt_conversation_id")
+    current_attempt_worker_binding_id = task.metadata.get("current_attempt_worker_binding_id")
+    current_attempt_worker_agent_id = task.metadata.get("current_attempt_worker_agent_id")
+    last_attempt_status = task.metadata.get("last_attempt_status")
+    pending_leader_adjudication = task.metadata.get("pending_leader_adjudication")
     return WorkspaceTaskResponse(
         id=task.id,
         workspace_id=task.workspace_id,
@@ -117,6 +131,27 @@ def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
         assignee_user_id=task.assignee_user_id,
         assignee_agent_id=task.assignee_agent_id,
         workspace_agent_id=task.get_workspace_agent_binding_id(),
+        current_attempt_id=current_attempt_id if isinstance(current_attempt_id, str) else None,
+        current_attempt_number=(
+            current_attempt_number if isinstance(current_attempt_number, int) else None
+        ),
+        current_attempt_conversation_id=(
+            current_attempt_conversation_id
+            if isinstance(current_attempt_conversation_id, str)
+            else None
+        ),
+        current_attempt_worker_binding_id=(
+            current_attempt_worker_binding_id
+            if isinstance(current_attempt_worker_binding_id, str)
+            else None
+        ),
+        current_attempt_worker_agent_id=(
+            current_attempt_worker_agent_id
+            if isinstance(current_attempt_worker_agent_id, str)
+            else None
+        ),
+        last_attempt_status=last_attempt_status if isinstance(last_attempt_status, str) else None,
+        pending_leader_adjudication=(pending_leader_adjudication is True),
         status=task.status,
         metadata=task.metadata,
         created_at=task.created_at,

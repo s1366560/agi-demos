@@ -94,6 +94,9 @@ class ConversationResponse(BaseModel):
     conversation_mode: str | None = None
     workspace_id: str | None = None
     linked_workspace_task_id: str | None = None
+    participant_agents: list[str] = Field(default_factory=list)
+    coordinator_agent_id: str | None = None
+    focused_agent_id: str | None = None
 
     @classmethod
     def from_domain(cls, conversation: Conversation) -> "ConversationResponse":
@@ -117,6 +120,9 @@ class ConversationResponse(BaseModel):
             ),
             workspace_id=conversation.workspace_id,
             linked_workspace_task_id=conversation.linked_workspace_task_id,
+            participant_agents=list(conversation.participant_agents),
+            coordinator_agent_id=conversation.coordinator_agent_id,
+            focused_agent_id=conversation.focused_agent_id,
         )
 
 

@@ -161,6 +161,10 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
       [t]
     );
 
+    const conversationParticipantIds = conversation?.participant_agents ?? [];
+    const conversationCoordinatorId = conversation?.coordinator_agent_id ?? null;
+    const conversationFocusedId = conversation?.focused_agent_id ?? null;
+
     const taskOptions = useMemo(
       () =>
         tasks.map((task) => ({
@@ -170,15 +174,18 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
       [tasks]
     );
     const focusedLabel = resolveParticipantLabel(
-      roster?.focused_agent_id,
+      conversationFocusedId || roster?.focused_agent_id,
       roster?.participant_bindings
     );
     const coordinatorLabel = resolveParticipantLabel(
-      roster?.coordinator_agent_id,
+      conversationCoordinatorId || roster?.coordinator_agent_id,
       roster?.participant_bindings
     );
     const linkedTask = tasks.find((task) => task.id === conversation?.linked_workspace_task_id) ?? null;
-    const participantCount = roster?.participant_agents.length ?? 0;
+    const participantCount =
+      conversationParticipantIds.length > 0
+        ? conversationParticipantIds.length
+        : (roster?.participant_agents.length ?? 0);
 
     const showTaskPicker =
       effectiveMode === 'autonomous' && !!conversation?.workspace_id;

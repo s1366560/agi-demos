@@ -474,8 +474,10 @@ function buildChildTaskLogs(
         });
       }
 
-      const conversationIdRaw = task.metadata.current_attempt_conversation_id;
-      const attemptNumberRaw = task.metadata.current_attempt_number;
+      const conversationIdRaw =
+        task.current_attempt_conversation_id ?? task.metadata.current_attempt_conversation_id;
+      const attemptNumberRaw =
+        task.current_attempt_number ?? task.metadata.current_attempt_number;
       const conversationId =
         typeof conversationIdRaw === 'string' && conversationIdRaw.length > 0
           ? conversationIdRaw

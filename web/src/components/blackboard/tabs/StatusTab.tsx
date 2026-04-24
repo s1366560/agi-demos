@@ -31,9 +31,11 @@ function resolveAttemptWorkerLabel(
   agents: WorkspaceAgent[]
 ): string | null {
   const workerBindingId =
-    typeof task.metadata.current_attempt_worker_binding_id === 'string'
-      ? task.metadata.current_attempt_worker_binding_id
-      : '';
+    typeof task.current_attempt_worker_binding_id === 'string'
+      ? task.current_attempt_worker_binding_id
+      : typeof task.metadata.current_attempt_worker_binding_id === 'string'
+        ? task.metadata.current_attempt_worker_binding_id
+        : '';
   if (workerBindingId) {
     const binding = agents.find((agent) => agent.id === workerBindingId);
     if (binding) {
@@ -42,9 +44,11 @@ function resolveAttemptWorkerLabel(
   }
 
   const workerAgentId =
-    typeof task.metadata.current_attempt_worker_agent_id === 'string'
-      ? task.metadata.current_attempt_worker_agent_id
-      : '';
+    typeof task.current_attempt_worker_agent_id === 'string'
+      ? task.current_attempt_worker_agent_id
+      : typeof task.metadata.current_attempt_worker_agent_id === 'string'
+        ? task.metadata.current_attempt_worker_agent_id
+        : '';
   if (workerAgentId) {
     const binding = agents.find((agent) => agent.agent_id === workerAgentId);
     if (binding) {
@@ -68,7 +72,7 @@ export function StatusTab({
 }: StatusTabProps) {
   const { t } = useTranslation();
   const pendingAdjudicationTasks = tasks.filter(
-    (task) => task.metadata.pending_leader_adjudication === true
+    (task) => task.pending_leader_adjudication === true || task.metadata.pending_leader_adjudication === true
   );
 
   return (
@@ -154,13 +158,17 @@ export function StatusTab({
                     .slice(0, 3)
                 : [];
               const currentConversationId =
-                typeof task.metadata.current_attempt_conversation_id === 'string'
-                  ? task.metadata.current_attempt_conversation_id
-                  : '';
+                typeof task.current_attempt_conversation_id === 'string'
+                  ? task.current_attempt_conversation_id
+                  : typeof task.metadata.current_attempt_conversation_id === 'string'
+                    ? task.metadata.current_attempt_conversation_id
+                    : '';
               const currentAttemptNumber =
-                typeof task.metadata.current_attempt_number === 'number'
-                  ? task.metadata.current_attempt_number
-                  : undefined;
+                typeof task.current_attempt_number === 'number'
+                  ? task.current_attempt_number
+                  : typeof task.metadata.current_attempt_number === 'number'
+                    ? task.metadata.current_attempt_number
+                    : undefined;
               const currentAttemptWorkerLabel = resolveAttemptWorkerLabel(task, agents);
               const conversationHref = currentConversationId
                 ? buildAgentWorkspacePath({

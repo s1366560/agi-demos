@@ -145,6 +145,9 @@ export interface Conversation {
   // Workspace linkage (Track G2).
   workspace_id?: string | null | undefined;
   linked_workspace_task_id?: string | null | undefined;
+  participant_agents?: string[] | undefined;
+  coordinator_agent_id?: string | null | undefined;
+  focused_agent_id?: string | null | undefined;
 }
 
 /**

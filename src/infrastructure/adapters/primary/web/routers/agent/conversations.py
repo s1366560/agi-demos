@@ -370,20 +370,7 @@ async def update_conversation_title(
         )
 
         assert updated_conversation is not None
-        return ConversationResponse(
-            id=updated_conversation.id,
-            project_id=updated_conversation.project_id,
-            user_id=updated_conversation.user_id,
-            tenant_id=updated_conversation.tenant_id,
-            title=updated_conversation.title,
-            status=updated_conversation.status.value,
-            message_count=updated_conversation.message_count,
-            created_at=updated_conversation.created_at.isoformat(),
-            updated_at=updated_conversation.updated_at.isoformat()
-            if updated_conversation.updated_at
-            else None,
-            summary=updated_conversation.summary,
-        )
+        return ConversationResponse.from_domain(updated_conversation)
 
     except HTTPException:
         raise
@@ -595,20 +582,7 @@ async def generate_conversation_title(
         if not updated_conversation:
             raise HTTPException(status_code=500, detail="Failed to update conversation title")
 
-        return ConversationResponse(
-            id=updated_conversation.id,
-            project_id=updated_conversation.project_id,
-            user_id=updated_conversation.user_id,
-            tenant_id=updated_conversation.tenant_id,
-            title=updated_conversation.title,
-            status=updated_conversation.status.value,
-            message_count=updated_conversation.message_count,
-            created_at=updated_conversation.created_at.isoformat(),
-            updated_at=updated_conversation.updated_at.isoformat()
-            if updated_conversation.updated_at
-            else None,
-            summary=updated_conversation.summary,
-        )
+        return ConversationResponse.from_domain(updated_conversation)
 
     except HTTPException:
         raise
