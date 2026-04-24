@@ -190,8 +190,12 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert response.blackboard[0].version == 1
     assert response.outbox[0].event_type == "supervisor_tick"
     assert response.outbox[0].status == "pending"
+    assert response.outbox[0].actions["retry_outbox"].enabled is False
     assert response.events[0].event_type == "verification_completed"
     assert response.events[0].payload["summary"] == "verified"
+    task_node = next(node for node in response.plan.nodes if node.id == "task-api")
+    assert task_node.actions["request_replan"].enabled is True
+    assert task_node.actions["reopen_blocked"].enabled is False
 
 
 @pytest.mark.asyncio
@@ -225,6 +229,105 @@ async def test_get_workspace_plan_snapshot_returns_empty_state_without_plan(
     assert response.blackboard == []
     assert response.outbox == []
     assert response.events == []
+
+
+@pytest.mark.asyncio
+async def test_retry_workspace_plan_outbox_item_queues_failed_job(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-retry"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    outbox_repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await outbox_repo.enqueue(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        event_type="supervisor_tick",
+        payload={"workspace_id": workspace_id},
+        max_attempts=1,
+    )
+    claimed = await outbox_repo.claim_due(limit=1, lease_owner="worker-a")
+    assert [claimed_item.id for claimed_item in claimed] == [item.id]
+    assert await outbox_repo.mark_failed(item.id, "worker failed") is True
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    result = await workspace_plans.retry_workspace_plan_outbox_item(
+        workspace_id=workspace_id,
+        outbox_id=item.id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="fixed input"),
+        request=cast(Request, SimpleNamespace()),
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert result.ok is True
+    assert result.outbox_id == item.id
+    loaded = await outbox_repo.get_by_id(item.id)
+    assert loaded is not None
+    assert loaded.status == "pending"
+    assert loaded.attempt_count == 0
+    assert loaded.metadata_json["operator_retry"]["reason"] == "fixed input"
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=5)
+    assert events[0].event_type == "operator_retry_outbox"
+    assert events[0].payload["outbox_id"] == item.id
+
+
+@pytest.mark.asyncio
+async def test_request_workspace_plan_node_replan_resets_node_and_schedules_tick(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-replan"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    result = await workspace_plans.request_workspace_plan_node_replan(
+        workspace_id=workspace_id,
+        node_id="task-api",
+        body=workspace_plans.WorkspacePlanActionRequest(reason="scope changed"),
+        request=cast(Request, SimpleNamespace()),
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert result.ok is True
+    assert result.node_id == "task-api"
+    loaded_plan = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded_plan is not None
+    node = loaded_plan.nodes[PlanNodeId(value="task-api")]
+    assert node.intent is TaskIntent.TODO
+    assert node.execution is TaskExecution.IDLE
+    assert node.metadata["operator_action"]["reason"] == "scope changed"
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=5)
+    assert events[0].event_type == "operator_replan_requested"
+    outbox_snapshot = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+    assert outbox_snapshot.outbox[0].event_type == "supervisor_tick"
+    assert outbox_snapshot.outbox[0].metadata["source"] == "operator_action"
 
 
 __all__: list[str] = []

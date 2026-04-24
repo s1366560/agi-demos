@@ -132,6 +132,84 @@ describe('workspaceService', () => {
     expect(result.plan?.id).toBe('plan-1');
   });
 
+  it('retries a durable workspace plan outbox item', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({
+        ok: true,
+        message: 'Outbox job queued for retry.',
+        plan_id: 'plan-1',
+        outbox_id: 'outbox-1',
+      }),
+    } as Response);
+
+    const result = await workspacePlanService.retryOutboxItem('ws-1', 'outbox-1', {
+      reason: 'fixed dependency',
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/plan/outbox/outbox-1/retry', {
+      reason: 'fixed dependency',
+    });
+    expect(result.outbox_id).toBe('outbox-1');
+  });
+
+  it('requests durable workspace plan node replan', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({
+        ok: true,
+        message: 'Plan node sent back for supervisor recovery.',
+        plan_id: 'plan-1',
+        node_id: 'node-1',
+      }),
+    } as Response);
+
+    const result = await workspacePlanService.requestNodeReplan('ws-1', 'node-1', {
+      reason: 'scope changed',
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith(
+      '/workspaces/ws-1/plan/nodes/node-1/request-replan',
+      {
+        reason: 'scope changed',
+      }
+    );
+    expect(result.node_id).toBe('node-1');
+  });
+
+  it('reopens a blocked durable workspace plan node', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({
+        ok: true,
+        message: 'Blocked plan node reopened.',
+        plan_id: 'plan-1',
+        node_id: 'node-1',
+      }),
+    } as Response);
+
+    const result = await workspacePlanService.reopenBlockedNode('ws-1', 'node-1', {
+      reason: 'operator reviewed',
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/plan/nodes/node-1/reopen', {
+      reason: 'operator reviewed',
+    });
+    expect(result.node_id).toBe('node-1');
+  });
+
   it('updates workspace agent binding via tenant/project/workspace route', async () => {
     const { apiFetch } = await import('@/services/client/urlUtils');
     vi.mocked(apiFetch.patch).mockResolvedValueOnce({

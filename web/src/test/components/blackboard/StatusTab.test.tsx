@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StatusTab } from '@/components/blackboard/tabs/StatusTab';
 import { workspacePlanService } from '@/services/workspaceService';
-import { render, screen } from '@/test/utils';
+import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
 vi.mock('@/services/workspaceService', () => ({
   workspacePlanService: {
     getSnapshot: vi.fn(),
+    reopenBlockedNode: vi.fn(),
+    requestNodeReplan: vi.fn(),
+    retryOutboxItem: vi.fn(),
   },
 }));
 
@@ -114,6 +117,19 @@ describe('StatusTab', () => {
             priority: 1,
             metadata: {},
             created_at: '2026-04-23T00:00:00Z',
+            actions: {
+              request_replan: {
+                enabled: true,
+                label: 'Request replan',
+                requires_confirmation: true,
+              },
+              reopen_blocked: {
+                enabled: false,
+                label: 'Reopen blocked node',
+                reason: 'Only blocked nodes can be reopened.',
+                requires_confirmation: false,
+              },
+            },
           },
         ],
         counts: {
@@ -136,11 +152,20 @@ describe('StatusTab', () => {
           plan_id: 'plan-1',
           workspace_id: 'ws-1',
           event_type: 'supervisor_tick',
+          payload: { node_id: 'node-task-1' },
           status: 'completed',
           attempt_count: 1,
           max_attempts: 3,
           metadata: {},
           created_at: '2026-04-23T00:00:00Z',
+          actions: {
+            retry_outbox: {
+              enabled: false,
+              label: 'Retry now',
+              reason: 'Only failed or dead-letter jobs can be retried.',
+              requires_confirmation: false,
+            },
+          },
         },
       ],
       events: [
@@ -153,7 +178,7 @@ describe('StatusTab', () => {
           event_type: 'verification_completed',
           source: 'workspace_plan_verifier',
           actor_id: null,
-          payload: { summary: 'verified' },
+          payload: { passed: true, summary: 'verified' },
           created_at: '2026-04-23T00:00:00Z',
         },
       ],
@@ -175,13 +200,189 @@ describe('StatusTab', () => {
       />
     );
 
-    expect(await screen.findByText('Ship autonomous plan')).toBeInTheDocument();
+    expect((await screen.findAllByText('Ship autonomous plan'))[0]).toBeInTheDocument();
     expect(screen.getByText('artifact.spec')).toBeInTheDocument();
     expect(screen.getByText('supervisor_tick')).toBeInTheDocument();
-    expect(screen.getByText('verification_completed')).toBeInTheDocument();
+    expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
-      outboxLimit: 8,
-      eventLimit: 8,
+      outboxLimit: 20,
+      eventLimit: 80,
+    });
+  });
+
+  it('filters the durable workbench and invokes recovery actions', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(workspacePlanService.getSnapshot).mockResolvedValue({
+      workspace_id: 'ws-1',
+      plan: {
+        id: 'plan-1',
+        workspace_id: 'ws-1',
+        goal_id: 'goal-1',
+        status: 'active',
+        created_at: '2026-04-23T00:00:00Z',
+        nodes: [
+          {
+            id: 'node-blocked-1',
+            parent_id: 'goal-1',
+            kind: 'task',
+            title: 'Blocked implementation',
+            description: 'Waiting on operator recovery',
+            depends_on: [],
+            acceptance_criteria: [],
+            recommended_capabilities: [],
+            intent: 'blocked',
+            execution: 'reported',
+            progress: { percent: 45, confidence: 0.6, note: '' },
+            assignee_agent_id: 'agent-1',
+            current_attempt_id: 'attempt-1',
+            workspace_task_id: 'task-1',
+            priority: 1,
+            metadata: {},
+            created_at: '2026-04-23T00:00:00Z',
+            actions: {
+              request_replan: {
+                enabled: true,
+                label: 'Request replan',
+                requires_confirmation: true,
+              },
+              reopen_blocked: {
+                enabled: true,
+                label: 'Reopen blocked node',
+                requires_confirmation: false,
+              },
+            },
+          },
+        ],
+        counts: { 'intent:blocked': 1 },
+      },
+      blackboard: [
+        {
+          plan_id: 'plan-1',
+          key: 'artifact.blocked-report',
+          value: { summary: 'blocked evidence' },
+          published_by: 'verifier',
+          version: 1,
+          metadata: {},
+        },
+      ],
+      outbox: [
+        {
+          id: 'outbox-failed-1',
+          plan_id: 'plan-1',
+          workspace_id: 'ws-1',
+          event_type: 'supervisor_tick',
+          payload: { node_id: 'node-blocked-1' },
+          status: 'failed',
+          attempt_count: 2,
+          max_attempts: 3,
+          last_error: 'lease expired',
+          metadata: {},
+          created_at: '2026-04-23T00:00:00Z',
+          actions: {
+            retry_outbox: {
+              enabled: true,
+              label: 'Retry now',
+              requires_confirmation: false,
+            },
+          },
+        },
+      ],
+      events: [
+        {
+          id: 'event-1',
+          plan_id: 'plan-1',
+          workspace_id: 'ws-1',
+          node_id: 'node-blocked-1',
+          attempt_id: 'attempt-1',
+          event_type: 'worker_report_terminal',
+          source: 'worker',
+          actor_id: 'agent-1',
+          payload: { summary: 'needs intervention' },
+          created_at: '2026-04-23T00:00:00Z',
+        },
+      ],
+    });
+    vi.mocked(workspacePlanService.retryOutboxItem).mockResolvedValue({
+      ok: true,
+      message: 'Outbox job queued for retry.',
+      plan_id: 'plan-1',
+      outbox_id: 'outbox-failed-1',
+    });
+    vi.mocked(workspacePlanService.reopenBlockedNode).mockResolvedValue({
+      ok: true,
+      message: 'Blocked plan node reopened.',
+      plan_id: 'plan-1',
+      node_id: 'node-blocked-1',
+    });
+    vi.mocked(workspacePlanService.requestNodeReplan).mockResolvedValue({
+      ok: true,
+      message: 'Plan node sent back for supervisor recovery.',
+      plan_id: 'plan-1',
+      node_id: 'node-blocked-1',
+    });
+
+    render(
+      <StatusTab
+        stats={{
+          completionRatio: 0,
+          discussions: 0,
+          activeAgents: 0,
+          pendingAdjudicationTasks: 0,
+        }}
+        topologyEdges={[]}
+        agents={[]}
+        tasks={[
+          {
+            id: 'task-1',
+            workspace_id: 'ws-1',
+            title: 'Blocked implementation',
+            status: 'blocked',
+            current_attempt_id: 'attempt-1',
+            current_attempt_conversation_id: 'conv-1',
+            created_at: '2026-04-23T00:00:00Z',
+            metadata: {},
+          },
+        ]}
+        workspaceId="ws-1"
+        tenantId="tenant-1"
+        projectId="project-1"
+        statusBadgeTone={() => 'bg-green-500'}
+      />
+    );
+
+    expect(await screen.findAllByText('Blocked implementation')).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText('blackboard.planRunSearch'), {
+      target: { value: 'blocked' },
+    });
+    expect(screen.getByText('artifact.blocked-report')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Retry'));
+    await waitFor(() => {
+      expect(workspacePlanService.retryOutboxItem).toHaveBeenCalledWith('ws-1', 'outbox-failed-1', {
+        reason: 'operator retry from central blackboard',
+      });
+    });
+
+    fireEvent.click(screen.getByText('blackboard.planRunReopenNode'));
+    await waitFor(() => {
+      expect(workspacePlanService.reopenBlockedNode).toHaveBeenCalledWith(
+        'ws-1',
+        'node-blocked-1',
+        {
+          reason: 'operator action from central blackboard',
+        }
+      );
+    });
+
+    fireEvent.click(screen.getByText('blackboard.planRunRequestReplan'));
+    await waitFor(() => {
+      expect(workspacePlanService.requestNodeReplan).toHaveBeenCalledWith(
+        'ws-1',
+        'node-blocked-1',
+        {
+          reason: 'operator action from central blackboard',
+        }
+      );
     });
   });
 });

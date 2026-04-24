@@ -162,5 +162,45 @@ class SqlWorkspacePlanOutboxRepository:
         await self._db.flush()
         return True
 
+    async def retry_now(
+        self,
+        outbox_id: str,
+        *,
+        workspace_id: str,
+        actor_id: str | None = None,
+        reason: str | None = None,
+        now: datetime | None = None,
+    ) -> WorkspacePlanOutboxModel | None:
+        """Release a failed/dead-letter item for immediate operator retry."""
+        item = await self.get_by_id(outbox_id)
+        if item is None or item.workspace_id != workspace_id:
+            return None
+        if item.status not in {"failed", "dead_letter"}:
+            raise ValueError(f"outbox item {outbox_id} is not retryable from {item.status}")
+
+        current_time = now or datetime.now(UTC)
+        previous_status = item.status
+        previous_error = item.last_error
+        item.status = "pending"
+        if previous_status == "dead_letter":
+            item.attempt_count = 0
+        item.lease_owner = None
+        item.lease_expires_at = None
+        item.last_error = None
+        item.next_attempt_at = None
+        item.processed_at = None
+        item.metadata_json = {
+            **dict(item.metadata_json or {}),
+            "operator_retry": {
+                "actor_id": actor_id,
+                "reason": reason,
+                "retried_at": current_time.isoformat(),
+                "previous_status": previous_status,
+                "previous_error": previous_error,
+            },
+        }
+        await self._db.flush()
+        return item
+
 
 __all__ = ["SqlWorkspacePlanOutboxRepository"]

@@ -243,3 +243,45 @@ async def test_mark_failed_retries_then_dead_letters(
         now=current_time + timedelta(minutes=10),
     )
     assert after_dead_letter == []
+
+
+@pytest.mark.asyncio
+async def test_retry_now_releases_dead_letter_for_operator_retry(
+    db_session: AsyncSession,
+    workspace_test_seed: dict[str, str],
+) -> None:
+    await _seed_plan(db_session, "workspace-1", "outbox-plan-1")
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    current_time = datetime(2026, 4, 24, 8, 0, tzinfo=UTC)
+
+    item = await repo.enqueue(
+        plan_id="outbox-plan-1",
+        workspace_id="workspace-1",
+        event_type="verify_node",
+        max_attempts=1,
+    )
+    await repo.claim_due(limit=1, lease_owner="worker-a", now=current_time)
+    assert await repo.mark_failed(item.id, "terminal failure", now=current_time) is True
+
+    retried = await repo.retry_now(
+        item.id,
+        workspace_id="workspace-1",
+        actor_id="operator-1",
+        reason="tooling fixed",
+        now=current_time + timedelta(minutes=2),
+    )
+
+    assert retried is not None
+    assert retried.status == "pending"
+    assert retried.attempt_count == 0
+    assert retried.last_error is None
+    assert retried.next_attempt_at is None
+    assert retried.metadata_json["operator_retry"]["actor_id"] == "operator-1"
+    assert retried.metadata_json["operator_retry"]["previous_status"] == "dead_letter"
+
+    claimed = await repo.claim_due(
+        limit=1,
+        lease_owner="worker-b",
+        now=current_time + timedelta(minutes=3),
+    )
+    assert [claimed_item.id for claimed_item in claimed] == [item.id]

@@ -134,6 +134,13 @@ export interface WorkspacePlanCapabilityHint {
   weight: number;
 }
 
+export interface WorkspacePlanActionCapability {
+  enabled: boolean;
+  label: string;
+  reason?: string | null | undefined;
+  requires_confirmation: boolean;
+}
+
 export interface WorkspacePlanNode {
   id: string;
   parent_id: string | null;
@@ -158,6 +165,7 @@ export interface WorkspacePlanNode {
   created_at: string;
   updated_at?: string | null | undefined;
   completed_at?: string | null | undefined;
+  actions?: Record<string, WorkspacePlanActionCapability> | undefined;
 }
 
 export interface WorkspacePlan {
@@ -186,6 +194,7 @@ export interface WorkspacePlanOutboxItem {
   plan_id: string;
   workspace_id: string;
   event_type: string;
+  payload: Record<string, unknown>;
   status: string;
   attempt_count: number;
   max_attempts: number;
@@ -197,6 +206,7 @@ export interface WorkspacePlanOutboxItem {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at?: string | null | undefined;
+  actions?: Record<string, WorkspacePlanActionCapability> | undefined;
 }
 
 export interface WorkspacePlanEvent {
@@ -218,6 +228,14 @@ export interface WorkspacePlanSnapshot {
   blackboard: WorkspacePlanBlackboardEntry[];
   outbox: WorkspacePlanOutboxItem[];
   events: WorkspacePlanEvent[];
+}
+
+export interface WorkspacePlanActionResult {
+  ok: boolean;
+  message: string;
+  plan_id: string;
+  node_id?: string | null | undefined;
+  outbox_id?: string | null | undefined;
 }
 
 export interface TopologyNode {

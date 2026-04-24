@@ -96,7 +96,12 @@ export function StatusTab({
         </div>
       </section>
 
-      <PlanRunSnapshotSection workspaceId={workspaceId} />
+      <PlanRunSnapshotSection
+        workspaceId={workspaceId}
+        tenantId={tenantId}
+        projectId={projectId}
+        tasks={tasks}
+      />
 
       <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex items-center justify-between gap-3">

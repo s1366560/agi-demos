@@ -9,6 +9,7 @@ import type {
   WorkspaceAgent,
   WorkspaceCreateRequest,
   WorkspaceMember,
+  WorkspacePlanActionResult,
   WorkspacePlanSnapshot,
   WorkspaceTask,
   WorkspaceUpdateRequest,
@@ -470,6 +471,42 @@ export const workspacePlanService = {
       },
     });
     return response.json() as Promise<WorkspacePlanSnapshot>;
+  },
+
+  retryOutboxItem: async (
+    workspaceId: string,
+    outboxId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/outbox/${outboxId}/retry`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
+
+  requestNodeReplan: async (
+    workspaceId: string,
+    nodeId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(
+      `${planBase(workspaceId)}/nodes/${nodeId}/request-replan`,
+      {
+        reason: options.reason ?? null,
+      }
+    );
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
+
+  reopenBlockedNode: async (
+    workspaceId: string,
+    nodeId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/nodes/${nodeId}/reopen`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
   },
 };
 
