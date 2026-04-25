@@ -1,11 +1,25 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 
 import { Button, Input, message, Progress, Spin, Tag } from 'antd';
-import { FolderKanban, LayoutGrid, Plus, Search, Target } from 'lucide-react';
-
+import {
+  BookOpenCheck,
+  BriefcaseBusiness,
+  Code2,
+  FolderKanban,
+  LayoutGrid,
+  Plus,
+  Search,
+  Target,
+} from 'lucide-react';
 
 import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
@@ -17,8 +31,7 @@ import { formatDistanceToNow } from '@/utils/date';
 
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
-import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
-
+import type { CyberObjective, Workspace, WorkspaceTask, WorkspaceType } from '@/types/workspace';
 
 type SummarySource = 'objectives' | 'tasks' | 'empty';
 
@@ -39,6 +52,54 @@ const EMPTY_SUMMARY: ObjectiveSummary = {
   completed: 0,
   loading: true,
 };
+
+const DEFAULT_WORKSPACE_TYPE: WorkspaceType = 'general';
+
+function isWorkspaceType(value: unknown): value is WorkspaceType {
+  return (
+    value === 'software_development' ||
+    value === 'research' ||
+    value === 'operations' ||
+    value === 'general'
+  );
+}
+
+function getWorkspaceType(workspace: Workspace): WorkspaceType {
+  const value = workspace.metadata?.workspace_type;
+  if (isWorkspaceType(value)) {
+    return value;
+  }
+  return DEFAULT_WORKSPACE_TYPE;
+}
+
+function normaliseSandboxCodeRoot(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('/workspace/')) return trimmed.replace(/\/+$/, '');
+  if (!trimmed.startsWith('/')) return `/workspace/${trimmed.replace(/^\/+/, '')}`;
+  return trimmed.replace(/\/+$/, '');
+}
+
+function isIsolatedSandboxCodeRoot(value: string): boolean {
+  const normalised = normaliseSandboxCodeRoot(value);
+  return normalised.startsWith('/workspace/') && normalised.length > '/workspace/'.length;
+}
+
+function getSandboxCodeRoot(workspace: Workspace): string | null {
+  const direct = workspace.metadata?.sandbox_code_root;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+  const codeContext = workspace.metadata?.code_context;
+  if (
+    codeContext &&
+    typeof codeContext === 'object' &&
+    'sandbox_code_root' in codeContext &&
+    typeof codeContext.sandbox_code_root === 'string' &&
+    codeContext.sandbox_code_root.trim()
+  ) {
+    return codeContext.sandbox_code_root.trim();
+  }
+  return null;
+}
 
 // Domain validates CyberObjective.progress in [0.0, 1.0], but some
 // UIs send 0-100. Auto-detect scale: if any value > 1, assume the
@@ -104,11 +165,48 @@ export function WorkspaceList() {
 
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
+  const [workspaceType, setWorkspaceType] = useState<WorkspaceType>(DEFAULT_WORKSPACE_TYPE);
+  const [sandboxCodeRoot, setSandboxCodeRoot] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [summaries, setSummaries] = useState<Record<string, ObjectiveSummary>>({});
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
   const projectId = params.projectId ?? currentProject?.id ?? projects[0]?.id ?? null;
+  const workspaceTypeLabels = useMemo(
+    () =>
+      ({
+        general: t('tenant.workspaceList.typeGeneral', 'General'),
+        software_development: t('tenant.workspaceList.typeSoftware', 'Software'),
+        research: t('tenant.workspaceList.typeResearch', 'Research'),
+        operations: t('tenant.workspaceList.typeOperations', 'Operations'),
+      }) satisfies Record<WorkspaceType, string>,
+    [t]
+  );
+  const workspaceTypeOptions = useMemo(
+    (): Array<{ label: string; value: WorkspaceType; icon: ReactNode }> => [
+      {
+        label: workspaceTypeLabels.general,
+        value: 'general',
+        icon: <LayoutGrid size={14} aria-hidden />,
+      },
+      {
+        label: workspaceTypeLabels.software_development,
+        value: 'software_development',
+        icon: <Code2 size={14} aria-hidden />,
+      },
+      {
+        label: workspaceTypeLabels.research,
+        value: 'research',
+        icon: <BookOpenCheck size={14} aria-hidden />,
+      },
+      {
+        label: workspaceTypeLabels.operations,
+        value: 'operations',
+        icon: <BriefcaseBusiness size={14} aria-hidden />,
+      },
+    ],
+    [workspaceTypeLabels]
+  );
 
   useEffect(() => {
     if (!tenantId || params.projectId || currentProject || projects.length > 0) return;
@@ -149,10 +247,9 @@ export function WorkspaceList() {
             // Prefer objectives when they exist AND have any progress.
             // Otherwise fall back to task completion rate so cards
             // remain informative for workspaces that rely on tasks only.
-            const useObjectives =
-              fromObjectives !== null && fromObjectives.avgProgress > 0;
+            const useObjectives = fromObjectives !== null && fromObjectives.avgProgress > 0;
             const summary = useObjectives
-              ? (fromObjectives)
+              ? fromObjectives
               : fromObjectives && tasks.length === 0
                 ? fromObjectives
                 : summarizeTasks(tasks);
@@ -184,9 +281,7 @@ export function WorkspaceList() {
     const q = query.trim().toLowerCase();
     if (!q) return workspaces;
     return workspaces.filter(
-      (w) =>
-        w.name.toLowerCase().includes(q) ||
-        (w.description?.toLowerCase().includes(q) ?? false)
+      (w) => w.name.toLowerCase().includes(q) || (w.description?.toLowerCase().includes(q) ?? false)
     );
   }, [workspaces, query]);
 
@@ -194,10 +289,25 @@ export function WorkspaceList() {
     event.preventDefault();
     const trimmed = name.trim();
     if (!tenantId || !projectId || !trimmed || submitting) return;
+    const codeRoot = normaliseSandboxCodeRoot(sandboxCodeRoot);
+    if (workspaceType === 'software_development' && !isIsolatedSandboxCodeRoot(codeRoot)) return;
     setSubmitting(true);
     try {
-      await createWorkspace(tenantId, projectId, { name: trimmed });
+      await createWorkspace(tenantId, projectId, {
+        name: trimmed,
+        metadata: {
+          workspace_type: workspaceType,
+          ...(workspaceType === 'software_development'
+            ? {
+                sandbox_code_root: codeRoot,
+                code_context: { sandbox_code_root: codeRoot },
+              }
+            : {}),
+        },
+      });
       setName('');
+      setWorkspaceType(DEFAULT_WORKSPACE_TYPE);
+      setSandboxCodeRoot('');
       message.success(t('tenant.workspaceList.createSuccess', 'Workspace created'));
     } catch {
       message.error(t('tenant.workspaceList.createError', 'Failed to create workspace'));
@@ -235,9 +345,7 @@ export function WorkspaceList() {
             {t('tenant.workspaceList.title', 'Workspaces')}
           </h1>
           {!isLoading && workspaces.length > 0 ? (
-            <span className="text-sm text-text-secondary dark:text-text-muted">
-              {totalLabel}
-            </span>
+            <span className="text-sm text-text-secondary dark:text-text-muted">{totalLabel}</span>
           ) : null}
         </div>
         <p className="text-sm text-text-secondary dark:text-text-muted">
@@ -249,33 +357,89 @@ export function WorkspaceList() {
       </header>
 
       {/* Toolbar: create form + search */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <form onSubmit={(e) => void onSubmit(e)} className="flex flex-1 gap-2 sm:max-w-md">
-          <label className="sr-only" htmlFor="workspace-name-input">
-            {t('tenant.workspaceList.namePlaceholder', 'Workspace name')}
-          </label>
-          <Input
-            id="workspace-name-input"
-            placeholder={t('tenant.workspaceList.namePlaceholder', 'Workspace name')}
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-            }}
-            maxLength={120}
-            disabled={submitting}
-            className="flex-1"
-          />
-          <Button
-            type="primary"
-            htmlType="submit"
-            icon={<Plus size={14} />}
-            loading={submitting}
-            disabled={!name.trim()}
+      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <form
+          onSubmit={(e) => void onSubmit(e)}
+          className="flex flex-1 flex-col gap-2 lg:max-w-3xl"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="sr-only" htmlFor="workspace-name-input">
+              {t('tenant.workspaceList.namePlaceholder', 'Workspace name')}
+            </label>
+            <Input
+              id="workspace-name-input"
+              placeholder={t('tenant.workspaceList.namePlaceholder', 'Workspace name')}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+              }}
+              maxLength={120}
+              disabled={submitting}
+              className="flex-1"
+            />
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<Plus size={14} />}
+              loading={submitting}
+              disabled={
+                !name.trim() ||
+                (workspaceType === 'software_development' &&
+                  !isIsolatedSandboxCodeRoot(sandboxCodeRoot))
+              }
+            >
+              {t('tenant.workspaceList.createButton', 'Create Workspace')}
+            </Button>
+          </div>
+          <div
+            role="radiogroup"
+            aria-label={t('tenant.workspaceList.typeSelector', 'Workspace type')}
+            className="grid grid-cols-2 overflow-hidden rounded-md border border-border-light bg-surface-muted p-0.5 dark:border-border-dark dark:bg-surface-dark-alt sm:grid-cols-4"
           >
-            {t('tenant.workspaceList.createButton', 'Create Workspace')}
-          </Button>
+            {workspaceTypeOptions.map((option) => {
+              const selected = workspaceType === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={submitting}
+                  onClick={() => {
+                    setWorkspaceType(option.value);
+                  }}
+                  className={[
+                    'flex min-h-8 items-center justify-center gap-1.5 rounded px-2 text-xs font-medium transition-colors',
+                    selected
+                      ? 'bg-surface-light text-primary shadow-sm dark:bg-surface-dark dark:text-primary-light'
+                      : 'text-text-secondary hover:bg-surface-light/70 dark:text-text-muted dark:hover:bg-surface-dark',
+                  ].join(' ')}
+                >
+                  {option.icon}
+                  <span className="truncate">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {workspaceType === 'software_development' ? (
+            <div>
+              <label className="sr-only" htmlFor="workspace-code-root-input">
+                {t('tenant.workspaceList.codeRootPlaceholder', 'Sandbox code root')}
+              </label>
+              <Input
+                id="workspace-code-root-input"
+                prefix={<Code2 size={14} className="text-text-muted" />}
+                placeholder={t('tenant.workspaceList.codeRootPlaceholder', '/workspace/my-evo')}
+                value={sandboxCodeRoot}
+                onChange={(e) => {
+                  setSandboxCodeRoot(e.target.value);
+                }}
+                disabled={submitting}
+              />
+            </div>
+          ) : null}
         </form>
-        <div className="sm:w-64">
+        <div className="lg:w-64">
           <label className="sr-only" htmlFor="workspace-search-input">
             {t('tenant.workspaceList.searchPlaceholder', 'Search workspaces...')}
           </label>
@@ -320,108 +484,120 @@ export function WorkspaceList() {
             className="grid gap-3"
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
           >
-          {filtered.map((workspace) => {
-            const updated = workspace.updated_at ?? workspace.created_at;
-            const archived = workspace.is_archived === true;
-            const summary = summaries[workspace.id];
-            return (
-              <li key={workspace.id} className="h-full">
-                <Link
-                  to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
-                  aria-label={workspace.name}
-                  className="group flex h-full flex-col gap-2 rounded-md border border-border-light bg-surface-light p-4 transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:bg-surface-dark"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="line-clamp-1 text-[15px] font-medium text-text-primary group-hover:text-primary dark:text-text-inverse">
-                      {workspace.name}
-                    </h3>
-                    {archived ? (
-                      <Tag color="default" className="!m-0 flex-shrink-0">
-                        {t('tenant.workspaceList.archived', 'Archived')}
-                      </Tag>
-                    ) : null}
-                  </div>
-                  <p className="line-clamp-2 min-h-[2.5rem] text-xs text-text-secondary dark:text-text-muted">
-                    {workspace.description?.trim() || '—'}
-                  </p>
-
-                  {/* Objective / task progress */}
-                  <div
-                    className="mt-1 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
-                    aria-label={t('tenant.workspaceList.objectiveProgress', 'Objective progress')}
+            {filtered.map((workspace) => {
+              const updated = workspace.updated_at ?? workspace.created_at;
+              const archived = workspace.is_archived === true;
+              const summary = summaries[workspace.id];
+              const type = getWorkspaceType(workspace);
+              const codeRoot = getSandboxCodeRoot(workspace);
+              return (
+                <li key={workspace.id} className="h-full">
+                  <Link
+                    to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
+                    aria-label={workspace.name}
+                    className="group flex h-full flex-col gap-2 rounded-md border border-border-light bg-surface-light p-4 transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:bg-surface-dark"
                   >
-                    <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                      <span className="flex items-center gap-1.5 text-text-secondary dark:text-text-muted">
-                        <Target size={12} aria-hidden />
-                        {!summary || summary.loading
-                          ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
-                          : summary.source === 'objectives'
-                            ? t('tenant.workspaceList.objectivesCount', {
-                                count:
-                                  summary.objectives > 0 ? summary.objectives : summary.total,
-                                defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
-                              })
-                            : summary.source === 'tasks'
-                              ? t('tenant.workspaceList.tasksCount', {
-                                  count: summary.total,
-                                  defaultValue: `${String(summary.total)} tasks`,
-                                })
-                              : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
-                      </span>
-                      <span className="font-medium tabular-nums text-text-primary dark:text-text-inverse">
-                        {summary && !summary.loading && summary.source !== 'empty'
-                          ? `${String(summary.avgProgress)}%`
-                          : '—'}
-                      </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="line-clamp-1 text-[15px] font-medium text-text-primary group-hover:text-primary dark:text-text-inverse">
+                        {workspace.name}
+                      </h3>
+                      {archived ? (
+                        <Tag color="default" className="!m-0 flex-shrink-0">
+                          {t('tenant.workspaceList.archived', 'Archived')}
+                        </Tag>
+                      ) : null}
                     </div>
-                    <Progress
-                      percent={summary && !summary.loading ? summary.avgProgress : 0}
-                      size="small"
-                      showInfo={false}
-                      {...(summary && !summary.loading && summary.avgProgress >= 100
-                        ? { strokeColor: '#10b981' }
-                        : {})}
-                      aria-hidden
-                    />
-                    {summary && !summary.loading && summary.source !== 'empty' ? (
-                      <div className="mt-1 text-[11px] text-text-muted">
-                        {t('tenant.workspaceList.completedCount', {
-                          completed: summary.completed,
-                          total:
-                            summary.source === 'objectives'
-                              ? summary.objectives > 0
-                                ? summary.objectives
-                                : summary.total
-                              : summary.total,
-                          defaultValue: `${String(summary.completed)} of ${String(
-                            summary.source === 'objectives'
-                              ? summary.objectives > 0
-                                ? summary.objectives
-                                : summary.total
-                              : summary.total
-                          )} complete`,
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-auto flex items-center justify-between pt-2 text-xs text-text-muted dark:text-text-muted">
-                    <span>
-                      {t('tenant.workspaceList.updated', {
-                        time: formatDistanceToNow(updated),
-                        defaultValue: `Updated ${formatDistanceToNow(updated)}`,
-                      })}
-                    </span>
-                    {workspace.office_status ? (
-                      <Tag color="default" className="!m-0">
-                        {workspace.office_status}
+                    <p className="line-clamp-2 min-h-[2.5rem] text-xs text-text-secondary dark:text-text-muted">
+                      {workspace.description?.trim() || '—'}
+                    </p>
+                    <div>
+                      <Tag color={type === 'general' ? 'default' : 'blue'} className="!m-0">
+                        {workspaceTypeLabels[type]}
                       </Tag>
-                    ) : null}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
+                      {codeRoot ? (
+                        <Tag color="geekblue" className="!mr-0">
+                          {codeRoot}
+                        </Tag>
+                      ) : null}
+                    </div>
+
+                    {/* Objective / task progress */}
+                    <div
+                      className="mt-1 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
+                      aria-label={t('tenant.workspaceList.objectiveProgress', 'Objective progress')}
+                    >
+                      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1.5 text-text-secondary dark:text-text-muted">
+                          <Target size={12} aria-hidden />
+                          {!summary || summary.loading
+                            ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
+                            : summary.source === 'objectives'
+                              ? t('tenant.workspaceList.objectivesCount', {
+                                  count:
+                                    summary.objectives > 0 ? summary.objectives : summary.total,
+                                  defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
+                                })
+                              : summary.source === 'tasks'
+                                ? t('tenant.workspaceList.tasksCount', {
+                                    count: summary.total,
+                                    defaultValue: `${String(summary.total)} tasks`,
+                                  })
+                                : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
+                        </span>
+                        <span className="font-medium tabular-nums text-text-primary dark:text-text-inverse">
+                          {summary && !summary.loading && summary.source !== 'empty'
+                            ? `${String(summary.avgProgress)}%`
+                            : '—'}
+                        </span>
+                      </div>
+                      <Progress
+                        percent={summary && !summary.loading ? summary.avgProgress : 0}
+                        size="small"
+                        showInfo={false}
+                        {...(summary && !summary.loading && summary.avgProgress >= 100
+                          ? { strokeColor: '#10b981' }
+                          : {})}
+                        aria-hidden
+                      />
+                      {summary && !summary.loading && summary.source !== 'empty' ? (
+                        <div className="mt-1 text-[11px] text-text-muted">
+                          {t('tenant.workspaceList.completedCount', {
+                            completed: summary.completed,
+                            total:
+                              summary.source === 'objectives'
+                                ? summary.objectives > 0
+                                  ? summary.objectives
+                                  : summary.total
+                                : summary.total,
+                            defaultValue: `${String(summary.completed)} of ${String(
+                              summary.source === 'objectives'
+                                ? summary.objectives > 0
+                                  ? summary.objectives
+                                  : summary.total
+                                : summary.total
+                            )} complete`,
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between pt-2 text-xs text-text-muted dark:text-text-muted">
+                      <span>
+                        {t('tenant.workspaceList.updated', {
+                          time: formatDistanceToNow(updated),
+                          defaultValue: `Updated ${formatDistanceToNow(updated)}`,
+                        })}
+                      </span>
+                      {workspace.office_status ? (
+                        <Tag color="default" className="!m-0">
+                          {workspace.office_status}
+                        </Tag>
+                      ) : null}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

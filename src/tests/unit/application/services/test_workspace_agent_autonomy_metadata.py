@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
-from src.application.services.workspace_agent_autonomy import validate_autonomy_metadata
+from src.application.services.workspace_agent_autonomy import (
+    ensure_goal_completion_allowed_for_workspace,
+    synthesize_goal_evidence_from_children,
+    validate_autonomy_metadata,
+)
+from src.application.services.workspace_autonomy_profiles import (
+    evaluate_workspace_code_context,
+    resolve_autonomy_profile,
+    stream_completion_reports_success,
+)
+from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 
 
 @pytest.mark.unit
@@ -22,3 +34,436 @@ def test_execution_task_metadata_accepts_delegation_binding_fields() -> None:
     assert metadata["delegated_subagent_name"] == "worker-subagent"
     assert metadata["delegated_subagent_id"] == "sa-1"
     assert metadata["delegated_task_text"] == "Implement the bounded task"
+
+
+@pytest.mark.unit
+def test_root_metadata_accepts_workspace_type_and_profile_override() -> None:
+    metadata = validate_autonomy_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "autonomy_profile": {
+                "completion_policy": {
+                    "required_artifact_prefixes": ["diff_bundle:"],
+                    "stream_completion_reports_success": False,
+                }
+            },
+        }
+    )
+
+    profile = resolve_autonomy_profile(metadata)
+
+    assert metadata["workspace_type"] == "software_development"
+    assert profile.workspace_type == "software_development"
+    assert profile.evidence.required_artifact_prefixes == ("diff_bundle:",)
+    assert stream_completion_reports_success(root_metadata=metadata) is False
+
+
+def _root_task(metadata: dict) -> WorkspaceTask:
+    return WorkspaceTask(
+        id="root-1",
+        workspace_id="ws-1",
+        title="Ship code change",
+        created_by="user-1",
+        status=WorkspaceTaskStatus.IN_PROGRESS,
+        metadata=metadata,
+    )
+
+
+def _child_task(
+    *,
+    task_id: str = "child-1",
+    metadata: dict | None = None,
+) -> WorkspaceTask:
+    now = datetime(2026, 4, 24, 10, 0, tzinfo=UTC)
+    return WorkspaceTask(
+        id=task_id,
+        workspace_id="ws-1",
+        title="Implement code",
+        created_by="user-1",
+        status=WorkspaceTaskStatus.DONE,
+        metadata=metadata or {},
+        created_at=now,
+        updated_at=now,
+        completed_at=now,
+    )
+
+
+@pytest.mark.unit
+def test_software_development_profile_does_not_turn_task_ids_into_external_evidence() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[_child_task()],
+        generated_by_agent_id="agent-1",
+    )
+
+    assert evidence is not None
+    assert evidence["artifacts"] == []
+    assert evidence["verification_grade"] == "fail"
+
+
+@pytest.mark.unit
+def test_software_development_profile_accepts_code_and_test_artifacts() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        metadata={
+            "evidence_refs": [
+                "git_diff:/workspace/my-evo#abc123",
+                "test_run:/workspace/my-evo#jest-search",
+            ],
+            "execution_verifications": ["command:npm-test", "command:typecheck"],
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[child],
+        generated_by_agent_id="agent-1",
+    )
+    assert evidence is not None
+    root.metadata["goal_evidence"] = evidence
+
+    ensure_goal_completion_allowed_for_workspace(root, workspace_metadata={})
+
+    assert evidence["artifacts"] == [
+        "git_diff:/workspace/my-evo#abc123",
+        "test_run:/workspace/my-evo#jest-search",
+    ]
+    assert evidence["verification_grade"] == "pass"
+
+
+@pytest.mark.unit
+def test_software_development_profile_rejects_code_artifact_without_test_evidence() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        metadata={
+            "evidence_refs": ["git_diff:/workspace/my-evo#abc123"],
+            "execution_verifications": ["command:typecheck"],
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[child],
+        generated_by_agent_id="agent-1",
+    )
+    assert evidence is not None
+    root.metadata["goal_evidence"] = evidence
+
+    assert evidence["verification_grade"] == "fail"
+    with pytest.raises(ValueError, match="verification_grade"):
+        ensure_goal_completion_allowed_for_workspace(root, workspace_metadata={})
+
+
+@pytest.mark.unit
+def test_child_blocked_worker_report_forces_goal_evidence_failure() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        metadata={
+            "evidence_refs": [
+                "git_diff:/workspace/my-evo#abc123",
+                "test_run:/workspace/my-evo#jest-search",
+            ],
+            "execution_verifications": ["command:npm test"],
+            "last_worker_report_type": "blocked",
+            "last_worker_report_summary": "recovered_stale_no_heartbeat",
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[child],
+        generated_by_agent_id="agent-1",
+    )
+
+    assert evidence is not None
+    assert evidence["verification_grade"] == "fail"
+    assert "child_report_not_completed:child-1:blocked" in evidence["verifications"]
+
+
+@pytest.mark.unit
+def test_workspace_type_metadata_can_drive_completion_policy_when_root_has_no_type() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "goal_evidence": {
+                "goal_task_id": "root-1",
+                "goal_text_snapshot": "Ship code change",
+                "outcome_status": "achieved",
+                "summary": "child tasks done",
+                "artifacts": ["workspace_task:child-1"],
+                "verifications": ["workspace_task_completed:child-1"],
+                "generated_by_agent_id": "agent-1",
+                "recorded_at": "2026-04-24T10:00:00Z",
+                "verification_grade": "warn",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="verification_grade"):
+        ensure_goal_completion_allowed_for_workspace(
+            root,
+            workspace_metadata={
+                "workspace_type": "software_development",
+                "sandbox_code_root": "/workspace/my-evo",
+            },
+        )
+
+
+@pytest.mark.unit
+def test_workspace_autonomy_profile_type_can_drive_completion_policy() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "goal_evidence": {
+                "goal_task_id": "root-1",
+                "goal_text_snapshot": "Ship code change",
+                "outcome_status": "achieved",
+                "summary": "child tasks done",
+                "artifacts": ["workspace_task:child-1"],
+                "verifications": ["workspace_task_completed:child-1"],
+                "generated_by_agent_id": "agent-1",
+                "recorded_at": "2026-04-24T10:00:00Z",
+                "verification_grade": "warn",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="verification_grade"):
+        ensure_goal_completion_allowed_for_workspace(
+            root,
+            workspace_metadata={
+                "autonomy_profile": {"workspace_type": "software_development"},
+                "sandbox_code_root": "/workspace/my-evo",
+            },
+        )
+
+
+@pytest.mark.unit
+def test_software_development_requires_isolated_sandbox_code_root() -> None:
+    missing = evaluate_workspace_code_context(
+        root_metadata={"workspace_type": "software_development"},
+        workspace_metadata={},
+    )
+    assert missing.allowed is False
+    assert "sandbox_code_root" in str(missing.reason)
+
+    root_workspace = evaluate_workspace_code_context(
+        root_metadata={
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace",
+        },
+        workspace_metadata={},
+    )
+    assert root_workspace.allowed is False
+    assert "not /workspace itself" in str(root_workspace.reason)
+
+    ready = evaluate_workspace_code_context(
+        root_metadata={},
+        workspace_metadata={
+            "workspace_type": "software_development",
+            "code_context": {"sandbox_code_root": "my-evo"},
+        },
+    )
+    assert ready.allowed is True
+    assert ready.sandbox_code_root == "/workspace/my-evo"
+
+
+@pytest.mark.unit
+def test_software_completion_artifacts_must_reference_code_root() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "goal_evidence": {
+                "goal_task_id": "root-1",
+                "goal_text_snapshot": "Ship code change",
+                "outcome_status": "achieved",
+                "summary": "child tasks done",
+                "artifacts": ["test_run:/workspace#vitest"],
+                "verifications": ["command:vitest"],
+                "generated_by_agent_id": "agent-1",
+                "recorded_at": "2026-04-24T10:00:00Z",
+                "verification_grade": "pass",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="sandbox_code_root"):
+        ensure_goal_completion_allowed_for_workspace(root, workspace_metadata={})
+
+
+@pytest.mark.unit
+def test_software_completion_artifacts_must_match_exact_code_root_boundary() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "goal_evidence": {
+                "goal_task_id": "root-1",
+                "goal_text_snapshot": "Ship code change",
+                "outcome_status": "achieved",
+                "summary": "child tasks done",
+                "artifacts": ["git_diff:/workspace/my-evo2#abc123"],
+                "verifications": ["command:git-diff"],
+                "generated_by_agent_id": "agent-1",
+                "recorded_at": "2026-04-24T10:00:00Z",
+                "verification_grade": "pass",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="sandbox_code_root"):
+        ensure_goal_completion_allowed_for_workspace(root, workspace_metadata={})
+
+
+@pytest.mark.unit
+def test_root_workspace_type_can_override_workspace_default_type() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "general",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "goal_evidence": {
+                "goal_task_id": "root-1",
+                "goal_text_snapshot": "Ship code change",
+                "outcome_status": "achieved",
+                "summary": "child tasks done",
+                "artifacts": ["workspace_task:child-1"],
+                "verifications": ["workspace_task_completed:child-1"],
+                "generated_by_agent_id": "agent-1",
+                "recorded_at": "2026-04-24T10:00:00Z",
+                "verification_grade": "warn",
+            },
+        }
+    )
+
+    ensure_goal_completion_allowed_for_workspace(
+        root,
+        workspace_metadata={"workspace_type": "software_development"},
+    )
+
+
+@pytest.mark.unit
+def test_general_workspace_preserves_internal_task_evidence_compatibility() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "goal_evidence": {
+                "goal_task_id": "root-1",
+                "goal_text_snapshot": "Ship code change",
+                "outcome_status": "achieved",
+                "summary": "child tasks done",
+                "artifacts": ["workspace_task:child-1"],
+                "verifications": ["workspace_task_completed:child-1"],
+                "generated_by_agent_id": "agent-1",
+                "recorded_at": "2026-04-24T10:00:00Z",
+                "verification_grade": "warn",
+            },
+        }
+    )
+
+    ensure_goal_completion_allowed_for_workspace(root, workspace_metadata={})

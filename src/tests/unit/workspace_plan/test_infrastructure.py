@@ -184,6 +184,32 @@ class TestLLMGoalPlanner:
         assert reset.execution is TaskExecution.IDLE
         assert reset.current_attempt_id is None
 
+    async def test_structural_checks_and_write_set_are_inferred_from_task_text(self) -> None:
+        sub = [
+            _FakeSubTask(
+                id="s1",
+                description=(
+                    "Update src/sandbox/routes.ts and src/sandbox/routes.test.ts, "
+                    "then run `npm test -- src/sandbox/routes.test.ts --runInBand "
+                    "--coverage=false` in /workspace/my-evo."
+                ),
+                target_subagent="coder",
+            ),
+        ]
+        planner = LLMGoalPlanner(decomposer=_FakeDecomposer(sub))
+        plan = await planner.plan(_goal("ship route fix"), _ctx())
+        leaf = plan.leaf_tasks()[0]
+
+        assert leaf.metadata["write_set"] == [
+            "src/sandbox/routes.ts",
+            "src/sandbox/routes.test.ts",
+        ]
+        commands = leaf.metadata["verification_commands"]
+        assert commands == [
+            "cd /workspace/my-evo && npm test -- src/sandbox/routes.test.ts --runInBand --coverage=false"
+        ]
+        assert any(crit.kind is CriterionKind.CMD for crit in leaf.acceptance_criteria)
+
 
 # ---------------------------------------------------------------------------
 # M3 allocator
@@ -312,6 +338,32 @@ class TestVerifier:
         rep = await verifier.verify(ctx)
         assert not rep.passed
         assert rep.hard_fail  # regex is deterministic, confidence == 1.0
+
+    async def test_verifier_rejects_blocked_worker_report_even_with_stdout(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={"pattern": r"\S", "source": "stdout"},
+                    required=True,
+                ),
+            )
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            stdout="recovered_stale_no_heartbeat",
+            artifacts={
+                "last_worker_report_type": "blocked",
+                "last_worker_report_summary": "recovered_stale_no_heartbeat",
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert rep.hard_fail
+        assert "not a completion report" in rep.summary()
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +558,69 @@ class TestSupervisorTick:
         assert report2.verifications_ran == 1
         assert report2.nodes_completed == 1
         assert report2.allocations_made == 1  # b now dispatched
+
+    async def test_tick_defers_ready_nodes_with_overlapping_write_sets(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(replace(a, metadata={"write_set": ["src/shared.ts"]}))
+        plan.replace_node(
+            replace(
+                b,
+                depends_on=frozenset(),
+                metadata={"write_set": ["src/shared.ts"]},
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            _payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert len(dispatched) == 1
+        assert events == [("dispatch_deferred_write_conflict", "b")]
 
 
 # ---------------------------------------------------------------------------

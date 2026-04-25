@@ -12,7 +12,6 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REPLAN_ATTEMPT_COUNT,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
-    WORKSPACE_AGENT_BINDING_ID,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
@@ -24,6 +23,7 @@ TaskRole = Literal["goal_root", "execution_task"]
 GoalHealth = Literal["healthy", "at_risk", "blocked", "achieved"]
 RemediationStatus = Literal["none", "replan_required", "ready_for_completion"]
 ExecutionPhase = Literal["todo", "in_progress", "pending_adjudication", "blocked", "done"]
+WorkspaceType = Literal["general", "software_development", "research", "operations"]
 ExecutionAction = Literal[
     "created",
     "reprioritized",
@@ -52,6 +52,26 @@ class ContractModel(BaseModel):
 class RootGoalPolicyModel(ContractModel):
     mutable_by_agent: bool
     completion_requires_external_proof: bool
+
+
+class CompletionPolicyOverrideModel(ContractModel):
+    allow_internal_task_artifacts: bool | None = None
+    required_artifact_prefixes: list[str] | None = None
+    requires_external_artifact: bool | None = None
+    minimum_verification_grade: VerificationGrade | None = None
+    stream_completion_reports_success: bool | None = None
+
+
+class AutonomyProfileModel(ContractModel):
+    workspace_type: WorkspaceType | None = None
+    completion_policy: CompletionPolicyOverrideModel | None = None
+
+
+class WorkspaceCodeContextModel(ContractModel):
+    sandbox_code_root: str | None = None
+    loaded_agents_files: list[str] = Field(default_factory=list)
+    agents_digest: str | None = None
+    agents_excerpt: str | None = None
 
 
 class SourceBreakdownItemModel(ContractModel):
@@ -126,6 +146,10 @@ class RootGoalMetadataModel(ContractModel):
     autonomy_schema_version: Literal[1]
     task_role: Literal["goal_root"]
     goal_origin: GoalOrigin
+    workspace_type: WorkspaceType | None = None
+    autonomy_profile: AutonomyProfileModel | None = None
+    sandbox_code_root: str | None = None
+    code_context: WorkspaceCodeContextModel | None = None
     goal_source_refs: list[str] = Field(default_factory=list)
     goal_formalization_reason: str | None = None
     objective_id: str | None = None
@@ -163,6 +187,10 @@ class ExecutionTaskMetadataModel(ContractModel):
     workspace_agent_binding_id: str | None = None
     workspace_plan_id: str | None = None
     workspace_plan_node_id: str | None = None
+    code_context: WorkspaceCodeContextModel | None = None
+    write_set: list[str] = Field(default_factory=list)
+    verification_commands: list[str] = Field(default_factory=list)
+    launch_state: str | None = None
     current_attempt_id: str | None = None
     last_attempt_id: str | None = None
     current_attempt_number: int | None = Field(default=None, ge=1)
@@ -205,12 +233,13 @@ def has_autonomy_metadata(metadata: dict[str, Any] | None) -> bool:
             "goal_formalization_reason",
             "goal_evidence_bundle",
             "goal_health",
+            "workspace_type",
+            "autonomy_profile",
             REMEDIATION_STATUS,
             "blocked_child_task_ids",
             REPLAN_ATTEMPT_COUNT,
             EXECUTION_STATE,
             ROOT_GOAL_TASK_ID,
-            WORKSPACE_AGENT_BINDING_ID,
             "objective_id",
             "root_goal_policy",
             DERIVED_FROM_INTERNAL_PLAN_STEP,

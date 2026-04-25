@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import ClassVar, Literal
 
 from src.application.services.workspace_agent_autonomy import (
-    ensure_goal_completion_allowed,
+    ensure_goal_completion_allowed_for_workspace,
     ensure_root_goal_mutation_allowed,
     is_autonomy_task,
     is_goal_root_task,
@@ -270,7 +270,10 @@ class WorkspaceTaskService:
         )
         if status is not None and status != task.status:
             if status == WorkspaceTaskStatus.DONE:
-                ensure_goal_completion_allowed(task)
+                ensure_goal_completion_allowed_for_workspace(
+                    task,
+                    workspace_metadata=workspace.metadata,
+                )
             await self._ensure_transition_allowed(
                 workspace_id=workspace.id,
                 task=task,
@@ -535,7 +538,10 @@ class WorkspaceTaskService:
             target=WorkspaceTaskStatus.DONE,
             authority=authority or WorkspaceTaskAuthorityContext(),
         )
-        ensure_goal_completion_allowed(task)
+        ensure_goal_completion_allowed_for_workspace(
+            task,
+            workspace_metadata=workspace.metadata,
+        )
         self._apply_transition(task, WorkspaceTaskStatus.DONE)
         record_task_actor(
             task,
@@ -759,7 +765,9 @@ class WorkspaceTaskService:
             raise PermissionError("Only the assigned worker may mutate this execution task")
 
     @staticmethod
-    def _set_workspace_agent_binding_id(task: WorkspaceTask, workspace_agent_binding_id: str) -> None:
+    def _set_workspace_agent_binding_id(
+        task: WorkspaceTask, workspace_agent_binding_id: str
+    ) -> None:
         metadata = dict(task.metadata)
         metadata[WORKSPACE_AGENT_BINDING_ID] = workspace_agent_binding_id
         task.metadata = validate_autonomy_metadata(metadata)

@@ -73,8 +73,7 @@ const commonTranslations: Record<string, string> = {
 
   // Tenant Workspace List
   'tenant.workspaceList.title': 'Workspaces',
-  'tenant.workspaceList.subtitle':
-    'Collaborative multi-agent spaces scoped to this project',
+  'tenant.workspaceList.subtitle': 'Collaborative multi-agent spaces scoped to this project',
   'tenant.workspaceList.createButton': 'Create Workspace',
   'tenant.workspaceList.searchPlaceholder': 'Search workspaces...',
   'tenant.workspaceList.empty': 'No workspaces found',
@@ -85,6 +84,12 @@ const commonTranslations: Record<string, string> = {
   'tenant.workspaceList.noContextDescription':
     'Workspaces are scoped to a project. Select a tenant and project to continue.',
   'tenant.workspaceList.namePlaceholder': 'Workspace name',
+  'tenant.workspaceList.typeSelector': 'Workspace type',
+  'tenant.workspaceList.typeGeneral': 'General',
+  'tenant.workspaceList.typeSoftware': 'Software',
+  'tenant.workspaceList.typeResearch': 'Research',
+  'tenant.workspaceList.typeOperations': 'Operations',
+  'tenant.workspaceList.codeRootPlaceholder': 'Sandbox code root',
   'tenant.workspaceList.createSuccess': 'Workspace created',
   'tenant.workspaceList.createError': 'Failed to create workspace',
   'tenant.workspaceList.archived': 'Archived',

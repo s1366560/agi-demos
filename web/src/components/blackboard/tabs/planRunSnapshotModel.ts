@@ -107,6 +107,22 @@ export function asText(value: unknown): string {
   }
 }
 
+export function nodeWriteSet(node: WorkspacePlanNode): string[] {
+  const value = asRecord(node.metadata).write_set;
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+export function criterionSummary(node: WorkspacePlanNode): string {
+  if (node.acceptance_criteria.length === 0) {
+    return 'No checks';
+  }
+  const kinds = node.acceptance_criteria.map((criterion) => criterion.kind);
+  return Array.from(new Set(kinds)).join(', ');
+}
+
 export function eventLabel(event: WorkspacePlanEvent): string {
   if (event.event_type === 'worker_report_terminal') {
     return 'Worker submitted result';
@@ -132,6 +148,9 @@ export function eventLabel(event: WorkspacePlanEvent): string {
   }
   if (event.event_type === 'supervisor_tick') {
     return 'Supervisor scheduled work';
+  }
+  if (event.event_type === 'dispatch_deferred_write_conflict') {
+    return 'Dispatch deferred';
   }
   return event.event_type;
 }

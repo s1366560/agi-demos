@@ -53,7 +53,9 @@ describe('TaskBoard', () => {
       fireEvent.change(screen.getByLabelText('workspaceDetail.taskBoard.taskTitle'), {
         target: { value: 'Build MVP' },
       });
-      const submitButtons = screen.getAllByRole('button', { name: 'workspaceDetail.taskBoard.add' });
+      const submitButtons = screen.getAllByRole('button', {
+        name: 'workspaceDetail.taskBoard.add',
+      });
       fireEvent.click(submitButtons[submitButtons.length - 1]);
     });
 
@@ -122,15 +124,57 @@ describe('TaskBoard', () => {
     render(<TaskBoard workspaceId="ws-1" />);
 
     expect(screen.getByText(/Pending adjudication/i)).toBeInTheDocument();
-    expect(screen.getByText(/workspaceDetail\.taskBoard\.pendingLeaderAdjudication/i)).toBeInTheDocument();
-    expect(screen.getByText(/workspaceDetail\.taskBoard\.workerReportType: completed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/workspaceDetail\.taskBoard\.pendingLeaderAdjudication/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/workspaceDetail\.taskBoard\.workerReportType: completed/i)
+    ).toBeInTheDocument();
     expect(screen.getByText(/Checklist drafted successfully/i)).toBeInTheDocument();
-    expect(screen.getByText(/workspaceDetail\.taskBoard\.reportArtifacts: artifact:checklist/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/workspaceDetail\.taskBoard\.reportArtifacts: artifact:checklist/i)
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/workspaceDetail\.taskBoard\.reportVerifications: worker_report:completed/i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/workspaceDetail\.taskBoard\.workerLabel: Worker A/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/workspaceDetail\.taskBoard\.workerLabel: Worker A/i)
+    ).toBeInTheDocument();
     expect(screen.getByText(/workspaceDetail\.taskBoard\.attemptNumber #2/i)).toBeInTheDocument();
+  });
+
+  it('renders code context and launch anomaly signals for software tasks', async () => {
+    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+
+    vi.mocked(useWorkspaceTasks).mockReturnValue([
+      {
+        id: 'task-code-1',
+        title: 'Fix routes',
+        status: 'in_progress',
+        workspace_id: 'ws-1',
+        metadata: {
+          current_attempt_id: 'attempt-1',
+          launch_state: 'no_terminal_event',
+          durable_plan_verdict: 'replan_requested',
+          code_context: {
+            sandbox_code_root: '/workspace/my-evo',
+            loaded_agents_files: ['/workspace/my-evo/AGENTS.md'],
+            agents_digest: 'abcdef1234567890',
+          },
+        },
+      },
+    ] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+
+    render(<TaskBoard workspaceId="ws-1" />);
+
+    expect(screen.getByText('Fix routes')).toBeInTheDocument();
+    expect(screen.getByText(/no terminal event/i)).toBeInTheDocument();
+    expect(screen.getByText(/Durable replan requested/i)).toBeInTheDocument();
+    expect(screen.getByText(/No conversation/i)).toBeInTheDocument();
+    expect(screen.getByText(/workspaceDetail\.taskBoard\.codeRoot/)).toBeInTheDocument();
+    expect(screen.getByText('/workspace/my-evo')).toBeInTheDocument();
+    expect(screen.getByText(/AGENTS abcdef123456/)).toBeInTheDocument();
   });
 
   it('uses workspace binding ids for assigned agent selection state', async () => {
@@ -173,7 +217,9 @@ describe('TaskBoard', () => {
     render(<TaskBoard workspaceId="ws-1" />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' }));
+      fireEvent.click(
+        screen.getByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' })
+      );
     });
 
     expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });

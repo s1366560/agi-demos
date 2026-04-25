@@ -31,11 +31,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from src.application.services.workspace_autonomy_profiles import (
+    evaluate_workspace_code_context,
+    stream_completion_reports_success,
+)
 from src.domain.model.workspace.workspace_task import WorkspaceTask
+from src.infrastructure.agent.workspace.code_context import (
+    WorkspaceCodeContext,
+    load_workspace_code_context,
+)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
@@ -82,6 +90,69 @@ def _conversation_id_for_worker(
     )
 
 
+def _stream_completion_auto_report_enabled(
+    *,
+    root_metadata: Mapping[str, Any] | None,
+    workspace_metadata: Mapping[str, Any] | None,
+) -> bool:
+    """Return whether a plain stream ``complete`` event may imply success."""
+
+    return stream_completion_reports_success(
+        root_metadata=root_metadata,
+        workspace_metadata=workspace_metadata,
+    )
+
+
+def _build_code_context_sections(code_context: WorkspaceCodeContext | None) -> list[str]:
+    if code_context is None or not code_context.sandbox_code_root:
+        return []
+
+    context_lines = [
+        "[workspace-code-context]",
+        f"sandbox_code_root={code_context.sandbox_code_root}",
+    ]
+    if code_context.loaded_agents_paths:
+        context_lines.append("loaded_agents_files=" + ",".join(code_context.loaded_agents_paths))
+    if code_context.agents_digest:
+        context_lines.append(f"agents_digest={code_context.agents_digest}")
+    context_lines.append("[/workspace-code-context]")
+
+    code_guidance = (
+        "Programming workspace rule: perform all repository inspection, file edits, "
+        "terminal commands, git diff, and tests from `sandbox_code_root`. Ignore "
+        "unrelated files outside that directory unless the task explicitly asks "
+        "for them. Read and follow the listed AGENTS.md files before decomposing "
+        "or executing the task."
+    )
+    sections = [code_guidance, "\n".join(context_lines)]
+    if code_context.agents_files:
+        agents_sections = [
+            "\n".join(
+                [
+                    f"### {agents_file.sandbox_path}{' (truncated)' if agents_file.truncated else ''}",
+                    agents_file.content,
+                ]
+            )
+            for agents_file in code_context.agents_files
+        ]
+        sections.append("## Loaded AGENTS.md instructions\n" + "\n\n".join(agents_sections))
+    elif code_context.warnings:
+        sections.append(
+            "## AGENTS.md instruction status\n"
+            + "\n".join(f"- {warning}" for warning in code_context.warnings)
+        )
+    return sections
+
+
+def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]:
+    return {
+        "sandbox_code_root": code_context.sandbox_code_root,
+        "loaded_agents_files": list(code_context.loaded_agents_paths),
+        "agents_digest": code_context.agents_digest,
+        "agents_excerpt": code_context.agents_excerpt,
+    }
+
+
 def _build_worker_brief(
     *,
     workspace_id: str,
@@ -89,6 +160,7 @@ def _build_worker_brief(
     attempt_id: str | None,
     leader_agent_id: str | None,
     extra_instructions: str | None = None,
+    code_context: WorkspaceCodeContext | None = None,
 ) -> str:
     """Compose the initial prompt the worker agent receives.
 
@@ -99,10 +171,9 @@ def _build_worker_brief(
     human-readable task brief.
     """
     root_goal_task_id = ""
-    if isinstance(task.metadata, dict):
-        candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
-        if isinstance(candidate, str) and candidate:
-            root_goal_task_id = candidate
+    candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
+    if isinstance(candidate, str) and candidate:
+        root_goal_task_id = candidate
 
     description = (task.description or "").strip()
     workspace_agent_binding_id = task.get_workspace_agent_binding_id()
@@ -137,6 +208,7 @@ def _build_worker_brief(
         "\n".join(binding_lines),
         f"## Task title\n{task.title}",
     ]
+    sections.extend(_build_code_context_sections(code_context))
     if description:
         sections.append(f"## Task description\n{description}")
     if extra_instructions:
@@ -252,11 +324,12 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # --- Stage 1: attempt lifecycle + deterministic conversation binding ---
     resolved_attempt_id = attempt_id
     resolved_conversation_id: str | None = None
+    auto_report_stream_completion = True
+    code_context: WorkspaceCodeContext | None = None
     root_goal_task_id = ""
-    if isinstance(task.metadata, dict):
-        candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
-        if isinstance(candidate, str) and candidate:
-            root_goal_task_id = candidate
+    candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
+    if isinstance(candidate, str) and candidate:
+        root_goal_task_id = candidate
 
     try:
         async with async_session_factory() as db:
@@ -277,6 +350,57 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     "attempt_id": resolved_attempt_id,
                     "reason": "workspace_not_found",
                 }
+
+            root_metadata: Mapping[str, Any] = {}
+            if root_goal_task_id:
+                try:
+                    root_task = await SqlWorkspaceTaskRepository(db).find_by_id(root_goal_task_id)
+                except Exception:
+                    logger.debug(
+                        "workspace_worker_launch.root_profile_lookup_failed",
+                        extra={
+                            "event": "workspace_worker_launch.root_profile_lookup_failed",
+                            "workspace_id": workspace_id,
+                            "task_id": task.id,
+                            "root_goal_task_id": root_goal_task_id,
+                        },
+                        exc_info=True,
+                    )
+                else:
+                    if root_task is not None and root_task.workspace_id == workspace_id:
+                        root_metadata = dict(root_task.metadata or {})
+            auto_report_stream_completion = _stream_completion_auto_report_enabled(
+                root_metadata=root_metadata,
+                workspace_metadata=dict(getattr(workspace, "metadata", {}) or {}),
+            )
+            workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
+            code_context_evaluation = evaluate_workspace_code_context(
+                root_metadata=root_metadata,
+                workspace_metadata=workspace_metadata,
+            )
+            if not code_context_evaluation.allowed:
+                logger.warning(
+                    "workspace_worker_launch.code_context_not_ready",
+                    extra={
+                        "event": "workspace_worker_launch.code_context_not_ready",
+                        "workspace_id": workspace_id,
+                        "task_id": task.id,
+                        "worker_agent_id": worker_agent_id,
+                        "reason": code_context_evaluation.reason,
+                    },
+                )
+                return {
+                    "launched": False,
+                    "conversation_id": None,
+                    "attempt_id": resolved_attempt_id,
+                    "reason": "software_code_context_not_ready",
+                    "message": code_context_evaluation.reason,
+                }
+            code_context = load_workspace_code_context(
+                project_id=workspace.project_id,
+                root_metadata=root_metadata,
+                workspace_metadata=workspace_metadata,
+            )
 
             # Defensive membership check: the worker_agent_id MUST be an
             # active workspace binding. This guards against races where a
@@ -430,17 +554,20 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             )
             command_service = WorkspaceTaskCommandService(task_service)
             try:
+                metadata_patch: dict[str, Any] = {
+                    CURRENT_ATTEMPT_ID: attempt.id,
+                    "current_attempt_number": attempt.attempt_number,
+                    "current_attempt_conversation_id": resolved_conversation_id,
+                    "current_attempt_worker_agent_id": worker_agent_id,
+                    CURRENT_ATTEMPT_WORKER_BINDING_ID: worker_binding.id,
+                    "launch_state": "bound",
+                }
+                metadata_patch["code_context"] = _code_context_metadata(code_context)
                 await command_service.update_task(
                     workspace_id=workspace_id,
                     task_id=task.id,
                     actor_user_id=actor_user_id,
-                    metadata={
-                        CURRENT_ATTEMPT_ID: attempt.id,
-                        "current_attempt_number": attempt.attempt_number,
-                        "current_attempt_conversation_id": resolved_conversation_id,
-                        "current_attempt_worker_agent_id": worker_agent_id,
-                        CURRENT_ATTEMPT_WORKER_BINDING_ID: worker_binding.id,
-                    },
+                    metadata=metadata_patch,
                     actor_type="agent" if leader_agent_id else "human",
                     actor_agent_id=leader_agent_id,
                     reason="workspace_worker_launch.bind_conversation",
@@ -488,6 +615,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         attempt_id=resolved_attempt_id,
         leader_agent_id=leader_agent_id,
         extra_instructions=extra_instructions,
+        code_context=code_context,
     )
     final_content = ""
     accumulated_text = ""
@@ -549,21 +677,48 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # --- Stage 3: terminal report -----------------------------------------
     outcome_reason: str
     if terminal_event == "complete":
-        outcome_reason = "completed"
-        summary = (final_content or "").strip()[:2000] or "Worker completed task."
-        await _report_terminal(
-            workspace_id=workspace_id,
-            root_goal_task_id=root_goal_task_id,
-            task_id=task.id,
-            attempt_id=resolved_attempt_id,
-            conversation_id=resolved_conversation_id,
-            actor_user_id=actor_user_id,
-            worker_agent_id=worker_agent_id,
-            leader_agent_id=leader_agent_id,
-            report_type="completed",
-            summary=summary,
-            apply_fn=apply_workspace_worker_report,
-        )
+        if auto_report_stream_completion:
+            outcome_reason = "completed"
+            summary = (final_content or "").strip()[:2000] or "Worker completed task."
+            await _report_terminal(
+                workspace_id=workspace_id,
+                root_goal_task_id=root_goal_task_id,
+                task_id=task.id,
+                attempt_id=resolved_attempt_id,
+                conversation_id=resolved_conversation_id,
+                actor_user_id=actor_user_id,
+                worker_agent_id=worker_agent_id,
+                leader_agent_id=leader_agent_id,
+                report_type="completed",
+                summary=summary,
+                apply_fn=apply_workspace_worker_report,
+            )
+            await _patch_task_launch_state(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                actor_user_id=actor_user_id,
+                leader_agent_id=leader_agent_id,
+                launch_state="completed",
+            )
+        else:
+            outcome_reason = "no_terminal_event"
+            await _patch_task_launch_state(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                actor_user_id=actor_user_id,
+                leader_agent_id=leader_agent_id,
+                launch_state="no_terminal_event",
+            )
+            logger.warning(
+                "workspace_worker_launch.stream_complete_without_terminal_report",
+                extra={
+                    "event": "workspace_worker_launch.stream_complete_without_terminal_report",
+                    "workspace_id": workspace_id,
+                    "task_id": task.id,
+                    "conversation_id": resolved_conversation_id,
+                    "attempt_id": resolved_attempt_id,
+                },
+            )
     elif terminal_event == "error":
         outcome_reason = "blocked"
         summary = (final_content or "").strip()[:2000] or "Worker stream errored."
@@ -580,8 +735,22 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             summary=summary,
             apply_fn=apply_workspace_worker_report,
         )
+        await _patch_task_launch_state(
+            workspace_id=workspace_id,
+            task_id=task.id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+            launch_state="blocked",
+        )
     else:
         outcome_reason = "no_terminal_event"
+        await _patch_task_launch_state(
+            workspace_id=workspace_id,
+            task_id=task.id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+            launch_state="no_terminal_event",
+        )
         logger.warning(
             "workspace_worker_launch.no_terminal_event",
             extra={
@@ -613,6 +782,73 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         "attempt_id": resolved_attempt_id,
         "reason": outcome_reason,
     }
+
+
+async def _patch_task_launch_state(
+    *,
+    workspace_id: str,
+    task_id: str,
+    actor_user_id: str,
+    leader_agent_id: str | None,
+    launch_state: str,
+) -> None:
+    try:
+        from src.application.services.workspace_task_command_service import (
+            WorkspaceTaskCommandService,
+        )
+        from src.application.services.workspace_task_service import (
+            WorkspaceTaskAuthorityContext,
+            WorkspaceTaskService,
+        )
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
+            SqlWorkspaceAgentRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
+            SqlWorkspaceMemberRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
+            SqlWorkspaceRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+            SqlWorkspaceTaskRepository,
+        )
+
+        async with async_session_factory() as db:
+            task_service = WorkspaceTaskService(
+                workspace_repo=SqlWorkspaceRepository(db),
+                workspace_member_repo=SqlWorkspaceMemberRepository(db),
+                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+                workspace_task_repo=SqlWorkspaceTaskRepository(db),
+            )
+            await WorkspaceTaskCommandService(task_service).update_task(
+                workspace_id=workspace_id,
+                task_id=task_id,
+                actor_user_id=actor_user_id,
+                metadata={"launch_state": launch_state},
+                actor_type="agent" if leader_agent_id else "human",
+                actor_agent_id=leader_agent_id,
+                reason=f"workspace_worker_launch.{launch_state}",
+                authority=(
+                    WorkspaceTaskAuthorityContext.leader(leader_agent_id)
+                    if leader_agent_id
+                    else None
+                ),
+            )
+            await db.commit()
+    except Exception:
+        logger.warning(
+            "workspace_worker_launch.launch_state_patch_failed",
+            extra={
+                "event": "workspace_worker_launch.launch_state_patch_failed",
+                "workspace_id": workspace_id,
+                "task_id": task_id,
+                "launch_state": launch_state,
+            },
+            exc_info=True,
+        )
 
 
 async def _report_terminal(

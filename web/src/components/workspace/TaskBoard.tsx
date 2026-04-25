@@ -3,14 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input, Select, Switch, Tooltip } from 'antd';
-import {
-  AlertCircle,
-  Ban,
-  CheckCircle,
-  ListTodo,
-  PlayCircle,
-  Plus,
-} from 'lucide-react';
+import { AlertCircle, Ban, CheckCircle, ListTodo, PlayCircle, Plus } from 'lucide-react';
 
 import { useWorkspaceAgents, useWorkspaceTasks } from '@/stores/workspace';
 
@@ -34,6 +27,15 @@ interface RootGoalDisplayState {
   goalHealth: string;
   remediationStatus: string;
   verificationGrade: string;
+}
+
+interface TaskObservabilityState {
+  codeRoot: string;
+  agentsDigest: string;
+  loadedAgentsCount: number;
+  launchState: string;
+  durableVerdict: string;
+  missingConversation: boolean;
 }
 
 const PRIORITY_TONES: Record<string, string> = {
@@ -62,12 +64,26 @@ const GOAL_HEALTH_TONES: Record<string, string> = {
 };
 
 const VERIFICATION_GRADE_TONES: Record<string, string> = {
-  pass:
+  pass: 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
+  warn: 'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
+  fail: 'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
+};
+
+const OBSERVABILITY_TONES: Record<string, string> = {
+  bound:
+    'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark',
+  scheduled:
+    'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark',
+  completed:
     'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
-  warn:
-    'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
-  fail:
+  accepted:
+    'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
+  blocked:
     'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
+  no_terminal_event:
+    'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
+  replan_requested:
+    'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
 };
 
 const EFFORT_OPTIONS = [
@@ -99,7 +115,9 @@ const COLUMN_CONFIG: {
   },
   {
     status: 'in_progress',
-    icon: <PlayCircle size={14} className="text-status-text-info dark:text-status-text-info-dark" />,
+    icon: (
+      <PlayCircle size={14} className="text-status-text-info dark:text-status-text-info-dark" />
+    ),
     labelKey: 'workspaceDetail.taskBoard.statusInProgress',
     fallback: 'In Progress',
   },
@@ -122,7 +140,9 @@ const COLUMN_CONFIG: {
   },
 ];
 
-function getRootGoalDisplayState(metadata: Record<string, unknown> | undefined): RootGoalDisplayState {
+function getRootGoalDisplayState(
+  metadata: Record<string, unknown> | undefined
+): RootGoalDisplayState {
   const safeMetadata = metadata ?? {};
   const taskRole = typeof safeMetadata.task_role === 'string' ? safeMetadata.task_role : '';
   const goalEvidence =
@@ -144,6 +164,42 @@ function getRootGoalDisplayState(metadata: Record<string, unknown> | undefined):
 
 function formatMetadataLabel(value: string): string {
   return formatTaskProjectionLabel(value);
+}
+
+function getTaskObservabilityState(task: WorkspaceTask): TaskObservabilityState {
+  const metadata = Object(task.metadata) as Record<string, unknown>;
+  const codeContext =
+    metadata.code_context && typeof metadata.code_context === 'object'
+      ? (metadata.code_context as Record<string, unknown>)
+      : null;
+  const loadedAgentsFiles = Array.isArray(codeContext?.loaded_agents_files)
+    ? codeContext.loaded_agents_files.filter((item): item is string => typeof item === 'string')
+    : [];
+  const currentAttemptId =
+    typeof metadata.current_attempt_id === 'string'
+      ? metadata.current_attempt_id
+      : task.current_attempt_id;
+  const attemptConversationId =
+    typeof metadata.current_attempt_conversation_id === 'string'
+      ? metadata.current_attempt_conversation_id
+      : task.current_attempt_conversation_id;
+
+  return {
+    codeRoot:
+      typeof codeContext?.sandbox_code_root === 'string'
+        ? codeContext.sandbox_code_root
+        : typeof metadata.sandbox_code_root === 'string'
+          ? metadata.sandbox_code_root
+          : '',
+    agentsDigest: typeof codeContext?.agents_digest === 'string' ? codeContext.agents_digest : '',
+    loadedAgentsCount: loadedAgentsFiles.length,
+    launchState: typeof metadata.launch_state === 'string' ? metadata.launch_state : '',
+    durableVerdict:
+      typeof metadata.durable_plan_verdict === 'string' ? metadata.durable_plan_verdict : '',
+    missingConversation: Boolean(
+      task.status === 'in_progress' && currentAttemptId && !attemptConversationId
+    ),
+  };
 }
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
@@ -239,8 +295,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
         return '';
       }
       const binding = agents.find(
-        (agent) => (agent.id || agent.agent_id) === task.assignee_agent_id
-          || agent.agent_id === task.assignee_agent_id
+        (agent) =>
+          (agent.id || agent.agent_id) === task.assignee_agent_id ||
+          agent.agent_id === task.assignee_agent_id
       );
       return binding?.id || binding?.agent_id || '';
     },
@@ -334,11 +391,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
           </Button>
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary dark:text-text-muted">
             {t('workspaceDetail.taskBoard.showArchived', 'Show archived')}
-            <Switch
-              size="small"
-              checked={showArchived}
-              onChange={setShowArchived}
-            />
+            <Switch size="small" checked={showArchived} onChange={setShowArchived} />
           </label>
           <Button
             type="text"
@@ -424,9 +477,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
               <div className="flex-1 space-y-2 overflow-y-auto p-2">
                 {colTasks.length === 0 ? (
                   <div className="flex h-full min-h-[80px] items-center justify-center">
-                    <span className="text-xs text-text-muted/60 dark:text-text-muted/40">
-                      --
-                    </span>
+                    <span className="text-xs text-text-muted/60 dark:text-text-muted/40">--</span>
                   </div>
                 ) : (
                   colTasks.map((task) => {
@@ -446,6 +497,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                     const priorityTone =
                       PRIORITY_TONES[task.priority || ''] ??
                       'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary';
+                    const observability = getTaskObservabilityState(task);
 
                     return (
                       <article
@@ -499,6 +551,38 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                               Pending adjudication
                             </span>
                           )}
+                          {observability.launchState && (
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                OBSERVABILITY_TONES[observability.launchState] ??
+                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                              }`}
+                            >
+                              {formatMetadataLabel(observability.launchState)}
+                            </span>
+                          )}
+                          {observability.durableVerdict && (
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                OBSERVABILITY_TONES[observability.durableVerdict] ??
+                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                              }`}
+                            >
+                              Durable {formatMetadataLabel(observability.durableVerdict)}
+                            </span>
+                          )}
+                          {observability.missingConversation && (
+                            <Tooltip
+                              title={t(
+                                'workspaceDetail.taskBoard.missingAttemptConversation',
+                                'Attempt is running but the worker conversation has not been bound yet.'
+                              )}
+                            >
+                              <span className="rounded-full border border-warning-border bg-warning-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+                                No conversation
+                              </span>
+                            </Tooltip>
+                          )}
                           {isBlocked && (
                             <Tooltip
                               title={
@@ -537,6 +621,25 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
                           <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
                             {formatMetadataLabel(remediationStatus)}
                           </p>
+                        )}
+
+                        {(observability.codeRoot || observability.agentsDigest) && (
+                          <div className="mt-2 space-y-1 rounded-md border border-border-light bg-surface-muted/70 px-2 py-2 text-[11px] leading-4 text-text-secondary dark:border-border-dark dark:bg-background-dark/45 dark:text-text-muted">
+                            {observability.codeRoot && (
+                              <p className="break-all">
+                                {t('workspaceDetail.taskBoard.codeRoot', 'Code root')}:{' '}
+                                <span className="font-mono">{observability.codeRoot}</span>
+                              </p>
+                            )}
+                            {observability.agentsDigest && (
+                              <p className="break-all">
+                                AGENTS {observability.agentsDigest.slice(0, 12)}
+                                {observability.loadedAgentsCount > 0
+                                  ? ` · ${String(observability.loadedAgentsCount)} file(s)`
+                                  : ''}
+                              </p>
+                            )}
+                          </div>
                         )}
 
                         {pending && (

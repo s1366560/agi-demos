@@ -231,7 +231,20 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 errors.append(f"verify({node.id}): {exc}")
 
         # --- 2. allocate ready nodes -----------------------------------
-        ready = plan.ready_nodes()
+        ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(
+            plan.ready_nodes()
+        )
+        for deferred_node in deferred_by_write_scope:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                deferred_node,
+                "dispatch_deferred_write_conflict",
+                {
+                    "summary": "node deferred because another ready node owns an overlapping write set",
+                    "write_set": list(_node_write_set(deferred_node)),
+                },
+            )
         if ready:
             try:
                 pool = await self._agent_pool(workspace_id)
@@ -349,6 +362,31 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def _select_ready_nodes_without_write_conflicts(
+    ready_nodes: list[PlanNode],
+) -> tuple[list[PlanNode], list[PlanNode]]:
+    """Keep parallel dispatch from assigning overlapping write sets in one tick."""
+
+    selected: list[PlanNode] = []
+    deferred: list[PlanNode] = []
+    claimed: set[str] = set()
+    for node in sorted(ready_nodes, key=lambda n: n.priority, reverse=True):
+        write_set = _node_write_set(node)
+        if write_set and not claimed.isdisjoint(write_set):
+            deferred.append(node)
+            continue
+        selected.append(node)
+        claimed.update(write_set)
+    return selected, deferred
+
+
+def _node_write_set(node: PlanNode) -> frozenset[str]:
+    value = node.metadata.get("write_set")
+    if not isinstance(value, list):
+        return frozenset()
+    return frozenset(str(item) for item in value if isinstance(item, str) and item)
 
 
 # --- optional Ray actor wrapper --------------------------------------

@@ -138,7 +138,9 @@ def _make_sql_agent_pool(session: AsyncSession) -> AgentPoolProvider:
                 "reported",
                 "adjudicating",
             }:
-                active_counts[task.assignee_agent_id] = active_counts.get(task.assignee_agent_id, 0) + 1
+                active_counts[task.assignee_agent_id] = (
+                    active_counts.get(task.assignee_agent_id, 0) + 1
+                )
 
         pool: list[AllocatorAgent] = []
         for binding in bindings:
@@ -196,7 +198,9 @@ def _make_sql_dispatcher(
             agent_id=str(allocation.agent_id),
         )
         if binding is None:
-            raise ValueError(f"workspace agent binding not found for agent_id={allocation.agent_id}")
+            raise ValueError(
+                f"workspace agent binding not found for agent_id={allocation.agent_id}"
+            )
 
         task_repo = SqlWorkspaceTaskRepository(session)
         existing_task = await _find_task_for_plan_node(
@@ -226,6 +230,7 @@ def _make_sql_dispatcher(
                     DERIVED_FROM_INTERNAL_PLAN_STEP: node.id,
                     WORKSPACE_PLAN_ID: item.plan_id,
                     WORKSPACE_PLAN_NODE_ID: node.id,
+                    **_execution_task_metadata_from_node(node),
                 },
                 priority=WorkspaceTaskPriority.from_rank(min(max(int(node.priority), 0), 4)),
                 estimated_effort=(
@@ -370,6 +375,7 @@ async def _project_dispatch_attempt_to_task(
         "current_attempt_worker_agent_id": worker_agent_id,
         CURRENT_ATTEMPT_WORKER_BINDING_ID: worker_binding_id,
         "last_attempt_status": WorkspaceTaskSessionAttemptStatus.RUNNING.value,
+        "launch_state": "scheduled",
         EXECUTION_STATE: _build_dispatch_execution_state(actor_id=leader_agent_id),
     }
     target_status = (
@@ -395,6 +401,10 @@ def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:
     async def _attempt_context(workspace_id: str, node: PlanNode) -> VerificationContext:
         stdout = ""
         artifacts: dict[str, Any] = {}
+        sandbox: _WorkspaceSandboxCommandRunner | None = None
+        workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+        if workspace is not None and getattr(workspace, "project_id", None):
+            sandbox = _WorkspaceSandboxCommandRunner(project_id=workspace.project_id)
         if node.workspace_task_id:
             task = await SqlWorkspaceTaskRepository(session).find_by_id(node.workspace_task_id)
             if task is not None:
@@ -417,9 +427,47 @@ def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:
             attempt_id=node.current_attempt_id,
             artifacts=artifacts,
             stdout=stdout,
+            sandbox=sandbox,
         )
 
     return _attempt_context
+
+
+class _WorkspaceSandboxCommandRunner:
+    """Small adapter that lets durable criteria run commands in the project sandbox."""
+
+    def __init__(self, *, project_id: str) -> None:
+        self._project_id = project_id
+
+    async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+        from src.infrastructure.agent.state.agent_worker_state import (
+            _resolve_project_sandbox_id,
+            get_mcp_sandbox_adapter,
+        )
+
+        adapter = get_mcp_sandbox_adapter()
+        if adapter is None:
+            raise RuntimeError("MCP sandbox adapter is not initialized")
+        sandbox_id = await _resolve_project_sandbox_id(self._project_id)
+        if not sandbox_id:
+            raise RuntimeError(f"no sandbox found for project {self._project_id}")
+
+        raw = await adapter.call_tool(
+            sandbox_id,
+            "bash",
+            {
+                "command": command,
+                "timeout": timeout,
+            },
+            timeout=float(timeout) + 5.0,
+        )
+        text = _tool_result_text(raw)
+        is_error = bool(raw.get("is_error") or raw.get("isError"))
+        return {
+            "exit_code": 1 if is_error else 0,
+            "stdout": "" if is_error else text,
+            "stderr": text if is_error else "",
+        }
 
 
 async def _resolve_root_task_id(
@@ -483,11 +531,55 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
     summary = metadata.get(LAST_WORKER_REPORT_SUMMARY)
     stdout = summary if isinstance(summary, str) else json.dumps(summary or "", ensure_ascii=False)
     artifacts: dict[str, Any] = {}
-    for key in ("evidence_refs", "execution_verifications", "last_worker_report_artifacts"):
+    for key in (
+        "evidence_refs",
+        "execution_verifications",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+    ):
         value = metadata.get(key)
         if isinstance(value, list):
             artifacts[key] = [str(item) for item in value if item]
+    for key in (
+        "current_attempt_conversation_id",
+        "last_attempt_status",
+        "last_worker_report_summary",
+        "last_worker_report_type",
+    ):
+        value = metadata.get(key)
+        if isinstance(value, str) and value:
+            artifacts[key] = value
     return stdout, artifacts
+
+
+def _execution_task_metadata_from_node(node: PlanNode) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    write_set = node.metadata.get("write_set")
+    if isinstance(write_set, list):
+        metadata["write_set"] = [str(item) for item in write_set if item]
+    commands = node.metadata.get("verification_commands")
+    if isinstance(commands, list):
+        metadata["verification_commands"] = [str(item) for item in commands if item]
+    return metadata
+
+
+def _tool_result_text(raw: Mapping[str, Any]) -> str:
+    content = raw.get("content")
+    if isinstance(content, list):
+        parts = [
+            str(item.get("text") or "")
+            for item in content
+            if isinstance(item, Mapping) and item.get("text")
+        ]
+        if parts:
+            return "\n".join(parts)
+    output = raw.get("output")
+    if isinstance(output, str):
+        return output
+    text = raw.get("text")
+    if isinstance(text, str):
+        return text
+    return ""
 
 
 def _node_worker_brief(node: PlanNode) -> str:

@@ -30,6 +30,7 @@ import {
   asRecord,
   asText,
   countDone,
+  criterionSummary,
   eventLabel,
   eventSummary,
   fallbackTone,
@@ -37,6 +38,7 @@ import {
   formatRelative,
   formatTime,
   matchesFilter,
+  nodeWriteSet,
   outboxNodeId,
   planStage,
   shortId,
@@ -291,6 +293,7 @@ export function PlanRunSnapshotSection({
           conversationId: linkedTask.current_attempt_conversation_id,
         })
       : '';
+  const selectedWriteSet = selectedNode ? nodeWriteSet(selectedNode) : [];
 
   const runNodeAction = async (actionId: NodeActionId) => {
     if (!selectedNode) {
@@ -548,7 +551,39 @@ export function PlanRunSnapshotSection({
                         </span>{' '}
                         {formatTime(selectedNode.updated_at ?? selectedNode.created_at)}
                       </div>
+                      <div>
+                        <span className="font-medium text-text-primary dark:text-text-inverse">
+                          Checks
+                        </span>{' '}
+                        {criterionSummary(selectedNode)}
+                      </div>
+                      <div>
+                        <span className="font-medium text-text-primary dark:text-text-inverse">
+                          Write set
+                        </span>{' '}
+                        {selectedWriteSet.length > 0
+                          ? `${String(selectedWriteSet.length)} file(s)`
+                          : 'none'}
+                      </div>
                     </div>
+
+                    {selectedWriteSet.length > 0 && (
+                      <div className="mt-3 rounded-md border border-border-light bg-surface-muted/70 p-3 dark:border-border-dark dark:bg-background-dark/35">
+                        <div className="text-[11px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+                          Write-scope guard
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {selectedWriteSet.slice(0, 8).map((path) => (
+                            <span
+                              key={path}
+                              className="rounded border border-border-light bg-surface-light px-1.5 py-0.5 font-mono text-[10px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted"
+                            >
+                              {path}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {attemptHref && (

@@ -10,10 +10,12 @@ import {
 import {
   actionEnabled,
   asText,
+  criterionSummary,
   eventLabel,
   eventSummary,
   fallbackTone,
   formatTime,
+  nodeWriteSet,
   outboxNodeId,
   shortId,
 } from './planRunSnapshotModel';
@@ -51,6 +53,7 @@ export function NodeRow({
   onSelect: () => void;
 }) {
   const progress = Math.max(0, Math.min(100, node.progress.percent || 0));
+  const writeSet = nodeWriteSet(node);
   return (
     <button
       type="button"
@@ -77,6 +80,8 @@ export function NodeRow({
             <span>{shortId(node.id)}</span>
             {node.assignee_agent_id && <span>owner {shortId(node.assignee_agent_id)}</span>}
             {node.depends_on.length > 0 && <span>deps {String(node.depends_on.length)}</span>}
+            {node.acceptance_criteria.length > 0 && <span>checks {criterionSummary(node)}</span>}
+            {writeSet.length > 0 && <span>write {String(writeSet.length)}</span>}
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-dark/10 dark:bg-surface-light/10">
             <div

@@ -34,6 +34,7 @@ import type {
   CyberObjectiveType,
   CyberGeneCategory,
   WorkspaceMessage,
+  WorkspaceCreateRequest,
 } from '@/types/workspace';
 
 type WorkspaceSurfaceState = Pick<
@@ -69,10 +70,8 @@ const createEmptySurfaceState = (): WorkspaceSurfaceState => ({
   chatMessages: [],
 });
 
-const hasLoadedReplies = (
-  loadedReplyPostIds: Record<string, boolean>,
-  postId: string
-): boolean => loadedReplyPostIds[postId] === true;
+const hasLoadedReplies = (loadedReplyPostIds: Record<string, boolean>, postId: string): boolean =>
+  loadedReplyPostIds[postId] === true;
 
 let workspaceSurfaceRequestSequence = 0;
 
@@ -103,7 +102,10 @@ function upsertManyById<T extends { id: string }>(items: T[], nextItems: T[]): T
   return nextItems.reduce((acc, item) => upsertById(acc, item), items);
 }
 
-function mergeWorkspaceAgentById(items: WorkspaceAgent[], nextItem: WorkspaceAgent): WorkspaceAgent[] {
+function mergeWorkspaceAgentById(
+  items: WorkspaceAgent[],
+  nextItem: WorkspaceAgent
+): WorkspaceAgent[] {
   const existingIndex = items.findIndex((item) => item.id === nextItem.id);
   if (existingIndex === -1) {
     return [...items, nextItem];
@@ -225,7 +227,7 @@ interface WorkspaceState {
   createWorkspace: (
     tenantId: string,
     projectId: string,
-    data: { name: string; description?: string }
+    data: WorkspaceCreateRequest
   ) => Promise<void>;
   createPost: (
     tenantId: string,
@@ -644,10 +646,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             if (current.currentWorkspace?.id !== workspaceId) {
               return current;
             }
-            if (
-              startedWithExistingPost &&
-              !current.posts.some((post) => post.id === postId)
-            ) {
+            if (startedWithExistingPost && !current.posts.some((post) => post.id === postId)) {
               return current;
             }
 
@@ -710,7 +709,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       pinPost: async (tenantId, projectId, workspaceId, postId) => {
-        const post = await workspaceBlackboardService.pinPost(tenantId, projectId, workspaceId, postId);
+        const post = await workspaceBlackboardService.pinPost(
+          tenantId,
+          projectId,
+          workspaceId,
+          postId
+        );
         set((state) => ({
           posts: state.posts.map((entry) => (entry.id === post.id ? post : entry)),
         }));
@@ -955,7 +959,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const postId = data.post_id as string;
           set((state) => {
             const { [postId]: _removedReplies, ...nextRepliesByPostId } = state.repliesByPostId;
-            const { [postId]: _loadedReplies, ...nextLoadedReplyPostIds } = state.loadedReplyPostIds;
+            const { [postId]: _loadedReplies, ...nextLoadedReplyPostIds } =
+              state.loadedReplyPostIds;
             const { [postId]: _loadingReplies, ...nextReplyLoadingPostIds } =
               state.replyLoadingPostIds;
 

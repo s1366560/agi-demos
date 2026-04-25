@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.application.schemas.workspace_agent_autonomy import (
     AUTONOMY_SCHEMA_VERSION,
@@ -14,6 +14,12 @@ from src.application.schemas.workspace_agent_autonomy import (
     GoalCandidateRecordModel,
     RootGoalMetadataModel,
     has_autonomy_metadata,
+)
+from src.application.services.workspace_autonomy_profiles import (
+    WorkspaceAutonomyProfile,
+    accepted_artifacts_for_profile,
+    evaluate_completion_evidence,
+    resolve_autonomy_profile,
 )
 from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
@@ -71,7 +77,8 @@ def is_mutable_by_agent(task: WorkspaceTask) -> bool:
         return True
     policy = task.metadata.get("root_goal_policy")
     if isinstance(policy, Mapping):
-        mutable = policy.get("mutable_by_agent")
+        policy_data = cast(Mapping[str, Any], policy)
+        mutable = policy_data.get("mutable_by_agent")
         if isinstance(mutable, bool):
             return mutable
     return task.metadata.get("goal_origin") == "agent_inferred"
@@ -102,6 +109,14 @@ def ensure_root_goal_mutation_allowed(
 
 
 def ensure_goal_completion_allowed(task: WorkspaceTask) -> None:
+    ensure_goal_completion_allowed_for_workspace(task, workspace_metadata=None)
+
+
+def ensure_goal_completion_allowed_for_workspace(
+    task: WorkspaceTask,
+    *,
+    workspace_metadata: Mapping[str, Any] | None = None,
+) -> None:
     if not is_goal_root_task(task):
         return
 
@@ -115,13 +130,21 @@ def ensure_goal_completion_allowed(task: WorkspaceTask) -> None:
     policy = task.metadata.get("root_goal_policy")
     requires_external_proof = is_agent_inferred_root_task(task)
     if isinstance(policy, Mapping):
-        maybe_requires_external = policy.get("completion_requires_external_proof")
+        policy_data = cast(Mapping[str, Any], policy)
+        maybe_requires_external = policy_data.get("completion_requires_external_proof")
         if isinstance(maybe_requires_external, bool):
             requires_external_proof = maybe_requires_external
     if requires_external_proof and not evidence.artifacts:
         raise ValueError(
             "Root goals requiring external proof must include proof artifacts before completion"
         )
+    evaluation = evaluate_completion_evidence(
+        root_metadata=task.metadata,
+        evidence=evidence.model_dump(mode="python"),
+        workspace_metadata=workspace_metadata,
+    )
+    if not evaluation.allowed:
+        raise ValueError(evaluation.reason or "Root goal completion evidence is insufficient")
 
 
 def build_projected_objective_root_metadata(objective: CyberObjective) -> dict[str, Any]:
@@ -225,35 +248,36 @@ def synthesize_goal_evidence_from_children(
     artifacts: list[str] = []
     verifications: list[str] = []
     evidence_rich_children = 0
+    failed_child_reasons: list[str] = []
+    profile = resolve_autonomy_profile(root_task.metadata)
     for task in child_tasks:
-        evidence_refs = task.metadata.get("evidence_refs")
-        normalized_refs: list[str] = []
-        if isinstance(evidence_refs, list):
-            normalized_refs = [str(ref) for ref in evidence_refs if ref]
-        if normalized_refs:
-            artifacts.extend(normalized_refs)
+        failed_child_reasons.extend(_child_execution_failure_reasons(task))
+        child_artifacts, child_verifications, has_external_evidence = (
+            _collect_child_completion_evidence(task, profile)
+        )
+        artifacts.extend(child_artifacts)
+        verifications.extend(child_verifications)
+        if has_external_evidence:
             evidence_rich_children += 1
-        else:
-            artifacts.append(f"workspace_task:{task.id}")
-
-        verifications.append(f"workspace_task_completed:{task.id}")
-        execution_verifications = task.metadata.get("execution_verifications")
-        if isinstance(execution_verifications, list):
-            verifications.extend(str(item) for item in execution_verifications if item)
-        last_mutation_actor = task.metadata.get("last_mutation_actor")
-        if isinstance(last_mutation_actor, Mapping):
-            reason = last_mutation_actor.get("reason")
-            if isinstance(reason, str) and reason.strip():
-                verifications.append(f"actor_reason:{reason.strip()}")
 
     dedup_artifacts = list(dict.fromkeys(artifacts))
-    dedup_verifications = list(dict.fromkeys(verifications))
+    dedup_verifications = list(dict.fromkeys([*verifications, *failed_child_reasons]))
+    accepted_artifacts = accepted_artifacts_for_profile(dedup_artifacts, profile)
     verification_grade = (
         "pass"
         if evidence_rich_children == len(child_tasks)
         and len(dedup_verifications) >= len(child_tasks) * 2
         else "warn"
     )
+    if profile.evidence.requires_external_artifact and not accepted_artifacts:
+        verification_grade = "fail"
+    if failed_child_reasons:
+        verification_grade = "fail"
+    if profile.workspace_type == "software_development" and not _has_software_test_evidence(
+        artifacts=dedup_artifacts,
+        verifications=dedup_verifications,
+    ):
+        verification_grade = "fail"
 
     return CompletionEvidenceModel(
         goal_task_id=root_task.id,
@@ -269,6 +293,73 @@ def synthesize_goal_evidence_from_children(
         recorded_at=recorded_at.isoformat().replace("+00:00", "Z"),
         verification_grade=verification_grade,
     ).model_dump(mode="python")
+
+
+def _child_execution_failure_reasons(task: WorkspaceTask) -> list[str]:
+    reasons: list[str] = []
+    report_type = task.metadata.get("last_worker_report_type")
+    report_summary = task.metadata.get("last_worker_report_summary")
+    if isinstance(report_type, str) and report_type and report_type != "completed":
+        reasons.append(f"child_report_not_completed:{task.id}:{report_type}")
+    if isinstance(report_summary, str) and report_summary.startswith("recovered_stale_"):
+        reasons.append(f"child_recovered_stale:{task.id}")
+    last_attempt_status = task.metadata.get("last_attempt_status")
+    if isinstance(last_attempt_status, str) and last_attempt_status in {
+        "blocked",
+        "cancelled",
+        "rejected",
+    }:
+        reasons.append(f"child_attempt_not_accepted:{task.id}:{last_attempt_status}")
+    return reasons
+
+
+def _collect_child_completion_evidence(
+    task: WorkspaceTask,
+    profile: WorkspaceAutonomyProfile,
+) -> tuple[list[str], list[str], bool]:
+    artifacts: list[str] = []
+    verifications = [f"workspace_task_completed:{task.id}"]
+
+    evidence_refs = task.metadata.get("evidence_refs")
+    normalized_refs: list[str] = []
+    if isinstance(evidence_refs, list):
+        normalized_refs = [str(ref) for ref in cast(list[Any], evidence_refs) if ref]
+    if normalized_refs:
+        artifacts.extend(normalized_refs)
+    elif profile.evidence.allow_internal_task_artifacts:
+        artifacts.append(f"workspace_task:{task.id}")
+
+    execution_verifications = task.metadata.get("execution_verifications")
+    if isinstance(execution_verifications, list):
+        verifications.extend(str(item) for item in cast(list[Any], execution_verifications) if item)
+    last_mutation_actor = task.metadata.get("last_mutation_actor")
+    if isinstance(last_mutation_actor, Mapping):
+        actor_data = cast(Mapping[str, Any], last_mutation_actor)
+        reason = actor_data.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            verifications.append(f"actor_reason:{reason.strip()}")
+    return artifacts, verifications, bool(normalized_refs)
+
+
+def _has_software_test_evidence(
+    *,
+    artifacts: list[str],
+    verifications: list[str],
+) -> bool:
+    for artifact in artifacts:
+        if artifact.startswith("test_run:"):
+            return True
+    for verification in verifications:
+        normalized = verification.lower()
+        if (
+            normalized.startswith("test_run:")
+            or "npm test" in normalized
+            or "pytest" in normalized
+            or "vitest" in normalized
+            or "jest" in normalized
+        ):
+            return True
+    return False
 
 
 async def reconcile_root_goal_progress(

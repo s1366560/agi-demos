@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
-import { render, screen, waitFor } from '../../utils';
+import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
 import { WorkspaceList } from '../../../pages/tenant/WorkspaceList';
 
@@ -78,5 +78,43 @@ describe('WorkspaceList', () => {
       'href',
       '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-1'
     );
+  });
+
+  it('creates software workspaces with scenario metadata', async () => {
+    render(
+      <Routes>
+        <Route path="/tenant/workspaces" element={<WorkspaceList />} />
+      </Routes>,
+      { route: '/tenant/workspaces' }
+    );
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Workspace name'), {
+        target: { value: 'My Evo delivery' },
+      });
+      fireEvent.click(screen.getByText('Software'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Sandbox code root')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Sandbox code root'), {
+        target: { value: '/workspace/my-evo' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Create Workspace/i }));
+    });
+
+    await waitFor(() => {
+      expect(workspaceState.actions.createWorkspace).toHaveBeenCalledWith('tenant-1', 'project-1', {
+        name: 'My Evo delivery',
+        metadata: {
+          workspace_type: 'software_development',
+          sandbox_code_root: '/workspace/my-evo',
+          code_context: { sandbox_code_root: '/workspace/my-evo' },
+        },
+      });
+    });
   });
 });

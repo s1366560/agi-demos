@@ -12,6 +12,7 @@ tests and for bootstrapping without hitting an LLM quota.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Protocol, cast
 
@@ -33,6 +34,27 @@ from src.domain.ports.services.goal_planner_port import (
 )
 
 logger = logging.getLogger(__name__)
+
+_COMMAND_PREFIXES = (
+    "npm ",
+    "pnpm ",
+    "yarn ",
+    "uv ",
+    "pytest",
+    "python ",
+    "python3 ",
+    "make ",
+)
+_SANDBOX_ROOT_RE = re.compile(r"(/workspace/[A-Za-z0-9._/-]+)")
+_FILE_PATH_RE = re.compile(
+    "".join(
+        (
+            r"(?<![A-Za-z0-9_./-])",
+            r"((?:src|web|tests?|packages?|apps?|docs|scripts)/[A-Za-z0-9_./-]+",
+            r"\.(?:py|ts|tsx|js|jsx|json|md|css|scss|yaml|yml))",
+        )
+    )
+)
 
 
 class LLMGoalPlanner(GoalPlannerPort):
@@ -78,7 +100,10 @@ class LLMGoalPlanner(GoalPlannerPort):
                     title=goal.title,
                     description=goal.description,
                     recommended_capabilities=(Capability(name=self._default_cap),),
-                    acceptance_criteria=(_default_llm_judge(goal.title),),
+                    acceptance_criteria=_default_acceptance_criteria(
+                        f"{goal.title}\n{goal.description}"
+                    ),
+                    metadata=_planner_node_metadata(f"{goal.title}\n{goal.description}"),
                 )
             )
             return plan
@@ -107,7 +132,8 @@ class LLMGoalPlanner(GoalPlannerPort):
                     preferred_agent_id=st.target_subagent,
                     recommended_capabilities=caps,
                     priority=max(0, int(getattr(st, "priority", 0))),
-                    acceptance_criteria=(_default_llm_judge(st.description),),
+                    acceptance_criteria=_default_acceptance_criteria(st.description),
+                    metadata=_planner_node_metadata(st.description),
                 )
             )
         return plan
@@ -178,7 +204,8 @@ class LLMGoalPlanner(GoalPlannerPort):
                     preferred_agent_id=st.target_subagent,
                     recommended_capabilities=caps,
                     priority=max(0, int(getattr(st, "priority", 0))),
-                    acceptance_criteria=(_default_llm_judge(st.description),),
+                    acceptance_criteria=_default_acceptance_criteria(st.description),
+                    metadata=_planner_node_metadata(st.description),
                 )
             )
         return plan
@@ -215,6 +242,26 @@ class LLMGoalPlanner(GoalPlannerPort):
         return depth
 
 
+def _default_acceptance_criteria(description: str) -> tuple[AcceptanceCriterion, ...]:
+    """Build conservative machine checks from structurally obvious task text."""
+
+    criteria = [_default_llm_judge(description)]
+    for command in _extract_candidate_commands(description):
+        criteria.append(
+            AcceptanceCriterion(
+                kind=CriterionKind.CMD,
+                spec={
+                    "cmd": command,
+                    "max_exit": 0,
+                    "timeout": 180,
+                },
+                description=f"command succeeds: {command}",
+                required=True,
+            )
+        )
+    return tuple(criteria)
+
+
 def _default_llm_judge(description: str) -> AcceptanceCriterion:
     """Fallback criterion — require a non-empty worker report.
 
@@ -233,6 +280,63 @@ def _default_llm_judge(description: str) -> AcceptanceCriterion:
         description="worker report is present",
         required=True,
     )
+
+
+def _planner_node_metadata(description: str) -> dict[str, object]:
+    metadata: dict[str, object] = {"acceptance_source": "planner_structural_v1"}
+    write_set = _infer_write_set(description)
+    if write_set:
+        metadata["write_set"] = list(write_set)
+    commands = _extract_candidate_commands(description)
+    if commands:
+        metadata["verification_commands"] = commands
+    return metadata
+
+
+def _extract_candidate_commands(description: str) -> list[str]:
+    """Extract explicit shell commands without interpreting task intent."""
+
+    sandbox_root = _extract_sandbox_root(description)
+    candidates: list[str] = []
+    for quoted in re.findall(r"`([^`\n]+)`", description):
+        stripped = quoted.strip()
+        if stripped.startswith(_COMMAND_PREFIXES):
+            candidates.append(stripped)
+
+    lower = description.lower()
+    if "npm run typecheck" in lower and not any(
+        candidate.startswith("npm run typecheck") for candidate in candidates
+    ):
+        candidates.append("npm run typecheck")
+    if "npm test" in lower and not any(
+        candidate.startswith("npm test") for candidate in candidates
+    ):
+        if "--runinband" in lower or "--runInBand" in description:
+            candidates.append("npm test -- --runInBand --coverage=false")
+        else:
+            candidates.append("npm test")
+
+    normalized: list[str] = []
+    for command in candidates:
+        command = command.strip()
+        if not command:
+            continue
+        if sandbox_root and not command.startswith("cd "):
+            command = f"cd {sandbox_root} && {command}"
+        normalized.append(command)
+    return list(dict.fromkeys(normalized))
+
+
+def _extract_sandbox_root(description: str) -> str | None:
+    match = _SANDBOX_ROOT_RE.search(description)
+    if not match:
+        return None
+    return match.group(1).rstrip(".,;:)")
+
+
+def _infer_write_set(description: str) -> tuple[str, ...]:
+    paths = [match.group(1).rstrip(".,;:)") for match in _FILE_PATH_RE.finditer(description)]
+    return tuple(dict.fromkeys(paths))
 
 
 # Structural typing shims — we don't import TaskDecomposer directly to keep

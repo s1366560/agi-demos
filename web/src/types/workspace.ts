@@ -4,6 +4,35 @@ export type BlackboardPostStatus = 'open' | 'archived';
 
 export type WorkspaceTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
 export type WorkspaceTaskPriority = '' | 'P1' | 'P2' | 'P3' | 'P4';
+export type WorkspaceType = 'general' | 'software_development' | 'research' | 'operations';
+export type WorkspaceVerificationGrade = 'pass' | 'warn' | 'fail';
+
+export interface WorkspaceCompletionPolicyOverride {
+  allow_internal_task_artifacts?: boolean | undefined;
+  required_artifact_prefixes?: string[] | undefined;
+  requires_external_artifact?: boolean | undefined;
+  minimum_verification_grade?: WorkspaceVerificationGrade | undefined;
+  stream_completion_reports_success?: boolean | undefined;
+}
+
+export interface WorkspaceAutonomyProfile {
+  workspace_type?: WorkspaceType | undefined;
+  completion_policy?: WorkspaceCompletionPolicyOverride | undefined;
+}
+
+export interface WorkspaceCodeContext {
+  sandbox_code_root?: string | undefined;
+  loaded_agents_files?: string[] | undefined;
+  agents_digest?: string | undefined;
+  agents_excerpt?: string | undefined;
+}
+
+export type WorkspaceMetadata = Record<string, unknown> & {
+  workspace_type?: WorkspaceType | undefined;
+  autonomy_profile?: WorkspaceAutonomyProfile | undefined;
+  sandbox_code_root?: string | undefined;
+  code_context?: WorkspaceCodeContext | undefined;
+};
 
 export type TopologyNodeType =
   | 'user'
@@ -22,7 +51,7 @@ export interface Workspace {
   created_by: string;
   description?: string | undefined;
   is_archived?: boolean | undefined;
-  metadata?: Record<string, unknown> | undefined;
+  metadata?: WorkspaceMetadata | undefined;
   office_status?: string | undefined;
   hex_layout_config?: Record<string, unknown> | undefined;
   created_at: string;
@@ -275,14 +304,14 @@ export interface TopologyEdge {
 export interface WorkspaceCreateRequest {
   name: string;
   description?: string | undefined;
-  metadata?: Record<string, unknown> | undefined;
+  metadata?: WorkspaceMetadata | undefined;
 }
 
 export interface WorkspaceUpdateRequest {
   name?: string | undefined;
   description?: string | undefined;
   is_archived?: boolean | undefined;
-  metadata?: Record<string, unknown> | undefined;
+  metadata?: WorkspaceMetadata | undefined;
 }
 
 export type CyberObjectiveType = 'objective' | 'key_result';

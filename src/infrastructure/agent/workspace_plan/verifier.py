@@ -289,6 +289,9 @@ class AcceptanceCriterionVerifier(VerifierPort):
 
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         results: list[CriterionResult] = []
+        terminal_guard = _terminal_worker_report_guard(ctx)
+        if terminal_guard is not None:
+            results.append(terminal_guard)
         for crit in ctx.node.acceptance_criteria:
             runner = self._runners.get(crit.kind, self._fallback)
             try:
@@ -307,6 +310,55 @@ class AcceptanceCriterionVerifier(VerifierPort):
             attempt_id=ctx.attempt_id,
             results=tuple(results),
         )
+
+
+def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult | None:
+    """Prevent stale or blocked worker reports from satisfying weak criteria."""
+
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "terminal_worker_report_completed"},
+        required=True,
+        description="terminal worker report must be completed before durable verification can pass",
+    )
+    report_type = _artifact_text(ctx, "last_worker_report_type")
+    attempt_status = _artifact_text(ctx, "last_attempt_status")
+    report_summary = _artifact_text(ctx, "last_worker_report_summary")
+
+    if report_type and report_type != "completed":
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=f"worker report type {report_type!r} is not a completion report",
+        )
+    if attempt_status in {"blocked", "cancelled", "rejected"}:
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=f"attempt status {attempt_status!r} cannot pass durable verification",
+        )
+    if report_summary.startswith("recovered_stale_"):
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=report_summary,
+        )
+    if report_type == "completed":
+        return CriterionResult(
+            criterion=criterion,
+            passed=True,
+            confidence=1.0,
+            message="worker report completed",
+        )
+    return None
+
+
+def _artifact_text(ctx: VerificationContext, key: str) -> str:
+    value = ctx.artifacts.get(key)
+    return value.strip() if isinstance(value, str) else ""
 
 
 # Keep :mod:`asyncio` imported so subclasses can override with timing logic.

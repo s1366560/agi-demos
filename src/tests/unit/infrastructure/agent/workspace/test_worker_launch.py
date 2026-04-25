@@ -11,6 +11,10 @@ from src.domain.model.workspace.workspace_task import (
     WorkspaceTaskStatus,
 )
 from src.infrastructure.agent.workspace import worker_launch as wl
+from src.infrastructure.agent.workspace.code_context import (
+    AgentsInstructionFile,
+    WorkspaceCodeContext,
+)
 
 
 def _make_task(
@@ -71,7 +75,13 @@ class TestConversationId:
 
 class TestBuildBrief:
     def test_includes_binding_block_and_title(self) -> None:
-        task = _make_task(metadata={"task_role": "execution", "root_goal_task_id": "root-1", "workspace_agent_binding_id": "binding-1"})
+        task = _make_task(
+            metadata={
+                "task_role": "execution",
+                "root_goal_task_id": "root-1",
+                "workspace_agent_binding_id": "binding-1",
+            }
+        )
         brief = wl._build_worker_brief(
             workspace_id="ws-1",
             task=task,
@@ -117,6 +127,78 @@ class TestBuildBrief:
             workspace_id="w", task=task, attempt_id=None, leader_agent_id=None
         )
         assert "Task description" not in brief
+
+    def test_includes_software_code_context_and_agents_instructions(self) -> None:
+        task = _make_task()
+        code_context = WorkspaceCodeContext(
+            sandbox_code_root="/workspace/my-evo",
+            agents_files=(
+                AgentsInstructionFile(
+                    sandbox_path="/workspace/my-evo/AGENTS.md",
+                    content="Always run npm test.",
+                ),
+            ),
+        )
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+        )
+
+        assert "[workspace-code-context]" in brief
+        assert "sandbox_code_root=/workspace/my-evo" in brief
+        assert "loaded_agents_files=/workspace/my-evo/AGENTS.md" in brief
+        assert "Always run npm test." in brief
+        assert "perform all repository inspection" in brief
+
+    def test_code_context_metadata_preserves_digest_and_agents_scope(self) -> None:
+        code_context = WorkspaceCodeContext(
+            sandbox_code_root="/workspace/my-evo",
+            agents_files=(
+                AgentsInstructionFile(
+                    sandbox_path="/workspace/my-evo/AGENTS.md",
+                    content="Always run npm test.",
+                ),
+            ),
+        )
+
+        metadata = wl._code_context_metadata(code_context)
+
+        assert metadata["sandbox_code_root"] == "/workspace/my-evo"
+        assert metadata["loaded_agents_files"] == ["/workspace/my-evo/AGENTS.md"]
+        assert isinstance(metadata["agents_digest"], str)
+        assert "Always run npm test." in str(metadata["agents_excerpt"])
+
+
+class TestStreamCompletionPolicy:
+    def test_general_workspace_keeps_legacy_stream_completion_success(self) -> None:
+        assert (
+            wl._stream_completion_auto_report_enabled(
+                root_metadata={},
+                workspace_metadata={},
+            )
+            is True
+        )
+
+    def test_software_development_requires_explicit_terminal_report(self) -> None:
+        assert (
+            wl._stream_completion_auto_report_enabled(
+                root_metadata={"workspace_type": "software_development"},
+                workspace_metadata={},
+            )
+            is False
+        )
+
+    def test_workspace_metadata_can_disable_plain_stream_completion(self) -> None:
+        assert (
+            wl._stream_completion_auto_report_enabled(
+                root_metadata={},
+                workspace_metadata={"workspace_type": "research"},
+            )
+            is False
+        )
 
 
 class TestLaunchWorkerSession:
@@ -188,9 +270,7 @@ class TestLaunchWorkerSession:
         assert out["conversation_id"] is None
 
     @pytest.mark.asyncio
-    async def test_rejects_when_worker_equals_leader(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_rejects_when_worker_equals_leader(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Leader must never be dispatched as a worker for its own tasks.
 
         Regression: a workspace leader could self-assign a task (via
@@ -261,13 +341,10 @@ class TestLaunchWorkerSession:
         # raise, making the test fail loudly instead of silently creating a
         # Conversation row.
         def _boom(*_a: object, **_kw: object) -> None:
-            raise AssertionError(
-                "worker_is_leader guard failed: downstream code invoked"
-            )
+            raise AssertionError("worker_is_leader guard failed: downstream code invoked")
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime."
-            "_build_attempt_service",
+            "src.infrastructure.agent.workspace.workspace_goal_runtime._build_attempt_service",
             _boom,
         )
 
