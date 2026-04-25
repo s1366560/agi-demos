@@ -16,9 +16,10 @@ import {
   Search,
   ShieldCheck,
   Split,
+  Zap,
 } from 'lucide-react';
 
-import { workspacePlanService } from '@/services/workspaceService';
+import { workspaceAutonomyService, workspacePlanService } from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
@@ -52,6 +53,7 @@ import {
 } from './PlanRunSnapshotParts';
 
 import type {
+  WorkspacePlanActionCapability,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
   WorkspaceTask,
@@ -64,6 +66,26 @@ interface PlanRunSnapshotSectionProps {
   tenantId?: string | undefined;
   projectId?: string | undefined;
   tasks?: WorkspaceTask[] | undefined;
+  refreshToken?: number | undefined;
+}
+
+const OPERATOR_REASON_LIMIT = 500;
+const DEFAULT_NODE_ACTION_REASON = 'operator action from central blackboard';
+const DEFAULT_RETRY_ACTION_REASON = 'operator retry from central blackboard';
+
+function actionLabel(action: WorkspacePlanActionCapability | undefined, fallback: string): string {
+  return action?.label || fallback;
+}
+
+function actionDisabledReason(
+  action: WorkspacePlanActionCapability | undefined,
+  fallback: string
+): string {
+  return action?.reason || fallback;
+}
+
+function reasonOrFallback(value: string, fallback: string): string {
+  return value.trim() || fallback;
 }
 
 export function PlanRunSnapshotSection({
@@ -71,10 +93,12 @@ export function PlanRunSnapshotSection({
   tenantId,
   projectId,
   tasks,
+  refreshToken,
 }: PlanRunSnapshotSectionProps) {
   const { t } = useTranslation();
   const taskList = useMemo(() => tasks ?? [], [tasks]);
   const isMountedRef = useRef(true);
+  const lastRefreshTokenRef = useRef(refreshToken ?? 0);
   const [snapshot, setSnapshot] = useState<WorkspacePlanSnapshot | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [filter, setFilter] = useState<NodeFilter>('all');
@@ -84,6 +108,8 @@ export function PlanRunSnapshotSection({
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [isTickPending, setIsTickPending] = useState(false);
+  const [operatorReason, setOperatorReason] = useState('');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const loadSnapshot = useCallback(
@@ -151,6 +177,15 @@ export function PlanRunSnapshotSection({
       }
     };
   }, [loadSnapshot]);
+
+  useEffect(() => {
+    const nextRefreshToken = refreshToken ?? 0;
+    if (lastRefreshTokenRef.current === nextRefreshToken) {
+      return;
+    }
+    lastRefreshTokenRef.current = nextRefreshToken;
+    void loadSnapshot({ silent: true });
+  }, [loadSnapshot, refreshToken]);
 
   const nodes = useMemo(() => snapshot?.plan?.nodes ?? [], [snapshot]);
   const runnableNodes = useMemo(
@@ -294,6 +329,58 @@ export function PlanRunSnapshotSection({
         })
       : '';
   const selectedWriteSet = selectedNode ? nodeWriteSet(selectedNode) : [];
+  const openAttemptAction = selectedNode?.actions?.open_attempt;
+  const requestReplanAction = selectedNode?.actions?.request_replan;
+  const reopenBlockedAction = selectedNode?.actions?.reopen_blocked;
+  const canOpenAttempt =
+    Boolean(attemptHref) && (!openAttemptAction || actionEnabled(openAttemptAction));
+  const showOpenAttemptAction = Boolean(openAttemptAction || attemptHref);
+  const openAttemptDisabledReason = !actionEnabled(openAttemptAction)
+    ? actionDisabledReason(openAttemptAction, 'No worker attempt has been linked yet.')
+    : 'Attempt conversation is not available in this workspace projection.';
+  const requestReplanDisabledReason = !actionEnabled(requestReplanAction)
+    ? actionDisabledReason(requestReplanAction, 'This node cannot be replanned.')
+    : undefined;
+  const reopenBlockedDisabledReason = !actionEnabled(reopenBlockedAction)
+    ? actionDisabledReason(reopenBlockedAction, 'This node cannot be reopened.')
+    : undefined;
+
+  const formatAutonomyTickMessage = (result: { triggered: boolean; reason: string }) => {
+    if (result.triggered) {
+      return t('blackboard.planRunAutonomyTriggered', 'Leader scheduled the next autonomy step.');
+    }
+    if (result.reason === 'cooling_down') {
+      return t(
+        'blackboard.planRunAutonomyCoolingDown',
+        'Autonomy is cooling down. Use Force run to bypass the cooldown.'
+      );
+    }
+    if (result.reason === 'no_open_root') {
+      return t('blackboard.planRunAutonomyNoRoot', 'No open root goal needs progress.');
+    }
+    if (result.reason === 'no_root_needs_progress') {
+      return t('blackboard.planRunAutonomyStable', 'All root goals are currently stable.');
+    }
+    return t(
+      'blackboard.planRunAutonomyNoop',
+      `Autonomy did not run: ${result.reason || 'unknown'}`
+    );
+  };
+
+  const runAutonomyTick = async (force: boolean) => {
+    setIsTickPending(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const result = await workspaceAutonomyService.tick(workspaceId, { force });
+      setActionMessage(formatAutonomyTickMessage(result));
+      await loadSnapshot({ silent: true });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsTickPending(false);
+    }
+  };
 
   const runNodeAction = async (actionId: NodeActionId) => {
     if (!selectedNode) {
@@ -306,7 +393,12 @@ export function PlanRunSnapshotSection({
     }
     if (
       action?.requires_confirmation &&
-      !window.confirm('Send this node back for durable supervisor recovery?')
+      !window.confirm(
+        t(
+          'blackboard.planRunConfirmNodeAction',
+          `Run "${actionLabel(action, actionId)}" for this durable plan node?`
+        )
+      )
     ) {
       return;
     }
@@ -315,13 +407,14 @@ export function PlanRunSnapshotSection({
     setActionError(null);
     setActionMessage(null);
     try {
+      const reason = reasonOrFallback(operatorReason, DEFAULT_NODE_ACTION_REASON);
       const result =
         actionId === 'reopen_blocked'
           ? await workspacePlanService.reopenBlockedNode(workspaceId, selectedNode.id, {
-              reason: 'operator action from central blackboard',
+              reason,
             })
           : await workspacePlanService.requestNodeReplan(workspaceId, selectedNode.id, {
-              reason: 'operator action from central blackboard',
+              reason,
             });
       setActionMessage(result.message);
       await loadSnapshot({ silent: true });
@@ -342,8 +435,9 @@ export function PlanRunSnapshotSection({
     setActionError(null);
     setActionMessage(null);
     try {
+      const reason = reasonOrFallback(operatorReason, DEFAULT_RETRY_ACTION_REASON);
       const result = await workspacePlanService.retryOutboxItem(workspaceId, item.id, {
-        reason: 'operator retry from central blackboard',
+        reason,
       });
       setActionMessage(result.message);
       await loadSnapshot({ silent: true });
@@ -372,27 +466,64 @@ export function PlanRunSnapshotSection({
             {isStale && <span className="text-status-text-warning">stale snapshot</span>}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void loadSnapshot();
-          }}
-          disabled={isLoading}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <RefreshCw className="h-4 w-4" aria-hidden />
-          )}
-          {t('blackboard.planRunRefreshShort', 'Refresh')}
-        </button>
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <button
+            type="button"
+            onClick={() => void runAutonomyTick(false)}
+            disabled={isTickPending}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-info-border bg-info-bg px-3 text-sm font-medium text-status-text-info transition-colors hover:bg-info-bg/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark lg:min-h-9 lg:text-xs"
+          >
+            {isTickPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Zap className="h-4 w-4" aria-hidden />
+            )}
+            {t('blackboard.planRunRunAutonomy', 'Run')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void runAutonomyTick(true)}
+            disabled={isTickPending}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
+          >
+            <Zap className="h-4 w-4" aria-hidden />
+            {t('blackboard.planRunForceAutonomy', 'Force')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void loadSnapshot();
+            }}
+            disabled={isLoading}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden />
+            )}
+            {t('blackboard.planRunRefreshShort', 'Refresh')}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-error-border bg-error-bg p-3 text-xs text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span className="break-words">{error}</span>
+        </div>
+      )}
+
+      {(actionError || actionMessage) && (
+        <div
+          className={`mx-4 mb-4 rounded-md border p-3 text-xs ${
+            actionError
+              ? 'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark'
+              : 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark'
+          }`}
+          aria-live="polite"
+        >
+          {actionError ?? actionMessage}
         </div>
       )}
 
@@ -585,52 +716,79 @@ export function PlanRunSnapshotSection({
                       </div>
                     )}
 
+                    <label className="mt-4 block">
+                      <span className="text-[11px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+                        {t('blackboard.planRunOperatorReason', 'Operator reason')}
+                      </span>
+                      <textarea
+                        value={operatorReason}
+                        onChange={(event) => {
+                          setOperatorReason(event.target.value.slice(0, OPERATOR_REASON_LIMIT));
+                        }}
+                        maxLength={OPERATOR_REASON_LIMIT}
+                        rows={2}
+                        placeholder={t(
+                          'blackboard.planRunOperatorReasonPlaceholder',
+                          'Optional reason for replan, reopen, or retry'
+                        )}
+                        className="mt-2 w-full resize-y rounded-md border border-border-light bg-surface-light px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-info-border focus:ring-2 focus:ring-ring dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse lg:text-xs"
+                      />
+                    </label>
+
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {attemptHref && (
-                        <Link
-                          to={attemptHref}
-                          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
-                        >
-                          <ArrowUpRight className="h-4 w-4" aria-hidden />
-                          {t('blackboard.planRunOpenAttempt', 'Open attempt')}
-                        </Link>
-                      )}
+                      {showOpenAttemptAction &&
+                        (canOpenAttempt ? (
+                          <Link
+                            to={attemptHref}
+                            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
+                          >
+                            <ArrowUpRight className="h-4 w-4" aria-hidden />
+                            {actionLabel(
+                              openAttemptAction,
+                              t('blackboard.planRunOpenAttempt', 'Open attempt')
+                            )}
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            title={openAttemptDisabledReason}
+                            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary opacity-60 disabled:cursor-not-allowed dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse lg:min-h-9 lg:text-xs"
+                          >
+                            <ArrowUpRight className="h-4 w-4" aria-hidden />
+                            {actionLabel(
+                              openAttemptAction,
+                              t('blackboard.planRunOpenAttempt', 'Open attempt')
+                            )}
+                          </button>
+                        ))}
                       <button
                         type="button"
                         onClick={() => void runNodeAction('request_replan')}
-                        disabled={
-                          isActionPending || !actionEnabled(selectedNode.actions?.request_replan)
-                        }
+                        disabled={isActionPending || !actionEnabled(requestReplanAction)}
+                        title={requestReplanDisabledReason}
                         className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
                       >
                         <RefreshCw className="h-4 w-4" aria-hidden />
-                        {t('blackboard.planRunRequestReplan', 'Request replan')}
+                        {actionLabel(
+                          requestReplanAction,
+                          t('blackboard.planRunRequestReplan', 'Request replan')
+                        )}
                       </button>
                       <button
                         type="button"
                         onClick={() => void runNodeAction('reopen_blocked')}
-                        disabled={
-                          isActionPending || !actionEnabled(selectedNode.actions?.reopen_blocked)
-                        }
+                        disabled={isActionPending || !actionEnabled(reopenBlockedAction)}
+                        title={reopenBlockedDisabledReason}
                         className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
                       >
                         <RotateCcw className="h-4 w-4" aria-hidden />
-                        {t('blackboard.planRunReopenNode', 'Reopen')}
+                        {actionLabel(
+                          reopenBlockedAction,
+                          t('blackboard.planRunReopenNode', 'Reopen')
+                        )}
                       </button>
                     </div>
-
-                    {(actionError || actionMessage) && (
-                      <div
-                        className={`mt-3 rounded-md border p-3 text-xs ${
-                          actionError
-                            ? 'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark'
-                            : 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark'
-                        }`}
-                        aria-live="polite"
-                      >
-                        {actionError ?? actionMessage}
-                      </div>
-                    )}
                   </div>
 
                   <div className="grid flex-1 grid-rows-[auto_auto_auto]">

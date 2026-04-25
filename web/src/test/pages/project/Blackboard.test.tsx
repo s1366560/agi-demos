@@ -58,11 +58,13 @@ function defaultStoreState(): Record<string, unknown> {
     agents: [],
     topologyNodes: [],
     topologyEdges: [],
+    planRefreshCounters: {},
     error: null,
     // Actions used by getState() path for SSE handler
     handlePresenceEvent: vi.fn(),
     handleAgentStatusEvent: vi.fn(),
     handleTaskEvent: vi.fn(),
+    handlePlanEvent: vi.fn(),
     handleBlackboardEvent: vi.fn(),
     handleChatEvent: vi.fn(),
     handleMemberEvent: vi.fn(),

@@ -161,6 +161,7 @@ export type AgentEventType =
   | "agent_supervisor_verdict"
   | "agent_decision_logged"
   | "agent_conversation_finished"
+  | "workspace_plan_updated"
   | "workspace_goal_materialized"
   | "workspace_decomposition_complete"
   | "workspace_worker_dispatched"
@@ -337,6 +338,7 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   "agent_supervisor_verdict": "agent",
   "agent_decision_logged": "agent",
   "agent_conversation_finished": "agent",
+  "workspace_plan_updated": "agent",
   "workspace_goal_materialized": "agent",
   "workspace_decomposition_complete": "agent",
   "workspace_worker_dispatched": "agent",
@@ -496,6 +498,7 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   "agent_supervisor_verdict",
   "agent_decision_logged",
   "agent_conversation_finished",
+  "workspace_plan_updated",
   "workspace_goal_materialized",
   "workspace_decomposition_complete",
   "workspace_worker_dispatched",

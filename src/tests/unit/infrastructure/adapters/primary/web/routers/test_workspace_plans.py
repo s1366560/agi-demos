@@ -298,12 +298,46 @@ async def test_request_workspace_plan_node_replan_resets_node_and_schedules_tick
         "_get_workspace_service",
         lambda _request, _db: workspace_service,
     )
+    published: list[dict[str, object]] = []
+
+    async def fake_publish_workspace_event(
+        _redis_client: object,
+        *,
+        workspace_id: str,
+        event_type: object,
+        payload: dict[str, object],
+        metadata: dict[str, object] | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        published.append(
+            {
+                "workspace_id": workspace_id,
+                "event_type": event_type,
+                "payload": payload,
+                "metadata": metadata or {},
+                "correlation_id": correlation_id or "",
+            }
+        )
+
+    monkeypatch.setattr(
+        workspace_plans,
+        "publish_workspace_event",
+        fake_publish_workspace_event,
+    )
+    request = cast(
+        Request,
+        SimpleNamespace(
+            app=SimpleNamespace(
+                state=SimpleNamespace(container=SimpleNamespace(redis_client=object()))
+            )
+        ),
+    )
 
     result = await workspace_plans.request_workspace_plan_node_replan(
         workspace_id=workspace_id,
         node_id="task-api",
         body=workspace_plans.WorkspacePlanActionRequest(reason="scope changed"),
-        request=cast(Request, SimpleNamespace()),
+        request=request,
         current_user=cast(User, SimpleNamespace(id="plan-api-user")),
         db=db_session,
     )
@@ -318,6 +352,24 @@ async def test_request_workspace_plan_node_replan_resets_node_and_schedules_tick
     assert node.metadata["operator_action"]["reason"] == "scope changed"
     events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=5)
     assert events[0].event_type == "operator_replan_requested"
+    assert published == [
+        {
+            "workspace_id": workspace_id,
+            "event_type": workspace_plans.AgentEventType.WORKSPACE_PLAN_UPDATED,
+            "payload": {
+                "workspace_id": workspace_id,
+                "plan_id": plan.id,
+                "action": "operator_replan_requested",
+                "node_id": "task-api",
+                "reason": "scope changed",
+            },
+            "metadata": {
+                "source": "workspace_plan_api",
+                "action": "operator_replan_requested",
+            },
+            "correlation_id": plan.id,
+        }
+    ]
     outbox_snapshot = await workspace_plans.get_workspace_plan_snapshot(
         workspace_id=workspace_id,
         request=cast(Request, SimpleNamespace()),

@@ -62,6 +62,7 @@ export interface CentralBlackboardContentProps {
   topologyEdges: TopologyEdge[];
   activeTab: BlackboardTab;
   onActiveTabChange: (nextTab: BlackboardTab) => void;
+  planRefreshToken?: number | undefined;
   agentWorkspacePath: string;
   onLoadReplies: (postId: string) => Promise<boolean>;
   onCreatePost: (data: { title: string; content: string }) => Promise<boolean>;
@@ -88,6 +89,7 @@ export function CentralBlackboardContent({
   topologyEdges,
   activeTab,
   onActiveTabChange,
+  planRefreshToken,
   agentWorkspacePath,
   onLoadReplies,
   onCreatePost,
@@ -270,6 +272,7 @@ export function CentralBlackboardContent({
                     projectId={projectId}
                     workspaceId={workspaceId}
                     statusBadgeTone={statusBadgeTone}
+                    planRefreshToken={planRefreshToken}
                   />
                 )}
 

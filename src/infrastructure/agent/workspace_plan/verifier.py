@@ -353,7 +353,21 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             confidence=1.0,
             message="worker report completed",
         )
+    if _requires_terminal_worker_report(ctx):
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message="missing completed worker report",
+        )
     return None
+
+
+def _requires_terminal_worker_report(ctx: VerificationContext) -> bool:
+    return any(
+        bool(criterion.spec.get("requires_terminal_worker_report"))
+        for criterion in ctx.node.acceptance_criteria
+    )
 
 
 def _artifact_text(ctx: VerificationContext, key: str) -> str:

@@ -178,10 +178,11 @@ export function OutboxRow({
                 onRetry(item);
               }}
               disabled={isActionPending}
+              title={retryAction?.reason ?? undefined}
               className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              Retry
+              {retryAction?.label || 'Retry'}
             </button>
           )}
         </div>

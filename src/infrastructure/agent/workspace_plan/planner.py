@@ -276,6 +276,7 @@ def _default_llm_judge(description: str) -> AcceptanceCriterion:
         spec={
             "pattern": r"\S",
             "source": "stdout",
+            "requires_terminal_worker_report": True,
         },
         description="worker report is present",
         required=True,

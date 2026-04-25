@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -13,11 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_service import WorkspaceService
 from src.configuration.di_container import DIContainer
+from src.domain.events.types import AgentEventType
 from src.domain.model.workspace_plan import Plan, PlanNode, PlanNodeId, Progress
 from src.domain.model.workspace_plan.plan_node import TaskExecution, TaskIntent
 from src.domain.model.workspace_plan.state_machine import transition_execution, transition_intent
 from src.domain.ports.services.blackboard_port import BlackboardEntry
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -38,6 +41,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox
 from src.infrastructure.agent.workspace_plan.outbox_handlers import SUPERVISOR_TICK_EVENT
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["workspace-plans"])
+logger = logging.getLogger(__name__)
 
 
 class WorkspacePlanActionCapabilityResponse(BaseModel):
@@ -216,7 +220,9 @@ def _node_actions(node: PlanNode) -> dict[str, WorkspacePlanActionCapabilityResp
     }
 
 
-def _outbox_actions(item: WorkspacePlanOutboxModel) -> dict[str, WorkspacePlanActionCapabilityResponse]:
+def _outbox_actions(
+    item: WorkspacePlanOutboxModel,
+) -> dict[str, WorkspacePlanActionCapabilityResponse]:
     retryable = item.status in {"failed", "dead_letter"}
     return {
         "retry_outbox": _action(
@@ -430,6 +436,56 @@ async def _enqueue_operator_tick(
     )
 
 
+async def _publish_plan_updated_event(
+    *,
+    request: Request,
+    workspace_id: str,
+    plan_id: str,
+    action: str,
+    node_id: str | None = None,
+    outbox_id: str | None = None,
+    reason: str | None = None,
+) -> None:
+    state = getattr(getattr(request, "app", None), "state", None)
+    container = getattr(state, "container", None)
+    redis_client = getattr(container, "redis_client", None)
+    if redis_client is None:
+        return
+
+    payload: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "plan_id": plan_id,
+        "action": action,
+    }
+    if node_id is not None:
+        payload["node_id"] = node_id
+    if outbox_id is not None:
+        payload["outbox_id"] = outbox_id
+    if reason:
+        payload["reason"] = reason
+
+    try:
+        await publish_workspace_event(
+            redis_client,
+            workspace_id=workspace_id,
+            event_type=AgentEventType.WORKSPACE_PLAN_UPDATED,
+            payload=payload,
+            metadata={"source": "workspace_plan_api", "action": action},
+            correlation_id=plan_id,
+        )
+    except Exception:
+        logger.warning(
+            "workspace_plan.update_event_publish_failed",
+            exc_info=True,
+            extra={
+                "event": "workspace_plan.update_event_publish_failed",
+                "workspace_id": workspace_id,
+                "plan_id": plan_id,
+                "action": action,
+            },
+        )
+
+
 @router.get("", response_model=WorkspacePlanSnapshotResponse)
 async def get_workspace_plan_snapshot(
     workspace_id: str,
@@ -523,6 +579,14 @@ async def retry_workspace_plan_outbox_item(
             },
         )
         await db.commit()
+        await _publish_plan_updated_event(
+            request=request,
+            workspace_id=workspace_id,
+            plan_id=item.plan_id,
+            action="operator_retry_outbox",
+            outbox_id=outbox_id,
+            reason=body.reason,
+        )
         return WorkspacePlanActionResultResponse(
             ok=True,
             message="Outbox job queued for retry.",
@@ -580,6 +644,14 @@ async def request_workspace_plan_node_replan(
             action="operator_replan_requested",
         )
         await db.commit()
+        await _publish_plan_updated_event(
+            request=request,
+            workspace_id=workspace_id,
+            plan_id=plan.id,
+            action="operator_replan_requested",
+            node_id=node_id,
+            reason=body.reason,
+        )
         return WorkspacePlanActionResultResponse(
             ok=True,
             message="Plan node sent back for supervisor recovery.",
@@ -639,6 +711,14 @@ async def reopen_blocked_workspace_plan_node(
             action="operator_node_reopened",
         )
         await db.commit()
+        await _publish_plan_updated_event(
+            request=request,
+            workspace_id=workspace_id,
+            plan_id=plan.id,
+            action="operator_node_reopened",
+            node_id=node_id,
+            reason=body.reason,
+        )
         return WorkspacePlanActionResultResponse(
             ok=True,
             message="Blocked plan node reopened.",

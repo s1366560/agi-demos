@@ -321,6 +321,7 @@ class AgentEventType(str, Enum):
     AGENT_CONVERSATION_FINISHED = "agent_conversation_finished"
 
     # Workspace orchestration lifecycle events
+    WORKSPACE_PLAN_UPDATED = "workspace_plan_updated"
     WORKSPACE_GOAL_MATERIALIZED = "workspace_goal_materialized"
     WORKSPACE_DECOMPOSITION_COMPLETE = "workspace_decomposition_complete"
     WORKSPACE_WORKER_DISPATCHED = "workspace_worker_dispatched"
@@ -519,6 +520,7 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.AGENT_DECISION_LOGGED: EventCategory.AGENT,
     AgentEventType.AGENT_CONVERSATION_FINISHED: EventCategory.AGENT,
     # Workspace orchestration lifecycle events
+    AgentEventType.WORKSPACE_PLAN_UPDATED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_GOAL_MATERIALIZED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_DECOMPOSITION_COMPLETE: EventCategory.AGENT,
     AgentEventType.WORKSPACE_WORKER_DISPATCHED: EventCategory.AGENT,

@@ -209,6 +209,12 @@ class TestLLMGoalPlanner:
             "cd /workspace/my-evo && npm test -- src/sandbox/routes.test.ts --runInBand --coverage=false"
         ]
         assert any(crit.kind is CriterionKind.CMD for crit in leaf.acceptance_criteria)
+        default_report_criteria = [
+            crit
+            for crit in leaf.acceptance_criteria
+            if crit.description == "worker report is present"
+        ]
+        assert default_report_criteria[0].spec["requires_terminal_worker_report"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +370,31 @@ class TestVerifier:
         assert not rep.passed
         assert rep.hard_fail
         assert "not a completion report" in rep.summary()
+
+    async def test_verifier_rejects_default_report_criterion_without_completed_report(
+        self,
+    ) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={
+                        "pattern": r"\S",
+                        "source": "stdout",
+                        "requires_terminal_worker_report": True,
+                    },
+                    description="worker report is present",
+                    required=True,
+                ),
+            )
+        )
+        ctx = VerificationContext(workspace_id="ws", node=node, stdout="looks complete")
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert rep.hard_fail
+        assert "missing completed worker report" in rep.summary()
 
 
 # ---------------------------------------------------------------------------

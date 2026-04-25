@@ -5,6 +5,7 @@ const handlers = {
   handlePresenceEvent: vi.fn(),
   handleAgentStatusEvent: vi.fn(),
   handleTaskEvent: vi.fn(),
+  handlePlanEvent: vi.fn(),
   handleBlackboardEvent: vi.fn(),
   handleChatEvent: vi.fn(),
   handleMemberEvent: vi.fn(),
@@ -44,6 +45,7 @@ describe('useBlackboardSSE', () => {
     expect(classifyWorkspaceEventType('workspace.presence.joined')).toBe('presence');
     expect(classifyWorkspaceEventType('workspace.agent_status.updated')).toBe('agent_status');
     expect(classifyWorkspaceEventType('workspace_task_updated')).toBe('task');
+    expect(classifyWorkspaceEventType('workspace_plan_updated')).toBe('plan');
     expect(classifyWorkspaceEventType('blackboard_post_created')).toBe('blackboard');
     expect(classifyWorkspaceEventType('workspace_message_created')).toBe('chat');
     expect(classifyWorkspaceEventType('workspace_member_joined')).toBe('member');
@@ -68,6 +70,7 @@ describe('useBlackboardSSE', () => {
     callback?.({ type: 'workspace_message_created', data: { id: 'msg-1' } });
     callback?.({ type: 'workspace.presence.joined', data: { user_id: 'u-1' } });
     callback?.({ type: 'topology_updated', data: { node_id: 'n-1' } });
+    callback?.({ type: 'workspace_plan_updated', data: { workspace_id: 'ws-1' } });
     callback?.({ type: 'unknown_event', data: {} });
 
     expect(handlers.handleBlackboardEvent).toHaveBeenCalledWith({
@@ -85,6 +88,10 @@ describe('useBlackboardSSE', () => {
     expect(handlers.handleTopologyEvent).toHaveBeenCalledWith({
       type: 'topology_updated',
       data: { node_id: 'n-1' },
+    });
+    expect(handlers.handlePlanEvent).toHaveBeenCalledWith({
+      type: 'workspace_plan_updated',
+      data: { workspace_id: 'ws-1' },
     });
     expect(handlers.handleMemberEvent).not.toHaveBeenCalled();
 

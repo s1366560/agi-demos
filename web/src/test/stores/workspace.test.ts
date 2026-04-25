@@ -76,6 +76,7 @@ describe('workspace store', () => {
       objectives: [],
       genes: [],
       chatMessages: [],
+      planRefreshCounters: {},
       isLoading: false,
       activeSurfaceRequestId: 0,
       error: null,
@@ -794,6 +795,38 @@ describe('workspace store', () => {
         },
       }),
     ]);
+  });
+
+  it('handlePlanEvent increments the workspace plan refresh counter', () => {
+    useWorkspaceStore.setState({
+      currentWorkspace: {
+        id: 'ws-fallback',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Fallback',
+        created_by: 'u-1',
+        created_at: '',
+      } as any,
+      planRefreshCounters: {},
+    });
+
+    useWorkspaceStore.getState().handlePlanEvent({
+      type: 'workspace_plan_updated',
+      data: { workspace_id: 'ws-1', plan_id: 'plan-1' },
+    });
+    useWorkspaceStore.getState().handlePlanEvent({
+      type: 'workspace_plan_updated',
+      data: { workspace_id: 'ws-1', plan_id: 'plan-1' },
+    });
+    useWorkspaceStore.getState().handlePlanEvent({
+      type: 'workspace_plan_updated',
+      data: { plan_id: 'plan-fallback' },
+    });
+
+    expect(useWorkspaceStore.getState().planRefreshCounters).toEqual({
+      'ws-1': 2,
+      'ws-fallback': 1,
+    });
   });
 
   it('handleTopologyEvent applies node update deltas with connected edge sync', () => {

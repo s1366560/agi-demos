@@ -157,6 +157,7 @@ interface WorkspaceState {
   onlineUsers: PresenceUser[];
   onlineAgents: PresenceAgent[];
   selectedHex: { q: number; r: number } | null;
+  planRefreshCounters: Record<string, number>;
 
   chatMessages: WorkspaceMessage[];
   chatLoading: boolean;
@@ -390,6 +391,7 @@ interface WorkspaceState {
   deleteTopologyEdge: (workspaceId: string, edgeId: string) => Promise<void>;
   handleTopologyEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleTaskEvent: (event: { type: string; data: Record<string, unknown> }) => void;
+  handlePlanEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleBlackboardEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleMemberEvent: (event: { type: string; data: Record<string, unknown> }) => void;
   handleWorkspaceLifecycleEvent: (event: { type: string; data: Record<string, unknown> }) => void;
@@ -420,6 +422,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       onlineUsers: [],
       onlineAgents: [],
       selectedHex: null,
+      planRefreshCounters: {},
 
       loadWorkspaces: async (tenantId, projectId) => {
         set({ isLoading: true, error: null });
@@ -941,6 +944,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             }));
           }
         }
+      },
+
+      handlePlanEvent: (event) => {
+        const { type, data } = event;
+        if (type !== 'workspace_plan_updated') {
+          return;
+        }
+        const workspaceId =
+          typeof data.workspace_id === 'string' && data.workspace_id.length > 0
+            ? data.workspace_id
+            : get().currentWorkspace?.id;
+        if (!workspaceId) {
+          return;
+        }
+        set((state) => ({
+          planRefreshCounters: {
+            ...state.planRefreshCounters,
+            [workspaceId]: (state.planRefreshCounters[workspaceId] ?? 0) + 1,
+          },
+        }));
       },
 
       handleBlackboardEvent: (event) => {

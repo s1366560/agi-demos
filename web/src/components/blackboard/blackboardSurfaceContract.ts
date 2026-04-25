@@ -16,6 +16,7 @@ export type WorkspaceEventChannel =
   | 'presence'
   | 'agent_status'
   | 'task'
+  | 'plan'
   | 'blackboard'
   | 'chat'
   | 'member'
@@ -52,6 +53,9 @@ export function classifyWorkspaceEventType(type: string): WorkspaceEventChannel 
   }
   if (type.startsWith('workspace_task_') || type === 'workspace_task_assigned') {
     return 'task';
+  }
+  if (type === 'workspace_plan_updated') {
+    return 'plan';
   }
   if (type.startsWith('blackboard_')) {
     return 'blackboard';

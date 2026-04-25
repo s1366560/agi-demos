@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
+from src.domain.events.types import AgentEventType
+from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
@@ -54,8 +58,10 @@ def _int_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
-async def initialize_workspace_plan_outbox_worker() -> WorkspacePlanOutboxWorker | None:
-    """Start the durable Workspace Plan V2 outbox worker when V2 is enabled."""
+async def initialize_workspace_plan_outbox_worker(
+    *, redis_client: object | None = None
+) -> WorkspacePlanOutboxWorker | None:
+    """Start the durable Workspace Plan V2 outbox worker and publish UI refresh events."""
     global _worker
 
     config = OrchestratorConfig.from_env()
@@ -77,6 +83,9 @@ async def initialize_workspace_plan_outbox_worker() -> WorkspacePlanOutboxWorker
             poll_interval_seconds=_float_env(_POLL_ENV, 2.0),
             batch_size=_int_env(_BATCH_ENV, 10),
             lease_seconds=_int_env(_LEASE_ENV, 60),
+            event_publisher=(
+                _make_plan_update_publisher(redis_client) if redis_client is not None else None
+            ),
         )
         _worker.start()
         logger.info(
@@ -92,6 +101,25 @@ async def initialize_workspace_plan_outbox_worker() -> WorkspacePlanOutboxWorker
         )
         _worker = None
         return None
+
+
+def _make_plan_update_publisher(
+    redis_client: object,
+) -> Callable[[dict[str, Any]], Awaitable[None]]:
+    async def _publish(payload: dict[str, Any]) -> None:
+        workspace_id = payload.get("workspace_id")
+        if not isinstance(workspace_id, str) or not workspace_id:
+            return
+        await publish_workspace_event(
+            cast(Any, redis_client),
+            workspace_id=workspace_id,
+            event_type=AgentEventType.WORKSPACE_PLAN_UPDATED,
+            payload=payload,
+            metadata={"source": "workspace_plan_outbox_worker"},
+            correlation_id=str(payload.get("plan_id") or workspace_id),
+        )
+
+    return _publish
 
 
 async def shutdown_workspace_plan_outbox_worker() -> None:

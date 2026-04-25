@@ -224,7 +224,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915
     await initialize_attempt_recovery()
 
     # Start Workspace Plan V2 durable outbox worker
-    await initialize_workspace_plan_outbox_worker()
+    await initialize_workspace_plan_outbox_worker(redis_client=redis_client)
 
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()

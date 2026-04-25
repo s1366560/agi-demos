@@ -32,6 +32,9 @@ export function useBlackboardSSE(workspaceId: string | null): void {
         case 'task':
           store.handleTaskEvent({ type, data });
           break;
+        case 'plan':
+          store.handlePlanEvent({ type, data });
+          break;
         case 'blackboard':
           store.handleBlackboardEvent({ type, data });
           break;

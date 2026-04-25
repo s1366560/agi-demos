@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StatusTab } from '@/components/blackboard/tabs/StatusTab';
-import { workspacePlanService } from '@/services/workspaceService';
+import { workspaceAutonomyService, workspacePlanService } from '@/services/workspaceService';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
 vi.mock('@/services/workspaceService', () => ({
+  workspaceAutonomyService: {
+    tick: vi.fn(),
+  },
   workspacePlanService: {
     getSnapshot: vi.fn(),
     reopenBlockedNode: vi.fn(),
@@ -22,6 +25,11 @@ describe('StatusTab', () => {
       blackboard: [],
       outbox: [],
       events: [],
+    });
+    vi.mocked(workspaceAutonomyService.tick).mockResolvedValue({
+      triggered: false,
+      root_task_id: null,
+      reason: 'no_root_needs_progress',
     });
   });
 
@@ -210,6 +218,93 @@ describe('StatusTab', () => {
     });
   });
 
+  it('refreshes durable plan snapshot when workspace plan events arrive', async () => {
+    const { rerender } = render(
+      <StatusTab
+        stats={{
+          completionRatio: 0,
+          discussions: 0,
+          activeAgents: 0,
+          pendingAdjudicationTasks: 0,
+        }}
+        topologyEdges={[]}
+        agents={[]}
+        tasks={[]}
+        workspaceId="ws-1"
+        statusBadgeTone={() => 'bg-green-500'}
+        planRefreshToken={0}
+      />
+    );
+
+    await waitFor(() => {
+      expect(workspacePlanService.getSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <StatusTab
+        stats={{
+          completionRatio: 0,
+          discussions: 0,
+          activeAgents: 0,
+          pendingAdjudicationTasks: 0,
+        }}
+        topologyEdges={[]}
+        agents={[]}
+        tasks={[]}
+        workspaceId="ws-1"
+        statusBadgeTone={() => 'bg-green-500'}
+        planRefreshToken={1}
+      />
+    );
+
+    await waitFor(() => {
+      expect(workspacePlanService.getSnapshot).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('triggers workspace autonomy from the durable plan header', async () => {
+    vi.mocked(workspaceAutonomyService.tick)
+      .mockResolvedValueOnce({
+        triggered: true,
+        root_task_id: 'root-1',
+        reason: 'triggered',
+      })
+      .mockResolvedValueOnce({
+        triggered: false,
+        root_task_id: 'root-1',
+        reason: 'cooling_down',
+      });
+
+    render(
+      <StatusTab
+        stats={{
+          completionRatio: 0,
+          discussions: 0,
+          activeAgents: 0,
+          pendingAdjudicationTasks: 0,
+        }}
+        topologyEdges={[]}
+        agents={[]}
+        tasks={[]}
+        workspaceId="ws-1"
+        statusBadgeTone={() => 'bg-green-500'}
+      />
+    );
+
+    expect(await screen.findByText('blackboard.planRunEmpty')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('blackboard.planRunRunAutonomy'));
+    await waitFor(() => {
+      expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: false });
+    });
+    expect(await screen.findByText('blackboard.planRunAutonomyTriggered')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('blackboard.planRunForceAutonomy'));
+    await waitFor(() => {
+      expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });
+    });
+  });
+
   it('filters the durable workbench and invokes recovery actions', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(workspacePlanService.getSnapshot).mockResolvedValue({
@@ -240,6 +335,11 @@ describe('StatusTab', () => {
             metadata: {},
             created_at: '2026-04-23T00:00:00Z',
             actions: {
+              open_attempt: {
+                enabled: true,
+                label: 'Open attempt',
+                requires_confirmation: false,
+              },
               request_replan: {
                 enabled: true,
                 label: 'Request replan',
@@ -355,32 +455,40 @@ describe('StatusTab', () => {
       target: { value: 'blocked' },
     });
     expect(screen.getByText('artifact.blocked-report')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open attempt' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1&workspaceId=ws-1'
+    );
 
-    fireEvent.click(screen.getByText('Retry'));
+    fireEvent.change(screen.getByLabelText('blackboard.planRunOperatorReason'), {
+      target: { value: 'operator reviewed blocked evidence' },
+    });
+
+    fireEvent.click(screen.getByText('Retry now'));
     await waitFor(() => {
       expect(workspacePlanService.retryOutboxItem).toHaveBeenCalledWith('ws-1', 'outbox-failed-1', {
-        reason: 'operator retry from central blackboard',
+        reason: 'operator reviewed blocked evidence',
       });
     });
 
-    fireEvent.click(screen.getByText('blackboard.planRunReopenNode'));
+    fireEvent.click(screen.getByText('Reopen blocked node'));
     await waitFor(() => {
       expect(workspacePlanService.reopenBlockedNode).toHaveBeenCalledWith(
         'ws-1',
         'node-blocked-1',
         {
-          reason: 'operator action from central blackboard',
+          reason: 'operator reviewed blocked evidence',
         }
       );
     });
 
-    fireEvent.click(screen.getByText('blackboard.planRunRequestReplan'));
+    fireEvent.click(screen.getByText('Request replan'));
     await waitFor(() => {
       expect(workspacePlanService.requestNodeReplan).toHaveBeenCalledWith(
         'ws-1',
         'node-blocked-1',
         {
-          reason: 'operator action from central blackboard',
+          reason: 'operator reviewed blocked evidence',
         }
       );
     });

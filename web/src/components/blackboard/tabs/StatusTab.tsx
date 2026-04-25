@@ -32,6 +32,7 @@ export interface StatusTabProps {
   projectId?: string;
   workspaceId: string;
   statusBadgeTone: (status: string | undefined) => string;
+  planRefreshToken?: number | undefined;
 }
 
 export function StatusTab({
@@ -43,6 +44,7 @@ export function StatusTab({
   projectId,
   workspaceId,
   statusBadgeTone,
+  planRefreshToken,
 }: StatusTabProps) {
   const { t } = useTranslation();
   const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication);
@@ -101,6 +103,7 @@ export function StatusTab({
         tenantId={tenantId}
         projectId={projectId}
         tasks={tasks}
+        refreshToken={planRefreshToken}
       />
 
       <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">

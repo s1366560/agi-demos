@@ -23,7 +23,6 @@ import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
 import { SensingSurfaceBadge } from '@/components/blackboard/SensingSurfaceBadge';
 
-
 function LoadingShell() {
   const { t } = useTranslation();
   return (
@@ -98,6 +97,9 @@ export function Blackboard() {
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? currentWorkspace,
     [currentWorkspace, selectedWorkspaceId, workspaces]
+  );
+  const planRefreshToken = useWorkspaceStore((state) =>
+    selectedWorkspaceId ? (state.planRefreshCounters[selectedWorkspaceId] ?? 0) : 0
   );
   const agentWorkspacePath = useMemo(
     () =>
@@ -292,6 +294,7 @@ export function Blackboard() {
               topologyEdges={topologyEdges}
               activeTab={activeTab}
               onActiveTabChange={handleTabChange}
+              planRefreshToken={planRefreshToken}
               agentWorkspacePath={agentWorkspacePath}
               onLoadReplies={handleLoadReplies}
               onCreatePost={handleCreatePost}

@@ -222,6 +222,50 @@ async def test_run_once_completes_registered_handler(
 
 
 @pytest.mark.asyncio
+async def test_run_once_publishes_plan_update_after_handler_completion(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type="supervisor_tick",
+        payload={"workspace_id": "workspace-1", "node_id": "node-1"},
+    )
+    published: list[dict[str, object]] = []
+
+    async def handler(_outbox_item: WorkspacePlanOutboxModel, _session: AsyncSession) -> None:
+        return None
+
+    async def event_publisher(payload: dict[str, object]) -> None:
+        published.append(payload)
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={"supervisor_tick": handler},
+        worker_id="worker-a",
+        event_publisher=event_publisher,
+    )
+
+    assert await worker.run_once() == 1
+
+    assert published == [
+        {
+            "workspace_id": "workspace-1",
+            "plan_id": "worker-plan-1",
+            "outbox_id": item.id,
+            "outbox_event_type": "supervisor_tick",
+            "outbox_status": "completed",
+            "attempt_count": 1,
+            "max_attempts": 5,
+            "change": "outbox_completed",
+            "node_id": "node-1",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_run_once_marks_missing_handler_failed(
     db_session: AsyncSession,
 ) -> None:
