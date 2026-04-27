@@ -153,6 +153,7 @@ class TestDoneHandler:
         svc.reject.assert_not_awaited()
         svc.create_attempt.assert_not_awaited()
         assert outcome.metadata_updates == {
+            "last_worker_report_type": "completed",
             "last_attempt_status": "accepted",
             "last_attempt_id": "a1",
             "current_attempt_id": "a1",

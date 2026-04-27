@@ -314,3 +314,37 @@ async def test_get_diagnostics_requires_workspace_membership() -> None:
             workspace_id="workspace-1",
             actor_user_id="user-1",
         )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_done_task_latest_blocked_attempt_is_not_reported_as_blocker() -> None:
+    done_task = _task(
+        "task-done",
+        "Done task",
+        WorkspaceTaskStatus.DONE,
+    )
+    attempts = {
+        "task-done": [
+            _attempt(
+                "attempt-blocked-after-done",
+                "task-done",
+                WorkspaceTaskSessionAttemptStatus.BLOCKED,
+                summary="recovery:parent_done",
+            )
+        ]
+    }
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[done_task],
+        attempts_by_task=attempts,
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    assert diagnostics.blockers == []

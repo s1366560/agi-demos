@@ -27,6 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
+    WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackboard import (
@@ -38,6 +39,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import ROOT_GOAL_TASK_ID, TASK_ROLE
 from src.infrastructure.agent.workspace_plan.outbox_handlers import SUPERVISOR_TICK_EVENT
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["workspace-plans"])
@@ -130,9 +132,24 @@ class WorkspacePlanEventResponse(BaseModel):
     created_at: datetime
 
 
+class WorkspacePlanRootGoalResponse(BaseModel):
+    id: str
+    title: str
+    status: str
+    blocker_reason: str | None = None
+    goal_health: str | None = None
+    remediation_status: str | None = None
+    remediation_summary: str | None = None
+    evidence_grade: str | None = None
+    completion_blocker_reason: str | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class WorkspacePlanSnapshotResponse(BaseModel):
     workspace_id: str
     plan: WorkspacePlanResponse | None = None
+    root_goal: WorkspacePlanRootGoalResponse | None = None
     blackboard: list[WorkspacePlanBlackboardEntryResponse] = Field(default_factory=list)
     outbox: list[WorkspacePlanOutboxItemResponse] = Field(default_factory=list)
     events: list[WorkspacePlanEventResponse] = Field(default_factory=list)
@@ -353,6 +370,124 @@ def _to_event_response(item: WorkspacePlanEventModel) -> WorkspacePlanEventRespo
     )
 
 
+async def _load_root_goal_response(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    plan: Plan,
+) -> WorkspacePlanRootGoalResponse | None:
+    root_goal_id = await _resolve_root_goal_task_id(db, workspace_id=workspace_id, plan=plan)
+    row: WorkspaceTaskModel | None = None
+    if root_goal_id:
+        candidate = await db.get(WorkspaceTaskModel, root_goal_id)
+        if candidate is not None and candidate.workspace_id == workspace_id:
+            row = candidate
+    if row is None:
+        result = await db.execute(
+            refresh_select_statement(
+                select(WorkspaceTaskModel)
+                .where(WorkspaceTaskModel.workspace_id == workspace_id)
+                .where(WorkspaceTaskModel.metadata_json[TASK_ROLE].as_string() == "goal_root")
+                .where(WorkspaceTaskModel.archived_at.is_(None))
+                .order_by(
+                    WorkspaceTaskModel.completed_at.is_(None).desc(),
+                    WorkspaceTaskModel.updated_at.desc(),
+                    WorkspaceTaskModel.created_at.desc(),
+                )
+                .limit(1)
+            )
+        )
+        row = result.scalar_one_or_none()
+    if row is None:
+        return None
+    return _to_root_goal_response(row)
+
+
+async def _resolve_root_goal_task_id(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    plan: Plan,
+) -> str | None:
+    workspace_task_ids = [
+        node.workspace_task_id
+        for node in plan.nodes.values()
+        if isinstance(node.workspace_task_id, str) and node.workspace_task_id
+    ]
+    if not workspace_task_ids:
+        return None
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceTaskModel)
+            .where(WorkspaceTaskModel.workspace_id == workspace_id)
+            .where(WorkspaceTaskModel.id.in_(workspace_task_ids))
+        )
+    )
+    for task in result.scalars().all():
+        metadata = dict(task.metadata_json or {})
+        root_goal_id = metadata.get(ROOT_GOAL_TASK_ID)
+        if isinstance(root_goal_id, str) and root_goal_id:
+            return root_goal_id
+    return None
+
+
+def _to_root_goal_response(row: WorkspaceTaskModel) -> WorkspacePlanRootGoalResponse:
+    metadata = dict(row.metadata_json or {})
+    evidence = metadata.get("goal_evidence")
+    evidence_grade = (
+        evidence.get("verification_grade")
+        if isinstance(evidence, dict) and isinstance(evidence.get("verification_grade"), str)
+        else None
+    )
+    return WorkspacePlanRootGoalResponse(
+        id=row.id,
+        title=row.title,
+        status=row.status,
+        blocker_reason=row.blocker_reason,
+        goal_health=_metadata_text(metadata, "goal_health"),
+        remediation_status=_metadata_text(metadata, "remediation_status"),
+        remediation_summary=_metadata_text(metadata, "remediation_summary"),
+        evidence_grade=evidence_grade,
+        completion_blocker_reason=_root_completion_blocker_reason(
+            status=row.status,
+            blocker_reason=row.blocker_reason,
+            metadata=metadata,
+            evidence_grade=evidence_grade,
+        ),
+        updated_at=row.updated_at,
+        completed_at=row.completed_at,
+    )
+
+
+def _metadata_text(metadata: dict[str, Any], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _root_completion_blocker_reason(
+    *,
+    status: str,
+    blocker_reason: str | None,
+    metadata: dict[str, Any],
+    evidence_grade: str | None,
+) -> str | None:
+    if status == "done":
+        return None
+    if blocker_reason:
+        return blocker_reason
+    if evidence_grade == "fail":
+        return (
+            _metadata_text(metadata, "remediation_summary")
+            or "Root goal evidence failed completion policy checks."
+        )
+    if metadata.get("remediation_status") == "ready_for_completion":
+        return (
+            _metadata_text(metadata, "remediation_summary")
+            or "Root goal is ready for completion but has not closed yet."
+        )
+    return None
+
+
 def _map_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PermissionError):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
@@ -540,6 +675,7 @@ async def get_workspace_plan_snapshot(
         return WorkspacePlanSnapshotResponse(
             workspace_id=workspace_id,
             plan=_to_plan_response(plan),
+            root_goal=await _load_root_goal_response(db, workspace_id=workspace_id, plan=plan),
             blackboard=[_to_blackboard_response(entry) for entry in blackboard_entries],
             outbox=[_to_outbox_response(item) for item in outbox_items],
             events=[_to_event_response(item) for item in event_items],

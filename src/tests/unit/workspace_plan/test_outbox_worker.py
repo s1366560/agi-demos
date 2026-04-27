@@ -693,15 +693,17 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     assert projected_task.status.value == "done"
     assert projected_task.metadata["pending_leader_adjudication"] is False
     assert projected_task.metadata["durable_plan_verdict"] == "accepted"
+    assert projected_task.metadata["last_worker_report_type"] == "completed"
+    assert projected_task.metadata["last_attempt_status"] == "accepted"
+    assert projected_task.metadata["last_attempt_id"] == leaf.current_attempt_id
+    assert projected_task.metadata["last_leader_adjudication_status"] == "accepted"
     assert projected_task.metadata["feature_checkpoint"]["commit_ref"] == "abc123"
     assert projected_task.metadata["handoff_package"]["git_head"] == "abc123"
     assert projected_task.metadata["handoff_package"]["git_diff_summary"] == "1 file changed"
     assert projected_task.metadata["handoff_package"]["test_commands"] == [
         "uv run pytest src/tests/unit/example.py"
     ]
-    assert projected_task.metadata["progress_events"][-1]["event_type"] == (
-        "verification_accepted"
-    )
+    assert projected_task.metadata["progress_events"][-1]["event_type"] == ("verification_accepted")
     assert "Commit: abc123" in projected_task.metadata["next_session_briefing"]
     reconciled_root = await SqlWorkspaceTaskRepository(db_session).find_by_id("root-task-1")
     assert reconciled_root is not None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import cast
 
@@ -26,6 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant as DBTenant,
     User,
     WorkspaceModel,
+    WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackboard import (
@@ -204,6 +206,92 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert task_node.feature_checkpoint["feature_id"] == "feature-api"
     assert task_node.actions["request_replan"].enabled is True
     assert task_node.actions["reopen_blocked"].enabled is False
+
+
+@pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_includes_root_closure_state(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-root"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[task_node_id] = replace(plan.nodes[task_node_id], workspace_task_id="child-api")
+    await SqlPlanRepository(db_session).save(plan)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api",
+                workspace_id=workspace_id,
+                title="Complete root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                priority=0,
+                metadata_json={
+                    "autonomy_schema_version": 1,
+                    "task_role": "goal_root",
+                    "goal_origin": "human_defined",
+                    "goal_source_refs": ["api:test"],
+                    "remediation_status": "ready_for_completion",
+                    "remediation_summary": "goal_evidence.verification_grade must be pass",
+                    "goal_evidence": {
+                        "goal_task_id": "root-api",
+                        "goal_text_snapshot": "Complete root",
+                        "outcome_status": "achieved",
+                        "summary": "stale failure",
+                        "artifacts": ["artifact:file-1"],
+                        "verifications": ["child_report_not_completed:child-api:blocked"],
+                        "generated_by_agent_id": "leader-api",
+                        "recorded_at": "2026-04-16T03:00:00Z",
+                        "verification_grade": "fail",
+                    },
+                },
+            ),
+            WorkspaceTaskModel(
+                id="child-api",
+                workspace_id=workspace_id,
+                title="Child task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                priority=0,
+                metadata_json={
+                    "autonomy_schema_version": 1,
+                    "task_role": "execution_task",
+                    "root_goal_task_id": "root-api",
+                    "lineage_source": "agent",
+                },
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.root_goal is not None
+    assert response.root_goal.id == "root-api"
+    assert response.root_goal.status == "in_progress"
+    assert response.root_goal.remediation_status == "ready_for_completion"
+    assert response.root_goal.evidence_grade == "fail"
+    assert response.root_goal.completion_blocker_reason == (
+        "goal_evidence.verification_grade must be pass"
+    )
 
 
 @pytest.mark.asyncio

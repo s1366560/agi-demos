@@ -33,6 +33,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events
     SqlWorkspacePlanEventRepository,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    CURRENT_ATTEMPT_ID,
+    LAST_LEADER_ADJUDICATION_STATUS,
+    LAST_WORKER_REPORT_SUMMARY,
     PENDING_LEADER_ADJUDICATION,
     ROOT_GOAL_TASK_ID,
 )
@@ -132,6 +135,7 @@ async def _project_verification_to_workspace_task(
             await _project_verification_to_task(
                 db=db,
                 task=task,
+                attempt_id=attempt_id,
                 passed=passed,
                 hard_fail=hard_fail,
                 summary=summary,
@@ -172,6 +176,7 @@ async def _project_verification_to_task(
     *,
     db: AsyncSession,
     task: WorkspaceTaskModel,
+    attempt_id: str | None,
     passed: bool,
     hard_fail: bool,
     summary: str,
@@ -202,6 +207,15 @@ async def _project_verification_to_task(
         passed=passed,
         hard_fail=hard_fail,
     )
+    if attempt_id:
+        metadata["last_attempt_id"] = attempt_id
+        metadata[CURRENT_ATTEMPT_ID] = attempt_id
+    if passed:
+        metadata["last_worker_report_type"] = "completed"
+        metadata[LAST_WORKER_REPORT_SUMMARY] = summary or str(
+            metadata.get(LAST_WORKER_REPORT_SUMMARY) or "Accepted by durable plan verifier."
+        )
+        metadata[LAST_LEADER_ADJUDICATION_STATUS] = "accepted"
     task.metadata_json = metadata
     if passed:
         task.status = "done"

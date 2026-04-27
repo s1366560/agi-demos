@@ -268,9 +268,24 @@ export interface WorkspacePlanEvent {
 export interface WorkspacePlanSnapshot {
   workspace_id: string;
   plan: WorkspacePlan | null;
+  root_goal?: WorkspacePlanRootGoal | null | undefined;
   blackboard: WorkspacePlanBlackboardEntry[];
   outbox: WorkspacePlanOutboxItem[];
   events: WorkspacePlanEvent[];
+}
+
+export interface WorkspacePlanRootGoal {
+  id: string;
+  title: string;
+  status: string;
+  blocker_reason?: string | null | undefined;
+  goal_health?: string | null | undefined;
+  remediation_status?: string | null | undefined;
+  remediation_summary?: string | null | undefined;
+  evidence_grade?: string | null | undefined;
+  completion_blocker_reason?: string | null | undefined;
+  updated_at?: string | null | undefined;
+  completed_at?: string | null | undefined;
 }
 
 export interface WorkspacePlanActionResult {

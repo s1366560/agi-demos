@@ -168,12 +168,20 @@ export function countDone(nodes: WorkspacePlanNode[]): number {
   return nodes.filter((node) => node.intent === 'done').length;
 }
 
+export function rootGoalNeedsClosure(snapshot: WorkspacePlanSnapshot | null): boolean {
+  const root = snapshot?.root_goal;
+  return Boolean(root && root.status !== 'done');
+}
+
 export function planStage(snapshot: WorkspacePlanSnapshot | null): string {
   const plan = snapshot?.plan;
   if (!plan) {
     return 'Not started';
   }
   const nodes = plan.nodes;
+  if (rootGoalNeedsClosure(snapshot)) {
+    return snapshot.root_goal?.completion_blocker_reason ? 'Root closure needed' : 'Closing root';
+  }
   if (plan.status === 'completed' || (nodes.length > 0 && countDone(nodes) === nodes.length)) {
     return 'Complete';
   }

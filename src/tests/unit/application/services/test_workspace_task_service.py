@@ -316,6 +316,33 @@ class TestWorkspaceTaskService:
         assert updated.priority == WorkspaceTaskPriority.P2
 
     @pytest.mark.asyncio
+    async def test_update_task_clears_blocker_reason_when_leaving_blocked(
+        self,
+        workspace_task_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_task_repo: MagicMock,
+    ) -> None:
+        blocked_task = _make_task(status=WorkspaceTaskStatus.BLOCKED)
+        blocked_task.blocker_reason = "old sandbox unavailable"
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "editor-1", WorkspaceRole.EDITOR
+        )
+        mock_task_repo.find_by_id.return_value = blocked_task
+        mock_task_repo.save.side_effect = lambda saved_task: saved_task
+
+        updated = await workspace_task_service.update_task(
+            workspace_id="ws-1",
+            task_id="wt-1",
+            actor_user_id="editor-1",
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+        )
+
+        assert updated.status == WorkspaceTaskStatus.IN_PROGRESS
+        assert updated.blocker_reason is None
+
+    @pytest.mark.asyncio
     async def test_root_start_requires_leader_authority(
         self,
         workspace_task_service,
@@ -562,7 +589,6 @@ class TestWorkspaceTaskService:
                 actor_user_id="member-1",
                 authority=WorkspaceTaskAuthorityContext.worker("worker-a"),
             )
-
 
     @pytest.mark.asyncio
     async def test_leader_cannot_complete_child_without_attempt(

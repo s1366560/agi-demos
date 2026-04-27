@@ -42,6 +42,7 @@ import {
   nodeWriteSet,
   outboxNodeId,
   planStage,
+  rootGoalNeedsClosure,
   shortId,
 } from './planRunSnapshotModel';
 import {
@@ -230,10 +231,14 @@ export function PlanRunSnapshotSection({
   const outbox = useMemo(() => snapshot?.outbox ?? [], [snapshot]);
   const events = useMemo(() => snapshot?.events ?? [], [snapshot]);
   const blackboard = useMemo(() => snapshot?.blackboard ?? [], [snapshot]);
+  const rootGoal = snapshot?.root_goal ?? null;
   const stage = planStage(snapshot);
   const doneCount = countDone(runnableNodes);
+  const rootUnitCount = rootGoal ? 1 : 0;
+  const totalCompletionUnits = runnableNodes.length + rootUnitCount;
+  const completedUnits = doneCount + (rootGoal?.status === 'done' ? 1 : 0);
   const completion =
-    runnableNodes.length > 0 ? Math.round((doneCount / runnableNodes.length) * 100) : 0;
+    totalCompletionUnits > 0 ? Math.round((completedUnits / totalCompletionUnits) * 100) : 0;
   const latestEvent = events[0] ?? null;
   const isStale = lastUpdatedAt ? Date.now() - lastUpdatedAt.getTime() > 20000 : false;
 
@@ -542,12 +547,24 @@ export function PlanRunSnapshotSection({
             <StatBadge label={t('blackboard.planRunStage', 'Stage')} value={stage} />
             <StatBadge
               label={t('blackboard.planRunCompleted', 'Done')}
-              value={`${String(doneCount)} / ${String(runnableNodes.length)}`}
+              value={`${String(completedUnits)} / ${String(totalCompletionUnits)}`}
             />
             <StatBadge
               label={t('blackboard.planRunCompletion', 'Completion')}
               value={`${String(completion)}%`}
             />
+            {rootGoal && (
+              <StatBadge
+                label={t('blackboard.planRunRootStatus', 'Root')}
+                value={rootGoal.status}
+              />
+            )}
+            {rootGoal?.evidence_grade && (
+              <StatBadge
+                label={t('blackboard.planRunEvidenceGrade', 'Evidence')}
+                value={rootGoal.evidence_grade}
+              />
+            )}
             <StatBadge
               label={t('blackboard.planRunQueue', 'Queue')}
               value={String(outbox.length)}
@@ -557,6 +574,11 @@ export function PlanRunSnapshotSection({
               value={String(events.length)}
             />
           </div>
+          {rootGoalNeedsClosure(snapshot) && rootGoal?.completion_blocker_reason && (
+            <div className="border-t border-warning-border bg-warning-bg px-4 py-3 text-sm text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+              {rootGoal.completion_blocker_reason}
+            </div>
+          )}
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
             <div className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-t-0">

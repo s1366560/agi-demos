@@ -18,6 +18,7 @@ from src.infrastructure.agent.workspace.workspace_goal_runtime import (
     _split_title_description,
     adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
+    auto_complete_ready_root,
     maybe_materialize_workspace_goal_candidate,
     prepare_workspace_subagent_delegation,
     resolve_workspace_execution_task_for_delegate,
@@ -1050,6 +1051,9 @@ class TestWorkspaceGoalRuntime:
                 attempt_service.accept.assert_awaited_once()
                 second_update_call = update_mock.await_args_list[-1]
                 assert second_update_call.kwargs["metadata"]["last_attempt_status"] == "accepted"
+                assert (
+                    second_update_call.kwargs["metadata"]["last_worker_report_type"] == "completed"
+                )
             elif status == WorkspaceTaskStatus.BLOCKED:
                 attempt_service.block.assert_awaited_once()
                 second_update_call = update_mock.await_args_list[-1]
@@ -1956,6 +1960,76 @@ class TestWorkspaceGoalRuntime:
             saved_root = task_repo_cls.return_value.save.await_args.args[0]
             assert saved_root.metadata["goal_evidence"]["artifacts"] == ["workspace_task:child-2"]
             assert saved_root.metadata["goal_evidence"]["verification_grade"] == "warn"
+
+    async def test_auto_complete_resynthesizes_failed_evidence_for_accepted_children(self) -> None:
+        root_task = MagicMock()
+        root_task.id = "root-accepted"
+        root_task.workspace_id = "ws-1"
+        root_task.title = "Ship accepted work"
+        root_task.status = MagicMock(value="in_progress")
+        root_task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "remediation_status": "ready_for_completion",
+            "goal_evidence": {
+                "goal_task_id": "root-accepted",
+                "goal_text_snapshot": "Ship accepted work",
+                "outcome_status": "achieved",
+                "summary": "stale failure",
+                "artifacts": ["artifact:file-1"],
+                "verifications": ["child_report_not_completed:child-accepted:blocked"],
+                "generated_by_agent_id": "leader-1",
+                "recorded_at": "2026-04-16T03:00:00Z",
+                "verification_grade": "fail",
+            },
+        }
+
+        child = MagicMock()
+        child.id = "child-accepted"
+        child.title = "Implement accepted work"
+        child.status = WorkspaceTaskStatus.DONE
+        child.completed_at = datetime.fromisoformat("2026-04-16T03:40:00+00:00")
+        child.updated_at = child.completed_at
+        child.created_at = child.completed_at
+        child.metadata = {
+            "task_role": "execution_task",
+            "evidence_refs": ["artifact:file-1"],
+            "execution_verifications": ["browser_assert:done"],
+            "durable_plan_verdict": "accepted",
+            "last_worker_report_type": "blocked",
+            "last_attempt_status": "awaiting_plan_verification",
+        }
+
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        task_repo.find_by_id = AsyncMock(return_value=root_task)
+        task_repo.save = AsyncMock(side_effect=lambda task: task)
+        command_service = MagicMock()
+        command_service.complete_task = AsyncMock(return_value=MagicMock(id="root-accepted"))
+
+        result = await auto_complete_ready_root(
+            workspace_id="ws-1",
+            actor_user_id="user-1",
+            root_task=root_task,
+            task_repo=task_repo,
+            command_service=command_service,
+            leader_agent_id="leader-1",
+        )
+
+        assert result is not None
+        saved_root = task_repo.save.await_args.args[0]
+        assert saved_root.metadata["goal_evidence"]["verification_grade"] == "pass"
+        assert (
+            "child_report_not_completed:child-accepted:blocked"
+            not in saved_root.metadata["goal_evidence"]["verifications"]
+        )
+        command_service.complete_task.assert_awaited_once()
 
     async def test_replan_limit_escalates_to_human_review(self) -> None:
         workspace = MagicMock()

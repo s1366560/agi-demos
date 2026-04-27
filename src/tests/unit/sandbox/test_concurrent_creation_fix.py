@@ -389,6 +389,73 @@ class TestAgentWorkerSandboxConsistency:
         finally:
             worker_state._mcp_sandbox_adapter = original_adapter
 
+    async def test_load_project_sandbox_tools_falls_back_to_existing_project_container(
+        self, mock_sandbox_adapter, monkeypatch
+    ):
+        """Use an existing same-project Docker sandbox when the DB sandbox is stale."""
+        from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
+
+        stale_sandbox = ProjectSandbox(
+            id="assoc-1",
+            project_id="test-proj",
+            tenant_id="test-tenant",
+            sandbox_id="stale-db-sandbox",
+            status=ProjectSandboxStatus.RUNNING,
+        )
+
+        mock_repo = MagicMock()
+        mock_repo.find_by_project = AsyncMock(return_value=stale_sandbox)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock()
+
+        mock_sandbox_adapter.container_exists = AsyncMock(return_value=False)
+        existing_container = MagicMock()
+        existing_container.name = "existing-project-sandbox"
+        existing_container.status = "running"
+        existing_container.labels = {"memstack.project_id": "test-proj"}
+        existing_container.attrs = {"Mounts": []}
+        mock_sandbox_adapter._docker.containers.list = MagicMock(return_value=[existing_container])
+
+        def add_existing_to_cache():
+            mock_sandbox_adapter._active_sandboxes["existing-project-sandbox"] = MagicMock()
+
+        mock_sandbox_adapter.sync_from_docker = AsyncMock(side_effect=add_existing_to_cache)
+        mock_sandbox_adapter.list_tools = AsyncMock(return_value=[{"name": "bash"}])
+
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
+
+        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+
+        try:
+            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+
+            with monkeypatch.context() as m:
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+                    MagicMock(return_value=mock_session),
+                )
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository.SqlProjectSandboxRepository",
+                    MagicMock(return_value=mock_repo),
+                )
+
+                from src.infrastructure.agent.state.agent_worker_state import (
+                    _load_project_sandbox_tools,
+                )
+
+                _ = await _load_project_sandbox_tools(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                )
+
+                mock_sandbox_adapter.create_sandbox.assert_not_called()
+                mock_sandbox_adapter.connect_mcp.assert_called_with("existing-project-sandbox")
+
+        finally:
+            worker_state._mcp_sandbox_adapter = original_adapter
+
     @pytest.mark.skip(
         reason="_sync_files_to_sandbox was removed; file sync now handled differently"
     )

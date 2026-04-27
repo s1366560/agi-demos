@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import re
@@ -23,6 +24,7 @@ from src.application.services.workspace_agent_autonomy import (
     synthesize_goal_evidence_from_children,
     validate_autonomy_metadata,
 )
+from src.application.services.workspace_autonomy_profiles import evaluate_completion_evidence
 from src.application.services.workspace_goal_materialization_service import (
     WorkspaceGoalMaterializationService,
 )
@@ -457,13 +459,20 @@ async def _ensure_root_goal_evidence(
     generated_by_agent_id: str,
 ) -> None:
     metadata = dict(getattr(root_task, "metadata", {}) or {})
+    workspace_metadata = await _load_workspace_metadata_for_task(
+        task_repo=task_repo,
+        workspace_id=getattr(root_task, "workspace_id", None),
+    )
     existing = metadata.get("goal_evidence")
     if isinstance(existing, Mapping):
-        existing_artifacts = existing.get("artifacts")
-        if isinstance(existing_artifacts, list) and len(existing_artifacts) > 0:
+        if _existing_goal_evidence_allows_completion(
+            root_task=root_task,
+            evidence=existing,
+            workspace_metadata=workspace_metadata,
+        ):
             return
-        # Stale evidence with empty artifacts: fall through and re-synthesize
-        # so that required external-proof artifacts are populated from children.
+        # Stale or insufficient evidence: fall through and re-synthesize so
+        # accepted child attempts can clear old blocked/failed metadata.
 
     root_task_id = getattr(root_task, "id", None)
     workspace_id = getattr(root_task, "workspace_id", None)
@@ -475,6 +484,7 @@ async def _ensure_root_goal_evidence(
         root_task=root_task,
         child_tasks=child_tasks,
         generated_by_agent_id=generated_by_agent_id,
+        workspace_metadata=workspace_metadata,
     )
     if synthesized is None:
         return
@@ -482,6 +492,65 @@ async def _ensure_root_goal_evidence(
     metadata["goal_evidence"] = synthesized
     root_task.metadata = validate_autonomy_metadata(metadata)
     _ = await task_repo.save(root_task)
+
+
+def _existing_goal_evidence_allows_completion(
+    *,
+    root_task: WorkspaceTask,
+    evidence: Mapping[str, Any],
+    workspace_metadata: Mapping[str, Any] | None,
+) -> bool:
+    try:
+        evaluation = evaluate_completion_evidence(
+            root_metadata=getattr(root_task, "metadata", {}) or {},
+            evidence=evidence,
+            workspace_metadata=workspace_metadata,
+        )
+    except Exception:
+        return False
+    return evaluation.allowed
+
+
+async def _load_workspace_metadata_for_task(
+    *,
+    task_repo: SqlWorkspaceTaskRepository,
+    workspace_id: object,
+) -> dict[str, Any]:
+    if not isinstance(workspace_id, str) or not workspace_id:
+        return {}
+    session = getattr(task_repo, "_session", None)
+    if session is None:
+        return {}
+    try:
+        workspace_result = SqlWorkspaceRepository(session).find_by_id(workspace_id)
+        workspace = await workspace_result if inspect.isawaitable(workspace_result) else None
+    except Exception:
+        logger.warning("workspace_goal_runtime.load_workspace_metadata_failed", exc_info=True)
+        return {}
+    metadata = getattr(workspace, "metadata", None)
+    return dict(metadata) if isinstance(metadata, Mapping) else {}
+
+
+async def _record_root_auto_complete_failure(
+    *,
+    root_task: WorkspaceTask,
+    task_repo: SqlWorkspaceTaskRepository,
+    reason: str,
+) -> None:
+    try:
+        refreshed = await task_repo.find_by_id(root_task.id)
+        effective_root = refreshed or root_task
+        metadata = dict(getattr(effective_root, "metadata", {}) or {})
+        metadata.setdefault(AUTONOMY_SCHEMA_VERSION_KEY, AUTONOMY_SCHEMA_VERSION)
+        metadata[REMEDIATION_STATUS] = "ready_for_completion"
+        metadata[REMEDIATION_SUMMARY] = reason
+        effective_root.metadata = validate_autonomy_metadata(metadata)
+        _ = await task_repo.save(effective_root)
+    except Exception:
+        logger.warning(
+            "auto_complete_ready_root: record failure reason failed",
+            exc_info=True,
+        )
 
 
 async def _increment_root_replan_attempt(
@@ -611,8 +680,13 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
             task_repo=task_repo,
             generated_by_agent_id=leader_agent_id or str(actor_user_id),
         )
-    except Exception:
+    except Exception as exc:
         logger.warning("auto_complete_ready_root: ensure_goal_evidence failed", exc_info=True)
+        await _record_root_auto_complete_failure(
+            root_task=root_task,
+            task_repo=task_repo,
+            reason=f"root auto-complete evidence synthesis failed: {exc}",
+        )
         return None
 
     refreshed = await task_repo.find_by_id(root_task.id)
@@ -641,8 +715,13 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
             reason="workspace_goal_runtime.auto_complete_ready_root",
             authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
         )
-    except Exception:
+    except Exception as exc:
         logger.warning("auto_complete_ready_root: complete_task failed", exc_info=True)
+        await _record_root_auto_complete_failure(
+            root_task=refreshed,
+            task_repo=task_repo,
+            reason=f"root auto-complete failed: {exc}",
+        )
         return None
 
 
@@ -1618,6 +1697,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                         current_attempt_id,
                         leader_feedback=summary or None,
                     )
+                    metadata["last_worker_report_type"] = "completed"
                     metadata["last_attempt_status"] = accepted_attempt.status.value
                     metadata["last_attempt_id"] = accepted_attempt.id
                     metadata[CURRENT_ATTEMPT_ID] = accepted_attempt.id

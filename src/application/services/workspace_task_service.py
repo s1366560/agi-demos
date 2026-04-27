@@ -281,6 +281,8 @@ class WorkspaceTaskService:
                 authority=authority_ctx,
             )
             self._apply_transition(task, status)
+            if status is not WorkspaceTaskStatus.BLOCKED:
+                task.blocker_reason = None
             saved = await self._workspace_task_repo.save(task)
             await self._reconcile_root_goal_if_needed(saved)
             return saved

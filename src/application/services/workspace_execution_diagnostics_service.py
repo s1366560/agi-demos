@@ -231,7 +231,11 @@ class WorkspaceExecutionDiagnosticsService:
                     "reason": task.blocker_reason or self._metadata_str(task, "blocker_reason"),
                 }
             )
-        if latest_attempt is not None and latest_attempt.status in self._BLOCKING_ATTEMPT_STATUSES:
+        if (
+            task.status is not WorkspaceTaskStatus.DONE
+            and latest_attempt is not None
+            and latest_attempt.status in self._BLOCKING_ATTEMPT_STATUSES
+        ):
             rows.append(
                 {
                     "type": "attempt_blocked",

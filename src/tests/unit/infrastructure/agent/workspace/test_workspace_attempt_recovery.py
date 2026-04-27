@@ -238,10 +238,10 @@ class TestStartupSweep:
         assert recovered == 0
         apply_report.assert_not_awaited()
         schedule_tick.assert_not_called()
-        # Orphan attempt must be flipped BLOCKED at the attempt-row level.
+        # Orphan attempt must be finalized at the attempt-row level.
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         saved = service._saves[0]  # type: ignore[attr-defined]
-        assert saved.status == WorkspaceTaskSessionAttemptStatus.BLOCKED
+        assert saved.status == WorkspaceTaskSessionAttemptStatus.CANCELLED
 
     @pytest.mark.asyncio
     async def test_skips_cascade_when_parent_task_already_done(self) -> None:
@@ -265,9 +265,9 @@ class TestStartupSweep:
         apply_report.assert_not_awaited()
         schedule_tick.assert_not_called()
         assert recovered == 0
-        # Attempt itself flipped BLOCKED so next sweep ignores it.
+        # Attempt itself is finalized without surfacing a false blocker.
         assert len(service._saves) == 1  # type: ignore[attr-defined]
-        assert service._saves[0].status == WorkspaceTaskSessionAttemptStatus.BLOCKED  # type: ignore[attr-defined]
+        assert service._saves[0].status == WorkspaceTaskSessionAttemptStatus.CANCELLED  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_skips_cascade_when_parent_task_already_blocked(self) -> None:
@@ -291,6 +291,62 @@ class TestStartupSweep:
         schedule_tick.assert_not_called()
         assert recovered == 0
         assert len(service._saves) == 1  # type: ignore[attr-defined]
+        assert service._saves[0].status == WorkspaceTaskSessionAttemptStatus.BLOCKED  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_awaiting_leader_attempt_reschedules_tick_without_blocking(self) -> None:
+        att = _make_attempt(
+            workspace_task_id="task-1",
+            status=WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
+        )
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            task_lookup={"task-1": "user-1"},
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_not_awaited()
+        schedule_tick.assert_called_once_with("ws-1", "user-1")
+        assert len(service._saves) == 1  # type: ignore[attr-defined]
+        assert (
+            service._saves[0].status  # type: ignore[attr-defined]
+            == WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION
+        )
+
+    @pytest.mark.asyncio
+    async def test_quiet_finalize_does_not_overwrite_terminal_attempt_race(self) -> None:
+        from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+
+        stale_snapshot = _make_attempt(workspace_task_id="task-1")
+        stored = _make_attempt(
+            workspace_task_id="task-1",
+            status=WorkspaceTaskSessionAttemptStatus.ACCEPTED,
+        )
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[stale_snapshot],
+            task_lookup={"task-1": "user-1"},
+            task_status_lookup={"task-1": WorkspaceTaskStatus.DONE},
+            attempt_lookup={stale_snapshot.id: stored},
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 0
+        apply_report.assert_not_awaited()
+        schedule_tick.assert_not_called()
+        assert service._saves == []  # type: ignore[attr-defined]
 
 
 class TestPeriodicSweep:

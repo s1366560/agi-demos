@@ -9,6 +9,7 @@ from src.application.services.workspace_agent_autonomy import (
     build_harness_feature_item,
     build_workspace_harness_contract,
     ensure_goal_completion_allowed_for_workspace,
+    reconcile_root_goal_progress,
     synthesize_goal_evidence_from_children,
     upsert_workspace_harness_feature_ledger,
     validate_autonomy_metadata,
@@ -129,9 +130,10 @@ def test_upsert_workspace_harness_feature_ledger_preserves_existing_features() -
         ],
     )
 
-    assert [
-        item["feature_id"] for item in updated["workspace_harness"]["feature_ledger"]
-    ] == ["feature-001", "feature-002"]
+    assert [item["feature_id"] for item in updated["workspace_harness"]["feature_ledger"]] == [
+        "feature-001",
+        "feature-002",
+    ]
 
 
 @pytest.mark.unit
@@ -354,6 +356,184 @@ def test_child_blocked_worker_report_forces_goal_evidence_failure() -> None:
     assert evidence is not None
     assert evidence["verification_grade"] == "fail"
     assert "child_report_not_completed:child-1:blocked" in evidence["verifications"]
+
+
+@pytest.mark.unit
+def test_accepted_durable_plan_child_ignores_stale_blocked_report_metadata() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        metadata={
+            "evidence_refs": ["artifact:file-1"],
+            "execution_verifications": ["browser_assert:done"],
+            "durable_plan_verdict": "accepted",
+            "last_attempt_status": "awaiting_plan_verification",
+            "last_worker_report_type": "blocked",
+            "last_worker_report_summary": "old sandbox failure",
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[child],
+        generated_by_agent_id="agent-1",
+    )
+
+    assert evidence is not None
+    assert evidence["verification_grade"] == "pass"
+    assert "child_report_not_completed:child-1:blocked" not in evidence["verifications"]
+
+
+@pytest.mark.unit
+def test_workspace_software_profile_synthesis_roots_relative_artifacts() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        metadata={
+            "evidence_refs": ["src/app/page.tsx", "frontend/tests/e2e-smoke.spec.ts"],
+            "execution_verifications": ["worker_report:completed"],
+            "last_worker_report_summary": "UI tests: 3/3 smoke tests passed",
+            "durable_plan_verdict": "accepted",
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[child],
+        generated_by_agent_id="agent-1",
+        workspace_metadata={
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+        },
+    )
+    assert evidence is not None
+    root.metadata["goal_evidence"] = evidence
+
+    ensure_goal_completion_allowed_for_workspace(
+        root,
+        workspace_metadata={
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+        },
+    )
+
+    assert "file_snapshot:/workspace/my-evo/src/app/page.tsx" in evidence["artifacts"]
+    assert "test_run:/workspace/my-evo#worker-summary:child-1" in evidence["verifications"]
+    assert evidence["verification_grade"] == "pass"
+
+
+@pytest.mark.unit
+def test_software_root_can_pass_with_mixed_analysis_and_code_children() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    analysis_child = _child_task(
+        task_id="analysis-child",
+        metadata={
+            "execution_verifications": ["worker_report:completed"],
+            "durable_plan_verdict": "accepted",
+        },
+    )
+    code_child = _child_task(
+        task_id="code-child",
+        metadata={
+            "evidence_refs": ["src/service.ts", "src/service.test.ts"],
+            "execution_verifications": ["worker_report:completed"],
+            "last_worker_report_summary": "Type Check: PASSED\nBuild: SUCCESS",
+            "durable_plan_verdict": "accepted",
+        },
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[analysis_child, code_child],
+        generated_by_agent_id="agent-1",
+        workspace_metadata={
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+        },
+    )
+
+    assert evidence is not None
+    assert evidence["verification_grade"] == "pass"
+    assert "workspace_task_completed:analysis-child" in evidence["verifications"]
+    assert "file_snapshot:/workspace/my-evo/src/service.ts" in evidence["artifacts"]
+
+
+@pytest.mark.unit
+async def test_reconcile_done_root_clears_ready_for_completion_summary() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "remediation_status": "ready_for_completion",
+            "remediation_summary": "root auto-complete failed: stale evidence",
+        }
+    )
+    root.status = WorkspaceTaskStatus.DONE
+    child = _child_task(task_id="child-done", metadata={"task_role": "execution_task"})
+
+    class Repo:
+        async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+            return root if task_id == root.id else None
+
+        async def find_by_root_goal_task_id(
+            self,
+            workspace_id: str,
+            root_goal_task_id: str,
+        ) -> list[WorkspaceTask]:
+            assert workspace_id == "ws-1"
+            assert root_goal_task_id == "root-1"
+            return [child]
+
+        async def save(self, task: WorkspaceTask) -> WorkspaceTask:
+            return task
+
+    reconciled = await reconcile_root_goal_progress(
+        task_repo=Repo(),
+        workspace_id="ws-1",
+        root_goal_task_id="root-1",
+    )
+
+    assert reconciled is not None
+    assert reconciled.metadata["remediation_status"] == "none"
+    assert reconciled.metadata["remediation_summary"] is None
+    assert reconciled.metadata["goal_health"] == "achieved"
 
 
 @pytest.mark.unit

@@ -24,6 +24,7 @@ from src.application.services.workspace_autonomy_profiles import (
     accepted_artifacts_for_profile,
     evaluate_completion_evidence,
     resolve_autonomy_profile,
+    resolve_sandbox_code_root,
 )
 from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
@@ -417,6 +418,7 @@ def synthesize_goal_evidence_from_children(
     root_task: WorkspaceTask,
     child_tasks: list[WorkspaceTask],
     generated_by_agent_id: str,
+    workspace_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     if not child_tasks:
         return None
@@ -435,11 +437,16 @@ def synthesize_goal_evidence_from_children(
     verifications: list[str] = []
     evidence_rich_children = 0
     failed_child_reasons: list[str] = []
-    profile = resolve_autonomy_profile(root_task.metadata)
+    profile = resolve_autonomy_profile(root_task.metadata, workspace_metadata)
+    sandbox_code_root = resolve_sandbox_code_root(root_task.metadata, workspace_metadata)
     for task in child_tasks:
         failed_child_reasons.extend(_child_execution_failure_reasons(task))
         child_artifacts, child_verifications, has_external_evidence = (
-            _collect_child_completion_evidence(task, profile)
+            _collect_child_completion_evidence(
+                task,
+                profile,
+                sandbox_code_root=sandbox_code_root,
+            )
         )
         artifacts.extend(child_artifacts)
         verifications.extend(child_verifications)
@@ -449,12 +456,19 @@ def synthesize_goal_evidence_from_children(
     dedup_artifacts = list(dict.fromkeys(artifacts))
     dedup_verifications = list(dict.fromkeys([*verifications, *failed_child_reasons]))
     accepted_artifacts = accepted_artifacts_for_profile(dedup_artifacts, profile)
-    verification_grade = (
-        "pass"
-        if evidence_rich_children == len(child_tasks)
-        and len(dedup_verifications) >= len(child_tasks) * 2
-        else "warn"
-    )
+    if profile.workspace_type == "software_development":
+        has_required_artifacts = bool(accepted_artifacts)
+        has_enough_verifications = len(dedup_verifications) >= len(child_tasks)
+        verification_grade = (
+            "pass" if has_required_artifacts and has_enough_verifications else "warn"
+        )
+    else:
+        verification_grade = (
+            "pass"
+            if evidence_rich_children == len(child_tasks)
+            and len(dedup_verifications) >= len(child_tasks) * 2
+            else "warn"
+        )
     if profile.evidence.requires_external_artifact and not accepted_artifacts:
         verification_grade = "fail"
     if failed_child_reasons:
@@ -482,6 +496,9 @@ def synthesize_goal_evidence_from_children(
 
 
 def _child_execution_failure_reasons(task: WorkspaceTask) -> list[str]:
+    if _child_has_accepted_completion(task):
+        return []
+
     reasons: list[str] = []
     report_type = task.metadata.get("last_worker_report_type")
     report_summary = task.metadata.get("last_worker_report_summary")
@@ -499,9 +516,22 @@ def _child_execution_failure_reasons(task: WorkspaceTask) -> list[str]:
     return reasons
 
 
+def _child_has_accepted_completion(task: WorkspaceTask) -> bool:
+    if task.status != WorkspaceTaskStatus.DONE:
+        return False
+    metadata = task.metadata if isinstance(task.metadata, dict) else {}
+    return (
+        metadata.get("durable_plan_verdict") == "accepted"
+        or metadata.get("last_attempt_status") == "accepted"
+        or metadata.get("last_leader_adjudication_status") in {"accepted", "done"}
+    )
+
+
 def _collect_child_completion_evidence(
     task: WorkspaceTask,
     profile: WorkspaceAutonomyProfile,
+    *,
+    sandbox_code_root: str | None,
 ) -> tuple[list[str], list[str], bool]:
     artifacts: list[str] = []
     verifications = [f"workspace_task_completed:{task.id}"]
@@ -511,7 +541,14 @@ def _collect_child_completion_evidence(
     if isinstance(evidence_refs, list):
         normalized_refs = [str(ref) for ref in cast(list[Any], evidence_refs) if ref]
     if normalized_refs:
-        artifacts.extend(normalized_refs)
+        artifacts.extend(
+            _normalize_child_artifact_ref(
+                ref,
+                profile=profile,
+                sandbox_code_root=sandbox_code_root,
+            )
+            for ref in normalized_refs
+        )
     elif profile.evidence.allow_internal_task_artifacts:
         artifacts.append(f"workspace_task:{task.id}")
 
@@ -524,7 +561,96 @@ def _collect_child_completion_evidence(
         reason = actor_data.get("reason")
         if isinstance(reason, str) and reason.strip():
             verifications.append(f"actor_reason:{reason.strip()}")
+    summary = task.metadata.get("last_worker_report_summary")
+    if isinstance(summary, str):
+        verifications.extend(
+            _software_summary_verifications(
+                task_id=task.id,
+                summary=summary,
+                sandbox_code_root=sandbox_code_root,
+            )
+        )
     return artifacts, verifications, bool(normalized_refs)
+
+
+def _normalize_child_artifact_ref(
+    ref: str,
+    *,
+    profile: WorkspaceAutonomyProfile,
+    sandbox_code_root: str | None,
+) -> str:
+    normalized = ref.strip()
+    if not normalized:
+        return normalized
+    should_root_relative_ref = (
+        profile.workspace_type == "software_development"
+        and bool(sandbox_code_root)
+        and not normalized.startswith(profile.evidence.required_artifact_prefixes)
+        and not normalized.startswith("workspace_task:")
+        and "://" not in normalized
+    )
+    if not should_root_relative_ref:
+        return normalized
+    if normalized.startswith("/workspace/"):
+        return f"file_snapshot:{normalized}"
+    if normalized.startswith("/"):
+        return normalized
+    return f"file_snapshot:{sandbox_code_root.rstrip('/')}/{normalized.lstrip('/')}"
+
+
+def _software_summary_verifications(
+    *,
+    task_id: str,
+    summary: str,
+    sandbox_code_root: str | None,
+) -> list[str]:
+    if not sandbox_code_root:
+        return []
+    verifications: list[str] = []
+    for line in summary.splitlines():
+        normalized = line.strip().lower()
+        if not normalized:
+            continue
+        if not _line_reports_success(normalized):
+            continue
+        if _line_mentions_software_verification(normalized):
+            verifications.append(f"test_run:{sandbox_code_root}#worker-summary:{task_id}")
+    return list(dict.fromkeys(verifications))
+
+
+def _line_reports_success(line: str) -> bool:
+    return any(
+        marker in line
+        for marker in (
+            "pass",
+            "passed",
+            "success",
+            "successful",
+            "通过",
+            "成功",
+        )
+    )
+
+
+def _line_mentions_software_verification(line: str) -> bool:
+    return any(
+        marker in line
+        for marker in (
+            "test",
+            "测试",
+            "smoke",
+            "e2e",
+            "build",
+            "构建",
+            "type check",
+            "typecheck",
+            "tsc",
+            "pytest",
+            "vitest",
+            "jest",
+            "npm run build",
+        )
+    )
 
 
 def _has_software_test_evidence(
@@ -579,7 +705,12 @@ async def reconcile_root_goal_progress(
     )
     total_count = len(child_tasks)
 
-    if blocked_tasks:
+    if root_task.status == WorkspaceTaskStatus.DONE:
+        goal_health = "achieved"
+        blocked_reason = None
+        remediation_status = "none"
+        remediation_summary = None
+    elif blocked_tasks:
         goal_health = "blocked"
         blocked_reason = blocked_tasks[0].blocker_reason or blocked_tasks[0].title
         remediation_status = "replan_required"

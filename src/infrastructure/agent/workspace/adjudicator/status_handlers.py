@@ -103,6 +103,7 @@ async def _handle_done(
     )
     return AttemptAdjudicationOutcome(
         metadata_updates={
+            "last_worker_report_type": "completed",
             "last_attempt_status": accepted.status.value,
             "last_attempt_id": accepted.id,
             CURRENT_ATTEMPT_ID: accepted.id,

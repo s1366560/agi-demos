@@ -1718,9 +1718,19 @@ async def _resolve_project_sandbox_id(project_id: str) -> str | None:
     # STEP 2: If found in DB, verify container exists
     if project_sandbox_id:
         container_ok = await _verify_sandbox_container(project_sandbox_id)
-        if not container_ok:
-            return None
-        return project_sandbox_id
+        if container_ok:
+            return project_sandbox_id
+        discovered_id = await _discover_sandbox_from_docker(project_id)
+        if discovered_id:
+            logger.warning(
+                "[AgentWorker] DB sandbox %s is unavailable; using existing Docker "
+                "sandbox %s for project %s",
+                project_sandbox_id,
+                discovered_id,
+                project_id,
+            )
+            return discovered_id
+        return None
 
     # STEP 3: If not in DB, fall back to Docker discovery
     return await _discover_sandbox_from_docker(project_id)
@@ -1752,6 +1762,19 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
 
     Returns True if container is available, False otherwise.
     """
+    if _mcp_sandbox_adapter is None:
+        return False
+
+    container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)  # type: ignore[union-attr]
+    if not container_exists:
+        active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
+        active.pop(project_sandbox_id, None)
+        logger.warning(
+            f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
+            f"doesn't exist or is not running."
+        )
+        return False
+
     # Sync from Docker to ensure adapter has the container in its cache
     if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
         logger.info(
@@ -1760,16 +1783,14 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
         )
         await _mcp_sandbox_adapter.sync_from_docker()  # type: ignore[union-attr]
 
-    # Verify container actually exists after sync
+    # Verify adapter state after sync. ``container_exists`` above is a real
+    # Docker check, so stale in-memory entries cannot mask a removed container.
     if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
-        # Container might have been deleted - check if it's running in Docker
-        container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)  # type: ignore[union-attr]
-        if not container_exists:
-            logger.warning(
-                f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
-                f"doesn't exist. Sandbox will be recreated by API on next access."
-            )
-            return False
+        logger.warning(
+            f"[AgentWorker] Sandbox {project_sandbox_id} exists in Docker but "
+            f"could not be synced into adapter state."
+        )
+        return False
 
     return True
 
@@ -1778,10 +1799,7 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
     """Fall back to Docker discovery for backwards compatibility."""
     import asyncio
 
-    logger.info(
-        f"[AgentWorker] No sandbox association in DB for project {project_id}, "
-        f"checking Docker directly..."
-    )
+    logger.info(f"[AgentWorker] Checking Docker directly for project sandbox {project_id}...")
     loop = asyncio.get_event_loop()
 
     # List all containers with memstack.sandbox label
