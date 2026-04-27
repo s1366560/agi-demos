@@ -36,18 +36,17 @@ STORAGE_ROOT = Path("data/workspace-files")
 
 def _validate_path(path: str) -> str:
     """Validate and normalize a file path. Prevent traversal attacks."""
-    normalized = os.path.normpath(path).replace("\\", "/")
-    if ".." in normalized.split("/"):
+    raw_path = (path or "/").replace("\\", "/").strip()
+    raw_parts = [part for part in raw_path.split("/") if part not in {"", "."}]
+    if any(part == ".." for part in raw_parts):
         raise ValueError("Path traversal detected")
-    parts = normalized.strip("/").split("/")
-    for part in parts:
+    for part in raw_parts:
         if part.lower() in BLOCKED_SEGMENTS:
             raise ValueError(f"Blocked path segment: {part}")
-    if not normalized.startswith("/"):
-        normalized = "/" + normalized
-    if not normalized.endswith("/"):
-        normalized += "/"
-    return normalized
+    if not raw_parts:
+        return "/"
+    normalized = os.path.normpath("/".join(raw_parts)).replace("\\", "/")
+    return f"/{normalized.strip('/')}/"
 
 
 def _validate_filename(filename: str) -> str:
@@ -58,7 +57,14 @@ def _validate_filename(filename: str) -> str:
         raise ValueError("Invalid filename")
     if "\x00" in safe_name:
         raise ValueError("Invalid filename")
+    if safe_name.lower() in BLOCKED_SEGMENTS:
+        raise ValueError(f"Blocked path segment: {safe_name}")
     return safe_name
+
+
+def _join_child_path(parent_path: str, name: str) -> str:
+    """Build the canonical parent path for a child directory."""
+    return _validate_path(f"{parent_path.rstrip('/')}/{name}")
 
 
 def _resolve_storage_path(workspace_id: str, storage_key: str) -> Path:
@@ -104,22 +110,25 @@ class BlackboardFileService:
         project_id: str,
         workspace_id: str,
         actor_user_id: str,
+        actor_user_name: str | None,
         parent_path: str,
         name: str,
     ) -> BlackboardFile:
         workspace = await self._require_workspace_scope(tenant_id, project_id, workspace_id)
         await self._require_editor(workspace.id, actor_user_id)
         safe_path = _validate_path(parent_path)
+        safe_name = _validate_filename(name.strip())
+        await self._ensure_name_available(workspace.id, safe_path, safe_name)
 
         directory = BlackboardFile(
             id=BlackboardFile.generate_id(),
             workspace_id=workspace.id,
             parent_path=safe_path,
-            name=name.strip(),
+            name=safe_name,
             is_directory=True,
             uploader_type="user",
             uploader_id=actor_user_id,
-            uploader_name=actor_user_id,
+            uploader_name=actor_user_name or actor_user_id,
         )
         return await self._file_repo.save(directory)
 
@@ -142,6 +151,7 @@ class BlackboardFileService:
             raise ValueError(f"File exceeds maximum size of {MAX_FILE_SIZE} bytes")
 
         safe_filename = _validate_filename(filename)
+        await self._ensure_name_available(workspace.id, safe_path, safe_filename)
         content_type = mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
         file_id = BlackboardFile.generate_id()
         storage_key = f"{file_id}/{safe_filename}"
@@ -173,7 +183,7 @@ class BlackboardFileService:
         workspace_id: str,
         actor_user_id: str,
         file_id: str,
-    ) -> tuple[bytes, str]:
+    ) -> tuple[bytes, str, str]:
         workspace = await self._require_workspace_scope(tenant_id, project_id, workspace_id)
         await self._require_member(workspace.id, actor_user_id)
         bb_file = await self._file_repo.find_by_id(file_id)
@@ -185,7 +195,7 @@ class BlackboardFileService:
         storage_path = _resolve_storage_path(workspace_id, bb_file.storage_key)
         if not storage_path.exists():
             raise ValueError("File content not found on disk")
-        return storage_path.read_bytes(), bb_file.content_type
+        return storage_path.read_bytes(), bb_file.content_type, bb_file.name
 
     async def delete_file(
         self,
@@ -201,7 +211,12 @@ class BlackboardFileService:
         if bb_file is None or bb_file.workspace_id != workspace_id:
             raise ValueError("File not found")
 
-        if not bb_file.is_directory and bb_file.storage_key:
+        if bb_file.is_directory:
+            child_path = _join_child_path(bb_file.parent_path, bb_file.name)
+            children = await self._file_repo.list_by_workspace(workspace.id, child_path)
+            if children:
+                raise ValueError("Directory is not empty")
+        elif bb_file.storage_key:
             storage_path = _resolve_storage_path(workspace_id, bb_file.storage_key)
             if storage_path.exists():
                 storage_path.unlink(missing_ok=True)
@@ -210,6 +225,11 @@ class BlackboardFileService:
                 shutil.rmtree(parent_dir, ignore_errors=True)
 
         return await self._file_repo.delete(file_id)
+
+    async def _ensure_name_available(self, workspace_id: str, parent_path: str, name: str) -> None:
+        siblings = await self._file_repo.list_by_workspace(workspace_id, parent_path)
+        if any(item.name == name for item in siblings):
+            raise ValueError("A file or folder with this name already exists")
 
     async def _require_workspace_scope(
         self, tenant_id: str, project_id: str, workspace_id: str

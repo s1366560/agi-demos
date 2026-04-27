@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import (
     APIRouter,
@@ -41,6 +42,7 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard",
     tags=["blackboard"],
 )
+
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     app_container = request.app.state.container
@@ -387,6 +389,12 @@ def _to_file_response(f: BlackboardFile) -> BlackboardFileResponse:
     )
 
 
+def _current_user_label(current_user: User) -> str:
+    full_name = getattr(current_user, "full_name", None)
+    email = getattr(current_user, "email", None)
+    return full_name or email or current_user.id
+
+
 @router.get("/files", response_model=BlackboardFileListResponse)
 async def list_files(
     tenant_id: str,
@@ -432,12 +440,14 @@ async def create_directory(
             project_id=project_id,
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
+            actor_user_name=_current_user_label(current_user),
             parent_path=payload.parent_path,
             name=payload.name,
         )
         await db.commit()
         return _to_file_response(directory)
     except Exception as exc:
+        await db.rollback()
         raise _map_error(exc) from exc
 
 
@@ -464,7 +474,7 @@ async def upload_file(
             project_id=project_id,
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
-            actor_user_name=current_user.full_name or current_user.email,
+            actor_user_name=_current_user_label(current_user),
             parent_path=parent_path,
             filename=file.filename or "unnamed",
             content=content,
@@ -472,6 +482,7 @@ async def upload_file(
         await db.commit()
         return _to_file_response(bb_file)
     except Exception as exc:
+        await db.rollback()
         raise _map_error(exc) from exc
 
 
@@ -487,7 +498,7 @@ async def download_file(
 ) -> Response:
     service = _file_service_from_request(request, db)
     try:
-        content, content_type = await service.read_file(
+        content, content_type, filename = await service.read_file(
             tenant_id=tenant_id,
             project_id=project_id,
             workspace_id=workspace_id,
@@ -497,7 +508,7 @@ async def download_file(
         return Response(
             content=content,
             media_type=content_type,
-            headers={"Content-Disposition": "attachment"},
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
         )
     except Exception as exc:
         raise _map_error(exc) from exc
@@ -525,6 +536,7 @@ async def delete_file(
         await db.commit()
         return {"deleted": deleted}
     except Exception as exc:
+        await db.rollback()
         raise _map_error(exc) from exc
 
 

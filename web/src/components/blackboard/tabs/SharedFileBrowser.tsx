@@ -11,6 +11,7 @@ import {
   FolderPlus,
   Image,
   Loader2,
+  RefreshCw,
   Trash2,
   Upload,
   X,
@@ -18,6 +19,9 @@ import {
 
 import { blackboardFileService } from '@/services/blackboardFileService';
 import type { BlackboardFileItem } from '@/services/blackboardFileService';
+import { parseError } from '@/services/client/ApiError';
+
+import { useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { OwnedSurfaceBadge } from '../OwnedSurfaceBadge';
 
@@ -47,6 +51,27 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  const parsed = parseError(error);
+  return parsed.message || fallback;
+}
+
+function isValidDirectoryName(name: string): boolean {
+  const trimmed = name.trim();
+  return (
+    Boolean(trimmed) &&
+    !trimmed.includes('/') &&
+    !trimmed.includes('\\') &&
+    trimmed !== '.' &&
+    trimmed !== '..'
+  );
+}
+
+function buildChildPath(parentPath: string, childName: string): string {
+  const normalizedParent = parentPath.endsWith('/') ? parentPath : `${parentPath}/`;
+  return `${normalizedParent}${childName}/`;
+}
+
 function fileIcon(item: BlackboardFileItem) {
   if (item.is_directory) return <Folder className="h-4 w-4 text-primary" />;
   if (item.content_type.startsWith('image/')) return <Image className="h-4 w-4 text-warning" />;
@@ -61,9 +86,11 @@ function fileIcon(item: BlackboardFileItem) {
 
 export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFileBrowserProps) {
   const { t } = useTranslation();
+  const message = useLazyMessage();
   const [currentPath, setCurrentPath] = useState('/');
   const [files, setFiles] = useState<BlackboardFileItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showMkdir, setShowMkdir] = useState(false);
   const [newDirName, setNewDirName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -82,15 +109,18 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         tenantId,
         projectId,
         workspaceId,
-        currentPath,
+        currentPath
       );
       setFiles(items);
+      setErrorMessage(null);
     } catch (err) {
-      console.error('Failed to fetch files:', err);
+      setErrorMessage(
+        getErrorMessage(err, t('blackboard.files.errors.load', 'Failed to load files'))
+      );
     } finally {
       setLoading(false);
     }
-  }, [tenantId, projectId, workspaceId, currentPath]);
+  }, [tenantId, projectId, workspaceId, currentPath, t]);
 
   useEffect(() => {
     void fetchFiles();
@@ -109,7 +139,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
 
   const navigateToDir = (item: BlackboardFileItem) => {
     if (item.is_directory) {
-      setCurrentPath(currentPath + item.name + '/');
+      setCurrentPath(buildChildPath(currentPath, item.name));
     }
   };
 
@@ -118,7 +148,15 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   };
 
   const handleMkdir = async () => {
-    if (!newDirName.trim()) return;
+    if (!isValidDirectoryName(newDirName)) {
+      const errorText = t(
+        'blackboard.files.errors.invalidFolder',
+        'Folder name cannot contain slashes.'
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
+      return;
+    }
     setCreating(true);
     try {
       await blackboardFileService.createDirectory(
@@ -126,29 +164,56 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         projectId,
         workspaceId,
         currentPath,
-        newDirName.trim(),
+        newDirName.trim()
       );
       setNewDirName('');
       setShowMkdir(false);
+      setErrorMessage(null);
+      void message?.success(t('blackboard.files.folderCreated', 'Folder created'));
       await fetchFiles();
     } catch (err) {
-      console.error('Failed to create directory:', err);
+      const errorText = getErrorMessage(
+        err,
+        t('blackboard.files.errors.createFolder', 'Failed to create folder')
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
     } finally {
       setCreating(false);
     }
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadFiles = async (selectedFiles: File[]) => {
+    if (selectedFiles.length === 0) return;
     setUploading(true);
     try {
-      await blackboardFileService.uploadFile(tenantId, projectId, workspaceId, currentPath, file);
+      for (const file of selectedFiles) {
+        await blackboardFileService.uploadFile(tenantId, projectId, workspaceId, currentPath, file);
+      }
+      setErrorMessage(null);
+      void message?.success(
+        t('blackboard.files.uploaded', 'Uploaded {{count}} file(s)', {
+          count: selectedFiles.length,
+        })
+      );
       await fetchFiles();
     } catch (err) {
-      console.error('Failed to upload file:', err);
+      const errorText = getErrorMessage(
+        err,
+        t('blackboard.files.errors.upload', 'Failed to upload file')
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files ?? []);
+    try {
+      await uploadFiles(selectedFiles);
+    } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -159,26 +224,44 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         tenantId,
         projectId,
         workspaceId,
-        item.id,
+        item.id
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = item.name;
       a.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 0);
     } catch (err) {
-      console.error('Failed to download:', err);
+      const errorText = getErrorMessage(
+        err,
+        t('blackboard.files.errors.download', 'Failed to download file')
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
     }
   };
 
   const handleDelete = async (item: BlackboardFileItem) => {
+    const confirmed = window.confirm(
+      t('blackboard.files.deleteConfirm', 'Delete {{name}}?', { name: item.name })
+    );
+    if (!confirmed) return;
     setDeletingId(item.id);
     try {
       await blackboardFileService.deleteFile(tenantId, projectId, workspaceId, item.id);
+      setErrorMessage(null);
+      void message?.success(t('blackboard.files.deleted', 'Deleted {{name}}', { name: item.name }));
       await fetchFiles();
     } catch (err) {
-      console.error('Failed to delete:', err);
+      const errorText = getErrorMessage(
+        err,
+        t('blackboard.files.errors.delete', 'Failed to delete file')
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
     } finally {
       setDeletingId(null);
     }
@@ -194,7 +277,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         tenantId,
         projectId,
         workspaceId,
-        item.id,
+        item.id
       );
       if (item.content_type.startsWith('image/') || item.content_type === 'application/pdf') {
         setPreviewContent(URL.createObjectURL(blob));
@@ -202,7 +285,12 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         setPreviewContent(await blob.text());
       }
     } catch (err) {
-      console.error('Failed to load preview:', err);
+      const errorText = getErrorMessage(
+        err,
+        t('blackboard.files.errors.preview', 'Failed to load preview')
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
     } finally {
       setPreviewLoading(false);
     }
@@ -239,24 +327,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
     e.stopPropagation();
     setIsDragOver(false);
     const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length === 0) return;
-    setUploading(true);
-    try {
-      for (const file of droppedFiles) {
-        await blackboardFileService.uploadFile(
-          tenantId,
-          projectId,
-          workspaceId,
-          currentPath,
-          file,
-        );
-      }
-      await fetchFiles();
-    } catch (err) {
-      console.error('Failed to upload dropped files:', err);
-    } finally {
-      setUploading(false);
-    }
+    await uploadFiles(droppedFiles);
   };
 
   return (
@@ -271,6 +342,24 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         fallbackLabel="blackboard file workspace"
       />
 
+      {errorMessage && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-md border border-error/25 bg-error/10 px-3 py-2 text-sm text-status-text-error dark:text-status-text-error-dark sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="break-words">{errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => void fetchFiles()}
+            disabled={loading}
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-error/25 bg-surface-light px-3 text-sm font-medium transition hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
+      )}
+
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-muted">
         {breadcrumbs.map((crumb, i) => (
@@ -278,7 +367,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
             {i > 0 && <ChevronRight className="h-3 w-3" />}
             <button
               type="button"
-              onClick={() => { navigateTo(crumb.path); }}
+              onClick={() => {
+                navigateTo(crumb.path);
+              }}
               className={`rounded px-1.5 py-0.5 transition hover:bg-surface-muted dark:hover:bg-surface-elevated ${
                 i === breadcrumbs.length - 1
                   ? 'font-medium text-text-primary dark:text-text-inverse'
@@ -295,7 +386,10 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => { setShowMkdir(true); }}
+          onClick={() => {
+            setShowMkdir(true);
+          }}
+          aria-label={t('blackboard.files.newFolder', 'New Folder')}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text-secondary transition hover:bg-surface-muted dark:border-border-dark dark:text-text-muted dark:hover:bg-surface-elevated"
         >
           <FolderPlus className="h-4 w-4" />
@@ -305,6 +399,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
+          aria-label={t('blackboard.files.upload', 'Upload')}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border-light px-3 py-1.5 text-sm text-text-secondary transition hover:bg-surface-muted disabled:opacity-50 dark:border-border-dark dark:text-text-muted dark:hover:bg-surface-elevated"
         >
           {uploading ? (
@@ -317,6 +412,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           onChange={(event) => {
             void handleUpload(event);
@@ -330,19 +426,22 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           <input
             type="text"
             value={newDirName}
-            onChange={(e) => { setNewDirName(e.target.value); }}
+            onChange={(e) => {
+              setNewDirName(e.target.value);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleMkdir();
               if (e.key === 'Escape') setShowMkdir(false);
             }}
             placeholder={t('blackboard.files.folderName', 'Folder name')}
             autoFocus
+            aria-label={t('blackboard.files.folderName', 'Folder name')}
             className="rounded-md border border-border-light bg-surface-light px-3 py-1.5 text-sm text-text-primary outline-none focus:ring-1 focus:ring-primary dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse"
           />
           <button
             type="button"
             onClick={() => void handleMkdir()}
-            disabled={creating || !newDirName.trim()}
+            disabled={creating || !isValidDirectoryName(newDirName)}
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:opacity-50"
           >
             {creating ? (
@@ -374,7 +473,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           <div className="text-sm text-text-secondary dark:text-text-muted">
             {t(
               'blackboard.files.empty',
-              'No files yet. Upload a file or create a folder to get started.',
+              'No files yet. Upload a file or create a folder to get started.'
             )}
           </div>
         </div>
@@ -439,6 +538,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                         <button
                           type="button"
                           onClick={() => void handleDownload(item)}
+                          aria-label={t('blackboard.files.downloadNamed', 'Download {{name}}', {
+                            name: item.name,
+                          })}
                           className="rounded p-1.5 text-text-secondary transition hover:bg-surface-muted hover:text-text-primary dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse"
                           title={t('blackboard.files.download', 'Download')}
                         >
@@ -449,6 +551,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                         type="button"
                         onClick={() => void handleDelete(item)}
                         disabled={deletingId === item.id}
+                        aria-label={t('blackboard.files.deleteNamed', 'Delete {{name}}', {
+                          name: item.name,
+                        })}
                         className="rounded p-1.5 text-text-secondary transition hover:bg-error/10 hover:text-error dark:text-text-muted"
                         title={t('blackboard.files.delete', 'Delete')}
                       >
@@ -498,6 +603,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                 <button
                   type="button"
                   onClick={() => void handleDownload(previewFile)}
+                  aria-label={t('blackboard.files.downloadNamed', 'Download {{name}}', {
+                    name: previewFile.name,
+                  })}
                   className="rounded-lg px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-muted dark:text-text-muted dark:hover:bg-surface-elevated"
                 >
                   {t('blackboard.files.download', 'Download')}
@@ -505,6 +613,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                 <button
                   type="button"
                   onClick={closePreview}
+                  aria-label={t('common.close', 'Close')}
                   className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-muted dark:text-text-muted dark:hover:bg-surface-elevated"
                 >
                   <X className="h-5 w-5" />
@@ -536,10 +645,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
               ) : (
                 <div className="py-12 text-center">
                   <p className="text-text-secondary dark:text-text-muted">
-                    {t(
-                      'blackboard.files.noPreview',
-                      'Preview not available for this file type.',
-                    )}
+                    {t('blackboard.files.noPreview', 'Preview not available for this file type.')}
                   </p>
                   <button
                     type="button"

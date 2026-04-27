@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildWorkspaceBlackboardRedirectQuery,
   clearBlackboardAutoOpenSearchParam,
+  resolveBlackboardTab,
   resolveRequestedWorkspaceSelection,
+  syncBlackboardTabSearchParam,
   syncBlackboardWorkspaceSearchParams,
 } from '@/pages/project/blackboardRouteUtils';
 
@@ -62,9 +64,9 @@ describe('blackboardRouteUtils', () => {
   });
 
   it('only applies URL-driven workspace changes once per requested id', () => {
-    expect(
-      resolveRequestedWorkspaceSelection('ws-2', null, [{ id: 'ws-1' }, { id: 'ws-2' }])
-    ).toBe('ws-2');
+    expect(resolveRequestedWorkspaceSelection('ws-2', null, [{ id: 'ws-1' }, { id: 'ws-2' }])).toBe(
+      'ws-2'
+    );
     expect(
       resolveRequestedWorkspaceSelection('ws-2', 'ws-2', [{ id: 'ws-1' }, { id: 'ws-2' }])
     ).toBeNull();
@@ -73,5 +75,12 @@ describe('blackboardRouteUtils', () => {
   it('only adds the workspace id to redirect URLs when one exists', () => {
     expect(buildWorkspaceBlackboardRedirectQuery('ws-2')).toBe('workspaceId=ws-2');
     expect(buildWorkspaceBlackboardRedirectQuery()).toBe('');
+  });
+
+  it('supports deep-linking directly to the files tab', () => {
+    expect(resolveBlackboardTab(new URLSearchParams('tab=files'))).toBe('files');
+    expect(
+      syncBlackboardTabSearchParam(new URLSearchParams('workspaceId=ws-1'), 'files')?.toString()
+    ).toBe('workspaceId=ws-1&tab=files');
   });
 });

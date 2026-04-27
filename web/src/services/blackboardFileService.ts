@@ -19,7 +19,9 @@ interface FileListResponse {
 }
 
 function basePath(tenantId: string, projectId: string, workspaceId: string): string {
-  return `/tenants/${tenantId}/projects/${projectId}/workspaces/${workspaceId}/blackboard`;
+  return `/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(
+    projectId
+  )}/workspaces/${encodeURIComponent(workspaceId)}/blackboard`;
 }
 
 export const blackboardFileService = {
@@ -27,11 +29,11 @@ export const blackboardFileService = {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    parentPath = '/',
+    parentPath = '/'
   ): Promise<BlackboardFileItem[]> {
     const res = await httpClient.get<FileListResponse>(
       `${basePath(tenantId, projectId, workspaceId)}/files`,
-      { params: { parent_path: parentPath } },
+      { params: { parent_path: parentPath } }
     );
     return res.items;
   },
@@ -41,11 +43,11 @@ export const blackboardFileService = {
     projectId: string,
     workspaceId: string,
     parentPath: string,
-    name: string,
+    name: string
   ): Promise<BlackboardFileItem> {
     return httpClient.post<BlackboardFileItem>(
       `${basePath(tenantId, projectId, workspaceId)}/files/mkdir`,
-      { parent_path: parentPath, name },
+      { parent_path: parentPath, name }
     );
   },
 
@@ -54,7 +56,7 @@ export const blackboardFileService = {
     projectId: string,
     workspaceId: string,
     parentPath: string,
-    file: File,
+    file: File
   ): Promise<BlackboardFileItem> {
     const formData = new FormData();
     formData.append('file', file);
@@ -62,7 +64,7 @@ export const blackboardFileService = {
     return httpClient.post<BlackboardFileItem>(
       `${basePath(tenantId, projectId, workspaceId)}/files/upload`,
       formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
+      { headers: { 'Content-Type': 'multipart/form-data' } }
     );
   },
 
@@ -70,11 +72,11 @@ export const blackboardFileService = {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    fileId: string,
+    fileId: string
   ): Promise<Blob> {
     return httpClient.get<Blob>(
-      `${basePath(tenantId, projectId, workspaceId)}/files/${fileId}/download`,
-      { responseType: 'blob' },
+      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}/download`,
+      { responseType: 'blob' }
     );
   },
 
@@ -82,10 +84,10 @@ export const blackboardFileService = {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    fileId: string,
+    fileId: string
   ): Promise<boolean> {
     const res = await httpClient.delete<{ deleted: boolean }>(
-      `${basePath(tenantId, projectId, workspaceId)}/files/${fileId}`,
+      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}`
     );
     return res.deleted;
   },

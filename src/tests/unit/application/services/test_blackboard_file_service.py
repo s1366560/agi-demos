@@ -102,6 +102,137 @@ class TestBlackboardFileServiceSecurity:
 
         file_repo.save.assert_not_awaited()
 
+    async def test_create_directory_rejects_path_traversal_name(self) -> None:
+        file_repo = AsyncMock()
+        workspace_repo = AsyncMock()
+        workspace_member_repo = AsyncMock()
+        workspace_repo.find_by_id.return_value = _make_workspace()
+        workspace_member_repo.find_by_workspace_and_user.return_value = SimpleNamespace(
+            role=WorkspaceRole.EDITOR
+        )
+
+        service = BlackboardFileService(
+            file_repo=file_repo,
+            workspace_repo=workspace_repo,
+            workspace_member_repo=workspace_member_repo,
+        )
+
+        with pytest.raises(ValueError, match="Invalid filename"):
+            await service.create_directory(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                actor_user_id="user-1",
+                actor_user_name="User One",
+                parent_path="/",
+                name="../escape",
+            )
+
+        file_repo.save.assert_not_awaited()
+
+    async def test_create_directory_uses_display_name_and_checks_duplicates(self) -> None:
+        file_repo = AsyncMock()
+        workspace_repo = AsyncMock()
+        workspace_member_repo = AsyncMock()
+        workspace_repo.find_by_id.return_value = _make_workspace()
+        workspace_member_repo.find_by_workspace_and_user.return_value = SimpleNamespace(
+            role=WorkspaceRole.EDITOR
+        )
+        file_repo.list_by_workspace.return_value = []
+        file_repo.save.side_effect = lambda directory: directory
+
+        service = BlackboardFileService(
+            file_repo=file_repo,
+            workspace_repo=workspace_repo,
+            workspace_member_repo=workspace_member_repo,
+        )
+
+        directory = await service.create_directory(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            actor_user_id="user-1",
+            actor_user_name="User One",
+            parent_path="/docs",
+            name="notes",
+        )
+
+        assert directory.parent_path == "/docs/"
+        assert directory.name == "notes"
+        assert directory.uploader_name == "User One"
+        file_repo.list_by_workspace.assert_awaited_once_with("workspace-1", "/docs/")
+
+    async def test_upload_file_rejects_duplicate_name(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(service_module, "STORAGE_ROOT", tmp_path)
+
+        file_repo = AsyncMock()
+        workspace_repo = AsyncMock()
+        workspace_member_repo = AsyncMock()
+        workspace_repo.find_by_id.return_value = _make_workspace()
+        workspace_member_repo.find_by_workspace_and_user.return_value = SimpleNamespace(
+            role=WorkspaceRole.EDITOR
+        )
+        file_repo.list_by_workspace.return_value = [SimpleNamespace(name="report.txt")]
+
+        service = BlackboardFileService(
+            file_repo=file_repo,
+            workspace_repo=workspace_repo,
+            workspace_member_repo=workspace_member_repo,
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            await service.upload_file(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                actor_user_id="user-1",
+                actor_user_name="User One",
+                parent_path="/",
+                filename="report.txt",
+                content=b"duplicate",
+            )
+
+        file_repo.save.assert_not_awaited()
+        assert list(tmp_path.rglob("*")) == []
+
+    async def test_delete_directory_rejects_non_empty_directory(self) -> None:
+        file_repo = AsyncMock()
+        workspace_repo = AsyncMock()
+        workspace_member_repo = AsyncMock()
+        workspace_repo.find_by_id.return_value = _make_workspace()
+        workspace_member_repo.find_by_workspace_and_user.return_value = SimpleNamespace(
+            role=WorkspaceRole.EDITOR
+        )
+        file_repo.find_by_id.return_value = SimpleNamespace(
+            workspace_id="workspace-1",
+            is_directory=True,
+            parent_path="/",
+            name="docs",
+        )
+        file_repo.list_by_workspace.return_value = [SimpleNamespace(name="report.txt")]
+
+        service = BlackboardFileService(
+            file_repo=file_repo,
+            workspace_repo=workspace_repo,
+            workspace_member_repo=workspace_member_repo,
+        )
+
+        with pytest.raises(ValueError, match="Directory is not empty"):
+            await service.delete_file(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                actor_user_id="user-1",
+                file_id="dir-1",
+            )
+
+        file_repo.list_by_workspace.assert_awaited_once_with("workspace-1", "/docs/")
+        file_repo.delete.assert_not_awaited()
+
     async def test_read_file_rejects_invalid_persisted_storage_key(
         self,
         tmp_path: Path,
