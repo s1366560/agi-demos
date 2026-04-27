@@ -745,6 +745,7 @@ class TestWorkspaceGoalRuntime:
                         '"changed_files":["src/ui.tsx"],"test_commands":["npm test"]}'
                     ),
                     artifacts=["artifact:trace-1"],
+                    verifications=["preflight:read-progress", "preflight:git-status"],
                     leader_agent_id="leader-agent",
                 )
 
@@ -760,6 +761,8 @@ class TestWorkspaceGoalRuntime:
             ]
             assert metadata["execution_verifications"] == [
                 "worker_report:started",
+                "preflight:read-progress",
+                "preflight:git-status",
                 "browser_assert:landing_page",
                 "screenshot_captured",
                 "test_run:npm test",

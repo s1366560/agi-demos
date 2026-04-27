@@ -82,6 +82,7 @@ class TestApplyWorkerReport:
             report_type="success",
             summary="done",
             artifacts=["a1"],
+            verifications=["preflight:git-status"],
             leader_agent_id="leader",
         )
         stub.assert_awaited_once_with(
@@ -95,6 +96,7 @@ class TestApplyWorkerReport:
             report_type="success",
             summary="done",
             artifacts=["a1"],
+            verifications=["preflight:git-status"],
             leader_agent_id="leader",
             report_id=None,
         )

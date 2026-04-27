@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +11,7 @@ from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskStatus,
 )
+from src.domain.model.workspace.wtp_envelope import WtpVerb
 from src.infrastructure.agent.workspace import worker_launch as wl
 from src.infrastructure.agent.workspace.code_context import (
     AgentsInstructionFile,
@@ -73,6 +75,65 @@ class TestConversationId:
         assert a != b
 
 
+class TestWorkerLaunchHeartbeat:
+    @pytest.mark.asyncio
+    async def test_publish_worker_launch_heartbeat_emits_wtp_liveness(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish = AsyncMock(return_value="1-0")
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
+            publish,
+        )
+
+        await wl._publish_worker_launch_heartbeat(
+            workspace_id="ws-1",
+            task_id="task-1",
+            attempt_id="attempt-1",
+            root_goal_task_id="root-1",
+            conversation_id="conv-1",
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+        )
+
+        publish.assert_awaited_once()
+        envelope = publish.await_args.args[0]
+        assert envelope.verb is WtpVerb.TASK_HEARTBEAT
+        assert envelope.workspace_id == "ws-1"
+        assert envelope.task_id == "task-1"
+        assert envelope.attempt_id == "attempt-1"
+        assert envelope.root_goal_task_id == "root-1"
+        assert envelope.extra_metadata["worker_conversation_id"] == "conv-1"
+        assert envelope.extra_metadata["worker_agent_id"] == "worker-1"
+        assert envelope.extra_metadata["leader_agent_id"] == "leader-1"
+        assert envelope.extra_metadata["actor_user_id"] == "user-1"
+        assert envelope.extra_metadata["source"] == "workspace_worker_launch"
+
+    @pytest.mark.asyncio
+    async def test_publish_worker_launch_heartbeat_skips_without_attempt_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
+            publish,
+        )
+
+        await wl._publish_worker_launch_heartbeat(
+            workspace_id="ws-1",
+            task_id="task-1",
+            attempt_id=None,
+            root_goal_task_id="root-1",
+            conversation_id="conv-1",
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+        )
+
+        publish.assert_not_awaited()
+
+
 class TestBuildBrief:
     def test_includes_binding_block_and_title(self) -> None:
         task = _make_task(
@@ -131,6 +192,10 @@ class TestBuildBrief:
         assert system_context["workspace_binding"]["attempt_id"] == "att-2"
         assert system_context["additional_instructions"] == "Be brief."
         assert "native tool-call" in system_context["tool_protocol"]["instruction"]
+        assert system_context["artifact_write_policy"]["max_single_write_chars"] == 12000
+        assert "smaller chunks" in " ".join(
+            system_context["artifact_write_policy"]["instructions"]
+        )
 
     def test_system_context_includes_harness_preflight_contract(self) -> None:
         task = _make_task(

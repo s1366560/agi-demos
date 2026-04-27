@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import shlex
+import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -23,6 +24,8 @@ from src.application.services.workspace_task_service import (
 from src.application.services.workspace_task_session_attempt_service import (
     WorkspaceTaskSessionAttemptService,
 )
+from src.domain.model.agent.agent_definition import Agent
+from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskPriority,
@@ -48,6 +51,9 @@ from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
+    SqlAgentRegistryRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
@@ -101,6 +107,63 @@ logger = logging.getLogger(__name__)
 
 WorktreePreparer = Callable[[AsyncSession, str, WorkspaceTask, str | None], Awaitable[str | None]]
 
+_AUTO_TEAM_AGENT_TOOLS = [
+    "*",
+]
+_AUTO_TEAM_TOOL_NAMES = [
+    "Read",
+    "Write",
+    "Edit",
+    "Grep",
+    "Glob",
+    "Bash",
+    "workspace_report_progress",
+    "workspace_report_complete",
+]
+_AUTO_TEAM_ROLES = (
+    {
+        "key": "architect",
+        "display_name": "Workspace Architect",
+        "label": "Architect",
+        "description": "Researches requirements and produces architecture or implementation plans.",
+        "capabilities": [
+            "architecture",
+            "research",
+            "documentation",
+            "planning",
+            "web_search",
+        ],
+    },
+    {
+        "key": "builder",
+        "display_name": "Workspace Builder",
+        "label": "Builder",
+        "description": "Implements backend, frontend, tests, and project artifacts.",
+        "capabilities": [
+            "software_development",
+            "backend",
+            "frontend",
+            "codegen",
+            "file_edit",
+            "shell",
+            "testing",
+        ],
+    },
+    {
+        "key": "verifier",
+        "display_name": "Workspace Verifier",
+        "label": "Verifier",
+        "description": "Runs verification, browser checks, and evidence synthesis.",
+        "capabilities": [
+            "verification",
+            "browser_e2e",
+            "testing",
+            "evidence",
+            "shell",
+        ],
+    },
+)
+
 
 def _build_dispatch_execution_state(*, actor_id: str) -> dict[str, str]:
     return {
@@ -126,10 +189,22 @@ def make_supervisor_tick_handler(
     async def _handle(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
         workspace_id = str(item.payload_json.get("workspace_id") or item.workspace_id)
         payload = dict(item.payload_json or {})
+        leader_agent_id = _payload_string(payload, "leader_agent_id") or BUILTIN_SISYPHUS_ID
+        resolved_agent_pool = agent_pool
+        if resolved_agent_pool is None:
+            await _ensure_leader_execution_team(
+                session=session,
+                workspace_id=workspace_id,
+                leader_agent_id=leader_agent_id,
+            )
+            resolved_agent_pool = _make_sql_agent_pool(
+                session,
+                leader_agent_id=leader_agent_id,
+            )
         orchestrator = build_sql_orchestrator(
             session,
             config=config,
-            agent_pool=agent_pool or _make_sql_agent_pool(session),
+            agent_pool=resolved_agent_pool,
             dispatcher=dispatcher or _make_sql_dispatcher(session, item, payload),
             attempt_context=attempt_context or _make_sql_attempt_context(session),
             progress_sink=progress_sink,
@@ -141,7 +216,11 @@ def make_supervisor_tick_handler(
     return _handle
 
 
-def _make_sql_agent_pool(session: AsyncSession) -> AgentPoolProvider:
+def _make_sql_agent_pool(
+    session: AsyncSession,
+    *,
+    leader_agent_id: str | None = None,
+) -> AgentPoolProvider:
     async def _agent_pool(workspace_id: str) -> list[AllocatorAgent]:
         binding_repo = SqlWorkspaceAgentRepository(session)
         task_repo = SqlWorkspaceTaskRepository(session)
@@ -190,7 +269,11 @@ def _make_sql_agent_pool(session: AsyncSession) -> AgentPoolProvider:
                         ]
                     ),
                     active_task_count=active_counts.get(binding.agent_id, 0),
-                    is_leader=binding.agent_id == BUILTIN_SISYPHUS_ID,
+                    is_leader=(
+                        binding.agent_id == BUILTIN_SISYPHUS_ID
+                        or (leader_agent_id is not None and binding.agent_id == leader_agent_id)
+                        or config.get("workspace_role") == "leader"
+                    ),
                     is_available=binding.is_active and binding.status != "offline",
                     affinity_tags=tags,
                 )
@@ -198,6 +281,139 @@ def _make_sql_agent_pool(session: AsyncSession) -> AgentPoolProvider:
         return pool
 
     return _agent_pool
+
+
+async def _ensure_leader_execution_team(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    leader_agent_id: str,
+) -> None:
+    """Let the leader assemble an execution team before dispatch stalls.
+
+    This is intentionally idempotent: if any active non-leader worker exists,
+    the existing team is respected. When no worker exists and the active plan has
+    ready executable nodes, the runtime materializes a small bounded team using
+    the workspace harness profile and records the composition on the bindings.
+    """
+    plan = await SqlPlanRepository(session).get_by_workspace(workspace_id)
+    if plan is None or not plan.ready_nodes():
+        return
+
+    workspace_repo = SqlWorkspaceRepository(session)
+    workspace = await workspace_repo.find_by_id(workspace_id)
+    if workspace is None:
+        return
+
+    binding_repo = SqlWorkspaceAgentRepository(session)
+    bindings = await binding_repo.find_by_workspace(workspace_id, active_only=True, limit=500)
+    if any(_is_execution_worker_binding(binding, leader_agent_id) for binding in bindings):
+        return
+
+    registry = SqlAgentRegistryRepository(session)
+    composition_id = f"leader-team:{workspace_id}:v1"
+    ready_capabilities = _capabilities_for_ready_nodes(plan.ready_nodes())
+    for role in _AUTO_TEAM_ROLES:
+        agent_name = _team_agent_name(workspace_id, str(role["key"]))
+        agent = await registry.get_by_name(workspace.tenant_id, agent_name)
+        if agent is None:
+            agent = Agent.create(
+                tenant_id=workspace.tenant_id,
+                project_id=workspace.project_id,
+                name=agent_name,
+                display_name=str(role["display_name"]),
+                system_prompt=_team_agent_prompt(
+                    str(role["display_name"]), str(role["description"])
+                ),
+                trigger_description=(
+                    "Execute workspace plan tasks assigned by the Sisyphus leader."
+                ),
+                allowed_tools=list(_AUTO_TEAM_AGENT_TOOLS),
+                allowed_skills=[],
+                allowed_mcp_servers=[],
+                max_iterations=30,
+                agent_to_agent_enabled=True,
+                agent_to_agent_allowlist=[leader_agent_id],
+                discoverable=True,
+                metadata={
+                    "created_by": "leader_team_setup",
+                    "workspace_id": workspace_id,
+                    "workspace_role": "execution_worker",
+                    "team_composition_id": composition_id,
+                    "max_iterations_explicit": True,
+                },
+            )
+            agent = await registry.create(agent)
+
+        existing_binding = await binding_repo.find_by_workspace_and_agent_id(
+            workspace_id=workspace_id,
+            agent_id=agent.id,
+        )
+        capabilities = sorted(
+            set(_iter_config_strings(role.get("capabilities"))) | ready_capabilities
+        )
+        config = {
+            "auto_bound_by_leader": True,
+            "workspace_role": "execution_worker",
+            "team_composition_id": composition_id,
+            "capabilities": capabilities,
+            "tool_names": list(_AUTO_TEAM_TOOL_NAMES),
+            "allowed_tools": list(_AUTO_TEAM_AGENT_TOOLS),
+        }
+        if existing_binding is None:
+            await binding_repo.save(
+                WorkspaceAgent(
+                    id=str(uuid.uuid4()),
+                    workspace_id=workspace_id,
+                    agent_id=agent.id,
+                    display_name=str(role["display_name"]),
+                    description=str(role["description"]),
+                    config=config,
+                    is_active=True,
+                    label=str(role["label"]),
+                    status="idle",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+            )
+        else:
+            existing_binding.is_active = True
+            existing_binding.status = "idle"
+            existing_binding.config = {
+                **dict(existing_binding.config or {}),
+                **config,
+            }
+            existing_binding.updated_at = datetime.now(UTC)
+            await binding_repo.save(existing_binding)
+
+
+def _is_execution_worker_binding(binding: WorkspaceAgent, leader_agent_id: str) -> bool:
+    if not binding.is_active or binding.status == "offline":
+        return False
+    if binding.agent_id in {leader_agent_id, BUILTIN_SISYPHUS_ID}:
+        return False
+    return dict(binding.config or {}).get("workspace_role") != "leader"
+
+
+def _capabilities_for_ready_nodes(nodes: Iterable[PlanNode]) -> set[str]:
+    capabilities: set[str] = set()
+    for node in nodes:
+        capabilities.update(capability.name for capability in node.recommended_capabilities)
+    return {cap for cap in capabilities if cap}
+
+
+def _team_agent_name(workspace_id: str, role_key: str) -> str:
+    compact_workspace_id = "".join(ch for ch in workspace_id.lower() if ch.isalnum())[:12]
+    return f"workspace-{compact_workspace_id}-{role_key}"
+
+
+def _team_agent_prompt(display_name: str, description: str) -> str:
+    return (
+        f"You are {display_name}, an execution worker in an autonomous workspace team. "
+        f"{description} Follow the workspace task binding exactly, report progress through "
+        "workspace reporting tools, provide concrete artifacts and verification evidence, "
+        "and do not finalize the root goal yourself; Sisyphus remains the leader."
+    )
 
 
 def _make_sql_dispatcher(
@@ -1150,9 +1366,7 @@ def _execution_task_metadata_from_node(node: PlanNode) -> dict[str, object]:
         metadata["feature_checkpoint"] = node.feature_checkpoint.to_json()
     if node.handoff_package is not None:
         metadata["handoff_package"] = node.handoff_package.to_json()
-    harness_feature_id = node.metadata.get("harness_feature_id") or node.metadata.get(
-        "feature_id"
-    )
+    harness_feature_id = node.metadata.get("harness_feature_id") or node.metadata.get("feature_id")
     if isinstance(harness_feature_id, str) and harness_feature_id:
         metadata["harness_feature_id"] = harness_feature_id
     preflight_checks = node.metadata.get("preflight_checks")

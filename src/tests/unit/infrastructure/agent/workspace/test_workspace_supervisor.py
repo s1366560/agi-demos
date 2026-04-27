@@ -21,21 +21,21 @@ pytestmark = pytest.mark.unit
 
 
 def _completed_envelope(**overrides: Any) -> WtpEnvelope:
-    fields = dict(
-        verb=WtpVerb.TASK_COMPLETED,
-        workspace_id="ws-1",
-        task_id="task-1",
-        attempt_id="attempt-1",
-        root_goal_task_id="root-1",
-        correlation_id="corr-1",
-        payload={"summary": "all done", "artifacts": ["a.md"]},
-        extra_metadata={
+    fields = {
+        "verb": WtpVerb.TASK_COMPLETED,
+        "workspace_id": "ws-1",
+        "task_id": "task-1",
+        "attempt_id": "attempt-1",
+        "root_goal_task_id": "root-1",
+        "correlation_id": "corr-1",
+        "payload": {"summary": "all done", "artifacts": ["a.md"]},
+        "extra_metadata": {
             "leader_agent_id": "leader",
             "worker_agent_id": "worker",
             "worker_conversation_id": "conv-1",
             "actor_user_id": "user-1",
         },
-    )
+    }
     fields.update(overrides)
     return WtpEnvelope(**fields)
 
@@ -287,6 +287,25 @@ class TestWatchdog:
             new=AsyncMock(return_value=None),
         ):
             await supervisor._dispatch_envelope(_completed_envelope())
+        assert "attempt-1" not in supervisor.get_liveness_snapshot()
+
+    async def test_post_terminal_heartbeat_does_not_resurrect_liveness(self) -> None:
+        supervisor = WorkspaceSupervisor(None)
+        terminal = _completed_envelope()
+        heartbeat = _completed_envelope(
+            verb=WtpVerb.TASK_HEARTBEAT,
+            payload={},
+            correlation_id="c-heartbeat-after-terminal",
+        )
+
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime."
+            "apply_workspace_worker_report",
+            new=AsyncMock(return_value=None),
+        ):
+            await supervisor._dispatch_envelope(terminal)
+            await supervisor._dispatch_envelope(heartbeat)
+
         assert "attempt-1" not in supervisor.get_liveness_snapshot()
 
     async def test_watchdog_tick_flips_stale_to_blocked(self) -> None:

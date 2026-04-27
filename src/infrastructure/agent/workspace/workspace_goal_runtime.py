@@ -1379,7 +1379,7 @@ async def _assign_execution_tasks_to_workers(
         )
 
 
-async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
+async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     workspace_id: str,
     root_goal_task_id: str,
@@ -1391,11 +1391,17 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
     report_type: str,
     summary: str,
     artifacts: list[str] | None = None,
+    verifications: list[str] | None = None,
     leader_agent_id: str | None = None,
     report_id: str | None = None,
 ) -> WorkspaceTask | None:
     """Record a worker execution report as candidate output awaiting leader adjudication."""
     artifacts = [artifact for artifact in (artifacts or []) if artifact]
+    explicit_verifications = [
+        verification
+        for verification in (verifications or [])
+        if isinstance(verification, str) and verification
+    ]
     try:
         async with async_session_factory() as db:
             workspace_repo = SqlWorkspaceRepository(db)
@@ -1458,6 +1464,9 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                     summary=summary,
                     artifacts=merged_artifacts,
                 )
+            )
+            report_verifications = list(
+                dict.fromkeys([*explicit_verifications, *report_verifications])
             )
             report_fingerprint = _build_worker_report_fingerprint(
                 report_type=report_type,

@@ -461,6 +461,124 @@ async def test_supervisor_tick_handler_advances_sql_plan_from_outbox(
 
 
 @pytest.mark.asyncio
+async def test_supervisor_tick_handler_leader_builds_team_when_only_leader_is_bound(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session, include_worker=False)
+    db_session.add(
+        WorkspaceAgentModel(
+            id="leader-binding-1",
+            workspace_id="workspace-1",
+            agent_id=BUILTIN_SISYPHUS_ID,
+            display_name="Sisyphus",
+            description=None,
+            config_json={"workspace_role": "leader"},
+            is_active=True,
+        )
+    )
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+    )
+    await db_session.commit()
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+
+    bindings = list(
+        (
+            await db_session.execute(
+                select(WorkspaceAgentModel)
+                .where(WorkspaceAgentModel.workspace_id == "workspace-1")
+                .order_by(WorkspaceAgentModel.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    execution_bindings = [
+        binding
+        for binding in bindings
+        if binding.agent_id != BUILTIN_SISYPHUS_ID
+        and binding.config_json["workspace_role"] == "execution_worker"
+    ]
+    assert len(execution_bindings) == 3
+    assert {binding.label for binding in execution_bindings} == {
+        "Architect",
+        "Builder",
+        "Verifier",
+    }
+    assert all(
+        binding.config_json["auto_bound_by_leader"] is True for binding in execution_bindings
+    )
+
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    leaf = loaded.leaf_tasks()[0]
+    assert leaf.intent is TaskIntent.IN_PROGRESS
+    assert leaf.execution is TaskExecution.DISPATCHED
+    assert leaf.assignee_agent_id in {binding.agent_id for binding in execution_bindings}
+    assert leaf.assignee_agent_id != BUILTIN_SISYPHUS_ID
+    assert leaf.workspace_task_id is not None
+
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(launch_jobs) == 1
+    assert launch_jobs[0].status == "pending"
+
+    created_agents = list(
+        (
+            await db_session.execute(
+                select(AgentDefinitionModel).where(
+                    AgentDefinitionModel.name.like("workspace-workspace1-%")
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert {agent.name for agent in created_agents} == {
+        "workspace-workspace1-architect",
+        "workspace-workspace1-builder",
+        "workspace-workspace1-verifier",
+    }
+
+
+@pytest.mark.asyncio
 async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(  # noqa: PLR0915
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -865,107 +983,111 @@ async def _noop_worktree(
     return None
 
 
-async def _seed_workspace_only(db_session: AsyncSession) -> None:
-    db_session.add_all(
-        [
-            DBUser(
-                id="worker-user-1",
-                email="worker-user-1@example.com",
-                full_name="Worker User",
-                hashed_password="hash",
-                is_active=True,
-            ),
-            DBTenant(
-                id="worker-tenant-1",
-                name="Worker Tenant",
-                slug="worker-tenant",
-                description="",
-                owner_id="worker-user-1",
-                plan="free",
-                max_projects=10,
-                max_users=10,
-                max_storage=1,
-            ),
-            DBProject(
-                id="worker-project-1",
-                tenant_id="worker-tenant-1",
-                name="Worker Project",
-                description="",
-                owner_id="worker-user-1",
-                memory_rules={},
-                graph_config={},
-                sandbox_type="cloud",
-                sandbox_config={},
-                is_public=False,
-            ),
-            WorkspaceModel(
-                id="workspace-1",
-                tenant_id="worker-tenant-1",
-                project_id="worker-project-1",
-                name="Worker Workspace",
-                description="",
-                created_by="worker-user-1",
-                is_archived=False,
-                metadata_json={},
-            ),
-            WorkspaceMemberModel(
-                id="workspace-member-1",
-                workspace_id="workspace-1",
-                user_id="worker-user-1",
-                role="owner",
-                invited_by="worker-user-1",
-            ),
-            AgentDefinitionModel(
-                id=BUILTIN_SISYPHUS_ID,
-                tenant_id="worker-tenant-1",
-                project_id="worker-project-1",
-                name="sisyphus",
-                display_name="Sisyphus",
-                system_prompt="You coordinate workspace execution.",
-                allowed_tools=[],
-                allowed_skills=[],
-                allowed_mcp_servers=[],
-            ),
-            AgentDefinitionModel(
-                id="worker-agent",
-                tenant_id="worker-tenant-1",
-                project_id="worker-project-1",
-                name="worker-agent",
-                display_name="Worker Agent",
-                system_prompt="You execute workspace tasks.",
-                allowed_tools=[],
-                allowed_skills=[],
-                allowed_mcp_servers=[],
-            ),
-            WorkspaceAgentModel(
-                id="worker-binding-1",
-                workspace_id="workspace-1",
-                agent_id="worker-agent",
-                display_name="Worker Agent",
-                description=None,
-                config_json={"capabilities": ["codegen"]},
-                is_active=True,
-            ),
-            WorkspaceTaskModel(
-                id="root-task-1",
-                workspace_id="workspace-1",
-                title="Root goal",
-                description="Root goal for V2 dispatch",
-                created_by="worker-user-1",
-                status="todo",
-                priority=0,
-                metadata_json={
-                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
-                    TASK_ROLE: "goal_root",
-                    "goal_origin": "existing_root",
-                    "goal_source_refs": [],
-                    "root_goal_policy": {
-                        "mutable_by_agent": False,
-                        "completion_requires_external_proof": True,
-                    },
-                    "goal_health": "healthy",
+async def _seed_workspace_only(db_session: AsyncSession, *, include_worker: bool = True) -> None:
+    rows = [
+        DBUser(
+            id="worker-user-1",
+            email="worker-user-1@example.com",
+            full_name="Worker User",
+            hashed_password="hash",
+            is_active=True,
+        ),
+        DBTenant(
+            id="worker-tenant-1",
+            name="Worker Tenant",
+            slug="worker-tenant",
+            description="",
+            owner_id="worker-user-1",
+            plan="free",
+            max_projects=10,
+            max_users=10,
+            max_storage=1,
+        ),
+        DBProject(
+            id="worker-project-1",
+            tenant_id="worker-tenant-1",
+            name="Worker Project",
+            description="",
+            owner_id="worker-user-1",
+            memory_rules={},
+            graph_config={},
+            sandbox_type="cloud",
+            sandbox_config={},
+            is_public=False,
+        ),
+        WorkspaceModel(
+            id="workspace-1",
+            tenant_id="worker-tenant-1",
+            project_id="worker-project-1",
+            name="Worker Workspace",
+            description="",
+            created_by="worker-user-1",
+            is_archived=False,
+            metadata_json={},
+        ),
+        WorkspaceMemberModel(
+            id="workspace-member-1",
+            workspace_id="workspace-1",
+            user_id="worker-user-1",
+            role="owner",
+            invited_by="worker-user-1",
+        ),
+        AgentDefinitionModel(
+            id=BUILTIN_SISYPHUS_ID,
+            tenant_id="worker-tenant-1",
+            project_id="worker-project-1",
+            name="sisyphus",
+            display_name="Sisyphus",
+            system_prompt="You coordinate workspace execution.",
+            allowed_tools=[],
+            allowed_skills=[],
+            allowed_mcp_servers=[],
+        ),
+        WorkspaceTaskModel(
+            id="root-task-1",
+            workspace_id="workspace-1",
+            title="Root goal",
+            description="Root goal for V2 dispatch",
+            created_by="worker-user-1",
+            status="todo",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "goal_root",
+                "goal_origin": "existing_root",
+                "goal_source_refs": [],
+                "root_goal_policy": {
+                    "mutable_by_agent": False,
+                    "completion_requires_external_proof": True,
                 },
-            ),
-        ]
-    )
+                "goal_health": "healthy",
+            },
+        ),
+    ]
+    if include_worker:
+        rows.extend(
+            [
+                AgentDefinitionModel(
+                    id="worker-agent",
+                    tenant_id="worker-tenant-1",
+                    project_id="worker-project-1",
+                    name="worker-agent",
+                    display_name="Worker Agent",
+                    system_prompt="You execute workspace tasks.",
+                    allowed_tools=[],
+                    allowed_skills=[],
+                    allowed_mcp_servers=[],
+                ),
+                WorkspaceAgentModel(
+                    id="worker-binding-1",
+                    workspace_id="workspace-1",
+                    agent_id="worker-agent",
+                    display_name="Worker Agent",
+                    description=None,
+                    config_json={"capabilities": ["codegen"]},
+                    is_active=True,
+                ),
+            ]
+        )
+    db_session.add_all(rows)
     await db_session.flush()

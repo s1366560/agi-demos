@@ -222,6 +222,7 @@ class TestComplete:
                 leader_agent_id="leader-agent-id",
                 summary="All done",
                 artifacts=["/tmp/report.md", ""],
+                verifications=["preflight:read-progress", "", "preflight:git-status"],
             )
 
         assert result.is_error is False
@@ -233,6 +234,7 @@ class TestComplete:
         send_call = mock_orchestrator.send_message.await_args
         content = json.loads(send_call.kwargs["message"])
         assert content["artifacts"] == ["/tmp/report.md"]
+        assert content["verifications"] == ["preflight:read-progress", "preflight:git-status"]
         assert send_call.kwargs["message_type"] == AgentMessageType.ANNOUNCE
         assert send_call.kwargs["metadata"]["wtp_verb"] == "task.completed"
         assert send_call.kwargs["metadata"]["workspace_agent_binding_id"] == "binding-1"
@@ -241,6 +243,10 @@ class TestComplete:
         apply_kwargs = mock_apply.await_args.kwargs
         assert apply_kwargs["report_type"] == "completed"
         assert apply_kwargs["artifacts"] == ["/tmp/report.md"]
+        assert apply_kwargs["verifications"] == [
+            "preflight:read-progress",
+            "preflight:git-status",
+        ]
         assert apply_kwargs["task_id"] == "task-1"
         assert apply_kwargs["attempt_id"] == "attempt-1"
         assert apply_kwargs["leader_agent_id"] == "leader-agent-id"

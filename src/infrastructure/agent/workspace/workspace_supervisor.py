@@ -40,6 +40,7 @@ Not yet (future phases):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -91,19 +92,15 @@ except Exception:  # pragma: no cover - keep supervisor importable without prom
 def _count_verb(verb: WtpVerb, *, source: str) -> None:
     if _WTP_VERB_COUNTER is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         _WTP_VERB_COUNTER.labels(verb=verb.value, source=source).inc()
-    except Exception:  # pragma: no cover
-        pass
 
 
 def _count_stale() -> None:
     if _WTP_STALE_COUNTER is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         _WTP_STALE_COUNTER.inc()
-    except Exception:  # pragma: no cover
-        pass
 
 
 class _RedisLike(Protocol):
@@ -116,7 +113,7 @@ class _RedisLike(Protocol):
         *,
         maxlen: int | None = ...,
         approximate: bool = ...,
-    ) -> Any: ...
+    ) -> Any: ...  # noqa: ANN401
 
     async def xread(
         self,
@@ -124,7 +121,7 @@ class _RedisLike(Protocol):
         *,
         count: int | None = ...,
         block: int | None = ...,
-    ) -> Any: ...
+    ) -> Any: ...  # noqa: ANN401
 
 
 # --- Publishing ---------------------------------------------------------------
@@ -199,6 +196,9 @@ class WorkspaceSupervisor:
         self._last_id: str = "$"
         # Phase 5 liveness state: attempt_id → {last_seen, envelope snapshot}.
         self._liveness: dict[str, dict[str, Any]] = {}
+        # Terminal WTP envelopes are authoritative for process-local liveness:
+        # delayed launch-owned heartbeats must not resurrect a completed attempt.
+        self._terminal_attempts: set[str] = set()
         self._stale_seconds = max(0, int(stale_seconds))
         self._watchdog_interval = max(1.0, float(watchdog_interval_seconds))
 
@@ -241,10 +241,8 @@ class WorkspaceSupervisor:
             if task is None:
                 continue
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
         self._task = None
         self._watchdog_task = None
         logger.info("WorkspaceSupervisor stopped")
@@ -267,7 +265,7 @@ class WorkspaceSupervisor:
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=2.0)
                     return
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
             if not resp:
@@ -317,6 +315,15 @@ class WorkspaceSupervisor:
         verb = envelope.verb
         _count_verb(verb, source="supervisor")
 
+        if envelope.attempt_id in self._terminal_attempts and verb not in WtpVerb.terminal():
+            self._liveness.pop(envelope.attempt_id, None)
+            logger.debug(
+                "workspace_supervisor ignored post-terminal %s for attempt=%s",
+                verb.value,
+                envelope.attempt_id,
+            )
+            return
+
         # Phase 5: every inbound envelope refreshes the attempt's liveness.
         if envelope.attempt_id:
             self._liveness[envelope.attempt_id] = {
@@ -340,6 +347,7 @@ class WorkspaceSupervisor:
             # Terminal envelope removes the attempt from liveness tracking.
             if envelope.attempt_id:
                 self._liveness.pop(envelope.attempt_id, None)
+                self._terminal_attempts.add(envelope.attempt_id)
             await self._apply_terminal(envelope)
             return
         if verb is WtpVerb.TASK_PROGRESS:
@@ -393,7 +401,7 @@ class WorkspaceSupervisor:
                         self._stop_event.wait(), timeout=self._watchdog_interval
                     )
                     return
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 try:
                     await self._watchdog_tick()

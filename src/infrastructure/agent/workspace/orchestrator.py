@@ -68,7 +68,7 @@ class WorkspaceAutonomyOrchestrator:
             user_query=user_query,
         )
 
-    async def apply_worker_report(
+    async def apply_worker_report(  # noqa: PLR0913
         self,
         *,
         workspace_id: str,
@@ -81,6 +81,7 @@ class WorkspaceAutonomyOrchestrator:
         report_type: str,
         summary: str,
         artifacts: list[str] | None = None,
+        verifications: list[str] | None = None,
         leader_agent_id: str | None = None,
         report_id: str | None = None,
     ) -> WorkspaceTask | None:
@@ -96,6 +97,7 @@ class WorkspaceAutonomyOrchestrator:
             report_type=report_type,
             summary=summary,
             artifacts=artifacts,
+            verifications=verifications,
             leader_agent_id=leader_agent_id,
             report_id=report_id,
         )

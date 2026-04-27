@@ -30,7 +30,9 @@ Safety:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import os
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -54,6 +56,9 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # Cooldown TTL — long enough to avoid double-launch on transient retries
 # but short enough that a genuine re-assignment after rework can re-fire.
 WORKER_LAUNCH_COOLDOWN_SECONDS = 300
+WORKER_LAUNCH_HEARTBEAT_SECONDS = int(
+    os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45")
+)
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
 _NATIVE_TOOL_PROTOCOL_GUARD = (
@@ -176,7 +181,27 @@ def _build_worker_system_context(
                 "Execute the assigned workspace task autonomously.",
                 "Call workspace_report_progress periodically during long-running work.",
                 "Call workspace_report_complete once when finished successfully.",
+                (
+                    "When reporting completion, include a verifications list with every "
+                    "required preflight ref such as preflight:read-progress and "
+                    "preflight:git-status."
+                ),
                 "Call workspace_report_blocked if a hard blocker cannot be recovered.",
+            ],
+        },
+        "artifact_write_policy": {
+            "max_single_write_chars": 12000,
+            "instructions": [
+                "Do not write large documents or code files in one oversized tool call.",
+                (
+                    "For long generated files, write a small skeleton first, then append "
+                    "or edit sections in chunks under max_single_write_chars."
+                ),
+                (
+                    "If a write/edit tool reports truncated arguments or incomplete JSON, "
+                    "retry with smaller chunks instead of reporting blocked immediately."
+                ),
+                "Split very large documentation into multiple focused files when appropriate.",
             ],
         },
     }
@@ -236,7 +261,8 @@ def _task_harness_context(task: WorkspaceTask) -> dict[str, Any] | None:
             "Run or inspect every required preflight check before reporting completion.",
             (
                 "Record each completed preflight check as an execution verification "
-                "using the form preflight:<check_id>."
+                "using the form preflight:<check_id>; pass those refs in "
+                "workspace_report_complete(verifications=[...])."
             ),
             "Report blocked with the failing check_id when a required preflight cannot pass.",
         ],
@@ -333,6 +359,92 @@ async def _is_on_cooldown(conversation_id: str) -> bool:
     except Exception:
         return False
     return not claimed
+
+
+async def _publish_worker_launch_heartbeat(
+    *,
+    workspace_id: str,
+    task_id: str,
+    attempt_id: str | None,
+    root_goal_task_id: str,
+    conversation_id: str | None,
+    actor_user_id: str,
+    worker_agent_id: str,
+    leader_agent_id: str | None,
+) -> None:
+    """Publish a process-owned heartbeat while a launched worker stream is active."""
+    if not attempt_id:
+        return
+    try:
+        from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpVerb
+        from src.infrastructure.agent.workspace.workspace_supervisor import (
+            publish_envelope_default,
+        )
+
+        metadata: dict[str, Any] = {
+            "actor_user_id": actor_user_id,
+            "worker_agent_id": worker_agent_id,
+            "source": "workspace_worker_launch",
+        }
+        if leader_agent_id:
+            metadata["leader_agent_id"] = leader_agent_id
+        if conversation_id:
+            metadata["worker_conversation_id"] = conversation_id
+
+        envelope = WtpEnvelope(
+            verb=WtpVerb.TASK_HEARTBEAT,
+            workspace_id=workspace_id,
+            task_id=task_id,
+            attempt_id=attempt_id,
+            root_goal_task_id=root_goal_task_id or None,
+            payload={},
+            extra_metadata=metadata,
+        )
+        await publish_envelope_default(envelope)
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.heartbeat_publish_failed",
+            extra={
+                "event": "workspace_worker_launch.heartbeat_publish_failed",
+                "workspace_id": workspace_id,
+                "task_id": task_id,
+                "attempt_id": attempt_id,
+            },
+            exc_info=True,
+        )
+
+
+async def _worker_launch_heartbeat_loop(
+    *,
+    stop_event: asyncio.Event,
+    workspace_id: str,
+    task_id: str,
+    attempt_id: str | None,
+    root_goal_task_id: str,
+    conversation_id: str | None,
+    actor_user_id: str,
+    worker_agent_id: str,
+    leader_agent_id: str | None,
+    interval_seconds: int = WORKER_LAUNCH_HEARTBEAT_SECONDS,
+) -> None:
+    """Keep recovery/watchdog liveness fresh for a still-running worker stream."""
+    interval = max(15, int(interval_seconds))
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            return
+        except TimeoutError:
+            pass
+        await _publish_worker_launch_heartbeat(
+            workspace_id=workspace_id,
+            task_id=task_id,
+            attempt_id=attempt_id,
+            root_goal_task_id=root_goal_task_id,
+            conversation_id=conversation_id,
+            actor_user_id=actor_user_id,
+            worker_agent_id=worker_agent_id,
+            leader_agent_id=leader_agent_id,
+        )
 
 
 async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
@@ -724,8 +836,34 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     final_content = ""
     accumulated_text = ""
     terminal_event: str | None = None  # "complete" | "error" | None
+    heartbeat_stop = asyncio.Event()
+    heartbeat_task: asyncio.Task[None] | None = None
 
     try:
+        await _publish_worker_launch_heartbeat(
+            workspace_id=workspace_id,
+            task_id=task.id,
+            attempt_id=resolved_attempt_id,
+            root_goal_task_id=root_goal_task_id,
+            conversation_id=resolved_conversation_id,
+            actor_user_id=actor_user_id,
+            worker_agent_id=worker_agent_id,
+            leader_agent_id=leader_agent_id,
+        )
+        heartbeat_task = asyncio.create_task(
+            _worker_launch_heartbeat_loop(
+                stop_event=heartbeat_stop,
+                workspace_id=workspace_id,
+                task_id=task.id,
+                attempt_id=resolved_attempt_id,
+                root_goal_task_id=root_goal_task_id,
+                conversation_id=resolved_conversation_id,
+                actor_user_id=actor_user_id,
+                worker_agent_id=worker_agent_id,
+                leader_agent_id=leader_agent_id,
+            ),
+            name=f"workspace-worker-heartbeat:{resolved_attempt_id or task.id}",
+        )
         async with async_session_factory() as db:
             workspace_repo = SqlWorkspaceRepository(db)
             workspace = await workspace_repo.find_by_id(workspace_id)
@@ -778,6 +916,12 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         )
         terminal_event = "error"
         final_content = "Worker launch stream raised an exception"
+    finally:
+        heartbeat_stop.set()
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
 
     # --- Stage 3: terminal report -----------------------------------------
     outcome_reason: str

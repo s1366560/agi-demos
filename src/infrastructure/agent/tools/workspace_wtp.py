@@ -159,9 +159,7 @@ async def _send_envelope(
         enriched_metadata = dict(envelope.extra_metadata)
         enriched_metadata.setdefault("leader_agent_id", to_agent_id)
         enriched_metadata.setdefault("worker_agent_id", worker_agent_id)
-        enriched_metadata.setdefault(
-            "worker_conversation_id", ctx.session_id or ""
-        )
+        enriched_metadata.setdefault("worker_conversation_id", ctx.session_id or "")
         if worker_binding_id:
             enriched_metadata.setdefault("workspace_agent_binding_id", worker_binding_id)
         actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
@@ -217,6 +215,7 @@ async def _apply_terminal_report(
     report_type: str,
     summary: str,
     artifacts: list[str] | None,
+    verifications: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Write a terminal report via the domain-authoritative path.
@@ -243,6 +242,7 @@ async def _apply_terminal_report(
             report_type=report_type,
             summary=summary,
             artifacts=artifacts,
+            verifications=verifications,
             leader_agent_id=leader_agent_id,
         )
     except Exception as exc:
@@ -258,7 +258,9 @@ async def _apply_terminal_report(
     }
 
 
-def _build_terminal_tool_result(send_result: ToolResult, apply_result: dict[str, Any]) -> ToolResult:
+def _build_terminal_tool_result(
+    send_result: ToolResult, apply_result: dict[str, Any]
+) -> ToolResult:
     """Merge terminal report apply status into the send result payload."""
     try:
         parsed_output = json.loads(send_result.output)
@@ -381,6 +383,15 @@ async def workspace_report_progress_tool(
                     "Optional artifact identifiers (filenames, URLs, conversation IDs) produced by this task."
                 ),
             },
+            "verifications": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Structured verification refs observed by this task, for example "
+                    "preflight:read-progress, preflight:git-status, test_run:npm test, "
+                    "commit_ref:<sha>, or git_diff_summary:<summary>."
+                ),
+            },
         },
         "required": ["task_id", "attempt_id", "leader_agent_id", "summary"],
     },
@@ -395,6 +406,7 @@ async def workspace_report_complete_tool(
     leader_agent_id: str,
     summary: str,
     artifacts: list[str] | None = None,
+    verifications: list[str] | None = None,
 ) -> ToolResult:
     role_error = _require_worker_role(ctx)
     if role_error:
@@ -403,6 +415,9 @@ async def workspace_report_complete_tool(
     root_goal_task_id = _runtime_string(ctx, "root_goal_task_id") or None
 
     normalized_artifacts = [a for a in (artifacts or []) if isinstance(a, str) and a]
+    normalized_verifications = [
+        item for item in (verifications or []) if isinstance(item, str) and item
+    ]
     payload: dict[str, Any] = {
         "summary": summary,
         "task_id": task_id,
@@ -410,6 +425,8 @@ async def workspace_report_complete_tool(
     }
     if normalized_artifacts:
         payload["artifacts"] = normalized_artifacts
+    if normalized_verifications:
+        payload["verifications"] = normalized_verifications
 
     try:
         envelope = WtpEnvelope(
@@ -438,6 +455,7 @@ async def workspace_report_complete_tool(
             report_type="completed",
             summary=summary,
             artifacts=normalized_artifacts or None,
+            verifications=normalized_verifications or None,
         )
     return _build_terminal_tool_result(send_result, apply_result)
 
@@ -524,6 +542,7 @@ async def workspace_report_blocked_tool(
             report_type="blocked",
             summary=summary,
             artifacts=None,
+            verifications=None,
         )
     return _build_terminal_tool_result(send_result, apply_result)
 
