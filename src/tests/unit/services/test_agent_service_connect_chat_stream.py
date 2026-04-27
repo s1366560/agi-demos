@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 
 from src.application.services.agent_service import AgentService
+from src.domain.model.agent import ToolExecutionRecord
+from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 
 
 class _TestAgentService(AgentService):
@@ -19,7 +22,20 @@ class _TestAgentService(AgentService):
         return []
 
 
-def _build_service() -> _TestAgentService:
+class _InMemoryToolExecutionRecordRepo:
+    def __init__(self) -> None:
+        self.records: dict[str, ToolExecutionRecord] = {}
+
+    async def find_by_id(self, record_id: str) -> ToolExecutionRecord | None:
+        return self.records.get(record_id)
+
+    async def save_and_commit(self, record: ToolExecutionRecord) -> None:
+        self.records[record.id] = record
+
+
+def _build_service(
+    tool_execution_record_repo: _InMemoryToolExecutionRecordRepo | None = None,
+) -> _TestAgentService:
     conversation_repo = AsyncMock()
     execution_repo = AsyncMock()
     graph_service = AsyncMock()
@@ -33,6 +49,7 @@ def _build_service() -> _TestAgentService:
         llm=llm,
         neo4j_client=neo4j_client,
         agent_execution_event_repository=agent_event_repo,
+        tool_execution_record_repository=tool_execution_record_repo,
         redis_client=None,
     )
     service._event_bus = SimpleNamespace(stream_read=AsyncMock())
@@ -204,6 +221,111 @@ async def test_connect_chat_stream_keeps_higher_cursor_than_replay() -> None:
 
     assert [event["type"] for event in events] == ["text_delta", "complete"]
     assert events[0]["data"]["delta"] == "keep"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_chat_stream_persists_live_tool_execution_records() -> None:
+    tool_record_repo = _InMemoryToolExecutionRecordRepo()
+    service = _build_service(tool_record_repo)
+
+    async def _stream_read(*_args: Any, **_kwargs: Any):
+        yield {
+            "id": "1-0",
+            "data": {
+                "type": "act",
+                "event_time_us": 1_000_000,
+                "event_counter": 1,
+                "data": {
+                    "message_id": "m1",
+                    "tool_execution_id": "ter-1",
+                    "call_id": "call-1",
+                    "tool_name": "bash",
+                    "tool_input": {"command": "git status"},
+                },
+            },
+        }
+        yield {
+            "id": "2-0",
+            "data": {
+                "type": "observe",
+                "event_time_us": 1_200_000,
+                "event_counter": 2,
+                "data": {
+                    "message_id": "m1",
+                    "tool_execution_id": "ter-1",
+                    "call_id": "call-1",
+                    "tool_name": "bash",
+                    "result": {"exit_code": 0, "output": "clean"},
+                    "duration_ms": 25.8,
+                    "status": "success",
+                },
+            },
+        }
+        yield {
+            "id": "3-0",
+            "data": {
+                "type": "complete",
+                "event_time_us": 1_300_000,
+                "event_counter": 3,
+                "data": {"message_id": "m1", "content": "done"},
+            },
+        }
+
+    service._replay_db_events = AsyncMock(return_value=([], 0, 0, False))
+    service._event_bus.stream_read = _stream_read
+    service._read_delayed_events = AsyncMock(return_value=[])
+    service._handle_title_generation = AsyncMock()
+
+    events = []
+    async for event in service.connect_chat_stream(
+        conversation_id="conv-1",
+        message_id="m1",
+        replay_from_db=False,
+    ):
+        events.append(event)
+
+    assert [event["type"] for event in events] == ["act", "observe", "complete"]
+    record = tool_record_repo.records["ter-1"]
+    assert record.conversation_id == "conv-1"
+    assert record.message_id == "m1"
+    assert record.call_id == "call-1"
+    assert record.tool_name == "bash"
+    assert record.tool_input == {"command": "git status"}
+    assert record.status == ToolExecutionStatus.SUCCESS
+    assert record.tool_output == '{"exit_code": 0, "output": "clean"}'
+    assert record.started_at == datetime.fromtimestamp(1, UTC)
+    assert record.completed_at == datetime.fromtimestamp(1.2, UTC)
+    assert record.duration_ms == 25
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_tool_execution_event_marks_failed_observations() -> None:
+    tool_record_repo = _InMemoryToolExecutionRecordRepo()
+    service = _build_service(tool_record_repo)
+
+    await service._persist_tool_execution_event(
+        conversation_id="conv-1",
+        message_id="m1",
+        event_type="observe",
+        event_data={
+            "tool_execution_id": "ter-failed",
+            "call_id": "call-failed",
+            "tool_name": "bash",
+            "error": "command failed",
+            "duration_ms": "12",
+            "status": "failed",
+        },
+        event_time_us=2_000_000,
+        event_counter=5,
+    )
+
+    record = tool_record_repo.records["ter-failed"]
+    assert record.status == ToolExecutionStatus.FAILED
+    assert record.error == "command failed"
+    assert record.completed_at == datetime.fromtimestamp(2, UTC)
+    assert record.duration_ms == 12
 
 
 @pytest.mark.unit

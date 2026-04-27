@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
-from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
+from src.domain.model.agent.skill.skill import TriggerPattern
+from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, PluginSkillBuildContext
 from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
 
 PLUGIN_NAME = "workspace-runtime"
+WORKSPACE_TASK_HARNESS_SKILL_NAME = "workspace-task-harness"
 
 _SESSION_INSTRUCTION = (
     "Workspace runtime is active. Treat this turn as part of a durable task attempt: "
@@ -25,6 +27,79 @@ _TOOL_FOLLOWUP_INSTRUCTION = (
     "After this workspace tool result, either continue with the next concrete tool call or "
     "close the attempt using workspace_report_complete/workspace_report_blocked."
 )
+_WORKSPACE_TASK_HARNESS_FULL_CONTENT = """# Workspace Task Harness
+
+Use this skill when a workspace task needs durable decomposition, delegated execution,
+collaboration tracking, or verification evidence.
+
+## Workflow
+
+1. Rehydrate the active workspace/task/attempt context before changing files.
+2. Decompose the request into feature-sized checklist items with explicit acceptance criteria.
+3. Execute each item with real tools, durable progress reports, and workspace chat updates when
+   coordination matters.
+4. Persist artifacts, changed files, test commands, verification evidence, and remaining risk.
+5. Finish by calling `workspace_report_complete`, or `workspace_report_blocked` with a concrete
+   blocker and next recovery action.
+
+## Evidence Standard
+
+- Every code change needs a diff summary and at least one targeted verification command.
+- Every handoff needs completed steps, next steps, changed files, test results, and known gaps.
+- Every collaboration blocker needs the blocked task, owner, missing input, and recommended action.
+"""
+
+
+def _build_workspace_task_harness_skills(
+    context: PluginSkillBuildContext,
+) -> list[dict[str, Any]]:
+    """Expose the workspace harness as a built-in plugin skill."""
+    _ = context
+    return [
+        {
+            "name": WORKSPACE_TASK_HARNESS_SKILL_NAME,
+            "description": (
+                "Run long workspace tasks through durable decomposition, collaboration tracking, "
+                "handoff, and verification evidence."
+            ),
+            "tools": [
+                "read",
+                "write",
+                "edit",
+                "bash",
+                "glob",
+                "grep",
+                "workspace_chat_read",
+                "workspace_chat_send",
+                "workspace_report_progress",
+                "workspace_report_complete",
+                "workspace_report_blocked",
+                "workspace_request_clarification",
+            ],
+            "trigger_type": "hybrid",
+            "trigger_patterns": [
+                TriggerPattern("workspace task", weight=0.9),
+                TriggerPattern("durable handoff", weight=0.9),
+                TriggerPattern("collaboration tracking", weight=0.85),
+                TriggerPattern("任务分解", weight=0.85),
+                TriggerPattern("协作跟踪", weight=0.85),
+                TriggerPattern("验收证据", weight=0.8),
+            ],
+            "prompt_template": _WORKSPACE_TASK_HARNESS_FULL_CONTENT,
+            "full_content": _WORKSPACE_TASK_HARNESS_FULL_CONTENT,
+            "agent_modes": ["*"],
+            "scope": "tenant",
+            "metadata": {
+                "plugin": PLUGIN_NAME,
+                "capabilities": [
+                    "feature_checklist",
+                    "handoff_package",
+                    "collaboration_tracking",
+                    "verification_evidence",
+                ],
+            },
+        }
+    ]
 
 
 def _is_workspace_runtime(payload: Mapping[str, Any]) -> bool:
@@ -80,6 +155,10 @@ def register_builtin_workspace_plugin(registry: AgentPluginRegistry) -> None:
 
 
 def _register_workspace_plugin(api: PluginRuntimeApi) -> None:
+    api.register_skill_factory(
+        _build_workspace_task_harness_skills,
+        overwrite=True,
+    )
     api.register_hook(
         "on_session_start",
         _on_session_start,

@@ -31,7 +31,9 @@ from src.domain.model.agent import (
     AgentExecutionEvent,
     Conversation,
     ConversationStatus,
+    ToolExecutionRecord,
 )
+from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
     AgentExecutionRepository,
@@ -825,6 +827,125 @@ class AgentService(AgentServicePort):
         # Skip message events for different messages (only when filtering by message_id)
         return not (message_id and event_message_id and event_message_id != message_id)
 
+    @staticmethod
+    def _timestamp_from_event_time(event_time_us: int) -> datetime:
+        """Convert stream microsecond timestamps to UTC datetimes."""
+        if event_time_us <= 0:
+            return datetime.now(UTC)
+        return datetime.fromtimestamp(event_time_us / 1_000_000, UTC)
+
+    @staticmethod
+    def _coerce_tool_input(tool_input: Any) -> dict[str, Any]:
+        """Keep tool inputs JSON-object shaped for historical timeline APIs."""
+        if isinstance(tool_input, Mapping):
+            return dict(tool_input)
+        if tool_input is None:
+            return {}
+        return {"value": tool_input}
+
+    @staticmethod
+    def _coerce_duration_ms(duration_ms: Any) -> int | None:
+        if duration_ms is None:
+            return None
+        try:
+            return int(duration_ms)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _serialize_tool_result(result: Any) -> str:
+        if result is None:
+            return ""
+        if isinstance(result, str):
+            return result
+        try:
+            return json.dumps(result, ensure_ascii=False, default=str)
+        except TypeError:
+            return str(result)
+
+    @staticmethod
+    def _is_failed_tool_observation(event_data: Mapping[str, Any]) -> bool:
+        status = str(event_data.get("status") or "").lower()
+        return bool(event_data.get("error")) or status in {"error", "failed", "failure"}
+
+    async def _persist_tool_execution_event(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str | None,
+        event_type: str,
+        event_data: dict[str, Any],
+        event_time_us: int,
+        event_counter: int,
+    ) -> None:
+        """Mirror live act/observe events into durable tool execution records."""
+        if event_type not in {"act", "observe"} or not message_id:
+            return
+        if self._tool_execution_record_repo is None:
+            return
+
+        record_id = event_data.get("tool_execution_id")
+        call_id = event_data.get("call_id")
+        tool_name = event_data.get("tool_name")
+        if not record_id or not call_id or not tool_name:
+            logger.debug(
+                "[AgentService] Skipping tool execution record without identity: "
+                f"type={event_type}, record_id={record_id}, call_id={call_id}, "
+                f"tool_name={tool_name}"
+            )
+            return
+
+        try:
+            event_at = self._timestamp_from_event_time(event_time_us)
+            existing = await self._tool_execution_record_repo.find_by_id(str(record_id))
+            record = existing or ToolExecutionRecord(
+                id=str(record_id),
+                conversation_id=conversation_id,
+                message_id=message_id,
+                call_id=str(call_id),
+                tool_name=str(tool_name),
+                tool_input={},
+                status=ToolExecutionStatus.RUNNING,
+                sequence_number=event_counter,
+                started_at=event_at,
+            )
+            record.conversation_id = conversation_id
+            record.message_id = message_id
+            record.call_id = str(call_id)
+            record.tool_name = str(tool_name)
+
+            if event_type == "act":
+                record.tool_input = self._coerce_tool_input(event_data.get("tool_input"))
+                record.sequence_number = event_counter
+                if record.status not in {
+                    ToolExecutionStatus.SUCCESS,
+                    ToolExecutionStatus.FAILED,
+                    ToolExecutionStatus.CANCELLED,
+                    ToolExecutionStatus.TIMEOUT,
+                    ToolExecutionStatus.PERMISSION_DENIED,
+                }:
+                    record.status = ToolExecutionStatus.RUNNING
+                if not record.started_at:
+                    record.started_at = event_at
+            else:
+                record.completed_at = event_at
+                record.duration_ms = self._coerce_duration_ms(event_data.get("duration_ms"))
+                if self._is_failed_tool_observation(event_data):
+                    record.status = ToolExecutionStatus.FAILED
+                    record.error = str(event_data.get("error") or "Tool execution failed")
+                else:
+                    record.status = ToolExecutionStatus.SUCCESS
+                    record.tool_output = self._serialize_tool_result(event_data.get("result"))
+                    record.error = None
+
+            await self._tool_execution_record_repo.save_and_commit(record)
+        except Exception as persist_err:
+            logger.warning(
+                "[AgentService] Failed to persist tool execution record: "
+                f"type={event_type}, call_id={call_id}, error={persist_err}",
+                exc_info=True,
+            )
+
     def _filter_live_event(
         self,
         raw_message: dict[str, Any],
@@ -966,6 +1087,15 @@ class AgentService(AgentServicePort):
                 if filtered is None:
                     continue
                 event_type, event_data, evt_time_us, evt_counter = filtered
+
+                await self._persist_tool_execution_event(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    event_type=event_type,
+                    event_data=event_data,
+                    event_time_us=evt_time_us,
+                    event_counter=evt_counter,
+                )
 
                 yield {
                     "type": event_type,

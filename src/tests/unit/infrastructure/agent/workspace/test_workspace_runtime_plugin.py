@@ -2,8 +2,11 @@
 
 import pytest
 
-from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
-from src.infrastructure.agent.workspace.runtime_plugin import register_builtin_workspace_plugin
+from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, PluginSkillBuildContext
+from src.infrastructure.agent.workspace.runtime_plugin import (
+    WORKSPACE_TASK_HARNESS_SKILL_NAME,
+    register_builtin_workspace_plugin,
+)
 
 
 @pytest.mark.unit
@@ -43,3 +46,24 @@ async def test_workspace_runtime_plugin_ignores_non_workspace_context() -> None:
     )
 
     assert result.payload["response_instructions"] == []
+
+
+@pytest.mark.unit
+async def test_workspace_runtime_plugin_exposes_task_harness_skill() -> None:
+    registry = AgentPluginRegistry()
+    register_builtin_workspace_plugin(registry)
+
+    skills, diagnostics = await registry.build_skills(
+        PluginSkillBuildContext(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+    )
+
+    assert [skill["name"] for skill in skills] == [WORKSPACE_TASK_HARNESS_SKILL_NAME]
+    skill = skills[0]
+    assert "workspace_report_complete" in skill["tools"]
+    assert "collaboration_tracking" in skill["metadata"]["capabilities"]
+    assert "workspace_report_complete" in skill["full_content"]
+    assert any(d.code == "plugin_skills_loaded" for d in diagnostics)
