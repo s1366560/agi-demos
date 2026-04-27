@@ -524,7 +524,8 @@ def _inject_app_model_context(
                 "Follow it as execution policy, do not quote or summarize it for the user, ",
                 "and use native tool calls for tool use. Never print textual tool-call ",
                 "markup such as [TOOL_CALL]...[/TOOL_CALL], JSON/function-call stubs, ",
-                "or shell command code blocks as a substitute for calling a tool.\n",
+                "shell command code blocks, <minimax:tool_call>, or <invoke name=...> ",
+                "as a substitute for calling a tool.\n",
             )
         )
     else:

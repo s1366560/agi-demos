@@ -125,10 +125,18 @@ def test_subagents_with_tool_mode_disabled_routes_to_react_loop() -> None:
     """With subagents and enable_subagent_as_tool=False, routing returns REACT_LOOP."""
     tools = {f"tool_{idx}": _MockTool(f"tool_{idx}") for idx in range(4)}
     mock_subagent = SimpleNamespace(
-        id="sa-1", name="coder", display_name="Coder", enabled=True,
-        model=None, temperature=0.7, max_tokens=4096, max_iterations=20,
-        system_prompt="You code.", allowed_tools=["*"],
-        allowed_skills=[], allowed_mcp_servers=[],
+        id="sa-1",
+        name="coder",
+        display_name="Coder",
+        enabled=True,
+        model=None,
+        temperature=0.7,
+        max_tokens=4096,
+        max_iterations=20,
+        system_prompt="You code.",
+        allowed_tools=["*"],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
         trigger=SimpleNamespace(keywords=["code"]),
     )
     agent = ReActAgent(
@@ -188,6 +196,30 @@ def test_final_tool_policy_filters_core_and_late_injected_tools() -> None:
     )
 
     assert [tool.name for tool in filtered] == ["workspace_report_complete"]
+
+
+@pytest.mark.unit
+def test_final_tool_policy_normalizes_ui_style_tool_names() -> None:
+    tools = [
+        _tool_def("read"),
+        _tool_def("grep"),
+        _tool_def("web_search"),
+        _tool_def("web_scrape"),
+        _tool_def("workspace_report_complete"),
+    ]
+
+    filtered = ReActAgent._filter_tools_by_name_policy(
+        tools,
+        allow_tools=["Read", "WebSearch", "WebFetch", "workspace_report_complete"],
+        deny_tools=[],
+    )
+
+    assert [tool.name for tool in filtered] == [
+        "read",
+        "web_search",
+        "web_scrape",
+        "workspace_report_complete",
+    ]
 
 
 @pytest.mark.unit

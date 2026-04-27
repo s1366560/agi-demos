@@ -123,6 +123,27 @@ class TestNotifyPluginHookHelper:
 
         assert "Demo runtime hook executed from custom script." in proc._response_instructions
 
+    def test_runtime_hook_context_exposes_workspace_fields(self):
+        """Workspace runtime plugins need structured runtime context, not prompt parsing."""
+        config = ProcessorConfig(
+            model="test-model",
+            plugin_registry=None,
+            runtime_context={
+                "tenant_id": "tenant-1",
+                "project_id": "project-1",
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "workspace_session_role": "worker",
+            },
+        )
+        proc = SessionProcessor(config=config, tools=[])
+
+        fields = proc._runtime_hook_context_fields()
+
+        assert fields["task_authority"] == "workspace"
+        assert fields["workspace_id"] == "ws-1"
+        assert fields["runtime_context"]["workspace_session_role"] == "worker"
+
 
 @pytest.mark.unit
 class TestRuntimeGuidanceMessage:
@@ -137,7 +158,7 @@ class TestRuntimeGuidanceMessage:
         assert message["role"] == "system"
         content = message["content"]
         assert "system-level execution policy" in content
-        assert "<instruction index=\"1\">" in content
+        assert '<instruction index="1">' in content
         assert "line one\nline two" in content
         assert "[TOOL_CALL]...[/TOOL_CALL]" in content
         assert "- line one" not in content

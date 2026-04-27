@@ -311,6 +311,7 @@ def test_get_plugin_registry_skips_memory_runtime_when_globally_disabled(
     registry = registry_module.get_plugin_registry()
     plugin_names = {entry.plugin_name for entry in registry.list_hook_catalog()}
 
+    assert "workspace-runtime" in plugin_names
     assert "sisyphus-runtime" in plugin_names
     assert "memory-runtime" not in plugin_names
 
@@ -391,7 +392,9 @@ async def test_apply_hook_executes_custom_script_runtime_override() -> None:
     )
 
     assert result.payload["demo_hook_executed"] is True
-    assert "Demo runtime hook executed from custom script." in result.payload["response_instructions"]
+    assert (
+        "Demo runtime hook executed from custom script." in result.payload["response_instructions"]
+    )
     assert result.diagnostics == []
 
 

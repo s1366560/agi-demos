@@ -249,7 +249,8 @@ class SessionProcessor:
         "When a tool is needed, use the runtime's native tool-call protocol and only "
         "the tools declared for the current step. Never print textual tool-call markup "
         "such as [TOOL_CALL]...[/TOOL_CALL], JSON/function-call stubs, or shell command "
-        "code blocks as a substitute for calling a tool."
+        "code blocks as a substitute for calling a tool. Also never print "
+        "<minimax:tool_call> or <invoke name=...> markup."
     )
     _WORKSPACE_DELEGATION_RECOVERY_HINT = (
         "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
@@ -415,15 +416,17 @@ class SessionProcessor:
             else {}
         )
         langfuse_context = (
-            dict(self._langfuse_context)
-            if isinstance(self._langfuse_context, dict)
-            else {}
+            dict(self._langfuse_context) if isinstance(self._langfuse_context, dict) else {}
         )
         tenant_id = langfuse_context.get("tenant_id") or runtime_context.get("tenant_id")
         project_id = langfuse_context.get("project_id") or runtime_context.get("project_id")
         return {
             "tenant_id": tenant_id,
             "project_id": project_id,
+            "runtime_context": runtime_context,
+            "task_authority": runtime_context.get("task_authority"),
+            "workspace_id": runtime_context.get("workspace_id"),
+            "workspace_session_role": runtime_context.get("workspace_session_role"),
         }
 
     def _merge_hook_instructions(self, payload: Mapping[str, Any]) -> None:
@@ -462,7 +465,7 @@ class SessionProcessor:
         for index, item in enumerate(instructions, start=1):
             lines.extend(
                 [
-                    f"<instruction index=\"{index}\">",
+                    f'<instruction index="{index}">',
                     item,
                     "</instruction>",
                 ]
@@ -506,9 +509,7 @@ class SessionProcessor:
     def _queue_workspace_todoread_snapshot(self, snapshot: str) -> None:
         """Inject a compact todoread snapshot to guide recovery after delegation guardrail errors."""
         self._clear_workspace_todoread_snapshot()
-        self._response_instructions.append(
-            f"{self._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX} {snapshot}"
-        )
+        self._response_instructions.append(f"{self._WORKSPACE_TODOREAD_SNAPSHOT_PREFIX} {snapshot}")
 
     def _clear_workspace_todoread_snapshot(self) -> None:
         """Remove any previously injected workspace todoread snapshot guidance."""

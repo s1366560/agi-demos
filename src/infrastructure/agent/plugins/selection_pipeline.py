@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any
 
+from src.infrastructure.agent.core.tool_name_policy import canonical_tool_policy_names
 from src.infrastructure.agent.core.tool_selector import (
     CORE_TOOLS,
     SKILL_TOOLS,
@@ -428,20 +429,28 @@ def _resolve_policy_lists(
     known_tool_names: set[str] | None = None,
     policy_context: PolicyContext | None = None,
 ) -> tuple[set[str], set[str], Mapping[str, Any]]:
-    allow_tools = set(_read_str_list(metadata, "allow_tools"))
-    deny_tools = set(_read_str_list(metadata, "deny_tools"))
+    known_names = set(known_tool_names or set()) | set(CORE_TOOLS)
+    allow_tools = set(
+        canonical_tool_policy_names(_read_str_list(metadata, "allow_tools"), known_names)
+    )
+    deny_tools = set(
+        canonical_tool_policy_names(_read_str_list(metadata, "deny_tools"), known_names)
+    )
     layers_applied: list[str] = []
 
     for layer_name, layer in _iter_policy_layers(metadata, policy_context=policy_context):
-        layer_allow = set(_read_str_list(layer, "allow_tools"))
-        layer_deny = set(_read_str_list(layer, "deny_tools"))
+        layer_allow = set(
+            canonical_tool_policy_names(_read_str_list(layer, "allow_tools"), known_names)
+        )
+        layer_deny = set(
+            canonical_tool_policy_names(_read_str_list(layer, "deny_tools"), known_names)
+        )
         if layer_allow or layer_deny:
             layers_applied.append(layer_name)
         allow_tools.update(layer_allow)
         deny_tools.update(layer_deny)
 
     conflicting_tools = allow_tools & deny_tools
-    known_names = set(known_tool_names or set()) | set(CORE_TOOLS)
     unknown_allow_tools = set()
     unknown_deny_tools = set()
     if known_tool_names is not None:

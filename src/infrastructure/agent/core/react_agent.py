@@ -25,7 +25,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -92,6 +92,7 @@ from .subagent_router import SubAgentMatch, SubAgentRouter
 from .subagent_runner import SubAgentRunnerDeps, SubAgentSessionRunner
 from .subagent_tools import SubAgentToolBuilder, SubAgentToolBuilderDeps
 from .tool_converter import convert_tools
+from .tool_name_policy import canonical_tool_policy_names
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -103,6 +104,20 @@ _react_bg_tasks: set[asyncio.Task[Any]] = set()
 _MODEL_PROVIDER_ALIASES: dict[str, str] = {
     "azure_openai": "openai",
 }
+_WORKSPACE_WORKER_CODE_TOOL_NAMES: tuple[str, ...] = (
+    "read",
+    "write",
+    "edit",
+    "bash",
+    "glob",
+    "grep",
+)
+_WORKSPACE_WORKER_REPORT_TOOL_NAMES: tuple[str, ...] = (
+    "workspace_report_progress",
+    "workspace_report_complete",
+    "workspace_report_blocked",
+    "workspace_request_clarification",
+)
 
 
 @dataclass(frozen=True)
@@ -1593,13 +1608,32 @@ class ReActAgent:
             and selected_agent.allowed_tools
             and "*" not in selected_agent.allowed_tools
         ):
-            allowlists.append({tool for tool in selected_agent.allowed_tools if tool})
+            allowlists.append(set(canonical_tool_policy_names(selected_agent.allowed_tools)))
         if tenant_agent_config.enabled_tools:
-            allowlists.append({tool for tool in tenant_agent_config.enabled_tools if tool})
+            allowlists.append(set(canonical_tool_policy_names(tenant_agent_config.enabled_tools)))
 
         effective_allow = set.intersection(*allowlists) if allowlists else set()
-        effective_deny = {tool for tool in tenant_agent_config.disabled_tools if tool}
+        effective_deny = set(canonical_tool_policy_names(tenant_agent_config.disabled_tools))
         return sorted(effective_allow), sorted(effective_deny)
+
+    @staticmethod
+    def _with_workspace_worker_tool_allowlist(
+        runtime_profile: AgentRuntimeProfile,
+    ) -> AgentRuntimeProfile:
+        """Ensure workspace workers can inspect/edit/report despite persona allowlists."""
+
+        if not runtime_profile.allow_tools or "*" in runtime_profile.allow_tools:
+            return runtime_profile
+        required_tools = list(_WORKSPACE_WORKER_REPORT_TOOL_NAMES)
+        if not runtime_profile.tenant_agent_config.enabled_tools:
+            required_tools.extend(_WORKSPACE_WORKER_CODE_TOOL_NAMES)
+        expanded = sorted(
+            {
+                *canonical_tool_policy_names(runtime_profile.allow_tools),
+                *required_tools,
+            }
+        )
+        return replace(runtime_profile, allow_tools=expanded)
 
     def _resolve_effective_model(
         self,
@@ -2082,9 +2116,10 @@ class ReActAgent:
         deny_tools: Sequence[str] | None,
     ) -> list[ToolDefinition]:
         """Apply final hard allow/deny filtering to the executable tool list."""
-        raw_allow: set[str] = {name for name in (allow_tools or ()) if name}
+        known_tool_names = [tool.name for tool in tools_to_use]
+        raw_allow: set[str] = set(canonical_tool_policy_names(allow_tools, known_tool_names))
         allow: set[str] = set() if "*" in raw_allow else raw_allow
-        deny: set[str] = {name for name in (deny_tools or ()) if name}
+        deny: set[str] = set(canonical_tool_policy_names(deny_tools, known_tool_names))
         if not allow and not deny:
             return tools_to_use
         return [
@@ -2092,6 +2127,18 @@ class ReActAgent:
             for tool in tools_to_use
             if (not allow or tool.name in allow) and tool.name not in deny
         ]
+
+    @staticmethod
+    def _has_workspace_runtime_context(conversation_context: Sequence[Mapping[str, Any]]) -> bool:
+        """Detect hidden workspace worker app context injected as system metadata."""
+
+        for message in conversation_context:
+            if message.get("role") != "system":
+                continue
+            content = message.get("content")
+            if isinstance(content, str) and '"context_type": "workspace_worker_runtime"' in content:
+                return True
+        return False
 
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self,
@@ -2756,7 +2803,9 @@ class ReActAgent:
             )
 
             orchestrator = WorkspaceAutonomyOrchestrator()
-            has_workspace_binding = "[workspace-task-binding]" in (processed_user_message or "")
+            has_workspace_binding = "[workspace-task-binding]" in (
+                processed_user_message or ""
+            ) or self._has_workspace_runtime_context(conversation_context)
             if orchestrator.should_activate(
                 processed_user_message,
                 has_workspace_binding=has_workspace_binding,
@@ -2778,6 +2827,8 @@ class ReActAgent:
             tenant_agent_config_data=tenant_agent_config_data,
             selected_agent=selected_agent,
         )
+        if has_workspace_binding:
+            runtime_profile = self._with_workspace_worker_tool_allowlist(runtime_profile)
         self.config.runtime_hook_overrides = [
             runtime_hook.to_dict()
             for runtime_hook in runtime_profile.tenant_agent_config.runtime_hooks

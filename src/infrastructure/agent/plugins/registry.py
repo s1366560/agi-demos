@@ -1372,8 +1372,13 @@ def _register_builtin_hooks() -> None:
     from src.infrastructure.agent.sisyphus.runtime_plugin import (
         register_builtin_sisyphus_plugin,
     )
+    from src.infrastructure.agent.workspace.runtime_plugin import (
+        register_builtin_workspace_plugin,
+    )
 
     hook_catalog = _global_plugin_registry.list_hook_catalog()
+    if not any(entry.plugin_name == "workspace-runtime" for entry in hook_catalog):
+        register_builtin_workspace_plugin(_global_plugin_registry)
     if not any(entry.plugin_name == "sisyphus-runtime" for entry in hook_catalog):
         register_builtin_sisyphus_plugin(_global_plugin_registry)
     if (

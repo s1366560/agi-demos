@@ -60,7 +60,7 @@ _NATIVE_TOOL_PROTOCOL_GUARD = (
     "Use only the platform's native tool-call channel for tools. Do not print "
     "tool-call markup, JSON/function-call stubs, or shell command code blocks as "
     "a substitute for a tool call. In particular, never emit [TOOL_CALL], "
-    "[/TOOL_CALL], or {tool => ...} text."
+    "[/TOOL_CALL], {tool => ...}, <minimax:tool_call>, or <invoke name=...> text."
 )
 
 
@@ -162,6 +162,8 @@ def _build_worker_system_context(
                 "[TOOL_CALL]",
                 "[/TOOL_CALL]",
                 "{tool => ...}",
+                "<minimax:tool_call>",
+                "<invoke name=...>",
             ],
         },
         "reporting": {

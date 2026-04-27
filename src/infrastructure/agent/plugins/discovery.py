@@ -472,8 +472,9 @@ def _builtin_plugins() -> list[Any]:
     from src.configuration.config import get_settings
     from src.infrastructure.agent.plugins.memory_plugin import BuiltinMemoryRuntimePlugin
     from src.infrastructure.agent.sisyphus.runtime_plugin import BuiltinSisyphusRuntimePlugin
+    from src.infrastructure.agent.workspace.runtime_plugin import BuiltinWorkspaceRuntimePlugin
 
-    builtin_plugins: list[Any] = [BuiltinSisyphusRuntimePlugin()]
+    builtin_plugins: list[Any] = [BuiltinWorkspaceRuntimePlugin(), BuiltinSisyphusRuntimePlugin()]
     if get_settings().agent_memory_runtime_mode != "disabled":
         builtin_plugins.append(BuiltinMemoryRuntimePlugin())
     return builtin_plugins

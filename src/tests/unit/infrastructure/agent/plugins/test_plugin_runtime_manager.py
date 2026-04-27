@@ -116,9 +116,11 @@ def test_list_plugins_includes_builtin_runtime_plugins(tmp_path) -> None:
     names = set(by_name)
 
     assert diagnostics == []
-    assert {"sisyphus-runtime", "memory-runtime"}.issubset(names)
+    assert {"workspace-runtime", "sisyphus-runtime", "memory-runtime"}.issubset(names)
+    assert by_name["workspace-runtime"]["kind"] == "runtime"
     assert by_name["sisyphus-runtime"]["kind"] == "runtime"
     assert by_name["memory-runtime"]["kind"] == "runtime"
+    assert by_name["workspace-runtime"]["version"] == "builtin"
     assert by_name["sisyphus-runtime"]["version"] == "builtin"
     assert by_name["memory-runtime"]["version"] == "builtin"
 

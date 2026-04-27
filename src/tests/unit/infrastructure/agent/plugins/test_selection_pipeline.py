@@ -109,6 +109,33 @@ def test_policy_stage_merges_layered_allow_and_deny() -> None:
 
 
 @pytest.mark.unit
+def test_policy_stage_normalizes_ui_style_tool_names() -> None:
+    """Agent allowlists may use UI names while runtime tools are snake_case."""
+    pipeline = build_default_tool_selection_pipeline()
+    tools = {
+        "read": SimpleNamespace(name="read", description="Read files"),
+        "grep": SimpleNamespace(name="grep", description="Search files"),
+        "web_search": SimpleNamespace(name="web_search", description="Search web"),
+        "web_scrape": SimpleNamespace(name="web_scrape", description="Fetch web page"),
+        "memory_search": SimpleNamespace(name="memory_search", description="Search memory"),
+    }
+
+    result = pipeline.select_with_trace(
+        tools,
+        ToolSelectionContext(
+            metadata={
+                "allow_tools": ["Read", "Grep", "WebSearch", "WebFetch"],
+            }
+        ),
+    )
+
+    assert {"read", "grep", "web_search", "web_scrape"}.issubset(result.tools)
+    assert "memory_search" not in result.tools
+    policy = next(step for step in result.trace if step.stage == "policy_stage")
+    assert policy.explain.get("unknown_allow_tools_count") == 0
+
+
+@pytest.mark.unit
 def test_semantic_stage_uses_layered_max_tools_budget() -> None:
     """Layered max_tools budget should cap user MCP tool selection."""
     pipeline = build_default_tool_selection_pipeline()
