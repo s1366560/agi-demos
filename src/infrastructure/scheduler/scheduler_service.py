@@ -122,9 +122,27 @@ async def register_job(
     from apscheduler.triggers.date import DateTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 
+    from src.domain.model.cron.value_objects import CronSchedule, ScheduleType
     from src.infrastructure.scheduler.job_executor import execute_cron_job
 
     scheduler = get_scheduler()
+
+    try:
+        schedule = CronSchedule(
+            kind=ScheduleType(schedule_type),
+            config=schedule_config,
+        )
+    except ValueError as exc:
+        logger.error(
+            "Invalid schedule config for job %s (%s): %s",
+            job_id,
+            schedule_type,
+            exc,
+        )
+        return
+
+    schedule_type = schedule.kind.value
+    schedule_config = schedule.config
 
     trigger: CronTrigger | IntervalTrigger | DateTrigger
     tz = schedule_config.get("timezone") or timezone

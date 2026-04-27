@@ -2,7 +2,13 @@ import React, { useEffect } from 'react';
 
 import { Form, Input, Switch, Select, InputNumber, Drawer, Button, Space, Divider } from 'antd';
 
-import type { CronJobCreate, CronJobUpdate, CronJobResponse } from '@/types/cron';
+import type {
+  CronJobCreate,
+  CronJobUpdate,
+  CronJobResponse,
+  ScheduleConfig,
+  ScheduleType,
+} from '@/types/cron';
 
 export interface CronJobFormProps {
   open: boolean;
@@ -11,6 +17,118 @@ export interface CronJobFormProps {
   initialData?: CronJobResponse | null;
   isSubmitting?: boolean;
 }
+
+const toFiniteNumber = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : undefined;
+};
+
+const getDefaultScheduleConfig = (kind: ScheduleType): Record<string, unknown> => {
+  if (kind === 'every') {
+    return { hours: 0, minutes: 5, seconds: 0 };
+  }
+
+  if (kind === 'at') {
+    return { run_at: '' };
+  }
+
+  return { expr: '0 * * * *' };
+};
+
+const normalizeScheduleForForm = (schedule: ScheduleConfig): ScheduleConfig => {
+  const config = schedule.config;
+
+  if (schedule.kind === 'every') {
+    const intervalSeconds = toFiniteNumber(config.interval_seconds);
+    if (intervalSeconds === undefined) {
+      return schedule;
+    }
+
+    return {
+      ...schedule,
+      config: {
+        ...config,
+        hours: Math.floor(intervalSeconds / 3600),
+        minutes: Math.floor((intervalSeconds % 3600) / 60),
+        seconds: intervalSeconds % 60,
+      },
+    };
+  }
+
+  if (schedule.kind === 'cron') {
+    return {
+      ...schedule,
+      config: {
+        ...config,
+        expr: config.expr ?? config.expression ?? '0 * * * *',
+      },
+    };
+  }
+
+  return {
+    ...schedule,
+    config: {
+      ...config,
+      run_at: config.run_at ?? config.target_time ?? '',
+    },
+  };
+};
+
+const normalizeScheduleForSubmit = (
+  schedule: ScheduleConfig | null | undefined
+): ScheduleConfig | null | undefined => {
+  if (!schedule) {
+    return schedule;
+  }
+
+  const config = schedule.config;
+
+  if (schedule.kind === 'every') {
+    const { hours: _hours, minutes: _minutes, seconds: _seconds, ...configWithoutParts } = config;
+    const existingIntervalSeconds = toFiniteNumber(config.interval_seconds);
+    const hours = toFiniteNumber(config.hours);
+    const minutes = toFiniteNumber(config.minutes);
+    const seconds = toFiniteNumber(config.seconds);
+    const intervalSeconds =
+      hours !== undefined || minutes !== undefined || seconds !== undefined
+        ? (hours ?? 0) * 3600 + (minutes ?? 0) * 60 + (seconds ?? 0)
+        : existingIntervalSeconds;
+
+    return {
+      ...schedule,
+      config: {
+        ...configWithoutParts,
+        interval_seconds: intervalSeconds ?? 0,
+      },
+    };
+  }
+
+  if (schedule.kind === 'cron') {
+    const { expression: _expression, ...configWithoutExpression } = config;
+
+    return {
+      ...schedule,
+      config: {
+        ...configWithoutExpression,
+        expr: config.expr ?? config.expression,
+      },
+    };
+  }
+
+  const { target_time: _targetTime, ...configWithoutTargetTime } = config;
+
+  return {
+    ...schedule,
+    config: {
+      ...configWithoutTargetTime,
+      run_at: config.run_at ?? config.target_time,
+    },
+  };
+};
 
 export const CronJobForm: React.FC<CronJobFormProps> = ({
   open,
@@ -31,7 +149,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
           description: initialData.description,
           enabled: initialData.enabled,
           delete_after_run: initialData.delete_after_run,
-          schedule: initialData.schedule,
+          schedule: normalizeScheduleForForm(initialData.schedule),
           payload: initialData.payload,
           delivery: initialData.delivery,
           conversation_mode: initialData.conversation_mode,
@@ -43,7 +161,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
         form.resetFields();
         form.setFieldsValue({
           enabled: true,
-          schedule: { kind: 'cron', config: { expression: '0 * * * *' } },
+          schedule: { kind: 'cron', config: getDefaultScheduleConfig('cron') },
           payload: { kind: 'system_event', config: { content: '' } },
           delivery: { kind: 'none', config: {} },
           conversation_mode: 'reuse',
@@ -60,7 +178,12 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
     form
       .validateFields()
       .then((values: CronJobCreate | CronJobUpdate) => {
-        void onSubmit(values).then(() => {
+        const payload = {
+          ...values,
+          schedule: normalizeScheduleForSubmit(values.schedule),
+        } as CronJobCreate | CronJobUpdate;
+
+        void onSubmit(payload).then(() => {
           form.resetFields();
         });
       })
@@ -113,6 +236,9 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
         </Divider>
         <Form.Item name={['schedule', 'kind']} label="Schedule Type" rules={[{ required: true }]}>
           <Select
+            onChange={(kind: ScheduleType) => {
+              form.setFieldValue(['schedule', 'config'], getDefaultScheduleConfig(kind));
+            }}
             options={[
               { value: 'cron', label: 'Cron Expression' },
               { value: 'every', label: 'Interval (Every X)' },
@@ -123,7 +249,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
 
         {scheduleKind === 'cron' && (
           <Form.Item
-            name={['schedule', 'config', 'expression']}
+            name={['schedule', 'config', 'expr']}
             label="Cron Expression"
             rules={[{ required: true, message: 'Please enter a valid cron expression' }]}
             help="E.g., '0 * * * *' for every hour, '0 0 * * *' for daily at midnight"
@@ -148,7 +274,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
 
         {scheduleKind === 'at' && (
           <Form.Item
-            name={['schedule', 'config', 'target_time']}
+            name={['schedule', 'config', 'run_at']}
             label="Target Time (ISO-8601)"
             rules={[{ required: true, message: 'Required for one-off tasks' }]}
           >

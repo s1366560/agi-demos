@@ -6,6 +6,7 @@ into Python dataclasses following MemStack's DDD conventions.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -25,6 +26,74 @@ class ScheduleType(str, Enum):
     CRON = "cron"  # Cron expression
 
 
+def _optional_int(config: Mapping[str, object], key: str) -> int | None:
+    value = config.get(key)
+    if value is None or value == "":
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    try:
+        return int(str(value))
+    except (TypeError, ValueError) as exc:
+        msg = f"{key} must be an integer"
+        raise ValueError(msg) from exc
+
+
+def _normalize_schedule_config(
+    kind: ScheduleType,
+    config: Mapping[str, object] | None,
+) -> dict[str, Any]:
+    raw = dict(config or {})
+
+    if kind is ScheduleType.EVERY:
+        interval_seconds = _optional_int(raw, "interval_seconds")
+        if interval_seconds is None:
+            hours = _optional_int(raw, "hours") or 0
+            minutes = _optional_int(raw, "minutes") or 0
+            seconds = _optional_int(raw, "seconds") or 0
+            interval_seconds = hours * 3600 + minutes * 60 + seconds
+
+        if interval_seconds <= 0:
+            msg = (
+                "every schedule requires interval_seconds or a non-zero "
+                "hours/minutes/seconds interval"
+            )
+            raise ValueError(msg)
+
+        normalized: dict[str, Any] = {"interval_seconds": interval_seconds}
+        anchor_at = raw.get("anchor_at")
+        if anchor_at not in (None, ""):
+            normalized["anchor_at"] = anchor_at
+        return normalized
+
+    if kind is ScheduleType.CRON:
+        expr = raw.get("expr") or raw.get("expression")
+        if not isinstance(expr, str) or not expr.strip():
+            msg = "cron schedule requires expr or expression"
+            raise ValueError(msg)
+
+        normalized = {"expr": expr.strip()}
+        timezone = raw.get("timezone")
+        if timezone not in (None, ""):
+            normalized["timezone"] = timezone
+
+        stagger_seconds = _optional_int(raw, "stagger_seconds")
+        if stagger_seconds:
+            normalized["stagger_seconds"] = stagger_seconds
+        return normalized
+
+    if kind is ScheduleType.AT:
+        run_at = raw.get("run_at") or raw.get("target_time")
+        if not isinstance(run_at, str) or not run_at.strip():
+            msg = "at schedule requires run_at or target_time"
+            raise ValueError(msg)
+        return {"run_at": run_at.strip()}
+
+    return raw
+
+
 @dataclass(frozen=True, kw_only=True)
 class CronSchedule(ValueObject):
     """Describes *when* a job fires.
@@ -42,6 +111,13 @@ class CronSchedule(ValueObject):
 
     kind: ScheduleType
     config: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "config",
+            _normalize_schedule_config(self.kind, self.config),
+        )
 
     # -- Factory helpers -----------------------------------------------------
 
