@@ -460,13 +460,13 @@ class TestSweepOrphanExecutionTasks:
             children=[orphan1, orphan2, already_assigned, done, archived, goal_root, no_role],
         )
 
-        assert dispatched == 2
+        assert dispatched == 1
         assert len(captured) == 1
         call = captured[0]
         assert call["leader_agent_id"] == "leader-1"
         assert call["workspace_id"] == "ws-1"
         assert call["reason"] == "autonomy_tick.orphan_sweep"
-        assert [t.id for t in call["created_tasks"]] == ["orph-1", "orph-2"]
+        assert [t.id for t in call["created_tasks"]] == ["orph-1"]
 
     async def test_noop_when_no_orphans(self, monkeypatch: pytest.MonkeyPatch) -> None:
         dispatched, captured = await self._run(monkeypatch, children=[])

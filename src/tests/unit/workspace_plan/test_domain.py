@@ -12,7 +12,10 @@ from src.domain.model.workspace_plan import (
     Effort,
     EvidenceRef,
     ExecutionTransitionError,
+    FeatureCheckpoint,
     GoalProgress,
+    HandoffPackage,
+    HandoffReason,
     IntentTransitionError,
     Plan,
     PlanNode,
@@ -65,6 +68,37 @@ def test_capability_validates() -> None:
 def test_plan_node_id_rejects_empty() -> None:
     with pytest.raises(ValueError):
         PlanNodeId("")
+
+
+def test_feature_checkpoint_normalizes_lists_and_serializes() -> None:
+    checkpoint = FeatureCheckpoint(
+        feature_id="feature-001",
+        sequence=1,
+        title="Implement handoff",
+        test_commands=("pytest", "pytest", " "),
+        expected_artifacts=("src/foo.py", "src/foo.py"),
+        worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-1",
+        branch_name="workspace/node-1-attempt-1",
+        base_ref="HEAD",
+    )
+
+    assert checkpoint.test_commands == ("pytest",)
+    assert checkpoint.expected_artifacts == ("src/foo.py",)
+    assert checkpoint.branch_name == "workspace/node-1-attempt-1"
+    assert FeatureCheckpoint.from_json(checkpoint.to_json()) == checkpoint
+
+
+def test_handoff_package_requires_summary_and_serializes() -> None:
+    package = HandoffPackage(
+        reason=HandoffReason.CONTEXT_LIMIT,
+        summary="Context almost full; continue from tests.",
+        next_steps=("run pytest",),
+        changed_files=("src/foo.py",),
+    )
+
+    assert HandoffPackage.from_json(package.to_json()) == package
+    with pytest.raises(ValueError):
+        HandoffPackage(reason=HandoffReason.MANUAL, summary=" ")
 
 
 # ---------- PlanNode invariants ----------

@@ -733,7 +733,9 @@ class TestWorkspaceGoalRuntime:
                     summary=(
                         '{"summary":"Browser checks passed","verdict":"pass",'
                         '"verifications":["browser_assert:landing_page","screenshot_captured"],'
-                        '"artifacts":["artifact:screenshot-1"],"verification_grade":"pass"}'
+                        '"artifacts":["artifact:screenshot-1"],"verification_grade":"pass",'
+                        '"commit_ref":"abc123","git_diff_summary":"1 file changed",'
+                        '"changed_files":["src/ui.tsx"],"test_commands":["npm test"]}'
                     ),
                     artifacts=["artifact:trace-1"],
                     leader_agent_id="leader-agent",
@@ -745,11 +747,15 @@ class TestWorkspaceGoalRuntime:
                 "artifact:existing",
                 "artifact:trace-1",
                 "artifact:screenshot-1",
+                "commit_ref:abc123",
+                "git_diff_summary:1 file changed",
+                "changed_file:src/ui.tsx",
             ]
             assert metadata["execution_verifications"] == [
                 "worker_report:started",
                 "browser_assert:landing_page",
                 "screenshot_captured",
+                "test_run:npm test",
                 "worker_verdict:pass",
                 "verification_grade:pass",
             ]
@@ -1575,12 +1581,12 @@ class TestWorkspaceGoalRuntime:
             "workspace_plan_node_id": "node-1",
         }
 
-        legacy_child = MagicMock()
-        legacy_child.id = "child-legacy"
-        legacy_child.metadata = {"root_goal_task_id": "root-1"}
+        non_plan_child = MagicMock()
+        non_plan_child.id = "child-non-plan"
+        non_plan_child.metadata = {"root_goal_task_id": "root-1"}
 
         task_repo = MagicMock()
-        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[plan_child, legacy_child])
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[plan_child, non_plan_child])
 
         command_service = MagicMock()
         command_service.delete_task = AsyncMock(return_value=True)
@@ -1601,7 +1607,7 @@ class TestWorkspaceGoalRuntime:
         assert replanned is False
         command_service.create_task.assert_not_awaited()
         command_service.delete_task.assert_awaited_once()
-        assert command_service.delete_task.await_args.kwargs["task_id"] == "child-legacy"
+        assert command_service.delete_task.await_args.kwargs["task_id"] == "child-non-plan"
 
     async def test_ready_for_completion_completes_root_when_evidence_exists(self) -> None:
         workspace = MagicMock()

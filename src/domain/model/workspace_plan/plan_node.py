@@ -9,6 +9,8 @@
 * ``recommended_capabilities`` — what tools/skills the worker should have
 * ``inputs_schema`` / ``outputs_schema`` — JSON-Schema for structured I/O
 * ``acceptance_criteria`` — list of machine-checkable completion criteria
+* ``feature_checkpoint`` — durable feature checklist and commit/test boundary
+* ``handoff_package`` — get-up-to-speed snapshot for session rollover
 * ``progress``          — numeric progress with confidence
 
 The entity is mutable (it has a lifecycle) but individual state transitions go
@@ -23,6 +25,7 @@ from enum import Enum
 from typing import Any
 
 from src.domain.model.workspace_plan.acceptance import AcceptanceCriterion
+from src.domain.model.workspace_plan.handoff import FeatureCheckpoint, HandoffPackage
 from src.domain.shared_kernel import Entity
 
 
@@ -152,6 +155,8 @@ class PlanNode(Entity):
 
     # Machine-checkable completion criteria.
     acceptance_criteria: tuple[AcceptanceCriterion, ...] = field(default_factory=tuple)
+    feature_checkpoint: FeatureCheckpoint | None = None
+    handoff_package: HandoffPackage | None = None
 
     # Allocation hints.
     recommended_capabilities: tuple[Capability, ...] = field(default_factory=tuple)
@@ -168,10 +173,10 @@ class PlanNode(Entity):
     assignee_agent_id: str | None = None
     current_attempt_id: str | None = None
 
-    # Linkage back to legacy WorkspaceTask (adapter-bridge).
+    # WorkspaceTask projection used by the blackboard and worker runtime.
     workspace_task_id: str | None = None
 
-    # Freeform metadata for migration compatibility — do not add new consumers.
+    # Freeform metadata for plan-local facts that are not first-class fields yet.
     metadata: dict[str, Any] = field(default_factory=dict)
 
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

@@ -26,11 +26,6 @@ from src.domain.model.workspace_plan import (
 )
 from src.domain.ports.services.task_allocator_port import WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
-from src.infrastructure.agent.workspace_plan.adapter import (
-    LegacyTaskView,
-    legacy_status_for,
-    plan_node_from_task,
-)
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
 from src.infrastructure.agent.workspace_plan.orchestrator import (
@@ -200,6 +195,16 @@ class TestLLMGoalPlanner:
         plan = await planner.plan(_goal("ship route fix"), _ctx())
         leaf = plan.leaf_tasks()[0]
 
+        assert leaf.feature_checkpoint is not None
+        assert leaf.feature_checkpoint.feature_id == leaf.metadata["feature_id"]
+        assert leaf.feature_checkpoint.sequence == 1
+        assert leaf.feature_checkpoint.test_commands == (
+            "cd /workspace/my-evo && npm test -- src/sandbox/routes.test.ts --runInBand --coverage=false",
+        )
+        assert leaf.feature_checkpoint.expected_artifacts == (
+            "src/sandbox/routes.ts",
+            "src/sandbox/routes.test.ts",
+        )
         assert leaf.metadata["write_set"] == [
             "src/sandbox/routes.ts",
             "src/sandbox/routes.test.ts",
@@ -486,29 +491,6 @@ class TestBlackboard:
 
 
 # ---------------------------------------------------------------------------
-# Adapter (PlanNode <-> legacy WorkspaceTask)
-# ---------------------------------------------------------------------------
-
-
-class TestAdapter:
-    def test_legacy_status_roundtrip(self) -> None:
-        task = LegacyTaskView(
-            id="t1",
-            workspace_id="ws",
-            title="do it",
-            description="",
-            status="executing",
-            priority=2,
-            metadata={"x": 1},
-        )
-        node = plan_node_from_task(task, plan_id="p", parent_id=PlanNodeId("goal"))
-        assert node.intent is TaskIntent.IN_PROGRESS
-        assert node.workspace_task_id == "t1"
-        assert node.metadata["x"] == 1
-        assert legacy_status_for(node) == "in_progress"
-
-
-# ---------------------------------------------------------------------------
 # M4 supervisor (end-to-end integration — fakes for verifier/dispatch/agents)
 # ---------------------------------------------------------------------------
 
@@ -655,26 +637,12 @@ class TestSupervisorTick:
 
 
 # ---------------------------------------------------------------------------
-# Orchestrator feature-flag behavior
+# Orchestrator behavior
 # ---------------------------------------------------------------------------
 
 
-class TestOrchestratorFeatureFlag:
-    async def test_disabled_by_default_rejects_start(self) -> None:
-        repo = InMemoryPlanRepository()
-        orch = WorkspaceOrchestrator(
-            planner=LLMGoalPlanner(decomposer=None),
-            allocator=CapabilityAllocator(),
-            verifier=_AlwaysPassVerifier(),
-            projector=ProgressProjector(),
-            supervisor=_NoopSupervisor(),
-            plan_repo=repo,
-            config=OrchestratorConfig(enabled=False),
-        )
-        with pytest.raises(RuntimeError):
-            await orch.start_goal(workspace_id="ws", title="x")
-
-    async def test_enabled_creates_plan_and_starts_supervisor(self) -> None:
+class TestOrchestrator:
+    async def test_creates_plan_and_starts_supervisor(self) -> None:
         repo = InMemoryPlanRepository()
         sup = _NoopSupervisor()
         orch = WorkspaceOrchestrator(
@@ -684,7 +652,7 @@ class TestOrchestratorFeatureFlag:
             projector=ProgressProjector(),
             supervisor=sup,
             plan_repo=repo,
-            config=OrchestratorConfig(enabled=True),
+            config=OrchestratorConfig(),
         )
         plan = await orch.start_goal(workspace_id="ws", title="goal")
         assert plan.workspace_id == "ws"
@@ -700,7 +668,7 @@ class TestOrchestratorFeatureFlag:
             projector=ProgressProjector(),
             supervisor=sup,
             plan_repo=repo,
-            config=OrchestratorConfig(enabled=True),
+            config=OrchestratorConfig(),
         )
 
         plan = await orch.start_goal(

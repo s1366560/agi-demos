@@ -14,10 +14,9 @@ Each handler:
   optional ``retry_launch_request`` (used to relaunch the worker when the
   leader asks for rework).
 
-Behavior is byte-for-byte equivalent to the legacy code for the three
-statuses that had branches (DONE / BLOCKED / IN_PROGRESS). TODO (and any
-other status, though :class:`LeaderVerdict` rejects those) produces a
-no-op outcome.
+Behavior matches the runtime adjudication contract for the three active
+statuses (DONE / BLOCKED / IN_PROGRESS). TODO (and any other status, though
+:class:`LeaderVerdict` rejects those) produces a no-op outcome.
 
 The caller remains responsible for persisting the merged metadata via
 ``command_service.update_task`` and for post-metadata side effects (e.g.
@@ -174,7 +173,7 @@ _HANDLERS: Mapping[WorkspaceTaskStatus, _Handler] = {
     WorkspaceTaskStatus.DONE: _handle_done,
     WorkspaceTaskStatus.BLOCKED: _handle_blocked,
     WorkspaceTaskStatus.IN_PROGRESS: _handle_in_progress,
-    # TODO: no handler — legacy simply falls through with no attempt-service
+    # TODO: no handler; it falls through with no attempt-service
     # side effect; this is a replan/reprioritize that the caller handles via
     # the separate "start root task" path.
 }
@@ -189,7 +188,7 @@ async def dispatch_attempt_adjudication(
     """Dispatch by ``verdict.status`` to the appropriate attempt handler.
 
     Statuses without a registered handler (currently only TODO) return an
-    empty outcome — this matches legacy behavior exactly.
+    empty outcome.
     """
     if verdict.status not in LEADER_VERDICT_STATUSES:
         # Defense in depth; LeaderVerdict validates this at construction.

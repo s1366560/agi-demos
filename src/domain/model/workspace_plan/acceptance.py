@@ -1,7 +1,7 @@
 """Acceptance criteria and verification reports.
 
-Replaces the legacy "leader LLM subjectively declares done" path with
-machine-checkable criteria. The kinds here are deliberately conservative so
+Defines the machine-checkable criteria that gate durable plan completion. The
+kinds here are deliberately conservative so
 that most can be executed without any LLM at all (``cmd``, ``schema``,
 ``file_exists``, ``regex``). ``llm_judge`` is provided for subjective
 criteria but must carry a confidence threshold.

@@ -1,19 +1,14 @@
-"""V2 legacy bridge — best-effort kickoff of durable WorkspaceOrchestrator.
+"""Durable WorkspaceOrchestrator kickoff for root goals.
 
-When ``settings.workspace_v2_enabled`` is True this module is called
-immediately after the legacy decomposer runs. It creates a parallel durable V2
-``Plan`` and enqueues a supervisor tick so the multi-agent architecture
-(planner → allocator → verifier → projector → blackboard) receives the
-same goals that the legacy ``WorkspaceTask`` tree does.
+This module creates a durable V2 ``Plan`` and enqueues a supervisor tick so
+the multi-agent architecture (planner → allocator → verifier → projector →
+blackboard) receives root goals through the current plan runtime.
 
-The bridge is *best-effort*:
+Kickoff is non-blocking:
 
-* All exceptions are swallowed and logged — legacy autonomy must never
-  regress on V2 errors
-* No-op when the flag is off (zero overhead)
-
-Once the V2 path reaches feature-parity the legacy decomposer can be
-retired and this bridge becomes the single writer.
+* All exceptions are swallowed and logged so caller task mutations stay
+  resilient.
+* The outbox worker owns durable supervisor progress after the plan is saved.
 """
 
 from __future__ import annotations
@@ -79,7 +74,7 @@ def reset_orchestrator_singleton_for_testing() -> None:
     _orchestrator_singleton = None
 
 
-async def kickoff_v2_plan_if_enabled(
+async def kickoff_v2_plan(
     *,
     workspace_id: str,
     title: str,
@@ -88,24 +83,13 @@ async def kickoff_v2_plan_if_enabled(
     root_task_id: str | None = None,
     leader_agent_id: str | None = None,
 ) -> None:
-    """Fire-and-forget V2 plan kickoff; no-op when the flag is off.
+    """Fire-and-forget durable workspace plan kickoff.
 
-    Never raises — any failure (config read, DI build, planner error) is
-    swallowed so legacy autonomy continues unaffected.
+    Never raises: any failure is logged and swallowed so the caller's task
+    mutation path stays resilient.
     """
     try:
-        from src.configuration.config import get_settings
-
-        if not getattr(get_settings(), "workspace_v2_enabled", True):
-            return
-    except Exception:
-        logger.debug("v2_bridge: settings unreadable; skipping kickoff", exc_info=True)
-        return
-
-    try:
         if _orchestrator_singleton is not None:
-            if not _orchestrator_singleton.enabled:
-                return
             _ = await _orchestrator_singleton.start_goal(
                 workspace_id=workspace_id,
                 title=title,
@@ -117,8 +101,6 @@ async def kickoff_v2_plan_if_enabled(
         async with async_session_factory() as db:
             decomposer = await _build_workspace_task_decomposer(db, workspace_id)
             orchestrator = build_sql_orchestrator(db, decomposer=decomposer)
-            if not orchestrator.enabled:
-                return
             plan = await orchestrator.start_goal(
                 workspace_id=workspace_id,
                 title=title,
@@ -179,7 +161,7 @@ async def _build_workspace_task_decomposer(
 
 
 __all__ = [
-    "kickoff_v2_plan_if_enabled",
+    "kickoff_v2_plan",
     "reset_orchestrator_singleton_for_testing",
     "set_orchestrator_singleton_for_testing",
 ]

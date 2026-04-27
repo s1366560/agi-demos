@@ -79,8 +79,6 @@ class TestWorkspaceTaskCommandService:
         assert events[0].event_type == AgentEventType.WORKSPACE_TASK_STATUS_CHANGED
         assert events[0].payload["new_status"] == WorkspaceTaskStatus.IN_PROGRESS.value
 
-
-
     @pytest.mark.asyncio
     async def test_update_task_queues_child_and_root_snapshot_events(self) -> None:
         task_service = AsyncMock()
@@ -203,35 +201,27 @@ class TestWorkspaceTaskCommandService:
 
 
 @pytest.mark.unit
-class TestMaybeScheduleWorkerSession:
-    """Regression tests for _maybe_schedule_worker_session task_role guard.
+class TestWorkerLaunchQueue:
+    """Regression tests for the worker-launch queue task_role guard.
 
-    After the worker-launch drain refactor, ``_maybe_schedule_worker_session``
-    became a backcompat shim that enqueues onto
-    ``_pending_worker_launches`` instead of firing directly. These tests
-    assert the queue contents; draining is covered separately in the
-    ``create_task`` / ``assign_task_to_agent`` tests below.
+    These tests assert the queue contents; durable outbox draining is covered
+    separately in the worker-launch drain tests.
     """
 
-    @pytest.mark.parametrize(
-        "task_role",
-        ["execution", "execution_task"],
-        ids=["legacy_execution", "canonical_execution_task"],
-    )
-    def test_accepts_both_execution_role_variants(self, task_role: str) -> None:
-        """Both 'execution' and 'execution_task' must enqueue a worker launch."""
+    def test_accepts_canonical_execution_task_role(self) -> None:
+        """Canonical execution_task role enqueues a worker launch."""
         task = _make_task(
             task_id="wt-role",
             status=WorkspaceTaskStatus.TODO,
             assignee_agent_id="agent-x",
         )
-        task.metadata = {"task_role": task_role}
+        task.metadata = {"task_role": "execution_task"}
 
         command_service = WorkspaceTaskCommandService(AsyncMock())
-        command_service._maybe_schedule_worker_session(
+        command_service._maybe_enqueue_worker_launch(
             task=task,
             actor_user_id="user-1",
-            actor_agent_id="leader-1",
+            leader_agent_id="leader-1",
         )
 
         pending = command_service.consume_pending_worker_launches()
@@ -240,6 +230,24 @@ class TestMaybeScheduleWorkerSession:
         assert queued_task is task
         assert actor_user_id == "user-1"
         assert leader_agent_id == "leader-1"
+        assert command_service.consume_pending_worker_launches() == []
+
+    def test_skips_old_execution_role_alias(self) -> None:
+        """The old execution alias must not launch a worker session."""
+        task = _make_task(
+            task_id="wt-old-role",
+            status=WorkspaceTaskStatus.TODO,
+            assignee_agent_id="agent-x",
+        )
+        task.metadata = {"task_role": "execution"}
+
+        command_service = WorkspaceTaskCommandService(AsyncMock())
+        command_service._maybe_enqueue_worker_launch(
+            task=task,
+            actor_user_id="user-1",
+            leader_agent_id="leader-1",
+        )
+
         assert command_service.consume_pending_worker_launches() == []
 
     def test_skips_goal_root_role(self) -> None:
@@ -252,10 +260,10 @@ class TestMaybeScheduleWorkerSession:
         task.metadata = {"task_role": "goal_root"}
 
         command_service = WorkspaceTaskCommandService(AsyncMock())
-        command_service._maybe_schedule_worker_session(
+        command_service._maybe_enqueue_worker_launch(
             task=task,
             actor_user_id="user-1",
-            actor_agent_id="leader-1",
+            leader_agent_id="leader-1",
         )
 
         assert command_service.consume_pending_worker_launches() == []
@@ -266,10 +274,10 @@ class TestMaybeScheduleWorkerSession:
         task.metadata = {"task_role": "execution_task"}
 
         command_service = WorkspaceTaskCommandService(AsyncMock())
-        command_service._maybe_schedule_worker_session(
+        command_service._maybe_enqueue_worker_launch(
             task=task,
             actor_user_id="user-1",
-            actor_agent_id=None,
+            leader_agent_id=None,
         )
 
         assert command_service.consume_pending_worker_launches() == []
@@ -278,8 +286,8 @@ class TestMaybeScheduleWorkerSession:
     async def test_create_task_with_assignee_enqueues_worker_launch(self) -> None:
         """Creating an execution task WITH assignee must enqueue a worker launch.
 
-        Regression: before this fix, ``_maybe_schedule_worker_session`` was
-        defined but never called from ``create_task``. Execution tasks were
+        Regression: before this fix, the worker-launch queue was not populated
+        from ``create_task``. Execution tasks were
         created with assignees but no worker conversations ever started,
         leaving workspaces stuck with zero ``workspace_task_session_attempts``.
         """

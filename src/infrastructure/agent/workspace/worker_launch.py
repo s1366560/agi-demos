@@ -35,10 +35,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from src.application.services.workspace_autonomy_profiles import (
-    evaluate_workspace_code_context,
-    stream_completion_reports_success,
-)
+from src.application.services.workspace_autonomy_profiles import evaluate_workspace_code_context
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.infrastructure.agent.workspace.code_context import (
     WorkspaceCodeContext,
@@ -90,19 +87,6 @@ def _conversation_id_for_worker(
     )
 
 
-def _stream_completion_auto_report_enabled(
-    *,
-    root_metadata: Mapping[str, Any] | None,
-    workspace_metadata: Mapping[str, Any] | None,
-) -> bool:
-    """Return whether a plain stream ``complete`` event may imply success."""
-
-    return stream_completion_reports_success(
-        root_metadata=root_metadata,
-        workspace_metadata=workspace_metadata,
-    )
-
-
 def _build_code_context_sections(code_context: WorkspaceCodeContext | None) -> list[str]:
     if code_context is None or not code_context.sandbox_code_root:
         return []
@@ -151,6 +135,15 @@ def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]
         "agents_digest": code_context.agents_digest,
         "agents_excerpt": code_context.agents_excerpt,
     }
+
+
+def _render_workspace_placeholders(
+    instructions: str,
+    code_context: WorkspaceCodeContext | None,
+) -> str:
+    if code_context is None or not code_context.sandbox_code_root:
+        return instructions
+    return instructions.replace("${sandbox_code_root}", code_context.sandbox_code_root)
 
 
 def _build_worker_brief(
@@ -212,7 +205,8 @@ def _build_worker_brief(
     if description:
         sections.append(f"## Task description\n{description}")
     if extra_instructions:
-        sections.append(f"## Additional instructions\n{extra_instructions.strip()}")
+        rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
+        sections.append(f"## Additional instructions\n{rendered_extra}")
 
     return "\n\n".join(sections)
 
@@ -262,12 +256,12 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     rather than raised, because this is invoked as a background task whose
     failure must not affect the assignment HTTP response.
 
-    Completion detection: the stream is parsed for in-band ``complete`` /
-    ``error`` events (mirroring :class:`WorkspaceMentionRouter`). On
-    ``complete`` the attempt is pushed through ``apply_workspace_worker_report``
-    with ``report_type="completed"``; on ``error`` with ``"blocked"``. If the
-    stream ends with neither signal the attempt is left RUNNING and we log
-    ``no_terminal_event`` — do **not** assume success from a clean drain.
+    Completion detection: the stream is parsed for in-band ``error`` events
+    (mirroring :class:`WorkspaceMentionRouter`). On ``error`` the attempt is
+    pushed through ``apply_workspace_worker_report`` with ``report_type="blocked"``.
+    A plain stream ``complete`` is not a workspace terminal report; the attempt
+    is left RUNNING and we log ``no_terminal_event`` so the worker must call
+    the explicit workspace reporting tools.
     """
     if not worker_agent_id:
         return {
@@ -324,7 +318,6 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # --- Stage 1: attempt lifecycle + deterministic conversation binding ---
     resolved_attempt_id = attempt_id
     resolved_conversation_id: str | None = None
-    auto_report_stream_completion = True
     code_context: WorkspaceCodeContext | None = None
     root_goal_task_id = ""
     candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
@@ -369,10 +362,6 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 else:
                     if root_task is not None and root_task.workspace_id == workspace_id:
                         root_metadata = dict(root_task.metadata or {})
-            auto_report_stream_completion = _stream_completion_auto_report_enabled(
-                root_metadata=root_metadata,
-                workspace_metadata=dict(getattr(workspace, "metadata", {}) or {}),
-            )
             workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
             code_context_evaluation = evaluate_workspace_code_context(
                 root_metadata=root_metadata,
@@ -677,48 +666,24 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # --- Stage 3: terminal report -----------------------------------------
     outcome_reason: str
     if terminal_event == "complete":
-        if auto_report_stream_completion:
-            outcome_reason = "completed"
-            summary = (final_content or "").strip()[:2000] or "Worker completed task."
-            await _report_terminal(
-                workspace_id=workspace_id,
-                root_goal_task_id=root_goal_task_id,
-                task_id=task.id,
-                attempt_id=resolved_attempt_id,
-                conversation_id=resolved_conversation_id,
-                actor_user_id=actor_user_id,
-                worker_agent_id=worker_agent_id,
-                leader_agent_id=leader_agent_id,
-                report_type="completed",
-                summary=summary,
-                apply_fn=apply_workspace_worker_report,
-            )
-            await _patch_task_launch_state(
-                workspace_id=workspace_id,
-                task_id=task.id,
-                actor_user_id=actor_user_id,
-                leader_agent_id=leader_agent_id,
-                launch_state="completed",
-            )
-        else:
-            outcome_reason = "no_terminal_event"
-            await _patch_task_launch_state(
-                workspace_id=workspace_id,
-                task_id=task.id,
-                actor_user_id=actor_user_id,
-                leader_agent_id=leader_agent_id,
-                launch_state="no_terminal_event",
-            )
-            logger.warning(
-                "workspace_worker_launch.stream_complete_without_terminal_report",
-                extra={
-                    "event": "workspace_worker_launch.stream_complete_without_terminal_report",
-                    "workspace_id": workspace_id,
-                    "task_id": task.id,
-                    "conversation_id": resolved_conversation_id,
-                    "attempt_id": resolved_attempt_id,
-                },
-            )
+        outcome_reason = "no_terminal_event"
+        await _patch_task_launch_state(
+            workspace_id=workspace_id,
+            task_id=task.id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+            launch_state="no_terminal_event",
+        )
+        logger.warning(
+            "workspace_worker_launch.stream_complete_without_terminal_report",
+            extra={
+                "event": "workspace_worker_launch.stream_complete_without_terminal_report",
+                "workspace_id": workspace_id,
+                "task_id": task.id,
+                "conversation_id": resolved_conversation_id,
+                "attempt_id": resolved_attempt_id,
+            },
+        )
     elif terminal_event == "error":
         outcome_reason = "blocked"
         summary = (final_content or "").strip()[:2000] or "Worker stream errored."

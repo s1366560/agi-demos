@@ -350,10 +350,10 @@ async def maybe_materialize_workspace_goal_candidate(
             )
             try:
                 from src.infrastructure.agent.workspace.worker_launch_drain import (
-                    drain_pending_worker_launches,
+                    drain_pending_worker_launches_to_outbox,
                 )
 
-                drain_pending_worker_launches(command_service)
+                _ = await drain_pending_worker_launches_to_outbox(command_service, db)
             except Exception:
                 logger.warning(
                     "workspace_goal_runtime.worker_launch_drain_failed",
@@ -591,9 +591,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
         logger.warning("auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True)
         return None
     execution_children = [
-        c
-        for c in children
-        if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) in {"execution", "execution_task"}
+        c for c in children if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
     ]
     if not execution_children:
         return None
@@ -751,7 +749,9 @@ async def _replan_execution_tasks(
         return False
 
     existing_children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
-    plan_linked_children = [child for child in existing_children if _is_workspace_plan_linked_task(child)]
+    plan_linked_children = [
+        child for child in existing_children if _is_workspace_plan_linked_task(child)
+    ]
     children_to_replace = [
         child for child in existing_children if not _is_workspace_plan_linked_task(child)
     ]
@@ -770,7 +770,7 @@ async def _replan_execution_tasks(
                 "workspace_id": workspace_id,
                 "root_task_id": root_task_id,
                 "plan_linked_child_count": len(plan_linked_children),
-                "legacy_child_deleted_count": len(children_to_replace),
+                "non_plan_child_deleted_count": len(children_to_replace),
             },
         )
         return False
@@ -855,7 +855,7 @@ async def _mark_workspace_plan_node_reported(
     worker_agent_id: str,
     leader_agent_id: str | None,
 ) -> None:
-    """Mirror terminal legacy worker reports into the durable V2 plan state."""
+    """Mirror terminal workspace worker reports into the durable V2 plan state."""
     plan_id = task_metadata.get(WORKSPACE_PLAN_ID)
     node_id = task_metadata.get(WORKSPACE_PLAN_NODE_ID)
     if not isinstance(plan_id, str) or not plan_id:
@@ -945,16 +945,9 @@ def _parse_worker_report_payload(
         payload_summary = payload.get("summary")
         if isinstance(payload_summary, str) and payload_summary.strip():
             normalized_summary = payload_summary.strip()
-        payload_artifacts = payload.get("artifacts")
-        if isinstance(payload_artifacts, list):
-            merged_artifacts = list(
-                dict.fromkeys(
-                    [*merged_artifacts, *[str(item) for item in payload_artifacts if item]]
-                )
-            )
-        payload_verifications = payload.get("verifications")
-        if isinstance(payload_verifications, list):
-            verifications.extend(str(item) for item in payload_verifications if item)
+        structured_artifacts, structured_verifications = _worker_report_structured_evidence(payload)
+        merged_artifacts.extend(structured_artifacts)
+        verifications.extend(structured_verifications)
         verdict = payload.get("verdict") or payload.get("outcome")
         if isinstance(verdict, str) and verdict.strip():
             verifications.append(f"worker_verdict:{verdict.strip()}")
@@ -965,7 +958,45 @@ def _parse_worker_report_payload(
     if report_type == "completed" and not verifications:
         verifications.append("worker_report:completed")
 
+    merged_artifacts = list(dict.fromkeys(merged_artifacts))
     return normalized_summary, merged_artifacts, list(dict.fromkeys(verifications))
+
+
+def _worker_report_structured_evidence(payload: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    artifacts: list[str] = []
+    verifications: list[str] = []
+
+    payload_artifacts = payload.get("artifacts")
+    if isinstance(payload_artifacts, list):
+        artifacts.extend(str(item) for item in payload_artifacts if item)
+
+    payload_verifications = payload.get("verifications")
+    if isinstance(payload_verifications, list):
+        verifications.extend(str(item) for item in payload_verifications if item)
+
+    commit_ref = payload.get("commit_ref")
+    if isinstance(commit_ref, str) and commit_ref.strip():
+        artifacts.append(f"commit_ref:{commit_ref.strip()}")
+
+    git_diff_summary = payload.get("git_diff_summary")
+    if isinstance(git_diff_summary, str) and git_diff_summary.strip():
+        artifacts.append(f"git_diff_summary:{git_diff_summary.strip()}")
+
+    changed_files = payload.get("changed_files")
+    if isinstance(changed_files, list):
+        artifacts.extend(
+            f"changed_file:{path}" for path in changed_files if isinstance(path, str) and path
+        )
+
+    test_commands = payload.get("test_commands")
+    if isinstance(test_commands, list):
+        verifications.extend(
+            f"test_run:{command}"
+            for command in test_commands
+            if isinstance(command, str) and command
+        )
+
+    return artifacts, verifications
 
 
 def _build_worker_report_fingerprint(
@@ -1697,7 +1728,7 @@ async def resolve_workspace_execution_task_for_delegate(
     workspace_id: str,
     root_goal_task_id: str,
     delegated_task_text: str,
-    subagent_name: str,  # kept for API compat; previously used for title-tag match
+    subagent_name: str,  # reserved for callers that still pass a delegate label
     workspace_task_id: str | None = None,
 ) -> WorkspaceTask | None:
     """Resolve a workspace execution task that best matches a delegated subagent task.

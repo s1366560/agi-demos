@@ -37,13 +37,9 @@ class WorkspaceTaskCommandService:
         # ``schedule_autonomy_tick`` opens its own session and must see the
         # persisted root — mirrors the pattern in ``apply_workspace_worker_report``.
         self._pending_autonomy_ticks: list[tuple[str, str]] = []
-        # (task, actor_user_id, leader_agent_id) entries for execution tasks
-        # that just received an assignee. Drained by callers AFTER db.commit()
-        # via ``consume_pending_worker_launches`` because
-        # ``worker_launch.schedule_worker_session`` opens its own session and
-        # must see the committed assignee. Without the drain, execution tasks
-        # sit in TODO with ``assignee_agent_id`` set but zero running
-        # conversations / session attempts.
+        # (task, actor_user_id, leader_agent_id) entries for canonical execution
+        # tasks that just received an assignee. Drained by callers AFTER
+        # db.commit() via the worker-launch outbox path.
         self._pending_worker_launches: list[tuple[WorkspaceTask, str, str | None]] = []
 
     def consume_pending_events(self) -> list[PendingWorkspaceTaskEvent]:
@@ -88,34 +84,18 @@ class WorkspaceTaskCommandService:
     ) -> None:
         """Queue a worker session launch for an assigned execution task.
 
-        Accepts both the canonical ``execution_task`` role and the legacy
-        ``execution`` alias. ``goal_root`` tasks are intentionally skipped —
-        root tasks are driven by the autonomy-tick path (see
-        ``_maybe_enqueue_root_autonomy_tick``). Drain via
-        ``consume_pending_worker_launches`` after ``db.commit()``.
+        ``goal_root`` tasks are intentionally skipped: root tasks are driven by
+        the autonomy-tick path (see ``_maybe_enqueue_root_autonomy_tick``).
+        Drain via ``consume_pending_worker_launches`` after ``db.commit()``.
         """
         metadata = dict(getattr(task, "metadata", {}) or {})
         task_role = metadata.get(TASK_ROLE)
-        if task_role not in {"execution", "execution_task"}:
+        if task_role != "execution_task":
             return
         worker_agent_id = getattr(task, "assignee_agent_id", None)
         if not worker_agent_id:
             return
         self._pending_worker_launches.append((task, actor_user_id, leader_agent_id))
-
-    def _maybe_schedule_worker_session(
-        self,
-        *,
-        task: WorkspaceTask,
-        actor_user_id: str,
-        actor_agent_id: str | None,
-    ) -> None:
-        """Backwards-compatible shim — delegates to ``_maybe_enqueue_worker_launch``."""
-        self._maybe_enqueue_worker_launch(
-            task=task,
-            actor_user_id=actor_user_id,
-            leader_agent_id=actor_agent_id,
-        )
 
     def _maybe_enqueue_root_autonomy_tick(
         self,

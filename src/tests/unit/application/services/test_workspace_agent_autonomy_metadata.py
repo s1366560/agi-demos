@@ -12,7 +12,6 @@ from src.application.services.workspace_agent_autonomy import (
 from src.application.services.workspace_autonomy_profiles import (
     evaluate_workspace_code_context,
     resolve_autonomy_profile,
-    stream_completion_reports_success,
 )
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 
@@ -52,7 +51,6 @@ def test_root_metadata_accepts_workspace_type_and_profile_override() -> None:
             "autonomy_profile": {
                 "completion_policy": {
                     "required_artifact_prefixes": ["diff_bundle:"],
-                    "stream_completion_reports_success": False,
                 }
             },
         }
@@ -63,7 +61,6 @@ def test_root_metadata_accepts_workspace_type_and_profile_override() -> None:
     assert metadata["workspace_type"] == "software_development"
     assert profile.workspace_type == "software_development"
     assert profile.evidence.required_artifact_prefixes == ("diff_bundle:",)
-    assert stream_completion_reports_success(root_metadata=metadata) is False
 
 
 def _root_task(metadata: dict) -> WorkspaceTask:

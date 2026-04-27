@@ -71,8 +71,7 @@ def build_worker_report_patch(
 ) -> WorkerReportPatch:
     """Build a metadata patch for a worker execution report.
 
-    Preserves zero-behavior-change from the legacy inlined block in
-    ``apply_workspace_worker_report``: artifacts merge with prior
+    Preserves ``apply_workspace_worker_report`` behavior: artifacts merge with prior
     ``evidence_refs``, verifications merge with prior
     ``execution_verifications``, ``pending_leader_adjudication`` flips for
     terminal report types, ``last_attempt_status`` + ``execution_state`` are

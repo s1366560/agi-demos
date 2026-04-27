@@ -395,8 +395,7 @@ class Settings(BaseSettings):
     workspace_max_chars_per_file: int = Field(default=20000, alias="WORKSPACE_MAX_CHARS_PER_FILE")
     workspace_max_chars_total: int = Field(default=150000, alias="WORKSPACE_MAX_CHARS_TOTAL")
 
-    # Workspace V2 (multi-agent orchestrator) feature flags
-    workspace_v2_enabled: bool = Field(default=True, alias="WORKSPACE_V2_ENABLED")
+    # Workspace V2 (multi-agent orchestrator) settings
     workspace_v2_heartbeat_sec: float = Field(default=10.0, alias="WORKSPACE_V2_HEARTBEAT_SEC")
     workspace_v2_max_depth: int = Field(default=2, alias="WORKSPACE_V2_MAX_DEPTH")
     workspace_v2_max_subtasks: int = Field(default=8, alias="WORKSPACE_V2_MAX_SUBTASKS")

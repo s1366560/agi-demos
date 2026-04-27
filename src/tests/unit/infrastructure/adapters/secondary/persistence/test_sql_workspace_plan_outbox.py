@@ -61,6 +61,30 @@ async def test_enqueue_and_get_roundtrips_payload_and_metadata(
 
 
 @pytest.mark.asyncio
+async def test_enqueue_accepts_workspace_scoped_item_without_plan(
+    db_session: AsyncSession,
+    workspace_test_seed: dict[str, str],
+) -> None:
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+
+    item = await repo.enqueue(
+        plan_id=None,
+        workspace_id="workspace-1",
+        event_type="worker_launch",
+        payload={"task_id": "task-1"},
+        metadata={"source": "worker_launch_drain"},
+    )
+    await db_session.commit()
+
+    loaded = await repo.get_by_id(item.id)
+    assert loaded is not None
+    assert loaded.plan_id is None
+    assert loaded.workspace_id == "workspace-1"
+    assert loaded.event_type == "worker_launch"
+    assert loaded.payload_json == {"task_id": "task-1"}
+
+
+@pytest.mark.asyncio
 async def test_claim_due_leases_only_due_items(
     db_session: AsyncSession,
     workspace_test_seed: dict[str, str],

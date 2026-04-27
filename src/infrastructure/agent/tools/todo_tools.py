@@ -610,7 +610,6 @@ async def _dispatch_created_workspace_tasks(
     return {"dispatched": True}
 
 
-
 @tool_define(
     name="todowrite",
     description=(
@@ -796,9 +795,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     )
 
                     publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-                    await publisher.publish_pending_events(
-                        command_service.consume_pending_events()
-                    )
+                    await publisher.publish_pending_events(command_service.consume_pending_events())
                 except Exception:
                     logger.warning(
                         "todowrite.workspace_authority publish_pending_events failed",
@@ -806,10 +803,10 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     )
                 try:
                     from src.infrastructure.agent.workspace.worker_launch_drain import (
-                        drain_pending_worker_launches,
+                        drain_pending_worker_launches_to_outbox,
                     )
 
-                    drain_pending_worker_launches(command_service)
+                    _ = await drain_pending_worker_launches_to_outbox(command_service, session)
                 except Exception:
                     logger.warning(
                         "todowrite.workspace_authority worker_launch_drain failed",
@@ -844,9 +841,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     ),
                 }
                 if "dispatch_skipped_reason" in dispatch_result:
-                    result["dispatch_skipped_reason"] = dispatch_result[
-                        "dispatch_skipped_reason"
-                    ]
+                    result["dispatch_skipped_reason"] = dispatch_result["dispatch_skipped_reason"]
             elif action == "update":
                 if not todo_id:
                     result = {"success": False, "error": "todo_id required for update"}
@@ -884,31 +879,30 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                             if todo_patch.get("priority") is not None
                             else None
                         )
-                        if (
-                            next_status is not None
-                            and (
-                                existing_task.metadata.get("pending_leader_adjudication") is True
-                                or isinstance(existing_task.metadata.get("current_attempt_id"), str)
-                            )
+                        if next_status is not None and (
+                            existing_task.metadata.get("pending_leader_adjudication") is True
+                            or isinstance(existing_task.metadata.get("current_attempt_id"), str)
                         ):
                             from src.infrastructure.agent.workspace.orchestrator import (
                                 WorkspaceAutonomyOrchestrator,
                             )
 
-                            updated = await WorkspaceAutonomyOrchestrator().adjudicate_worker_report(
-                                workspace_id=workspace_id,
-                                task_id=existing_task.id,
-                                attempt_id=(
-                                    existing_task.metadata.get("current_attempt_id")
-                                    if isinstance(
-                                        existing_task.metadata.get("current_attempt_id"), str
-                                    )
-                                    else None
-                                ),
-                                actor_user_id=ctx.user_id,
-                                status=next_status,
-                                title=todo_patch.get("content"),
-                                priority=next_priority,
+                            updated = (
+                                await WorkspaceAutonomyOrchestrator().adjudicate_worker_report(
+                                    workspace_id=workspace_id,
+                                    task_id=existing_task.id,
+                                    attempt_id=(
+                                        existing_task.metadata.get("current_attempt_id")
+                                        if isinstance(
+                                            existing_task.metadata.get("current_attempt_id"), str
+                                        )
+                                        else None
+                                    ),
+                                    actor_user_id=ctx.user_id,
+                                    status=next_status,
+                                    title=todo_patch.get("content"),
+                                    priority=next_priority,
+                                )
                             )
                         else:
                             if next_status == WorkspaceTaskStatus.IN_PROGRESS:
@@ -926,7 +920,10 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                         except Exception:
                                             root_task = None
                                         root_status = getattr(root_task, "status", None)
-                                        if root_task is not None and root_status == WorkspaceTaskStatus.TODO:
+                                        if (
+                                            root_task is not None
+                                            and root_status == WorkspaceTaskStatus.TODO
+                                        ):
                                             await command_service.start_task(
                                                 workspace_id=workspace_id,
                                                 task_id=root_goal_task_id,

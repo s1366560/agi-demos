@@ -12,9 +12,9 @@ DONE) produces a structured WARN log and the task is skipped. The dispatcher
 never raises: assignment failures are a scheduling concern, not a contract
 violation.
 
-Behavior matches the legacy ``_assign_execution_tasks_to_workers`` exactly
-(same filter, same stable sort, same round-robin), so wiring this in is a pure
-refactor — covered by the existing workspace_goal_runtime regression tests.
+Behavior intentionally matches the current ``_assign_execution_tasks_to_workers``
+contract (same filter, same stable sort, same round-robin), so wiring this in
+is a pure refactor covered by the workspace_goal_runtime regression tests.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def filter_worker_bindings(
 ) -> list[WorkspaceAgent]:
     """Return the subset of ``bindings`` eligible to receive execution tasks.
 
-    Rules (matching legacy behavior):
+    Rules:
     * Prefer bindings whose ``agent_id`` differs from the leader.
     * If that filter would leave the pool empty (leader is the only active
       agent), fall back to the full active list — the leader dispatches to
@@ -64,7 +64,7 @@ def filter_worker_bindings(
 
 
 def sort_bindings(bindings: Sequence[WorkspaceAgent]) -> list[WorkspaceAgent]:
-    """Stable sort bindings by display_name, label, agent_id, id (legacy order)."""
+    """Stable sort bindings by display_name, label, agent_id, id."""
     return sorted(
         bindings,
         key=lambda binding: (

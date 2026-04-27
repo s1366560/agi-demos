@@ -42,6 +42,15 @@ SignalSourceType = Literal[
     "message_signal",
     "converged_signal",
 ]
+HandoffReasonValue = Literal[
+    "planned",
+    "context_limit",
+    "session_end",
+    "worker_restart",
+    "retry",
+    "replan",
+    "manual",
+]
 
 
 class ContractModel(BaseModel):
@@ -59,7 +68,6 @@ class CompletionPolicyOverrideModel(ContractModel):
     required_artifact_prefixes: list[str] | None = None
     requires_external_artifact: bool | None = None
     minimum_verification_grade: VerificationGrade | None = None
-    stream_completion_reports_success: bool | None = None
 
 
 class AutonomyProfileModel(ContractModel):
@@ -72,6 +80,33 @@ class WorkspaceCodeContextModel(ContractModel):
     loaded_agents_files: list[str] = Field(default_factory=list)
     agents_digest: str | None = None
     agents_excerpt: str | None = None
+
+
+class FeatureCheckpointMetadataModel(ContractModel):
+    feature_id: str
+    sequence: int = Field(default=0, ge=0)
+    title: str = ""
+    init_command: str | None = None
+    test_commands: list[str] = Field(default_factory=list)
+    expected_artifacts: list[str] = Field(default_factory=list)
+    worktree_path: str | None = None
+    branch_name: str | None = None
+    base_ref: str | None = None
+    commit_ref: str | None = None
+    handoff_notes: str = ""
+
+
+class HandoffPackageMetadataModel(ContractModel):
+    reason: HandoffReasonValue
+    summary: str
+    next_steps: list[str] = Field(default_factory=list)
+    completed_steps: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    git_head: str | None = None
+    git_diff_summary: str = ""
+    test_commands: list[str] = Field(default_factory=list)
+    verification_notes: str = ""
+    created_at: str | None = None
 
 
 class SourceBreakdownItemModel(ContractModel):
@@ -188,6 +223,8 @@ class ExecutionTaskMetadataModel(ContractModel):
     workspace_plan_id: str | None = None
     workspace_plan_node_id: str | None = None
     code_context: WorkspaceCodeContextModel | None = None
+    feature_checkpoint: FeatureCheckpointMetadataModel | None = None
+    handoff_package: HandoffPackageMetadataModel | None = None
     write_set: list[str] = Field(default_factory=list)
     verification_commands: list[str] = Field(default_factory=list)
     launch_state: str | None = None

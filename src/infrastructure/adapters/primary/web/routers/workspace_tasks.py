@@ -237,7 +237,9 @@ async def create_workspace_task(
     try:
         await event_publisher.publish_pending_events(service.consume_pending_events())
     except Exception:
-        logger.exception("Failed to publish workspace task events", extra={"workspace_id": workspace_id})
+        logger.exception(
+            "Failed to publish workspace task events", extra={"workspace_id": workspace_id}
+        )
     for tick_workspace_id, tick_actor_user_id in service.consume_pending_autonomy_ticks():
         try:
             # Lazy import: ``workspace_leader_bootstrap`` imports from this module.
@@ -254,10 +256,10 @@ async def create_workspace_task(
             )
     try:
         from src.infrastructure.agent.workspace.worker_launch_drain import (
-            drain_pending_worker_launches,
+            drain_pending_worker_launches_to_outbox,
         )
 
-        drain_pending_worker_launches(service)
+        _ = await drain_pending_worker_launches_to_outbox(service, db)
     except Exception:
         logger.warning(
             "worker_launch drain failed after direct workspace task creation",
@@ -410,10 +412,10 @@ async def assign_workspace_task_to_agent(
         )
     try:
         from src.infrastructure.agent.workspace.worker_launch_drain import (
-            drain_pending_worker_launches,
+            drain_pending_worker_launches_to_outbox,
         )
 
-        drain_pending_worker_launches(service)
+        _ = await drain_pending_worker_launches_to_outbox(service, db)
     except Exception:
         logger.warning(
             "worker_launch drain failed after direct workspace task assign",

@@ -1,15 +1,15 @@
 """Workspace Autonomy Orchestrator — unified entry points (P2d M5).
 
-Collects the six public coroutines previously exposed directly from
+Collects the six public coroutines exposed by
 :mod:`workspace_goal_runtime` behind a single facade. Callers that want a
 single injection point (e.g. subagent/react loops) can depend on
 :class:`WorkspaceAutonomyOrchestrator` instead of importing module-level
-functions scattered across the legacy runtime.
+functions scattered across the runtime module.
 
 This module is **pure-additive**: the underlying coroutines remain available
-at their legacy import paths. The facade holds no mutable state; it simply
-forwards to the underlying functions so that composition / mocking is easier
-and future migrations can swap implementations without touching callers.
+at their module import paths. The facade holds no mutable state; it simply
+forwards to the underlying functions so composition / mocking is easier and
+future migrations can swap implementations without touching callers.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class WorkspaceAutonomyOrchestrator:
 
     Instances are cheap and stateless — construct one per caller or share
     a singleton. The class is deliberately thin: each method forwards to an
-    existing coroutine so the legacy regression tests cover it by proxy.
+    existing coroutine so runtime regression tests cover it by proxy.
     """
 
     def should_activate(

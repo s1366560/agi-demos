@@ -6,10 +6,9 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from fastapi import Request
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +24,6 @@ from src.infrastructure.adapters.primary.web.routers.workspace_chat import (
     get_message_service,
 )
 from src.infrastructure.adapters.primary.web.startup.container import get_app_container
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentDefinitionModel,
@@ -36,7 +34,6 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_AGENT_NAMESPACE,
     BUILTIN_SISYPHUS_DISPLAY_NAME,
     BUILTIN_SISYPHUS_ID,
-    BUILTIN_SISYPHUS_NAME,
     build_builtin_sisyphus_agent,
 )
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
@@ -111,43 +108,6 @@ def _format_agent_mention(display_name: str | None, agent_id: str) -> str:
     return f'@"{handle}"' if " " in handle else f"@{handle}"
 
 
-def _legacy_builtin_conflict_name(agent_id: str) -> str:
-    suffix = agent_id.replace(":", "-")
-    candidate = f"{BUILTIN_SISYPHUS_NAME}-legacy-{suffix}"
-    return candidate[:100]
-
-
-async def _rename_legacy_sisyphus_name_conflict(db: AsyncSession) -> AgentDefinitionModel | None:
-    result = await db.execute(
-        refresh_select_statement(
-            select(AgentDefinitionModel)
-            .where(AgentDefinitionModel.name == BUILTIN_SISYPHUS_NAME)
-            .where(AgentDefinitionModel.id != BUILTIN_SISYPHUS_ID)
-            .limit(1)
-        )
-    )
-    conflicting_row = cast(AgentDefinitionModel | None, result.scalar_one_or_none())
-    if conflicting_row is None:
-        return None
-
-    old_name = conflicting_row.name
-    conflicting_row.name = _legacy_builtin_conflict_name(conflicting_row.id)
-    metadata = dict(conflicting_row.metadata_json or {})
-    metadata["renamed_from_builtin_name"] = old_name
-    metadata["renamed_for_builtin_id"] = BUILTIN_SISYPHUS_ID
-    conflicting_row.metadata_json = metadata
-    logger.warning(
-        "Renaming legacy agent definition that conflicts with built-in Sisyphus bootstrap",
-        extra={
-            "agent_id": conflicting_row.id,
-            "old_name": old_name,
-            "new_name": conflicting_row.name,
-        },
-    )
-    await db.flush()
-    return conflicting_row
-
-
 async def ensure_workspace_leader_binding(
     *,
     request: Request | None = None,
@@ -165,7 +125,6 @@ async def ensure_workspace_leader_binding(
 
     builtin_row = await db.get(AgentDefinitionModel, BUILTIN_SISYPHUS_ID)
     if builtin_row is None:
-        await _rename_legacy_sisyphus_name_conflict(db)
         builtin_agent = build_builtin_sisyphus_agent(tenant_id=BUILTIN_AGENT_NAMESPACE)
         db.add(
             AgentDefinitionModel(
@@ -368,7 +327,7 @@ async def _select_root_task_needing_progress(
     return None, False
 
 
-_SWEEPABLE_EXECUTION_ROLES = frozenset({"execution", "execution_task"})
+_SWEEPABLE_EXECUTION_ROLES = frozenset({"execution_task"})
 
 
 async def _sweep_orphan_execution_tasks(
@@ -389,8 +348,8 @@ async def _sweep_orphan_execution_tasks(
     to active workspace agents. Returns the number of orphans dispatched.
 
     An orphan is an unarchived task under ``root_task_id`` with
-    ``metadata.task_role`` in ``{execution, execution_task}``,
-    ``assignee_agent_id IS NULL``, and status ``todo``.
+    ``metadata.task_role == "execution_task"``, ``assignee_agent_id IS NULL``,
+    and status ``todo``.
     """
     from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 
@@ -718,12 +677,12 @@ async def _reconcile_durable_plan_after_root_auto_complete(
     root_task_id: str,
     actor_user_id: str,
 ) -> bool:
-    """Mark the side-by-side V2 plan completed after legacy root closeout.
+    """Mark the durable V2 plan completed after root closeout.
 
-    Legacy autonomy remains the authority that launches workers and closes the
-    root task. Durable V2 is an observable/recoverable projection, so when the
-    authoritative root is auto-completed we reconcile the projection instead of
-    letting the plan stay visually active forever.
+    Workspace autonomy remains the authority that launches workers and closes
+    the root task. Durable V2 is an observable/recoverable projection, so when
+    the authoritative root is auto-completed we reconcile the projection instead
+    of letting the plan stay visually active forever.
     """
     from src.domain.model.workspace_plan import PlanStatus
     from src.domain.model.workspace_plan.plan_node import (
@@ -764,7 +723,7 @@ async def _reconcile_durable_plan_after_root_auto_complete(
                 progress=Progress(
                     percent=100.0,
                     confidence=1.0,
-                    note="Closed after legacy workspace root auto-completed.",
+                    note="Closed after workspace root auto-completed.",
                 ),
                 metadata=metadata,
                 updated_at=now,
@@ -781,7 +740,7 @@ async def _reconcile_durable_plan_after_root_auto_complete(
         workspace_id=workspace_id,
         actor_id=actor_user_id,
         event_type="root_auto_completed_plan_reconciled",
-        source="legacy_autonomy",
+        source="workspace_autonomy",
         payload={
             "root_task_id": root_task_id,
             "reconciled_node_count": reconciled_node_count,
@@ -1254,10 +1213,10 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     if remediation_status != "ready_for_completion":
         try:
             from src.infrastructure.agent.workspace.goal_runtime import (
-                kickoff_v2_plan_if_enabled,
+                kickoff_v2_plan,
             )
 
-            await kickoff_v2_plan_if_enabled(
+            await kickoff_v2_plan(
                 workspace_id=workspace_id,
                 title=title,
                 description=description,
@@ -1317,10 +1276,10 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     if sweep_command_service is not None:
         try:
             from src.infrastructure.agent.workspace.worker_launch_drain import (
-                drain_pending_worker_launches,
+                drain_pending_worker_launches_to_outbox,
             )
 
-            drain_pending_worker_launches(sweep_command_service)
+            _ = await drain_pending_worker_launches_to_outbox(sweep_command_service, db)
         except Exception:
             logger.warning(
                 "autonomy_tick.orphan_sweep.drain_failed",

@@ -184,14 +184,14 @@ class TestBuildAdjudicationMetadata:
             task_title="task",
             now=now,
         )
-        # legacy preserves behavior: only touches flag if it was True.
+        # Current behavior: only touches flag if it was True.
         assert (
             "pending_leader_adjudication" not in out
             or out["pending_leader_adjudication"] is not True
         )
 
     def test_does_not_clear_false_pending_flag(self) -> None:
-        # Matches legacy: only `is True` triggers clearing (False stays False).
+        # Only `is True` triggers clearing (False stays False).
         prior = {"pending_leader_adjudication": False}
         now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=UTC)
         out = build_adjudication_metadata(

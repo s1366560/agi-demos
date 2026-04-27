@@ -11,6 +11,9 @@ from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     Capability,
     CriterionKind,
+    FeatureCheckpoint,
+    HandoffPackage,
+    HandoffReason,
     Plan,
     PlanNode,
     PlanNodeId,
@@ -124,6 +127,30 @@ def _make_plan(workspace_id: str) -> Plan:
                 description="output file",
             ),
         ),
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-001-task-1",
+            sequence=1,
+            title="Do research",
+            init_command="make init",
+            test_commands=("pytest -q",),
+            expected_artifacts=("out.json",),
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-1",
+            branch_name="workspace/task-1-attempt-1",
+            base_ref="HEAD",
+            commit_ref="abc123",
+        ),
+        handoff_package=HandoffPackage(
+            reason=HandoffReason.CONTEXT_LIMIT,
+            summary="Research is started; continue with tests.",
+            next_steps=("run pytest -q",),
+            completed_steps=("created out.json",),
+            changed_files=("out.json",),
+            git_head="abc123",
+            git_diff_summary="1 file changed",
+            test_commands=("pytest -q",),
+            verification_notes="No known failures.",
+            created_at=datetime(2026, 4, 27, tzinfo=UTC),
+        ),
         recommended_capabilities=(
             Capability(name="web_search", weight=1.5),
             Capability(name="codegen"),
@@ -169,6 +196,16 @@ async def test_save_and_get_roundtrips_every_field(
     assert task.assignee_agent_id == "agent-x"
     assert task.workspace_task_id == "wt-42"
     assert task.metadata == {"foo": "bar"}
+    assert task.feature_checkpoint is not None
+    assert task.feature_checkpoint.feature_id == "feature-001-task-1"
+    assert task.feature_checkpoint.test_commands == ("pytest -q",)
+    assert task.feature_checkpoint.worktree_path == (
+        "${sandbox_code_root}/../.memstack/worktrees/attempt-1"
+    )
+    assert task.feature_checkpoint.branch_name == "workspace/task-1-attempt-1"
+    assert task.handoff_package is not None
+    assert task.handoff_package.reason is HandoffReason.CONTEXT_LIMIT
+    assert task.handoff_package.next_steps == ("run pytest -q",)
 
     names = sorted(c.name for c in task.recommended_capabilities)
     assert names == ["codegen", "web_search"]

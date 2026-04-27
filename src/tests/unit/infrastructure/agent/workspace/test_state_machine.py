@@ -126,12 +126,12 @@ class TestGuardReasons:
     def test_invalid_current_for_root_flagged(self) -> None:
         # DISPATCHED is never a valid current state for a root.
         reasons = guard_reasons(TaskRole.ROOT, S.DISPATCHED, S.DONE)
-        assert any("not valid for role root" in r for r in reasons)
+        assert any("not valid for role goal_root" in r for r in reasons)
 
     def test_invalid_current_for_execution_flagged(self) -> None:
         # IN_PROGRESS is not used by execution tasks.
         reasons = guard_reasons(TaskRole.EXECUTION, S.IN_PROGRESS, S.DONE)
-        assert any("not valid for role execution" in r for r in reasons)
+        assert any("not valid for role execution_task" in r for r in reasons)
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ class TestTransition:
         assert err.reasons  # non-empty
         # message should surface role + states
         msg = str(err)
-        assert "root" in msg
+        assert "goal_root" in msg
         assert "done" in msg
         assert "todo" in msg
 

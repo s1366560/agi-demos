@@ -1,10 +1,4 @@
-"""Root goal decomposition — delegates to :class:`TaskDecomposer`.
-
-When ``WORKSPACE_V2_ENABLED`` is true this also kicks off the new
-:class:`WorkspaceOrchestrator` for side-by-side execution visibility.
-The V2 path is best-effort and never blocks the legacy return value so
-behavior stays identical if V2 is disabled or misconfigured.
-"""
+"""Root goal decomposition — delegates to :class:`TaskDecomposer`."""
 
 from __future__ import annotations
 

@@ -12,9 +12,8 @@ Ray-actor wrapper is provided by :class:`RaySupervisor` — a thin shell that
 delegates to :class:`WorkspaceSupervisor` so the core logic stays testable
 without a Ray cluster.
 
-The supervisor deliberately avoids touching the legacy
-``workspace_goal_runtime`` paths; wiring happens in
-:mod:`orchestrator`.
+The supervisor deliberately avoids direct ``workspace_goal_runtime`` calls;
+runtime wiring happens in :mod:`orchestrator`.
 """
 
 from __future__ import annotations

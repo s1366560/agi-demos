@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.domain.model.workspace_plan import PlanNode, TaskExecution, TaskIntent
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -49,8 +50,12 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 from src.infrastructure.agent.workspace_plan.factory import build_sql_orchestrator
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    HANDOFF_RESUME_EVENT,
     SUPERVISOR_TICK_EVENT,
+    WORKER_LAUNCH_EVENT,
+    make_handoff_resume_handler,
     make_supervisor_tick_handler,
+    make_worker_launch_handler,
 )
 from src.infrastructure.agent.workspace_plan.outbox_worker import (
     WorkspacePlanOutboxWorker,
@@ -350,7 +355,7 @@ async def test_supervisor_tick_handler_advances_sql_plan_from_outbox(
     await _seed_workspace_only(db_session)
     orchestrator = build_sql_orchestrator(
         db_session,
-        config=OrchestratorConfig(enabled=True, heartbeat_seconds=3600),
+        config=OrchestratorConfig(heartbeat_seconds=3600),
     )
     plan = await orchestrator.start_goal(
         workspace_id="workspace-1",
@@ -383,7 +388,7 @@ async def test_supervisor_tick_handler_advances_sql_plan_from_outbox(
         session_factory=_session_factory(db_session),
         handlers={
             SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
-                config=OrchestratorConfig(enabled=True, heartbeat_seconds=3600),
+                config=OrchestratorConfig(heartbeat_seconds=3600),
                 agent_pool=agent_pool,
                 dispatcher=dispatcher,
             )
@@ -410,7 +415,7 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     await _seed_workspace_only(db_session)
     orchestrator = build_sql_orchestrator(
         db_session,
-        config=OrchestratorConfig(enabled=True, heartbeat_seconds=3600),
+        config=OrchestratorConfig(heartbeat_seconds=3600),
     )
     plan = await orchestrator.start_goal(
         workspace_id="workspace-1",
@@ -435,6 +440,19 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     def fake_schedule_worker_session(**kwargs: object) -> None:
         launched.append(kwargs)
 
+    prepared_worktrees: list[tuple[str, str]] = []
+
+    async def fake_worktree_preparer(
+        _session: AsyncSession,
+        workspace_id: str,
+        task: WorkspaceTask,
+        extra_instructions: str | None,
+    ) -> str:
+        assert extra_instructions is not None
+        assert "[feature-checkpoint]" in extra_instructions
+        prepared_worktrees.append((workspace_id, task.id))
+        return "[worktree-setup]\nstatus=prepared\n[/worktree-setup]"
+
     monkeypatch.setattr(
         "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
         fake_schedule_worker_session,
@@ -444,8 +462,11 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
         session_factory=_session_factory(db_session),
         handlers={
             SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
-                config=OrchestratorConfig(enabled=True, heartbeat_seconds=3600),
-            )
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(
+                worktree_preparer=fake_worktree_preparer
+            ),
         },
         worker_id="worker-a",
     )
@@ -463,6 +484,26 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
         .all()
     )
     assert outbox_after_dispatch[0].status == "completed", outbox_after_dispatch[0].last_error
+    worker_launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(worker_launch_jobs) == 1
+    worker_launch_job_id = worker_launch_jobs[0].id
+    assert worker_launch_jobs[0].status == "pending"
+    assert not launched
+    assert await worker.run_once() == 1
+    db_session.expire_all()
+    worker_launch_job = await db_session.get(WorkspacePlanOutboxModel, worker_launch_job_id)
+    assert worker_launch_job is not None
+    assert worker_launch_job.status == "completed", worker_launch_job.last_error
     assert launched
     db_session.expire_all()
 
@@ -479,12 +520,19 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     assert task is not None
     assert task.assignee_agent_id == "worker-agent"
     assert task.status.value == "in_progress"
+    assert prepared_worktrees == [("workspace-1", task.id)]
     root_task = await SqlWorkspaceTaskRepository(db_session).find_by_id("root-task-1")
     assert root_task is not None
     assert root_task.status.value == "in_progress"
     assert task.metadata[ROOT_GOAL_TASK_ID] == "root-task-1"
     assert task.metadata[WORKSPACE_PLAN_ID] == plan.id
     assert task.metadata[WORKSPACE_PLAN_NODE_ID] == leaf.id
+    assert leaf.feature_checkpoint is not None
+    assert task.metadata["feature_checkpoint"]["feature_id"] == leaf.feature_checkpoint.feature_id
+    assert task.metadata["feature_checkpoint"]["worktree_path"] == (
+        f"${{sandbox_code_root}}/../.memstack/worktrees/{leaf.current_attempt_id}"
+    )
+    assert task.metadata["feature_checkpoint"]["branch_name"].startswith(f"workspace/{leaf.id}-")
     assert task.metadata[CURRENT_ATTEMPT_ID] == leaf.current_attempt_id
     assert task.metadata["current_attempt_number"] == 1
     assert task.metadata["current_attempt_worker_agent_id"] == "worker-agent"
@@ -496,6 +544,14 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     )
     assert task.metadata[EXECUTION_STATE]["last_agent_action"] == "start"
     assert launched and launched[0]["attempt_id"] == leaf.current_attempt_id
+    assert "[feature-checkpoint]" in str(launched[0]["extra_instructions"])
+    assert leaf.feature_checkpoint.feature_id in str(launched[0]["extra_instructions"])
+    assert "worktree_path=${sandbox_code_root}/../.memstack/worktrees/" in str(
+        launched[0]["extra_instructions"]
+    )
+    assert "branch_name=workspace/" in str(launched[0]["extra_instructions"])
+    assert "[worktree-setup]" in str(launched[0]["extra_instructions"])
+    assert "status=prepared" in str(launched[0]["extra_instructions"])
 
     async def report_session_factory() -> AsyncIterator[AsyncSession]:
         yield db_session
@@ -552,6 +608,153 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, leaf.current_attempt_id)
     assert attempt is not None
     assert attempt.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a resumable durable plan",
+        start_supervisor=False,
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **_kwargs: None,
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
+        },
+        worker_id="worker-a",
+    )
+    assert await worker.run_once() == 1
+    assert await worker.run_once() == 1
+
+    db_session.expire_all()
+    dispatched = await SqlPlanRepository(db_session).get(plan.id)
+    assert dispatched is not None
+    leaf = dispatched.leaf_tasks()[0]
+    assert leaf.workspace_task_id is not None
+    assert leaf.current_attempt_id is not None
+    previous_attempt_id = leaf.current_attempt_id
+
+    task_row = await db_session.get(WorkspaceTaskModel, leaf.workspace_task_id)
+    assert task_row is not None
+    task_row.status = "blocked"
+    task_row.metadata_json = {
+        **dict(task_row.metadata_json or {}),
+        "evidence_refs": ["commit_ref:abc123", "changed_file:src/example.py"],
+        "execution_verifications": ["test_run:uv run pytest src/tests/unit/example.py"],
+        "last_worker_report_type": "blocked",
+        "last_worker_report_summary": "lost process",
+    }
+    attempt_row = await db_session.get(WorkspaceTaskSessionAttemptModel, previous_attempt_id)
+    assert attempt_row is not None
+    attempt_row.status = "blocked"
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=HANDOFF_RESUME_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": leaf.workspace_task_id,
+            "node_id": leaf.id,
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "previous_attempt_id": previous_attempt_id,
+            "root_goal_task_id": "root-task-1",
+            "summary": "resume after restart",
+            "force_schedule": True,
+        },
+    )
+    await db_session.commit()
+
+    resume_worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={HANDOFF_RESUME_EVENT: make_handoff_resume_handler()},
+        worker_id="worker-b",
+    )
+    assert await resume_worker.run_once() == 1
+
+    db_session.expire_all()
+    resume_items = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == HANDOFF_RESUME_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert resume_items[-1].status == "completed", resume_items[-1].last_error
+    resumed = await SqlPlanRepository(db_session).get(plan.id)
+    assert resumed is not None
+    resumed_leaf = resumed.leaf_tasks()[0]
+    assert resumed_leaf.current_attempt_id != previous_attempt_id
+    assert resumed_leaf.handoff_package is not None
+    assert resumed_leaf.handoff_package.git_head == "abc123"
+    assert resumed_leaf.handoff_package.changed_files == ("src/example.py",)
+    assert resumed_leaf.handoff_package.test_commands == (
+        "uv run pytest src/tests/unit/example.py",
+    )
+
+    projected_task = await SqlWorkspaceTaskRepository(db_session).find_by_id(leaf.workspace_task_id)
+    assert projected_task is not None
+    assert projected_task.status.value == "in_progress"
+    assert projected_task.metadata["handoff_package"]["summary"] == "resume after restart"
+    assert projected_task.metadata[CURRENT_ATTEMPT_ID] == resumed_leaf.current_attempt_id
+
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel)
+                .where(WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT)
+                .where(WorkspacePlanOutboxModel.status == "pending")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(launch_jobs) == 1
+    assert "[handoff-package]" in str(launch_jobs[0].payload_json["extra_instructions"])
+    assert "previous_attempt_id" in str(launch_jobs[0].payload_json["extra_instructions"])
+
+
+async def _noop_worktree(
+    _session: AsyncSession,
+    _workspace_id: str,
+    _task: WorkspaceTask,
+    _extra_instructions: str | None,
+) -> str | None:
+    return None
 
 
 async def _seed_workspace_only(db_session: AsyncSession) -> None:

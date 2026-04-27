@@ -9,12 +9,9 @@ Submodules:
 * :mod:`blackboard` — in-memory / redis-backed :class:`BlackboardPort`
 * :mod:`supervisor` — async single-writer :class:`WorkspaceSupervisorPort`
 * :mod:`repository` — in-memory and SQL :class:`PlanRepositoryPort` impls
-* :mod:`adapter`    — bi-directional ``PlanNode`` ↔ ``WorkspaceTask`` mapping
 * :mod:`outbox_handlers` — job handlers for durable plan progression
 * :mod:`outbox_worker` — durable worker loop for plan outbox jobs
 * :mod:`orchestrator` — the L5 façade wiring everything together
-
-Gated behind the ``WORKSPACE_V2_*`` feature flags so legacy runtime is untouched.
 """
 
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator

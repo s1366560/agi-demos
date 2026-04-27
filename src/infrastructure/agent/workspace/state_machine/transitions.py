@@ -40,8 +40,8 @@ __all__ = [
 class TaskRole(str, Enum):
     """Role a task plays in the workspace autonomy loop."""
 
-    ROOT = "root"
-    EXECUTION = "execution"
+    ROOT = "goal_root"
+    EXECUTION = "execution_task"
 
 
 class IllegalTransitionError(ValueError):

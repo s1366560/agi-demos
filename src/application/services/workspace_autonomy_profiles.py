@@ -32,7 +32,6 @@ class EvidencePolicy:
     required_artifact_prefixes: tuple[str, ...] = ()
     requires_external_artifact: bool = False
     minimum_verification_grade: VerificationGrade = "warn"
-    stream_completion_reports_success: bool = True
 
 
 @dataclass(frozen=True)
@@ -69,7 +68,6 @@ _BUILTIN_PROFILES: dict[WorkspaceType, WorkspaceAutonomyProfile] = {
         evidence=EvidencePolicy(
             allow_internal_task_artifacts=True,
             minimum_verification_grade="warn",
-            stream_completion_reports_success=True,
         ),
     ),
     "software_development": WorkspaceAutonomyProfile(
@@ -88,7 +86,6 @@ _BUILTIN_PROFILES: dict[WorkspaceType, WorkspaceAutonomyProfile] = {
             ),
             requires_external_artifact=True,
             minimum_verification_grade="pass",
-            stream_completion_reports_success=False,
         ),
     ),
     "research": WorkspaceAutonomyProfile(
@@ -98,7 +95,6 @@ _BUILTIN_PROFILES: dict[WorkspaceType, WorkspaceAutonomyProfile] = {
             required_artifact_prefixes=("document:", "citation:", "url:", "artifact:", "file:"),
             requires_external_artifact=True,
             minimum_verification_grade="warn",
-            stream_completion_reports_success=False,
         ),
     ),
     "operations": WorkspaceAutonomyProfile(
@@ -114,7 +110,6 @@ _BUILTIN_PROFILES: dict[WorkspaceType, WorkspaceAutonomyProfile] = {
             ),
             requires_external_artifact=True,
             minimum_verification_grade="warn",
-            stream_completion_reports_success=False,
         ),
     ),
 }
@@ -273,10 +268,6 @@ def resolve_autonomy_profile(
         minimum_verification_grade=_grade_override(
             policy_mapping.get("minimum_verification_grade"),
             base.evidence.minimum_verification_grade,
-        ),
-        stream_completion_reports_success=_bool_override(
-            policy_mapping.get("stream_completion_reports_success"),
-            base.evidence.stream_completion_reports_success,
         ),
     )
     return WorkspaceAutonomyProfile(workspace_type=workspace_type, evidence=evidence)
@@ -493,15 +484,3 @@ def _has_software_test_evidence(
         ):
             return True
     return False
-
-
-def stream_completion_reports_success(
-    *,
-    root_metadata: Mapping[str, Any] | None,
-    workspace_metadata: Mapping[str, Any] | None = None,
-) -> bool:
-    """Whether a normal model stream completion may become a worker success."""
-
-    return resolve_autonomy_profile(
-        root_metadata, workspace_metadata
-    ).evidence.stream_completion_reports_success

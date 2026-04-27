@@ -2,18 +2,13 @@
 supervisor + verifier + projector + blackboard into a single entry point.
 
 This is what the application layer (``WorkspaceAutonomyOrchestrator`` et al.)
-calls — it *replaces* the tangled ``schedule_autonomy_tick`` fire-and-forget
-path with a typed, observable flow.
-
-Feature-flagged via ``WORKSPACE_V2_ENABLED`` so the legacy runtime is not
-touched until tests confirm behavior parity.
+calls: a typed, observable flow for durable workspace plans.
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from dataclasses import dataclass
 
 from src.domain.model.workspace_plan import (
@@ -45,15 +40,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class OrchestratorConfig:
-    enabled: bool = True
     heartbeat_seconds: float = 10.0
     max_planning_depth: int = 2
     max_subtasks: int = 8
 
     @classmethod
     def from_env(cls) -> OrchestratorConfig:
+        import os
+
         return cls(
-            enabled=os.getenv("WORKSPACE_V2_ENABLED", "true").lower() == "true",
             heartbeat_seconds=float(os.getenv("WORKSPACE_V2_HEARTBEAT_SEC", "10")),
             max_planning_depth=int(os.getenv("WORKSPACE_V2_MAX_DEPTH", "2")),
             max_subtasks=int(os.getenv("WORKSPACE_V2_MAX_SUBTASKS", "8")),
@@ -61,12 +56,7 @@ class OrchestratorConfig:
 
 
 class WorkspaceOrchestrator:
-    """High-level entry point for the multi-agent architecture.
-
-    The existing ``WorkspaceAutonomyOrchestrator`` (pure-forward dataclass)
-    should delegate to this class when ``config.enabled`` is True. When
-    disabled it is a no-op — legacy runtime continues unchanged.
-    """
+    """High-level entry point for the multi-agent workspace plan architecture."""
 
     def __init__(
         self,
@@ -90,10 +80,6 @@ class WorkspaceOrchestrator:
         self._blackboard = blackboard
         self._config = config or OrchestratorConfig.from_env()
 
-    @property
-    def enabled(self) -> bool:
-        return self._config.enabled
-
     # --- lifecycle -----------------------------------------------------
 
     async def start_goal(
@@ -108,8 +94,6 @@ class WorkspaceOrchestrator:
         start_supervisor: bool = True,
     ) -> Plan:
         """Create or refresh a plan for ``workspace_id`` and start supervision."""
-        if not self._config.enabled:
-            raise RuntimeError("WorkspaceOrchestrator is disabled (set WORKSPACE_V2_ENABLED=true)")
         existing = await self._repo.get_by_workspace(workspace_id)
         if existing is not None and existing.status in (
             PlanStatus.DRAFT,
@@ -143,8 +127,6 @@ class WorkspaceOrchestrator:
         return plan
 
     async def stop_goal(self, workspace_id: str) -> None:
-        if not self._config.enabled:
-            return
         await self._supervisor.stop(workspace_id)
 
     async def mark_worker_reported(
@@ -199,6 +181,4 @@ class WorkspaceOrchestrator:
 
     async def tick_once(self, workspace_id: str) -> TickReport:
         """Run one supervision step without starting a long-lived loop."""
-        if not self._config.enabled:
-            return TickReport(workspace_id=workspace_id)
         return await self._supervisor.tick(workspace_id)

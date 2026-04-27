@@ -59,6 +59,8 @@ class WorkspacePlanNodeResponse(BaseModel):
     description: str
     depends_on: list[str] = Field(default_factory=list)
     acceptance_criteria: list[dict[str, Any]] = Field(default_factory=list)
+    feature_checkpoint: dict[str, Any] | None = None
+    handoff_package: dict[str, Any] | None = None
     recommended_capabilities: list[dict[str, Any]] = Field(default_factory=list)
     intent: str
     execution: str
@@ -97,7 +99,7 @@ class WorkspacePlanBlackboardEntryResponse(BaseModel):
 
 class WorkspacePlanOutboxItemResponse(BaseModel):
     id: str
-    plan_id: str
+    plan_id: str | None
     workspace_id: str
     event_type: str
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -252,6 +254,12 @@ def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
                 }
                 for criterion in node.acceptance_criteria
             ],
+            feature_checkpoint=(
+                node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else None
+            ),
+            handoff_package=(
+                node.handoff_package.to_json() if node.handoff_package is not None else None
+            ),
             recommended_capabilities=[
                 {"name": capability.name, "weight": capability.weight}
                 for capability in node.recommended_capabilities
@@ -566,8 +574,11 @@ async def retry_workspace_plan_outbox_item(
         )
         if item is None:
             raise ValueError(f"outbox item {outbox_id} not found")
+        if item.plan_id is None:
+            raise ValueError(f"outbox item {outbox_id} is not associated with a workspace plan")
+        plan_id = item.plan_id
         _ = await SqlWorkspacePlanEventRepository(db).append(
-            plan_id=item.plan_id,
+            plan_id=plan_id,
             workspace_id=workspace_id,
             event_type="operator_retry_outbox",
             source="operator",
@@ -582,7 +593,7 @@ async def retry_workspace_plan_outbox_item(
         await _publish_plan_updated_event(
             request=request,
             workspace_id=workspace_id,
-            plan_id=item.plan_id,
+            plan_id=plan_id,
             action="operator_retry_outbox",
             outbox_id=outbox_id,
             reason=body.reason,
@@ -590,7 +601,7 @@ async def retry_workspace_plan_outbox_item(
         return WorkspacePlanActionResultResponse(
             ok=True,
             message="Outbox job queued for retry.",
-            plan_id=item.plan_id,
+            plan_id=plan_id,
             outbox_id=outbox_id,
         )
     except Exception as exc:

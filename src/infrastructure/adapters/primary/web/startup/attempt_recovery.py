@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 if TYPE_CHECKING:
+    from src.domain.model.workspace.workspace_task_session_attempt import (
+        WorkspaceTaskSessionAttempt,
+    )
     from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
         WorkspaceAttemptRecoveryService,
     )
@@ -47,6 +50,69 @@ def _int_env(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+async def _enqueue_handoff_resume(
+    attempt: WorkspaceTaskSessionAttempt,
+    summary: str,
+    actor_user_id: str,
+) -> None:
+    from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+        SqlWorkspacePlanOutboxRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+        SqlWorkspaceTaskRepository,
+    )
+    from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+        ROOT_GOAL_TASK_ID,
+        WORKSPACE_PLAN_ID,
+        WORKSPACE_PLAN_NODE_ID,
+    )
+    from src.infrastructure.agent.workspace_plan.outbox_handlers import HANDOFF_RESUME_EVENT
+
+    async with async_session_factory() as db:
+        task = await SqlWorkspaceTaskRepository(db).find_by_id(attempt.workspace_task_id)
+        if task is None:
+            return
+        worker_agent_id = attempt.worker_agent_id or task.assignee_agent_id
+        if not worker_agent_id:
+            return
+
+        metadata = dict(task.metadata or {})
+        raw_plan_id = metadata.get(WORKSPACE_PLAN_ID)
+        plan_id = raw_plan_id if isinstance(raw_plan_id, str) and raw_plan_id else None
+        raw_node_id = metadata.get(WORKSPACE_PLAN_NODE_ID)
+        node_id = raw_node_id if isinstance(raw_node_id, str) and raw_node_id else None
+        root_goal_task_id = attempt.root_goal_task_id
+        if not root_goal_task_id:
+            raw_root_id = metadata.get(ROOT_GOAL_TASK_ID)
+            root_goal_task_id = raw_root_id if isinstance(raw_root_id, str) else ""
+
+        _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
+            plan_id=plan_id,
+            workspace_id=attempt.workspace_id,
+            event_type=HANDOFF_RESUME_EVENT,
+            payload={
+                "workspace_id": attempt.workspace_id,
+                "task_id": attempt.workspace_task_id,
+                "node_id": node_id,
+                "worker_agent_id": worker_agent_id,
+                "actor_user_id": actor_user_id,
+                "leader_agent_id": attempt.leader_agent_id,
+                "previous_attempt_id": attempt.id,
+                "root_goal_task_id": root_goal_task_id,
+                "summary": summary,
+                "reason": "worker_restart"
+                if summary == "recovered_after_restart_no_heartbeat"
+                else "retry",
+                "force_schedule": True,
+            },
+            metadata={
+                "source": "workspace_attempt_recovery",
+                "previous_attempt_id": attempt.id,
+            },
+        )
+        await db.commit()
 
 
 async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | None:
@@ -86,14 +152,11 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             session_factory=async_session_factory,
             apply_report=apply_workspace_worker_report,
             schedule_tick=schedule_autonomy_tick,
+            enqueue_resume=_enqueue_handoff_resume,
             liveness_lookup=_liveness_lookup,
             stale_seconds=_int_env(_STALE_ENV, DEFAULT_STALE_SECONDS),
-            startup_grace_seconds=_int_env(
-                _GRACE_ENV, DEFAULT_STARTUP_GRACE_SECONDS
-            ),
-            check_interval_seconds=_int_env(
-                _INTERVAL_ENV, DEFAULT_CHECK_INTERVAL_SECONDS
-            ),
+            startup_grace_seconds=_int_env(_GRACE_ENV, DEFAULT_STARTUP_GRACE_SECONDS),
+            check_interval_seconds=_int_env(_INTERVAL_ENV, DEFAULT_CHECK_INTERVAL_SECONDS),
         )
         await _recovery.start()
         return _recovery

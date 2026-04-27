@@ -12,8 +12,14 @@ from src.infrastructure.adapters.primary.web.routers.workspace_events import pub
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    ATTEMPT_RETRY_EVENT,
+    HANDOFF_RESUME_EVENT,
     SUPERVISOR_TICK_EVENT,
+    WORKER_LAUNCH_EVENT,
+    make_attempt_retry_handler,
+    make_handoff_resume_handler,
     make_supervisor_tick_handler,
+    make_worker_launch_handler,
 )
 from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxWorker
 
@@ -27,9 +33,7 @@ _LEASE_ENV = "WORKSPACE_PLAN_OUTBOX_LEASE_SECONDS"
 _worker: WorkspacePlanOutboxWorker | None = None
 
 
-def _enabled(config: OrchestratorConfig) -> bool:
-    if not config.enabled:
-        return False
+def _enabled() -> bool:
     raw = os.environ.get(_ENABLED_ENV)
     if raw is None:
         return True
@@ -65,7 +69,7 @@ async def initialize_workspace_plan_outbox_worker(
     global _worker
 
     config = OrchestratorConfig.from_env()
-    if not _enabled(config):
+    if not _enabled():
         logger.info(
             "workspace_plan_outbox.disabled",
             extra={"event": "workspace_plan_outbox.disabled"},
@@ -79,6 +83,9 @@ async def initialize_workspace_plan_outbox_worker(
             session_factory=async_session_factory,
             handlers={
                 SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(config=config),
+                WORKER_LAUNCH_EVENT: make_worker_launch_handler(),
+                HANDOFF_RESUME_EVENT: make_handoff_resume_handler(),
+                ATTEMPT_RETRY_EVENT: make_attempt_retry_handler(),
             },
             poll_interval_seconds=_float_env(_POLL_ENV, 2.0),
             batch_size=_int_env(_BATCH_ENV, 10),

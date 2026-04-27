@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from src.domain.model.workspace_plan import Plan
 from src.domain.model.workspace_plan.acceptance import AcceptanceCriterion, CriterionKind
+from src.domain.model.workspace_plan.handoff import FeatureCheckpoint, HandoffPackage
 from src.domain.model.workspace_plan.plan import PlanStatus
 from src.domain.model.workspace_plan.plan_node import (
     Capability,
@@ -142,6 +143,12 @@ def _plan_node_to_model(node: PlanNode) -> PlanNodeModel:
         inputs_schema=dict(node.inputs_schema),
         outputs_schema=dict(node.outputs_schema),
         acceptance_criteria=[_criterion_to_json(c) for c in node.acceptance_criteria],
+        feature_checkpoint=(
+            node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else None
+        ),
+        handoff_package=(
+            node.handoff_package.to_json() if node.handoff_package is not None else None
+        ),
         recommended_capabilities=[
             {"name": c.name, "weight": c.weight} for c in node.recommended_capabilities
         ],
@@ -182,6 +189,8 @@ def _plan_node_from_model(model: PlanNodeModel) -> PlanNode:
         acceptance_criteria=tuple(
             _criterion_from_json(c) for c in (model.acceptance_criteria or [])
         ),
+        feature_checkpoint=_feature_checkpoint_from_json(model.feature_checkpoint),
+        handoff_package=_handoff_package_from_json(model.handoff_package),
         recommended_capabilities=tuple(
             Capability(name=c["name"], weight=float(c.get("weight", 1.0)))
             for c in (model.recommended_capabilities or [])
@@ -226,6 +235,18 @@ def _criterion_from_json(payload: dict[str, Any]) -> AcceptanceCriterion:
         required=bool(payload.get("required", True)),
         description=str(payload.get("description", "")),
     )
+
+
+def _feature_checkpoint_from_json(payload: dict[str, Any] | None) -> FeatureCheckpoint | None:
+    if not isinstance(payload, dict) or not payload:
+        return None
+    return FeatureCheckpoint.from_json(payload)
+
+
+def _handoff_package_from_json(payload: dict[str, Any] | None) -> HandoffPackage | None:
+    if not isinstance(payload, dict) or not payload:
+        return None
+    return HandoffPackage.from_json(payload)
 
 
 __all__ = ["SqlPlanRepository"]

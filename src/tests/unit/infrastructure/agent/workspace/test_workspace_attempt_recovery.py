@@ -61,6 +61,7 @@ def _make_service(
     stale_attempts: list[WorkspaceTaskSessionAttempt],
     apply_report: AsyncMock | None = None,
     schedule_tick: MagicMock | None = None,
+    enqueue_resume: AsyncMock | None = None,
     liveness_lookup: Any = None,
     task_lookup: dict[str, str] | None = None,
     task_status_lookup: dict[str, Any] | None = None,
@@ -69,16 +70,18 @@ def _make_service(
 ) -> tuple[WorkspaceAttemptRecoveryService, AsyncMock, MagicMock]:
     apply_report = apply_report or AsyncMock(return_value=MagicMock())
     schedule_tick = schedule_tick or MagicMock()
+    enqueue_resume = enqueue_resume or AsyncMock()
     lookup = task_lookup if task_lookup is not None else {"task-1": "user-1"}
     from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+
     status_lookup = (
         task_status_lookup
         if task_status_lookup is not None
-        else {tid: WorkspaceTaskStatus.IN_PROGRESS for tid in lookup}
+        else dict.fromkeys(lookup, WorkspaceTaskStatus.IN_PROGRESS)
     )
-    attempts_by_id = attempt_lookup if attempt_lookup is not None else {
-        a.id: a for a in stale_attempts
-    }
+    attempts_by_id = (
+        attempt_lookup if attempt_lookup is not None else {a.id: a for a in stale_attempts}
+    )
     saves_sink = attempt_saves if attempt_saves is not None else []
 
     class _Session:
@@ -95,7 +98,8 @@ def _make_service(
 
         return _CM()
 
-    session_factory = lambda: _session_cm()
+    def session_factory() -> Any:
+        return _session_cm()
 
     repo_instance = MagicMock()
     repo_instance.find_stale_non_terminal = AsyncMock(return_value=stale_attempts)
@@ -129,7 +133,8 @@ def _make_service(
         session_factory=session_factory,
         apply_report=apply_report,
         schedule_tick=schedule_tick,
-        liveness_lookup=liveness_lookup or (lambda: []),
+        enqueue_resume=enqueue_resume,
+        liveness_lookup=liveness_lookup or (list),
         stale_seconds=60,
         startup_grace_seconds=5,
         check_interval_seconds=30,
@@ -179,6 +184,26 @@ class TestStartupSweep:
         assert schedule_tick.call_count == 2
         ticked = {call.args for call in schedule_tick.call_args_list}
         assert ticked == {("ws-1", "user-1"), ("ws-2", "user-2")}
+
+    @pytest.mark.asyncio
+    async def test_successful_recovery_enqueues_resume_job(self) -> None:
+        enqueue_resume = AsyncMock()
+        att = _make_attempt(attempt_id="att-resume", workspace_task_id="task-1")
+        service, _apply_report, _schedule_tick = _make_service(
+            stale_attempts=[att],
+            enqueue_resume=enqueue_resume,
+            task_lookup={"task-1": "user-1"},
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
 
     @pytest.mark.asyncio
     async def test_noop_when_no_stale_attempts(self) -> None:

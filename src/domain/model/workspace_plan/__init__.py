@@ -5,6 +5,8 @@ This package is the M1 foundation of the multi-agent refactor. It introduces:
 * :class:`PlanNode`            — a task / milestone / verify node in the goal DAG
 * :class:`Plan`                — aggregate root: a DAG of PlanNodes
 * :class:`AcceptanceCriterion` — machine-checkable completion criteria
+* :class:`FeatureCheckpoint`   — durable feature checklist boundary
+* :class:`HandoffPackage`      — context rehydration package for worker rollover
 * :class:`VerificationReport`  — result of running acceptance criteria
 * :class:`GoalProgress`        — first-class progress projection
 
@@ -26,6 +28,11 @@ from src.domain.model.workspace_plan.acceptance import (
 )
 from src.domain.model.workspace_plan.event import WorkspacePlanEvent
 from src.domain.model.workspace_plan.goal_progress import GoalProgress
+from src.domain.model.workspace_plan.handoff import (
+    FeatureCheckpoint,
+    HandoffPackage,
+    HandoffReason,
+)
 from src.domain.model.workspace_plan.plan import Plan, PlanStatus
 from src.domain.model.workspace_plan.plan_node import (
     Capability,
@@ -56,7 +63,10 @@ __all__ = [
     "Effort",
     "EvidenceRef",
     "ExecutionTransitionError",
+    "FeatureCheckpoint",
     "GoalProgress",
+    "HandoffPackage",
+    "HandoffReason",
     "IntentTransitionError",
     "Plan",
     "PlanNode",

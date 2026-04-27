@@ -161,7 +161,7 @@ class TestDoneHandler:
 
     @pytest.mark.asyncio
     async def test_empty_summary_passes_none(self) -> None:
-        # Legacy: `leader_feedback=summary or None` (falsy summary → None).
+        # Empty summary is stored as None.
         svc = _fake_service()
         svc.accept.return_value = _attempt("a1", status=WorkspaceTaskSessionAttemptStatus.ACCEPTED)
         await dispatch_attempt_adjudication(

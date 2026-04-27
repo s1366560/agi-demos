@@ -29,7 +29,7 @@ class SqlWorkspacePlanOutboxRepository:
     async def enqueue(
         self,
         *,
-        plan_id: str,
+        plan_id: str | None,
         workspace_id: str,
         event_type: str,
         payload: dict[str, Any] | None = None,

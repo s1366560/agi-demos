@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from collections.abc import Iterable, Mapping
+import shlex
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +32,14 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
-from src.domain.model.workspace_plan import PlanNode
+from src.domain.model.workspace_plan import (
+    HandoffPackage,
+    HandoffReason,
+    PlanNode,
+    PlanNodeId,
+    TaskExecution,
+    TaskIntent,
+)
 from src.domain.ports.services.task_allocator_port import (
     Allocation,
     WorkspaceAgent as AllocatorAgent,
@@ -39,11 +49,15 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
     SqlWorkspaceAgentRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
     SqlWorkspaceMemberRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+    SqlWorkspacePlanOutboxRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
     SqlWorkspaceRepository,
@@ -80,7 +94,12 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
 )
 
 SUPERVISOR_TICK_EVENT = "supervisor_tick"
+WORKER_LAUNCH_EVENT = "worker_launch"
+HANDOFF_RESUME_EVENT = "handoff_resume"
+ATTEMPT_RETRY_EVENT = "attempt_retry"
 logger = logging.getLogger(__name__)
+
+WorktreePreparer = Callable[[AsyncSession, str, WorkspaceTask, str | None], Awaitable[str | None]]
 
 
 def _build_dispatch_execution_state(*, actor_id: str) -> dict[str, str]:
@@ -187,6 +206,9 @@ def _make_sql_dispatcher(
     payload: Mapping[str, Any],
 ) -> Dispatcher:
     async def _dispatch(workspace_id: str, allocation: Allocation, node: PlanNode) -> str | None:
+        plan_id = item.plan_id
+        if plan_id is None:
+            raise ValueError("workspace plan dispatch requires a plan_id")
         root_task_id = await _resolve_root_task_id(session, workspace_id, payload)
         if root_task_id is None:
             raise ValueError("workspace plan dispatch requires a root goal task")
@@ -206,7 +228,7 @@ def _make_sql_dispatcher(
         existing_task = await _find_task_for_plan_node(
             session=session,
             workspace_id=workspace_id,
-            plan_id=item.plan_id,
+            plan_id=plan_id,
             node_id=node.id,
         )
         task_service = WorkspaceTaskService(
@@ -228,7 +250,7 @@ def _make_sql_dispatcher(
                     ROOT_GOAL_TASK_ID: root_task_id,
                     LINEAGE_SOURCE: "agent",
                     DERIVED_FROM_INTERNAL_PLAN_STEP: node.id,
-                    WORKSPACE_PLAN_ID: item.plan_id,
+                    WORKSPACE_PLAN_ID: plan_id,
                     WORKSPACE_PLAN_NODE_ID: node.id,
                     **_execution_task_metadata_from_node(node),
                 },
@@ -240,7 +262,7 @@ def _make_sql_dispatcher(
                 ),
                 actor_type="agent",
                 actor_agent_id=leader_agent_id,
-                reason="workspace_plan.dispatch.create_compat_task",
+                reason="workspace_plan.dispatch.create_projection_task",
                 authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
             )
 
@@ -275,6 +297,7 @@ def _make_sql_dispatcher(
             attempt = await attempt_service.mark_running(attempt.id)
             should_schedule = True
 
+        _apply_attempt_worktree_checkpoint(node, attempt.id)
         await _ensure_root_started_for_dispatch(
             task_service=task_service,
             command_service=command_service,
@@ -292,6 +315,7 @@ def _make_sql_dispatcher(
             worker_agent_id=binding.agent_id,
             worker_binding_id=binding.id,
             leader_agent_id=leader_agent_id,
+            plan_metadata=_execution_task_metadata_from_node(node),
         )
 
         node.workspace_task_id = existing_task.id
@@ -303,24 +327,541 @@ def _make_sql_dispatcher(
 
         await session.flush()
         if should_schedule and existing_task.assignee_agent_id:
-            await session.commit()
-            from src.infrastructure.agent.workspace.worker_launch import (
-                schedule_worker_session,
-            )
-
-            schedule_worker_session(
+            _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
+                plan_id=plan_id,
                 workspace_id=workspace_id,
-                task=existing_task,
-                worker_agent_id=existing_task.assignee_agent_id,
-                actor_user_id=actor_user_id,
-                leader_agent_id=leader_agent_id,
-                attempt_id=attempt.id,
-                extra_instructions=_node_worker_brief(node),
+                event_type=WORKER_LAUNCH_EVENT,
+                payload={
+                    "workspace_id": workspace_id,
+                    "node_id": node.id,
+                    "task_id": existing_task.id,
+                    "worker_agent_id": existing_task.assignee_agent_id,
+                    "actor_user_id": actor_user_id,
+                    "leader_agent_id": leader_agent_id,
+                    "attempt_id": attempt.id,
+                    "extra_instructions": _node_worker_brief(node),
+                },
+                metadata={"source": "workspace_plan.dispatch.worker_launch"},
             )
 
         return attempt.id
 
     return _dispatch
+
+
+def make_worker_launch_handler(
+    *,
+    worktree_preparer: WorktreePreparer | None = None,
+) -> WorkspacePlanOutboxHandler:
+    """Build an outbox handler that durably schedules a worker conversation."""
+
+    async def _handle(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
+        payload = dict(item.payload_json or {})
+        workspace_id = _payload_string(payload, "workspace_id") or item.workspace_id
+        task_id = _required_payload_string(payload, "task_id")
+        worker_agent_id = _payload_string(payload, "worker_agent_id")
+        actor_user_id = _required_payload_string(payload, "actor_user_id")
+        leader_agent_id = _payload_string(payload, "leader_agent_id")
+        attempt_id = _payload_string(payload, "attempt_id")
+        extra_instructions = _payload_string(payload, "extra_instructions")
+
+        task = await SqlWorkspaceTaskRepository(session).find_by_id(task_id)
+        if task is None or task.workspace_id != workspace_id:
+            raise ValueError(f"workspace task {task_id} not found for workspace {workspace_id}")
+        resolved_worker_agent_id = worker_agent_id or task.assignee_agent_id
+        if not resolved_worker_agent_id:
+            raise ValueError(f"workspace task {task_id} has no worker agent")
+
+        setup_note = await _worker_launch_worktree_note(
+            worktree_preparer or _prepare_attempt_worktree_if_available,
+            session=session,
+            workspace_id=workspace_id,
+            task=task,
+            extra_instructions=extra_instructions,
+        )
+        extra_instructions = _append_launch_instruction_note(extra_instructions, setup_note)
+
+        from src.infrastructure.agent.workspace.worker_launch import (
+            schedule_worker_session,
+        )
+
+        schedule_worker_session(
+            workspace_id=workspace_id,
+            task=task,
+            worker_agent_id=resolved_worker_agent_id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+            attempt_id=attempt_id,
+            extra_instructions=extra_instructions,
+        )
+
+    return _handle
+
+
+def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
+    """Build a handler that turns recovery/retry jobs into fresh worker launches."""
+
+    async def _handle(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
+        payload = dict(item.payload_json or {})
+        workspace_id = _payload_string(payload, "workspace_id") or item.workspace_id
+        task_id = _required_payload_string(payload, "task_id")
+
+        task = await SqlWorkspaceTaskRepository(session).find_by_id(task_id)
+        if task is None or task.workspace_id != workspace_id:
+            raise ValueError(f"workspace task {task_id} not found for workspace {workspace_id}")
+
+        metadata = dict(task.metadata or {})
+        actor_user_id = _payload_string(payload, "actor_user_id") or task.created_by
+        leader_agent_id = _payload_string(payload, "leader_agent_id") or BUILTIN_SISYPHUS_ID
+        worker_agent_id = _payload_string(payload, "worker_agent_id") or task.assignee_agent_id
+        if not worker_agent_id:
+            raise ValueError(f"workspace task {task_id} has no worker agent")
+
+        root_task_id = (
+            _payload_string(payload, ROOT_GOAL_TASK_ID)
+            or _payload_string(payload, "root_goal_task_id")
+            or _mapping_string(metadata, ROOT_GOAL_TASK_ID)
+        )
+        if not root_task_id:
+            raise ValueError(f"workspace task {task_id} has no root goal task")
+
+        binding = await SqlWorkspaceAgentRepository(session).find_by_workspace_and_agent_id(
+            workspace_id=workspace_id,
+            agent_id=worker_agent_id,
+        )
+        if binding is None:
+            raise ValueError(f"workspace agent binding not found for agent_id={worker_agent_id}")
+
+        attempt_service = WorkspaceTaskSessionAttemptService(
+            SqlWorkspaceTaskSessionAttemptRepository(session)
+        )
+        attempt = await attempt_service.get_active_attempt(task.id)
+        should_schedule = _payload_bool(payload, "force_schedule")
+        if attempt is None:
+            attempt = await attempt_service.create_attempt(
+                workspace_task_id=task.id,
+                root_goal_task_id=root_task_id,
+                workspace_id=workspace_id,
+                worker_agent_id=worker_agent_id,
+                leader_agent_id=leader_agent_id,
+            )
+            attempt = await attempt_service.mark_running(attempt.id)
+            should_schedule = True
+        elif attempt.status is WorkspaceTaskSessionAttemptStatus.PENDING:
+            attempt = await attempt_service.mark_running(attempt.id)
+            should_schedule = True
+        elif not attempt.conversation_id:
+            should_schedule = True
+
+        plan_id = item.plan_id or _mapping_string(metadata, WORKSPACE_PLAN_ID)
+        node_id = _payload_string(payload, "node_id") or _mapping_string(
+            metadata, WORKSPACE_PLAN_NODE_ID
+        )
+        handoff = _build_handoff_package(
+            event_type=item.event_type,
+            payload=payload,
+            task=task,
+            metadata=metadata,
+        )
+
+        node_brief: str | None = None
+        plan_metadata: dict[str, object] = {"handoff_package": handoff.to_json()}
+        if plan_id and node_id:
+            node = await _attach_handoff_to_plan_node(
+                session=session,
+                plan_id=plan_id,
+                node_id=node_id,
+                task=task,
+                attempt=attempt,
+                worker_agent_id=worker_agent_id,
+                worker_binding_id=binding.id,
+                handoff=handoff,
+            )
+            if node is not None:
+                node_brief = _node_worker_brief(node)
+                plan_metadata.update(_execution_task_metadata_from_node(node))
+
+        task_service = WorkspaceTaskService(
+            workspace_repo=SqlWorkspaceRepository(session),
+            workspace_member_repo=SqlWorkspaceMemberRepository(session),
+            workspace_agent_repo=SqlWorkspaceAgentRepository(session),
+            workspace_task_repo=SqlWorkspaceTaskRepository(session),
+        )
+        command_service = WorkspaceTaskCommandService(task_service)
+        task = await _project_dispatch_attempt_to_task(
+            command_service=command_service,
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            task=task,
+            attempt=attempt,
+            worker_agent_id=worker_agent_id,
+            worker_binding_id=binding.id,
+            leader_agent_id=leader_agent_id,
+            plan_metadata=plan_metadata,
+        )
+
+        await session.flush()
+        if not should_schedule:
+            return
+        extra_instructions = _append_launch_instruction_note(
+            _payload_string(payload, "extra_instructions"),
+            node_brief or _handoff_only_brief(handoff),
+        )
+        _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            event_type=WORKER_LAUNCH_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "node_id": node_id,
+                "task_id": task.id,
+                "worker_agent_id": worker_agent_id,
+                "actor_user_id": actor_user_id,
+                "leader_agent_id": leader_agent_id,
+                "attempt_id": attempt.id,
+                "extra_instructions": extra_instructions,
+            },
+            metadata={
+                "source": f"workspace_plan.{item.event_type}",
+                "previous_attempt_id": _payload_string(payload, "previous_attempt_id"),
+            },
+        )
+
+    return _handle
+
+
+def make_attempt_retry_handler() -> WorkspacePlanOutboxHandler:
+    """Build a retry handler; retry and handoff resume share the same durable path."""
+
+    return make_handoff_resume_handler()
+
+
+async def _attach_handoff_to_plan_node(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    node_id: str,
+    task: WorkspaceTask,
+    attempt: WorkspaceTaskSessionAttempt,
+    worker_agent_id: str,
+    worker_binding_id: str,
+    handoff: HandoffPackage,
+) -> PlanNode | None:
+    plan = await SqlPlanRepository(session).get(plan_id)
+    if plan is None:
+        return None
+    node = plan.nodes.get(PlanNodeId(node_id))
+    if node is None:
+        return None
+
+    node.workspace_task_id = task.id
+    node.current_attempt_id = attempt.id
+    node.assignee_agent_id = worker_agent_id
+    node.intent = TaskIntent.IN_PROGRESS
+    node.execution = TaskExecution.RUNNING
+    node.handoff_package = handoff
+    node.metadata = {
+        **dict(node.metadata or {}),
+        "workspace_task_id": task.id,
+        WORKSPACE_AGENT_BINDING_ID: worker_binding_id,
+    }
+    _apply_attempt_worktree_checkpoint(node, attempt.id)
+    plan.replace_node(node)
+    await SqlPlanRepository(session).save(plan)
+    return node
+
+
+def _build_handoff_package(
+    *,
+    event_type: str,
+    payload: Mapping[str, Any],
+    task: WorkspaceTask,
+    metadata: Mapping[str, Any],
+) -> HandoffPackage:
+    summary = (
+        _payload_string(payload, "summary")
+        or _mapping_string(metadata, LAST_WORKER_REPORT_SUMMARY)
+        or f"Resume workspace task after {event_type}."
+    )
+    previous_attempt_id = _payload_string(payload, "previous_attempt_id")
+    completed_steps = [
+        value
+        for value in (
+            f"previous_attempt_id={previous_attempt_id}" if previous_attempt_id else None,
+            f"last_report={_mapping_string(metadata, 'last_worker_report_type')}"
+            if _mapping_string(metadata, "last_worker_report_type")
+            else None,
+        )
+        if value
+    ]
+    return HandoffPackage(
+        reason=_handoff_reason_for_event(event_type, _payload_string(payload, "reason")),
+        summary=summary,
+        completed_steps=tuple(completed_steps),
+        next_steps=(
+            "Inspect the checkpoint, existing worktree, recent git status, and any prior diff.",
+            "Continue from the durable plan node and report completion with evidence.",
+        ),
+        changed_files=tuple(_prefixed_metadata_values(metadata, "changed_file:")),
+        git_head=_first_prefixed_metadata_value(metadata, "commit_ref:"),
+        git_diff_summary=_first_prefixed_metadata_value(metadata, "git_diff_summary:") or "",
+        test_commands=tuple(_known_test_commands(metadata)),
+        verification_notes=_verification_notes(metadata) or "",
+    )
+
+
+def _handoff_reason_for_event(event_type: str, raw_reason: str | None) -> HandoffReason:
+    if raw_reason:
+        with contextlib.suppress(ValueError):
+            return HandoffReason(raw_reason)
+    if event_type == ATTEMPT_RETRY_EVENT:
+        return HandoffReason.RETRY
+    return HandoffReason.WORKER_RESTART
+
+
+def _handoff_only_brief(handoff: HandoffPackage) -> str:
+    lines = [
+        "[handoff-package]",
+        f"reason={handoff.reason.value}",
+        f"created_at={handoff.created_at.isoformat()}",
+        f"summary={handoff.summary}",
+    ]
+    lines.extend(f"completed_step={step}" for step in handoff.completed_steps)
+    lines.extend(f"next_step={step}" for step in handoff.next_steps)
+    lines.extend(f"changed_file={path}" for path in handoff.changed_files)
+    lines.extend(f"test_command={command}" for command in handoff.test_commands)
+    lines.append("[/handoff-package]")
+    lines.extend(_rehydration_guidance_lines())
+    return "\n".join(lines)
+
+
+def _prefixed_metadata_values(metadata: Mapping[str, Any], prefix: str) -> list[str]:
+    return [
+        value.removeprefix(prefix)
+        for value in _metadata_string_values(metadata, "evidence_refs")
+        if value.startswith(prefix)
+    ]
+
+
+def _first_prefixed_metadata_value(metadata: Mapping[str, Any], prefix: str) -> str | None:
+    for value in _metadata_string_values(metadata, "evidence_refs"):
+        if value.startswith(prefix):
+            return value.removeprefix(prefix)
+    return None
+
+
+def _known_test_commands(metadata: Mapping[str, Any]) -> list[str]:
+    commands: list[str] = []
+    commands.extend(_metadata_string_values(metadata, "verification_commands"))
+    commands.extend(
+        value.removeprefix("test_run:")
+        for value in _metadata_string_values(metadata, "execution_verifications")
+        if value.startswith("test_run:")
+    )
+    feature = metadata.get("feature_checkpoint")
+    if isinstance(feature, Mapping):
+        commands.extend(_iter_config_strings(feature.get("test_commands")))
+    return list(dict.fromkeys(command for command in commands if command))
+
+
+def _verification_notes(metadata: Mapping[str, Any]) -> str | None:
+    verifications = _metadata_string_values(metadata, "execution_verifications")
+    if not verifications:
+        return None
+    return "; ".join(verifications[:8])
+
+
+def _metadata_string_values(metadata: Mapping[str, Any], key: str) -> list[str]:
+    value = metadata.get(key)
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return []
+
+
+async def _worker_launch_worktree_note(
+    preparer: WorktreePreparer,
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    task: WorkspaceTask,
+    extra_instructions: str | None,
+) -> str | None:
+    try:
+        return await preparer(session, workspace_id, task, extra_instructions)
+    except Exception as exc:
+        logger.warning(
+            "workspace_plan.worker_launch.worktree_prepare_failed",
+            extra={
+                "event": "workspace_plan.worker_launch.worktree_prepare_failed",
+                "workspace_id": workspace_id,
+                "task_id": task.id,
+            },
+            exc_info=True,
+        )
+        return _worktree_setup_note(status="failed", reason=f"preparer raised: {exc}")
+
+
+def _append_launch_instruction_note(instructions: str | None, note: str | None) -> str | None:
+    if not note:
+        return instructions
+    if not instructions:
+        return note.strip()
+    return f"{instructions.rstrip()}\n\n{note.strip()}"
+
+
+async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
+    session: AsyncSession,
+    workspace_id: str,
+    task: WorkspaceTask,
+    _extra_instructions: str | None,
+) -> str | None:
+    metadata = dict(task.metadata or {})
+    feature_checkpoint = metadata.get("feature_checkpoint")
+    if not isinstance(feature_checkpoint, Mapping):
+        return None
+    feature_metadata = cast(Mapping[str, Any], feature_checkpoint)
+
+    worktree_path_template = _mapping_string(feature_metadata, "worktree_path")
+    branch_name = _mapping_string(feature_metadata, "branch_name")
+    base_ref = _mapping_string(feature_metadata, "base_ref") or "HEAD"
+    if not worktree_path_template or not branch_name:
+        return _worktree_setup_note(
+            status="skipped",
+            reason="feature checkpoint does not include worktree_path and branch_name",
+        )
+
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    if workspace is None:
+        return _worktree_setup_note(status="skipped", reason="workspace not found")
+
+    root_metadata: Mapping[str, Any] = {}
+    root_task_id = _mapping_string(metadata, ROOT_GOAL_TASK_ID)
+    if root_task_id:
+        root_task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
+        if root_task is not None and root_task.workspace_id == workspace_id:
+            root_metadata = dict(root_task.metadata or {})
+
+    from src.infrastructure.agent.workspace.code_context import (
+        load_workspace_code_context,
+    )
+
+    workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
+    code_context = load_workspace_code_context(
+        project_id=workspace.project_id,
+        root_metadata=root_metadata,
+        workspace_metadata=workspace_metadata,
+    )
+    if not code_context.sandbox_code_root:
+        return _worktree_setup_note(
+            status="skipped",
+            reason="sandbox_code_root is not available for this workspace",
+        )
+
+    worktree_path = worktree_path_template.replace(
+        "${sandbox_code_root}", code_context.sandbox_code_root
+    )
+    if "${sandbox_code_root}" in worktree_path:
+        return _worktree_setup_note(
+            status="skipped",
+            reason="worktree_path still contains an unresolved sandbox_code_root placeholder",
+        )
+
+    command = _worktree_setup_command(
+        sandbox_code_root=code_context.sandbox_code_root,
+        worktree_path=worktree_path,
+        branch_name=branch_name,
+        base_ref=base_ref,
+    )
+    try:
+        result = await _WorkspaceSandboxCommandRunner(project_id=workspace.project_id).run_command(
+            command,
+            timeout=120,
+        )
+    except Exception as exc:
+        return _worktree_setup_note(
+            status="failed",
+            reason=str(exc),
+            worktree_path=worktree_path,
+            branch_name=branch_name,
+            base_ref=base_ref,
+        )
+
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    if int(result.get("exit_code") or 0) != 0:
+        return _worktree_setup_note(
+            status="failed",
+            reason=_compact_command_output(stderr or stdout),
+            worktree_path=worktree_path,
+            branch_name=branch_name,
+            base_ref=base_ref,
+        )
+    return _worktree_setup_note(
+        status="prepared",
+        output=_compact_command_output(stdout),
+        worktree_path=worktree_path,
+        branch_name=branch_name,
+        base_ref=base_ref,
+    )
+
+
+def _worktree_setup_command(
+    *,
+    sandbox_code_root: str,
+    worktree_path: str,
+    branch_name: str,
+    base_ref: str,
+) -> str:
+    code_root = shlex.quote(sandbox_code_root)
+    worktree = shlex.quote(worktree_path)
+    branch = shlex.quote(branch_name)
+    base = shlex.quote(base_ref)
+    return "\n".join(
+        [
+            "set -e",
+            f"cd {code_root}",
+            f'mkdir -p "$(dirname {worktree})"',
+            f"if [ -e {worktree}/.git ] || [ -f {worktree}/.git ]; then",
+            f"  git -C {worktree} checkout {branch}",
+            "else",
+            f"  git worktree add -B {branch} {worktree} {base}",
+            "fi",
+            f'printf "git_head=%s\\n" "$(git -C {worktree} rev-parse HEAD)"',
+            f"git -C {worktree} status --short",
+            f"git -C {worktree} diff --stat -- || true",
+        ]
+    )
+
+
+def _worktree_setup_note(
+    *,
+    status: str,
+    reason: str | None = None,
+    output: str | None = None,
+    worktree_path: str | None = None,
+    branch_name: str | None = None,
+    base_ref: str | None = None,
+) -> str:
+    lines = ["[worktree-setup]", f"status={status}"]
+    if worktree_path:
+        lines.append(f"worktree_path={worktree_path}")
+    if branch_name:
+        lines.append(f"branch_name={branch_name}")
+    if base_ref:
+        lines.append(f"base_ref={base_ref}")
+    if reason:
+        lines.append(f"reason={_compact_command_output(reason)}")
+    if output:
+        lines.append(f"output={_compact_command_output(output)}")
+    lines.append("[/worktree-setup]")
+    return "\n".join(lines)
+
+
+def _compact_command_output(value: str, *, limit: int = 1000) -> str:
+    compacted = value.strip().replace("\n", "\\n")
+    if len(compacted) <= limit:
+        return compacted
+    return compacted[: limit - 15] + "...[truncated]"
 
 
 async def _ensure_root_started_for_dispatch(
@@ -360,16 +901,18 @@ async def _project_dispatch_attempt_to_task(
     worker_agent_id: str,
     worker_binding_id: str,
     leader_agent_id: str,
+    plan_metadata: Mapping[str, object] | None = None,
 ) -> WorkspaceTask:
-    """Synchronize a durable dispatch onto the legacy task projection.
+    """Synchronize a durable dispatch onto the workspace task projection.
 
-    Durable V2 is the source of truth, but the blackboard UI still reads the
-    compatibility ``WorkspaceTask`` rows. Project the running attempt before
+    Durable V2 is the source of truth, while the blackboard UI reads projected
+    ``WorkspaceTask`` rows. Project the running attempt before
     the async worker launcher fills in conversation details so dispatched work
     never appears stuck at TODO.
     """
 
     metadata_patch: dict[str, object] = {
+        **dict(plan_metadata or {}),
         CURRENT_ATTEMPT_ID: attempt.id,
         "current_attempt_number": attempt.attempt_number,
         "current_attempt_worker_agent_id": worker_agent_id,
@@ -378,11 +921,8 @@ async def _project_dispatch_attempt_to_task(
         "launch_state": "scheduled",
         EXECUTION_STATE: _build_dispatch_execution_state(actor_id=leader_agent_id),
     }
-    target_status = (
-        WorkspaceTaskStatus.IN_PROGRESS
-        if task.status in {WorkspaceTaskStatus.TODO, WorkspaceTaskStatus.BLOCKED}
-        else None
-    )
+    task_status = task.status.value
+    target_status = WorkspaceTaskStatus.IN_PROGRESS if task_status != "done" else None
     return await command_service.update_task(
         workspace_id=workspace_id,
         task_id=task.id,
@@ -554,6 +1094,10 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
 
 def _execution_task_metadata_from_node(node: PlanNode) -> dict[str, object]:
     metadata: dict[str, object] = {}
+    if node.feature_checkpoint is not None:
+        metadata["feature_checkpoint"] = node.feature_checkpoint.to_json()
+    if node.handoff_package is not None:
+        metadata["handoff_package"] = node.handoff_package.to_json()
     write_set = node.metadata.get("write_set")
     if isinstance(write_set, list):
         metadata["write_set"] = [str(item) for item in write_set if item]
@@ -561,6 +1105,36 @@ def _execution_task_metadata_from_node(node: PlanNode) -> dict[str, object]:
     if isinstance(commands, list):
         metadata["verification_commands"] = [str(item) for item in commands if item]
     return metadata
+
+
+def _apply_attempt_worktree_checkpoint(node: PlanNode, attempt_id: str) -> None:
+    feature = node.feature_checkpoint
+    if feature is None:
+        return
+    branch_name = feature.branch_name or _worktree_branch_name(
+        node_id=node.id, attempt_id=attempt_id
+    )
+    worktree_path = (
+        feature.worktree_path or f"${{sandbox_code_root}}/../.memstack/worktrees/{attempt_id}"
+    )
+    node.feature_checkpoint = replace(
+        feature,
+        worktree_path=worktree_path,
+        branch_name=branch_name,
+        base_ref=feature.base_ref or "HEAD",
+    )
+
+
+def _worktree_branch_name(*, node_id: str, attempt_id: str) -> str:
+    node_token = _safe_git_token(node_id)[:48]
+    attempt_token = _safe_git_token(attempt_id)[:12]
+    return f"workspace/{node_token}-{attempt_token}"
+
+
+def _safe_git_token(value: str) -> str:
+    token = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in value)
+    token = token.strip("./-")
+    return token or "node"
 
 
 def _tool_result_text(raw: Mapping[str, Any]) -> str:
@@ -589,9 +1163,85 @@ def _node_worker_brief(node: PlanNode) -> str:
         f"node_id={node.id}",
         f"title={node.title}",
     ]
+    lines.extend(_feature_checkpoint_brief_lines(node))
+    lines.extend(_handoff_package_brief_lines(node))
+    lines.extend(_rehydration_guidance_lines())
     if node.description:
         lines.extend(["", str(node.description)])
     return "\n".join(lines)
+
+
+def _feature_checkpoint_brief_lines(node: PlanNode) -> list[str]:
+    feature = node.feature_checkpoint
+    if feature is None:
+        return []
+    lines = [
+        "",
+        "[feature-checkpoint]",
+        f"feature_id={feature.feature_id}",
+        f"sequence={feature.sequence}",
+        f"title={feature.title or node.title}",
+    ]
+    if feature.init_command:
+        lines.append(f"init_command={feature.init_command}")
+    if feature.commit_ref:
+        lines.append(f"commit_ref={feature.commit_ref}")
+    if feature.worktree_path:
+        lines.append(f"worktree_path={feature.worktree_path}")
+    if feature.branch_name:
+        lines.append(f"branch_name={feature.branch_name}")
+    if feature.base_ref:
+        lines.append(f"base_ref={feature.base_ref}")
+    lines.extend(f"test_command={command}" for command in feature.test_commands)
+    lines.extend(f"expected_artifact={artifact}" for artifact in feature.expected_artifacts)
+    if feature.handoff_notes:
+        lines.append(f"handoff_notes={feature.handoff_notes}")
+    lines.append("[/feature-checkpoint]")
+    return lines
+
+
+def _handoff_package_brief_lines(node: PlanNode) -> list[str]:
+    handoff = node.handoff_package
+    if handoff is None:
+        return []
+    lines = [
+        "",
+        "[handoff-package]",
+        f"reason={handoff.reason.value}",
+        f"created_at={handoff.created_at.isoformat()}",
+        f"summary={handoff.summary}",
+    ]
+    if handoff.git_head:
+        lines.append(f"git_head={handoff.git_head}")
+    if handoff.git_diff_summary:
+        lines.append(f"git_diff_summary={handoff.git_diff_summary}")
+    if handoff.verification_notes:
+        lines.append(f"verification_notes={handoff.verification_notes}")
+    lines.extend(f"completed_step={step}" for step in handoff.completed_steps)
+    lines.extend(f"next_step={step}" for step in handoff.next_steps)
+    lines.extend(f"changed_file={path}" for path in handoff.changed_files)
+    lines.extend(f"test_command={command}" for command in handoff.test_commands)
+    lines.append("[/handoff-package]")
+    return lines
+
+
+def _rehydration_guidance_lines() -> list[str]:
+    return [
+        "",
+        (
+            "Before changing files, get up to speed from the checkpoint: inspect git status, "
+            "recent commits, existing diffs, and any listed test commands from the code root."
+        ),
+        (
+            "If a worktree_path is listed, create or reuse that git worktree from base_ref, "
+            "switch to branch_name, and perform edits/tests there instead of the main checkout."
+        ),
+        (
+            "When reporting completion, include artifacts, verification evidence, remaining risk, "
+            "commit_ref, changed_file entries, test_run evidence, and any diff summary needed by "
+            "the next worker."
+        ),
+    ]
 
 
 def _payload_string(payload: Mapping[str, Any], key: str) -> str | None:
@@ -599,6 +1249,29 @@ def _payload_string(payload: Mapping[str, Any], key: str) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _mapping_string(payload: Mapping[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _payload_bool(payload: Mapping[str, Any], key: str) -> bool:
+    value = payload.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _required_payload_string(payload: Mapping[str, Any], key: str) -> str:
+    value = _payload_string(payload, key)
+    if value is None:
+        raise ValueError(f"worker launch payload requires {key}")
+    return value
 
 
 def _iter_config_strings(value: object) -> Iterable[str]:
@@ -614,4 +1287,13 @@ def _string_set(values: Iterable[str | None]) -> frozenset[str]:
     return frozenset(str(value).strip().lower() for value in values if value and str(value).strip())
 
 
-__all__ = ["SUPERVISOR_TICK_EVENT", "make_supervisor_tick_handler"]
+__all__ = [
+    "ATTEMPT_RETRY_EVENT",
+    "HANDOFF_RESUME_EVENT",
+    "SUPERVISOR_TICK_EVENT",
+    "WORKER_LAUNCH_EVENT",
+    "make_attempt_retry_handler",
+    "make_handoff_resume_handler",
+    "make_supervisor_tick_handler",
+    "make_worker_launch_handler",
+]

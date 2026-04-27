@@ -35,7 +35,7 @@ from src.infrastructure.agent.workspace.goal_runtime.task_transitions import (
     ensure_root_task_started,
 )
 from src.infrastructure.agent.workspace.goal_runtime.v2_bridge import (
-    kickoff_v2_plan_if_enabled,
+    kickoff_v2_plan,
     reset_orchestrator_singleton_for_testing,
 )
 from src.infrastructure.agent.workspace.goal_runtime.worker_report_parsing import (
@@ -58,7 +58,7 @@ __all__ = [
     "_select_existing_root_candidate",
     "ensure_execution_attempt",
     "ensure_root_task_started",
-    "kickoff_v2_plan_if_enabled",
+    "kickoff_v2_plan",
     "reset_orchestrator_singleton_for_testing",
     "should_activate_workspace_authority",
 ]

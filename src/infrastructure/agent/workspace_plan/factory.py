@@ -89,17 +89,17 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
             payload=payload,
         )
         if event_type == "verification_completed":
-            await _project_verification_to_legacy_runtime(db, node, payload)
+            await _project_verification_to_workspace_task(db, node, payload)
 
     return _sink
 
 
-async def _project_verification_to_legacy_runtime(
+async def _project_verification_to_workspace_task(
     db: AsyncSession,
     node: PlanNode,
     payload: dict[str, Any],
 ) -> None:
-    """Keep compatibility task/session projections in sync with V2 verifier authority."""
+    """Keep workspace task/session projections in sync with V2 verifier authority."""
     attempt_id = _payload_string(payload, "attempt_id") or node.current_attempt_id
     passed = bool(payload.get("passed"))
     hard_fail = bool(payload.get("hard_fail"))
@@ -210,7 +210,7 @@ def build_sql_orchestrator(
     progress_sink: ProgressSink | None = None,
     event_sink: PlanEventSink | None = None,
 ) -> WorkspaceOrchestrator:
-    """Wire a SQL-backed Workspace V2 orchestrator without changing legacy runtime.
+    """Wire a SQL-backed Workspace V2 orchestrator.
 
     This is an explicit boundary for request-scoped or job-scoped callers. The
     caller owns the provided ``AsyncSession`` lifetime and commit. Long-lived

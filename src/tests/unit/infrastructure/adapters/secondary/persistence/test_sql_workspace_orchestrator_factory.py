@@ -22,7 +22,7 @@ async def test_build_sql_orchestrator_persists_started_goal(
 ) -> None:
     orchestrator = build_sql_orchestrator(
         db_session,
-        config=OrchestratorConfig(enabled=True, heartbeat_seconds=3600),
+        config=OrchestratorConfig(heartbeat_seconds=3600),
     )
 
     plan = await orchestrator.start_goal(

@@ -3179,6 +3179,8 @@ class PlanNodeModel(Base):
     acceptance_criteria: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, nullable=False, default=list
     )
+    feature_checkpoint: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    handoff_package: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     recommended_capabilities: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, nullable=False, default=list
     )
@@ -3281,8 +3283,8 @@ class WorkspacePlanOutboxModel(Base):
     __tablename__ = "workspace_plan_outbox"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    plan_id: Mapped[str] = mapped_column(
-        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=False
+    plan_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=True
     )
     workspace_id: Mapped[str] = mapped_column(
         String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False

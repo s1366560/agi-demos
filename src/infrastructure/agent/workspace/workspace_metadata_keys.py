@@ -33,7 +33,7 @@ WORKSPACE_AGENT_BINDING_ID: Final[str] = "workspace_agent_binding_id"
 """Workspace-scoped agent binding id preserved alongside assignment projections."""
 
 TASK_ROLE: Final[str] = "task_role"
-"""Semantic role tag on a task (``"goal"``, ``"execution"``, ``"root"``, ...)."""
+"""Semantic role tag on a task (for example ``"goal_root"`` or ``"execution_task"``)."""
 
 LINEAGE_SOURCE: Final[str] = "lineage_source"
 """Where a task was derived from (e.g. ``"decomposer"``, ``"replan"``)."""
@@ -42,10 +42,10 @@ DERIVED_FROM_INTERNAL_PLAN_STEP: Final[str] = "derived_from_internal_plan_step"
 """Step id in the internal plan that produced this execution task."""
 
 WORKSPACE_PLAN_ID: Final[str] = "workspace_plan_id"
-"""Durable V2 ``Plan.id`` that authored this compatibility task."""
+"""Durable V2 ``Plan.id`` that authored this workspace task projection."""
 
 WORKSPACE_PLAN_NODE_ID: Final[str] = "workspace_plan_node_id"
-"""Durable V2 ``PlanNode.id`` that authored this compatibility task."""
+"""Durable V2 ``PlanNode.id`` that authored this workspace task projection."""
 
 AUTONOMY_SCHEMA_VERSION_KEY: Final[str] = "autonomy_schema_version"
 """Schema version key for validator forward-compat; see ``autonomy_schema.py``."""

@@ -32,7 +32,7 @@ def _make_task(
         description=description,
         created_by="user-1",
         status=WorkspaceTaskStatus.TODO,
-        metadata=metadata or {"task_role": "execution", "root_goal_task_id": "root-1"},
+        metadata=metadata or {"task_role": "execution_task", "root_goal_task_id": "root-1"},
     )
 
 
@@ -77,7 +77,7 @@ class TestBuildBrief:
     def test_includes_binding_block_and_title(self) -> None:
         task = _make_task(
             metadata={
-                "task_role": "execution",
+                "task_role": "execution_task",
                 "root_goal_task_id": "root-1",
                 "workspace_agent_binding_id": "binding-1",
             }
@@ -153,6 +153,20 @@ class TestBuildBrief:
         assert "Always run npm test." in brief
         assert "perform all repository inspection" in brief
 
+    def test_renders_code_root_placeholder_in_extra_instructions(self) -> None:
+        task = _make_task()
+        code_context = WorkspaceCodeContext(sandbox_code_root="/workspace/my-evo")
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+            extra_instructions="worktree_path=${sandbox_code_root}/../.memstack/worktrees/att-2",
+        )
+
+        assert "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2" in brief
+
     def test_code_context_metadata_preserves_digest_and_agents_scope(self) -> None:
         code_context = WorkspaceCodeContext(
             sandbox_code_root="/workspace/my-evo",
@@ -170,35 +184,6 @@ class TestBuildBrief:
         assert metadata["loaded_agents_files"] == ["/workspace/my-evo/AGENTS.md"]
         assert isinstance(metadata["agents_digest"], str)
         assert "Always run npm test." in str(metadata["agents_excerpt"])
-
-
-class TestStreamCompletionPolicy:
-    def test_general_workspace_keeps_legacy_stream_completion_success(self) -> None:
-        assert (
-            wl._stream_completion_auto_report_enabled(
-                root_metadata={},
-                workspace_metadata={},
-            )
-            is True
-        )
-
-    def test_software_development_requires_explicit_terminal_report(self) -> None:
-        assert (
-            wl._stream_completion_auto_report_enabled(
-                root_metadata={"workspace_type": "software_development"},
-                workspace_metadata={},
-            )
-            is False
-        )
-
-    def test_workspace_metadata_can_disable_plain_stream_completion(self) -> None:
-        assert (
-            wl._stream_completion_auto_report_enabled(
-                root_metadata={},
-                workspace_metadata={"workspace_type": "research"},
-            )
-            is False
-        )
 
 
 class TestLaunchWorkerSession:

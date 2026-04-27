@@ -1,22 +1,31 @@
 """Unit tests for :mod:`worker_launch_drain`.
 
 Regression anchors: the drain helper is the single path that converts
-``WorkspaceTaskCommandService._pending_worker_launches`` into real worker
-session launches. Skipping or crashing it leaves assigned execution tasks
-stranded with no conversation (the ``2c11849d-…`` stuck-workspace bug).
+``WorkspaceTaskCommandService._pending_worker_launches`` into durable outbox
+events. Skipping it leaves assigned execution tasks stranded with no
+conversation (the ``2c11849d-…`` stuck-workspace bug).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_task_command_service import (
     WorkspaceTaskCommandService,
 )
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
+    User,
+    WorkspaceModel,
+    WorkspacePlanOutboxModel,
+)
 from src.infrastructure.agent.workspace import worker_launch_drain
+from src.infrastructure.agent.workspace_plan.outbox_handlers import WORKER_LAUNCH_EVENT
 
 
 @dataclass
@@ -24,91 +33,91 @@ class _FakeTask:
     id: str
     workspace_id: str
     assignee_agent_id: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+async def _seed_workspace(
+    db_session: AsyncSession,
+    *,
+    project: Project,
+    user: User,
+) -> None:
+    db_session.add(
+        WorkspaceModel(
+            id="workspace-1",
+            tenant_id=project.tenant_id,
+            project_id=project.id,
+            name="Workspace",
+            description="",
+            created_by=user.id,
+            is_archived=False,
+            metadata_json={},
+        )
+    )
+    await db_session.flush()
 
 
 @pytest.mark.unit
 class TestDrainPendingWorkerLaunches:
-    def test_empty_queue_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        calls: list[dict] = []
-        monkeypatch.setattr(
-            worker_launch_drain.worker_launch_mod,
-            "schedule_worker_session",
-            lambda **kw: calls.append(kw),
-        )
-        command_service = WorkspaceTaskCommandService(AsyncMock())
-
-        fired = worker_launch_drain.drain_pending_worker_launches(command_service)
-
-        assert fired == 0
-        assert calls == []
-
-    def test_fires_all_queued_entries_and_clears_queue(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.asyncio
+    async def test_async_drain_enqueues_worker_launch_outbox_without_plan(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
     ) -> None:
-        calls: list[dict] = []
-        monkeypatch.setattr(
-            worker_launch_drain.worker_launch_mod,
-            "schedule_worker_session",
-            lambda **kw: calls.append(kw),
-        )
+        await _seed_workspace(db_session, project=test_project_db, user=test_user)
         command_service = WorkspaceTaskCommandService(AsyncMock())
-        t1 = _FakeTask(id="wt-1", workspace_id="ws-1", assignee_agent_id="agent-1")
-        t2 = _FakeTask(id="wt-2", workspace_id="ws-1", assignee_agent_id="agent-2")
-        command_service._pending_worker_launches.extend(
-            [(t1, "user-1", "leader-1"), (t2, "user-1", "leader-1")]
+        task = _FakeTask(id="wt-queued", workspace_id="workspace-1", assignee_agent_id="agent-1")
+        command_service._pending_worker_launches.append((task, "user-1", "leader-1"))
+
+        fired = await worker_launch_drain.drain_pending_worker_launches_to_outbox(
+            command_service,
+            db_session,
         )
-
-        fired = worker_launch_drain.drain_pending_worker_launches(command_service)
-
-        assert fired == 2
-        assert [c["worker_agent_id"] for c in calls] == ["agent-1", "agent-2"]
-        assert command_service._pending_worker_launches == []
-
-    def test_skips_entries_missing_assignee(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        calls: list[dict] = []
-        monkeypatch.setattr(
-            worker_launch_drain.worker_launch_mod,
-            "schedule_worker_session",
-            lambda **kw: calls.append(kw),
-        )
-        command_service = WorkspaceTaskCommandService(AsyncMock())
-        t_bad = _FakeTask(id="wt-bad", workspace_id="ws-1", assignee_agent_id=None)
-        t_good = _FakeTask(id="wt-good", workspace_id="ws-1", assignee_agent_id="agent-x")
-        command_service._pending_worker_launches.extend(
-            [(t_bad, "user-1", None), (t_good, "user-1", None)]
-        )
-
-        fired = worker_launch_drain.drain_pending_worker_launches(command_service)
 
         assert fired == 1
-        assert calls[0]["worker_agent_id"] == "agent-x"
+        outbox_items = list(
+            (
+                await db_session.execute(
+                    select(WorkspacePlanOutboxModel).where(
+                        WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(outbox_items) == 1
+        item = outbox_items[0]
+        assert item.plan_id is None
+        assert item.workspace_id == "workspace-1"
+        assert item.payload_json["task_id"] == "wt-queued"
+        assert item.payload_json["worker_agent_id"] == "agent-1"
+        assert item.payload_json["actor_user_id"] == "user-1"
+        assert item.payload_json["leader_agent_id"] == "leader-1"
+        assert item.metadata_json["source"] == "workspace.worker_launch_drain"
 
-    def test_swallows_scheduler_exception(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.asyncio
+    async def test_async_drain_raises_when_outbox_enqueue_fails(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A single scheduler failure must not abort the rest of the drain."""
-        attempts: list[str] = []
+        await _seed_workspace(db_session, project=test_project_db, user=test_user)
 
-        def _boom(**kw: object) -> None:
-            attempts.append(str(kw["worker_agent_id"]))
-            if kw["worker_agent_id"] == "agent-1":
-                raise RuntimeError("boom")
+        async def boom(*args: object, **kwargs: object) -> object:
+            raise RuntimeError("outbox down")
 
-        monkeypatch.setattr(
-            worker_launch_drain.worker_launch_mod,
-            "schedule_worker_session",
-            _boom,
-        )
+        monkeypatch.setattr(worker_launch_drain, "_enqueue_worker_launch", boom)
         command_service = WorkspaceTaskCommandService(AsyncMock())
-        t1 = _FakeTask(id="wt-1", workspace_id="ws-1", assignee_agent_id="agent-1")
-        t2 = _FakeTask(id="wt-2", workspace_id="ws-1", assignee_agent_id="agent-2")
-        command_service._pending_worker_launches.extend(
-            [(t1, "user-1", None), (t2, "user-1", None)]
-        )
+        task = _FakeTask(id="wt-direct", workspace_id="workspace-1", assignee_agent_id="agent-1")
+        command_service._pending_worker_launches.append((task, "user-1", None))
 
-        fired = worker_launch_drain.drain_pending_worker_launches(command_service)
-
-        assert attempts == ["agent-1", "agent-2"]
-        assert fired == 1  # only agent-2 counted
+        with pytest.raises(RuntimeError, match="outbox down"):
+            await worker_launch_drain.drain_pending_worker_launches_to_outbox(
+                command_service,
+                db_session,
+            )

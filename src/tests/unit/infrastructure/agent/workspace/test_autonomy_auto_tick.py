@@ -125,12 +125,12 @@ class TestWorkerReportHook:
         schedule_idx = source.index("schedule_autonomy_tick")
         assert commit_idx < schedule_idx
 
-    def test_autonomy_tick_kicks_off_v2_plan_before_legacy_message(self) -> None:
+    def test_autonomy_tick_kicks_off_v2_plan_before_leader_message(self) -> None:
         """The explicit/auto tick path must feed the durable plan before dispatch."""
         import inspect
 
         source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
-        kickoff_idx = source.index("kickoff_v2_plan_if_enabled")
+        kickoff_idx = source.index("kickoff_v2_plan")
         message_idx = source.index("message_service.send_message")
         assert kickoff_idx < message_idx
 
@@ -140,12 +140,12 @@ class TestWorkerReportHook:
 
         source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
         auto_complete_idx = source.index("_try_auto_complete_root")
-        kickoff_idx = source.index("kickoff_v2_plan_if_enabled")
+        kickoff_idx = source.index("kickoff_v2_plan")
         assert auto_complete_idx < kickoff_idx
         assert 'if remediation_status != "ready_for_completion"' in source
 
     def test_auto_complete_reconciles_durable_plan_before_commit(self) -> None:
-        """Legacy root completion must reconcile the V2 projection before publish/commit."""
+        """Root completion must reconcile the V2 projection before publish/commit."""
         import inspect
 
         source = inspect.getsource(wlb._try_auto_complete_root)
@@ -154,7 +154,7 @@ class TestWorkerReportHook:
         commit_idx = source.index("await db.commit()")
         assert reconcile_idx < publish_idx < commit_idx
 
-    def test_durable_plan_children_suppress_legacy_leader_message(self) -> None:
+    def test_durable_plan_children_suppress_extra_leader_message(self) -> None:
         """Once V2 has compat tasks, the tick must not ask Sisyphus to replan."""
         import inspect
 
@@ -171,10 +171,10 @@ class TestWorkerReportHook:
             "workspace_plan_id": "plan-1",
             "workspace_plan_node_id": "node-1",
         }
-        legacy_child = MagicMock()
-        legacy_child.metadata = {"root_goal_task_id": "root-1"}
+        non_plan_child = MagicMock()
+        non_plan_child.metadata = {"root_goal_task_id": "root-1"}
         task_repo = MagicMock()
-        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[legacy_child, plan_child])
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[non_plan_child, plan_child])
 
         assert (
             await wlb._root_has_workspace_plan_linked_children(

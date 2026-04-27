@@ -81,11 +81,11 @@ class TestProgressReport:
     def test_keeps_existing_current_attempt_worker_binding_projection(self) -> None:
         result = build_worker_report_patch(
             **_base_kwargs(
-                task_metadata={"current_attempt_worker_binding_id": "binding-legacy"},
+                task_metadata={"current_attempt_worker_binding_id": "binding-existing"},
                 report_type="progress",
             )
         )
-        assert result.patch["current_attempt_worker_binding_id"] == "binding-legacy"
+        assert result.patch["current_attempt_worker_binding_id"] == "binding-existing"
 
 
 class TestTerminalReport:
@@ -101,7 +101,7 @@ class TestTerminalReport:
             == WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
         )
         assert patch["execution_state"]["last_agent_action"] == "await_leader_adjudication"
-        # legacy default for completed with no explicit verification
+        # default for completed with no explicit verification
         assert "worker_report:completed" in result.report_verifications
         assert "worker_report:completed" in patch["execution_verifications"]
 

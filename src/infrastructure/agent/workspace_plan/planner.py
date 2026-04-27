@@ -1,9 +1,8 @@
 """M2 — LLM-backed :class:`GoalPlannerPort` adapter.
 
 Wraps the existing :class:`~src.infrastructure.agent.subagent.task_decomposer.TaskDecomposer`
-and promotes its :class:`SubTask` output into a full :class:`Plan` DAG. Unlike
-the legacy ``_decompose_root_goal`` call site (which discarded
-``target_subagent / dependencies / priority``), this adapter preserves them.
+and promotes its :class:`SubTask` output into a full :class:`Plan` DAG while
+preserving ``target_subagent / dependencies / priority``.
 
 Falls back to a single-task plan if no LLM client is configured — useful for
 tests and for bootstrapping without hitting an LLM quota.
@@ -20,6 +19,7 @@ from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     Capability,
     CriterionKind,
+    FeatureCheckpoint,
     Plan,
     PlanNode,
     PlanNodeId,
@@ -91,9 +91,10 @@ class LLMGoalPlanner(GoalPlannerPort):
 
         if not decomposition:
             # Single-task fallback under the goal.
+            node_id = self._new_id("node")
             plan.add_node(
                 PlanNode(
-                    id=self._new_id("node"),
+                    id=node_id,
                     plan_id=plan_id,
                     parent_id=goal_node_id,
                     kind=PlanNodeKind.TASK,
@@ -103,7 +104,17 @@ class LLMGoalPlanner(GoalPlannerPort):
                     acceptance_criteria=_default_acceptance_criteria(
                         f"{goal.title}\n{goal.description}"
                     ),
-                    metadata=_planner_node_metadata(f"{goal.title}\n{goal.description}"),
+                    feature_checkpoint=_feature_checkpoint_for_task(
+                        node_id=PlanNodeId(node_id),
+                        title=goal.title,
+                        description=goal.description,
+                        sequence=1,
+                    ),
+                    metadata=_planner_node_metadata(
+                        f"{goal.title}\n{goal.description}",
+                        node_id=PlanNodeId(node_id),
+                        sequence=1,
+                    ),
                 )
             )
             return plan
@@ -114,7 +125,7 @@ class LLMGoalPlanner(GoalPlannerPort):
             nid = PlanNodeId(self._new_id("node"))
             id_map[st.id] = nid
 
-        for st in decomposition:
+        for sequence, st in enumerate(decomposition, start=1):
             nid = id_map[st.id]
             deps = frozenset(id_map[d] for d in st.dependencies if d in id_map)
             caps: tuple[Capability, ...] = ()
@@ -133,7 +144,17 @@ class LLMGoalPlanner(GoalPlannerPort):
                     recommended_capabilities=caps,
                     priority=max(0, int(getattr(st, "priority", 0))),
                     acceptance_criteria=_default_acceptance_criteria(st.description),
-                    metadata=_planner_node_metadata(st.description),
+                    feature_checkpoint=_feature_checkpoint_for_task(
+                        node_id=nid,
+                        title=st.description[:120] or f"Task {st.id}",
+                        description=st.description,
+                        sequence=sequence,
+                    ),
+                    metadata=_planner_node_metadata(
+                        st.description,
+                        node_id=nid,
+                        sequence=sequence,
+                    ),
                 )
             )
         return plan
@@ -186,7 +207,7 @@ class LLMGoalPlanner(GoalPlannerPort):
         if not sub or len(sub) < 2:
             return plan
         id_map: dict[str, PlanNodeId] = {st.id: PlanNodeId(self._new_id("node")) for st in sub}
-        for st in sub:
+        for sequence, st in enumerate(sub, start=1):
             nid = id_map[st.id]
             deps = frozenset(id_map[d] for d in st.dependencies if d in id_map)
             caps: tuple[Capability, ...] = ()
@@ -205,7 +226,17 @@ class LLMGoalPlanner(GoalPlannerPort):
                     recommended_capabilities=caps,
                     priority=max(0, int(getattr(st, "priority", 0))),
                     acceptance_criteria=_default_acceptance_criteria(st.description),
-                    metadata=_planner_node_metadata(st.description),
+                    feature_checkpoint=_feature_checkpoint_for_task(
+                        node_id=nid,
+                        title=st.description[:120] or f"Task {st.id}",
+                        description=st.description,
+                        sequence=sequence,
+                    ),
+                    metadata=_planner_node_metadata(
+                        st.description,
+                        node_id=nid,
+                        sequence=sequence,
+                    ),
                 )
             )
         return plan
@@ -246,7 +277,8 @@ def _default_acceptance_criteria(description: str) -> tuple[AcceptanceCriterion,
     """Build conservative machine checks from structurally obvious task text."""
 
     criteria = [_default_llm_judge(description)]
-    for command in _extract_candidate_commands(description):
+    commands = _extract_candidate_commands(description)
+    for command in commands:
         criteria.append(
             AcceptanceCriterion(
                 kind=CriterionKind.CMD,
@@ -256,6 +288,27 @@ def _default_acceptance_criteria(description: str) -> tuple[AcceptanceCriterion,
                     "timeout": 180,
                 },
                 description=f"command succeeds: {command}",
+                required=True,
+            )
+        )
+    if commands:
+        criteria.append(
+            AcceptanceCriterion(
+                kind=CriterionKind.REGEX,
+                spec={"pattern": r"test_run:", "source": "execution_verifications"},
+                description="test evidence is recorded",
+                required=True,
+            )
+        )
+    if _infer_write_set(description):
+        criteria.append(
+            AcceptanceCriterion(
+                kind=CriterionKind.REGEX,
+                spec={
+                    "pattern": r"(commit_ref:|git_diff_summary:)",
+                    "source": "evidence_refs",
+                },
+                description="change evidence is recorded",
                 required=True,
             )
         )
@@ -283,8 +336,15 @@ def _default_llm_judge(description: str) -> AcceptanceCriterion:
     )
 
 
-def _planner_node_metadata(description: str) -> dict[str, object]:
+def _planner_node_metadata(
+    description: str,
+    *,
+    node_id: PlanNodeId | None = None,
+    sequence: int | None = None,
+) -> dict[str, object]:
     metadata: dict[str, object] = {"acceptance_source": "planner_structural_v1"}
+    if node_id is not None:
+        metadata["feature_id"] = _feature_id(node_id=node_id, sequence=sequence or 0)
     write_set = _infer_write_set(description)
     if write_set:
         metadata["write_set"] = list(write_set)
@@ -292,6 +352,29 @@ def _planner_node_metadata(description: str) -> dict[str, object]:
     if commands:
         metadata["verification_commands"] = commands
     return metadata
+
+
+def _feature_checkpoint_for_task(
+    *,
+    node_id: PlanNodeId,
+    title: str,
+    description: str,
+    sequence: int,
+) -> FeatureCheckpoint:
+    return FeatureCheckpoint(
+        feature_id=_feature_id(node_id=node_id, sequence=sequence),
+        sequence=sequence,
+        title=title,
+        test_commands=tuple(_extract_candidate_commands(description)),
+        expected_artifacts=_infer_write_set(description),
+    )
+
+
+def _feature_id(*, node_id: PlanNodeId, sequence: int) -> str:
+    suffix = node_id.value.removeprefix("node-")
+    if sequence > 0:
+        return f"feature-{sequence:03d}-{suffix}"
+    return f"feature-{suffix}"
 
 
 def _extract_candidate_commands(description: str) -> list[str]:

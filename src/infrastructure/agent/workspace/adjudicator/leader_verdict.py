@@ -117,8 +117,8 @@ class LeaderVerdict:
         The user on whose behalf the leader agent is acting. Required for
         downstream attribution.
     leader_agent_id:
-        Agent ID of the leader that produced the verdict. ``None`` is
-        permitted for legacy paths where the leader is unbound, though in
+        Agent ID of the leader that produced the verdict. ``None`` is accepted
+        for transitional callers where the leader is unbound, though in
         practice the command service requires one.
     attempt_id:
         The attempt ID being adjudicated (may be ``None`` when the task has
@@ -157,7 +157,7 @@ class LeaderVerdict:
 
 
 def _isoformat_z(dt: datetime) -> str:
-    """Format ``dt`` in ISO-8601 with a trailing Z (matches legacy output)."""
+    """Format ``dt`` in ISO-8601 with a trailing Z."""
     iso = dt.isoformat()
     return iso.replace("+00:00", "Z")
 
@@ -171,15 +171,14 @@ def build_adjudication_metadata(
 ) -> dict[str, Any]:
     """Build the metadata patch persisted after a leader adjudication. Pure.
 
-    Mirrors the existing behavior in
-    ``adjudicate_workspace_worker_report``:
+    Mirrors ``adjudicate_workspace_worker_report`` behavior:
 
     * copies ``prior_metadata``;
     * clears ``pending_leader_adjudication`` if it was set;
     * stamps ``last_leader_adjudication_status`` and
       ``last_leader_adjudicated_at`` (ISO-8601 Z);
     * rebuilds ``execution_state`` via the same phase/action mapping used by
-      the legacy code.
+      the runtime code.
 
     The ``now`` parameter is injected for test determinism; production
     callers may omit it to default to ``datetime.now(UTC)``.
@@ -205,9 +204,9 @@ def build_adjudication_metadata(
 
 
 def execution_state_reason(*, verdict: LeaderVerdict, task_title: str) -> str:
-    """Compose the ``reason`` string the legacy code passed to ``_build_execution_state``.
+    """Compose the ``reason`` string passed to ``_build_execution_state``.
 
-    Pure. Matches the legacy format exactly:
+    Pure. Keeps the existing reason format:
     ``workspace_goal_runtime.leader_adjudication.<status>:<summary-or-title>``.
     """
     return (

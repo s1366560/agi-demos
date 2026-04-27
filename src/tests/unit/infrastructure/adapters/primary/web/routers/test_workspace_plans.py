@@ -10,6 +10,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace_plan import (
+    FeatureCheckpoint,
     Plan,
     PlanNode,
     PlanNodeId,
@@ -122,6 +123,11 @@ def _make_plan(workspace_id: str) -> Plan:
         execution=TaskExecution.DISPATCHED,
         assignee_agent_id="agent-api",
         priority=4,
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-api",
+            sequence=1,
+            title="Implement durable supervisor",
+        ),
     )
     return plan
 
@@ -194,6 +200,8 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert response.events[0].event_type == "verification_completed"
     assert response.events[0].payload["summary"] == "verified"
     task_node = next(node for node in response.plan.nodes if node.id == "task-api")
+    assert task_node.feature_checkpoint is not None
+    assert task_node.feature_checkpoint["feature_id"] == "feature-api"
     assert task_node.actions["request_replan"].enabled is True
     assert task_node.actions["reopen_blocked"].enabled is False
 

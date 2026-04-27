@@ -28,9 +28,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import UTC, datetime, timedelta
-from typing import Awaitable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,11 +38,11 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (  # noqa: E501
-    SqlWorkspaceTaskSessionAttemptRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
+    SqlWorkspaceTaskSessionAttemptRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +59,7 @@ RECOVERY_SUMMARY_STALE = "recovered_stale_no_heartbeat"
 ApplyReportCallable = Callable[..., Awaitable[object]]
 LivenessLookup = Callable[[], Iterable[str]]
 ScheduleTickCallable = Callable[[str, str], None]
+EnqueueResumeCallable = Callable[[WorkspaceTaskSessionAttempt, str, str], Awaitable[None]]
 
 
 class WorkspaceAttemptRecoveryService:
@@ -71,6 +71,7 @@ class WorkspaceAttemptRecoveryService:
         session_factory: Callable[[], AsyncSession],
         apply_report: ApplyReportCallable,
         schedule_tick: ScheduleTickCallable,
+        enqueue_resume: EnqueueResumeCallable | None = None,
         liveness_lookup: LivenessLookup | None = None,
         stale_seconds: int = DEFAULT_STALE_SECONDS,
         startup_grace_seconds: int = DEFAULT_STARTUP_GRACE_SECONDS,
@@ -85,6 +86,7 @@ class WorkspaceAttemptRecoveryService:
         self._session_factory = session_factory
         self._apply_report = apply_report
         self._schedule_tick = schedule_tick
+        self._enqueue_resume = enqueue_resume
         self._liveness_lookup: LivenessLookup = liveness_lookup or (lambda: ())
         self._stale_seconds = stale_seconds
         self._startup_grace_seconds = startup_grace_seconds
@@ -105,9 +107,7 @@ class WorkspaceAttemptRecoveryService:
         if self.is_running:
             return
         self._stop_event.clear()
-        self._task = asyncio.create_task(
-            self._loop(), name="workspace-attempt-recovery"
-        )
+        self._task = asyncio.create_task(self._loop(), name="workspace-attempt-recovery")
         logger.info(
             "workspace_attempt_recovery.started",
             extra={
@@ -180,7 +180,7 @@ class WorkspaceAttemptRecoveryService:
                     self._stop_event.wait(), timeout=self._check_interval_seconds
                 )
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             try:
                 await self.periodic_sweep()
@@ -190,14 +190,10 @@ class WorkspaceAttemptRecoveryService:
                 logger.warning(
                     "workspace_attempt_recovery.periodic_sweep_failed",
                     exc_info=True,
-                    extra={
-                        "event": "workspace_attempt_recovery.periodic_sweep_failed"
-                    },
+                    extra={"event": "workspace_attempt_recovery.periodic_sweep_failed"},
                 )
 
-    async def _fetch_stale(
-        self, older_than: datetime
-    ) -> list[WorkspaceTaskSessionAttempt]:
+    async def _fetch_stale(self, older_than: datetime) -> list[WorkspaceTaskSessionAttempt]:
         async with self._session_factory() as session:
             repo = SqlWorkspaceTaskSessionAttemptRepository(session)
             return await repo.find_stale_non_terminal(older_than=older_than)
@@ -226,9 +222,7 @@ class WorkspaceAttemptRecoveryService:
                 )
                 # Parent task was deleted -- mark the orphan attempt terminal
                 # directly so we stop re-discovering it.
-                await self._quiet_block_attempt(
-                    attempt, reason="parent_task_missing"
-                )
+                await self._quiet_block_attempt(attempt, reason="parent_task_missing")
                 continue
             actor_user_id, parent_status = resolution
             if parent_status in terminal_parent_statuses:
@@ -244,9 +238,7 @@ class WorkspaceAttemptRecoveryService:
                         "parent_status": parent_status.value,
                     },
                 )
-                await self._quiet_block_attempt(
-                    attempt, reason=f"parent_{parent_status.value}"
-                )
+                await self._quiet_block_attempt(attempt, reason=f"parent_{parent_status.value}")
                 continue
             try:
                 result = await self._apply_report(
@@ -275,11 +267,14 @@ class WorkspaceAttemptRecoveryService:
                             "workspace_task_id": attempt.workspace_task_id,
                         },
                     )
-                    await self._quiet_block_attempt(
-                        attempt, reason="cascade_returned_none"
-                    )
+                    await self._quiet_block_attempt(attempt, reason="cascade_returned_none")
                     continue
                 recovered += 1
+                await self._enqueue_resume_if_configured(
+                    attempt=attempt,
+                    summary=summary,
+                    actor_user_id=actor_user_id,
+                )
                 scheduled_roots.add((attempt.workspace_id, actor_user_id))
                 logger.warning(
                     "workspace_attempt_recovery.attempt_blocked",
@@ -298,9 +293,7 @@ class WorkspaceAttemptRecoveryService:
                 )
                 # Still flip the attempt itself so we don't loop forever on
                 # the same broken row.
-                await self._quiet_block_attempt(
-                    attempt, reason="apply_report_failed"
-                )
+                await self._quiet_block_attempt(attempt, reason="apply_report_failed")
         for workspace_id, actor_user_id in scheduled_roots:
             try:
                 self._schedule_tick(workspace_id, actor_user_id)
@@ -314,6 +307,29 @@ class WorkspaceAttemptRecoveryService:
                     },
                 )
         return recovered
+
+    async def _enqueue_resume_if_configured(
+        self,
+        *,
+        attempt: WorkspaceTaskSessionAttempt,
+        summary: str,
+        actor_user_id: str,
+    ) -> None:
+        if self._enqueue_resume is None:
+            return
+        try:
+            await self._enqueue_resume(attempt, summary, actor_user_id)
+        except Exception:
+            logger.warning(
+                "workspace_attempt_recovery.enqueue_resume_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_attempt_recovery.enqueue_resume_failed",
+                    "attempt_id": attempt.id,
+                    "workspace_id": attempt.workspace_id,
+                    "workspace_task_id": attempt.workspace_task_id,
+                },
+            )
 
     async def _resolve_parent_task(
         self, workspace_task_id: str
@@ -356,12 +372,8 @@ class WorkspaceAttemptRecoveryService:
                 if stored.status == WorkspaceTaskSessionAttemptStatus.BLOCKED:
                     return
                 stored.status = WorkspaceTaskSessionAttemptStatus.BLOCKED
-                stored.leader_feedback = (
-                    stored.leader_feedback or f"recovery:{reason}"
-                )
-                stored.adjudication_reason = (
-                    stored.adjudication_reason or f"recovery:{reason}"
-                )
+                stored.leader_feedback = stored.leader_feedback or f"recovery:{reason}"
+                stored.adjudication_reason = stored.adjudication_reason or f"recovery:{reason}"
                 now = datetime.now(UTC)
                 stored.completed_at = stored.completed_at or now
                 stored.updated_at = now
