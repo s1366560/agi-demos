@@ -23,6 +23,59 @@ import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
 import { SensingSurfaceBadge } from '@/components/blackboard/SensingSurfaceBadge';
 
+import type { Workspace, WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
+
+const DEFAULT_WORKSPACE_USE_CASE: WorkspaceUseCase = 'general';
+const DEFAULT_COLLABORATION_MODE: WorkspaceCollaborationMode = 'multi_agent_shared';
+
+function isWorkspaceUseCase(value: unknown): value is WorkspaceUseCase {
+  return (
+    value === 'programming' ||
+    value === 'conversation' ||
+    value === 'research' ||
+    value === 'operations' ||
+    value === 'general'
+  );
+}
+
+function isWorkspaceCollaborationMode(value: unknown): value is WorkspaceCollaborationMode {
+  return (
+    value === 'single_agent' ||
+    value === 'multi_agent_shared' ||
+    value === 'multi_agent_isolated' ||
+    value === 'autonomous'
+  );
+}
+
+function getWorkspaceUseCase(workspace: Workspace | null | undefined): WorkspaceUseCase {
+  const direct = workspace?.metadata?.workspace_use_case;
+  if (isWorkspaceUseCase(direct)) {
+    return direct;
+  }
+  const type = workspace?.metadata?.workspace_type;
+  if (type === 'software_development') {
+    return 'programming';
+  }
+  if (type === 'research' || type === 'operations' || type === 'general') {
+    return type;
+  }
+  return DEFAULT_WORKSPACE_USE_CASE;
+}
+
+function getWorkspaceCollaborationMode(
+  workspace: Workspace | null | undefined
+): WorkspaceCollaborationMode {
+  const direct = workspace?.metadata?.collaboration_mode;
+  if (isWorkspaceCollaborationMode(direct)) {
+    return direct;
+  }
+  const legacy = workspace?.metadata?.agent_conversation_mode;
+  if (isWorkspaceCollaborationMode(legacy)) {
+    return legacy;
+  }
+  return DEFAULT_COLLABORATION_MODE;
+}
+
 function LoadingShell() {
   const { t } = useTranslation();
   return (
@@ -98,6 +151,29 @@ export function Blackboard() {
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? currentWorkspace,
     [currentWorkspace, selectedWorkspaceId, workspaces]
   );
+  const workspaceUseCaseLabels = useMemo(
+    () =>
+      ({
+        general: t('tenant.workspaceList.typeGeneral', 'General'),
+        programming: t('tenant.workspaceList.typeProgramming', 'Programming'),
+        conversation: t('tenant.workspaceList.typeConversation', 'Conversation'),
+        research: t('tenant.workspaceList.typeResearch', 'Research'),
+        operations: t('tenant.workspaceList.typeOperations', 'Operations'),
+      }) satisfies Record<WorkspaceUseCase, string>,
+    [t]
+  );
+  const collaborationModeLabels = useMemo(
+    () =>
+      ({
+        single_agent: t('tenant.workspaceList.modeSingle', 'Single'),
+        multi_agent_shared: t('tenant.workspaceList.modeShared', 'Shared team'),
+        multi_agent_isolated: t('tenant.workspaceList.modeIsolated', 'Isolated'),
+        autonomous: t('tenant.workspaceList.modeAutonomous', 'Autonomous'),
+      }) satisfies Record<WorkspaceCollaborationMode, string>,
+    [t]
+  );
+  const workspaceUseCase = getWorkspaceUseCase(selectedWorkspace);
+  const collaborationMode = getWorkspaceCollaborationMode(selectedWorkspace);
   const planRefreshToken = useWorkspaceStore((state) =>
     selectedWorkspaceId ? (state.planRefreshCounters[selectedWorkspaceId] ?? 0) : 0
   );
@@ -197,6 +273,16 @@ export function Blackboard() {
                   'Shared goals, tasks, discussions, and topology for the active workspace.'
                 )}
             </div>
+            {selectedWorkspace && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="inline-flex min-h-7 items-center rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
+                  {workspaceUseCaseLabels[workspaceUseCase]}
+                </span>
+                <span className="inline-flex min-h-7 items-center rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
+                  {collaborationModeLabels[collaborationMode]}
+                </span>
+              </div>
+            )}
             <div className="mt-1 text-xs text-text-muted dark:text-text-muted">
               {t(
                 'blackboard.shellHint',

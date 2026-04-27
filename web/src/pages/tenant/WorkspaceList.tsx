@@ -1,25 +1,10 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 
-import { Button, Input, message, Progress, Spin, Tag } from 'antd';
-import {
-  BookOpenCheck,
-  BriefcaseBusiness,
-  Code2,
-  FolderKanban,
-  LayoutGrid,
-  Plus,
-  Search,
-  Target,
-} from 'lucide-react';
+import { Input, Progress, Spin, Tag } from 'antd';
+import { FolderKanban, LayoutGrid, Plus, Search, Target } from 'lucide-react';
 
 import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
@@ -28,10 +13,20 @@ import { useWorkspaceActions, useWorkspaceLoading, useWorkspaces } from '@/store
 import { workspaceObjectiveService, workspaceTaskService } from '@/services/workspaceService';
 
 import { formatDistanceToNow } from '@/utils/date';
+import {
+  getSandboxCodeRoot,
+  getWorkspaceCollaborationMode,
+  getWorkspaceUseCase,
+} from '@/utils/workspaceConfig';
 
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
-import type { CyberObjective, Workspace, WorkspaceTask, WorkspaceType } from '@/types/workspace';
+import type {
+  CyberObjective,
+  WorkspaceCollaborationMode,
+  WorkspaceTask,
+  WorkspaceUseCase,
+} from '@/types/workspace';
 
 type SummarySource = 'objectives' | 'tasks' | 'empty';
 
@@ -53,59 +48,11 @@ const EMPTY_SUMMARY: ObjectiveSummary = {
   loading: true,
 };
 
-const DEFAULT_WORKSPACE_TYPE: WorkspaceType = 'general';
-
-function isWorkspaceType(value: unknown): value is WorkspaceType {
-  return (
-    value === 'software_development' ||
-    value === 'research' ||
-    value === 'operations' ||
-    value === 'general'
-  );
-}
-
-function getWorkspaceType(workspace: Workspace): WorkspaceType {
-  const value = workspace.metadata?.workspace_type;
-  if (isWorkspaceType(value)) {
-    return value;
-  }
-  return DEFAULT_WORKSPACE_TYPE;
-}
-
-function normaliseSandboxCodeRoot(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('/workspace/')) return trimmed.replace(/\/+$/, '');
-  if (!trimmed.startsWith('/')) return `/workspace/${trimmed.replace(/^\/+/, '')}`;
-  return trimmed.replace(/\/+$/, '');
-}
-
-function isIsolatedSandboxCodeRoot(value: string): boolean {
-  const normalised = normaliseSandboxCodeRoot(value);
-  return normalised.startsWith('/workspace/') && normalised.length > '/workspace/'.length;
-}
-
-function getSandboxCodeRoot(workspace: Workspace): string | null {
-  const direct = workspace.metadata?.sandbox_code_root;
-  if (typeof direct === 'string' && direct.trim()) return direct.trim();
-  const codeContext = workspace.metadata?.code_context;
-  if (
-    codeContext &&
-    typeof codeContext === 'object' &&
-    'sandbox_code_root' in codeContext &&
-    typeof codeContext.sandbox_code_root === 'string' &&
-    codeContext.sandbox_code_root.trim()
-  ) {
-    return codeContext.sandbox_code_root.trim();
-  }
-  return null;
-}
-
 // Domain validates CyberObjective.progress in [0.0, 1.0], but some
 // UIs send 0-100. Auto-detect scale: if any value > 1, assume the
 // collection is on a 0-100 scale; otherwise multiply by 100.
 function normaliseProgress(items: CyberObjective[]): number[] {
-  const raw = items.map((o) => (Number.isFinite(o.progress) ? Number(o.progress) : 0));
+  const raw = items.map((o) => (Number.isFinite(o.progress) ? o.progress : 0));
   const max = raw.reduce((m, v) => (v > m ? v : m), 0);
   const scale = max > 1 ? 1 : 100;
   return raw.map((v) => Math.max(0, Math.min(100, v * scale)));
@@ -161,53 +108,34 @@ export function WorkspaceList() {
   const listProjects = useProjectStore((state) => state.listProjects);
   const workspaces = useWorkspaces();
   const isLoading = useWorkspaceLoading();
-  const { loadWorkspaces, createWorkspace } = useWorkspaceActions();
+  const { loadWorkspaces } = useWorkspaceActions();
 
-  const [name, setName] = useState('');
   const [query, setQuery] = useState('');
-  const [workspaceType, setWorkspaceType] = useState<WorkspaceType>(DEFAULT_WORKSPACE_TYPE);
-  const [sandboxCodeRoot, setSandboxCodeRoot] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [summaries, setSummaries] = useState<Record<string, ObjectiveSummary>>({});
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
   const projectId = params.projectId ?? currentProject?.id ?? projects[0]?.id ?? null;
-  const workspaceTypeLabels = useMemo(
+  const useCaseLabels = useMemo(
     () =>
       ({
         general: t('tenant.workspaceList.typeGeneral', 'General'),
-        software_development: t('tenant.workspaceList.typeSoftware', 'Software'),
+        programming: t('tenant.workspaceList.typeProgramming', 'Programming'),
+        conversation: t('tenant.workspaceList.typeConversation', 'Conversation'),
         research: t('tenant.workspaceList.typeResearch', 'Research'),
         operations: t('tenant.workspaceList.typeOperations', 'Operations'),
-      }) satisfies Record<WorkspaceType, string>,
+      }) satisfies Record<WorkspaceUseCase, string>,
     [t]
   );
-  const workspaceTypeOptions = useMemo(
-    (): Array<{ label: string; value: WorkspaceType; icon: ReactNode }> => [
-      {
-        label: workspaceTypeLabels.general,
-        value: 'general',
-        icon: <LayoutGrid size={14} aria-hidden />,
-      },
-      {
-        label: workspaceTypeLabels.software_development,
-        value: 'software_development',
-        icon: <Code2 size={14} aria-hidden />,
-      },
-      {
-        label: workspaceTypeLabels.research,
-        value: 'research',
-        icon: <BookOpenCheck size={14} aria-hidden />,
-      },
-      {
-        label: workspaceTypeLabels.operations,
-        value: 'operations',
-        icon: <BriefcaseBusiness size={14} aria-hidden />,
-      },
-    ],
-    [workspaceTypeLabels]
+  const collaborationModeLabels = useMemo(
+    () =>
+      ({
+        single_agent: t('tenant.workspaceList.modeSingle', 'Single'),
+        multi_agent_shared: t('tenant.workspaceList.modeShared', 'Shared team'),
+        multi_agent_isolated: t('tenant.workspaceList.modeIsolated', 'Isolated'),
+        autonomous: t('tenant.workspaceList.modeAutonomous', 'Autonomous'),
+      }) satisfies Record<WorkspaceCollaborationMode, string>,
+    [t]
   );
-
   useEffect(() => {
     if (!tenantId || params.projectId || currentProject || projects.length > 0) return;
     void listProjects(tenantId).catch(() => {
@@ -226,15 +154,15 @@ export function WorkspaceList() {
     let cancelled = false;
     const ids = workspaces.map((w) => w.id);
 
-    setSummaries((prev) => {
-      const next = { ...prev };
-      for (const id of ids) {
-        if (!next[id]) next[id] = EMPTY_SUMMARY;
-      }
-      return next;
-    });
-
     void (async () => {
+      setSummaries((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          if (!next[id]) next[id] = EMPTY_SUMMARY;
+        }
+        return next;
+      });
+
       await Promise.all(
         ids.map(async (id) => {
           try {
@@ -285,37 +213,6 @@ export function WorkspaceList() {
     );
   }, [workspaces, query]);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (!tenantId || !projectId || !trimmed || submitting) return;
-    const codeRoot = normaliseSandboxCodeRoot(sandboxCodeRoot);
-    if (workspaceType === 'software_development' && !isIsolatedSandboxCodeRoot(codeRoot)) return;
-    setSubmitting(true);
-    try {
-      await createWorkspace(tenantId, projectId, {
-        name: trimmed,
-        metadata: {
-          workspace_type: workspaceType,
-          ...(workspaceType === 'software_development'
-            ? {
-                sandbox_code_root: codeRoot,
-                code_context: { sandbox_code_root: codeRoot },
-              }
-            : {}),
-        },
-      });
-      setName('');
-      setWorkspaceType(DEFAULT_WORKSPACE_TYPE);
-      setSandboxCodeRoot('');
-      message.success(t('tenant.workspaceList.createSuccess', 'Workspace created'));
-    } catch {
-      message.error(t('tenant.workspaceList.createError', 'Failed to create workspace'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   if (!tenantId || !projectId) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
@@ -335,6 +232,10 @@ export function WorkspaceList() {
     count: workspaces.length,
     defaultValue: `${String(workspaces.length)} workspaces`,
   });
+  const createWorkspacePath =
+    tenantId && projectId
+      ? `/tenant/${tenantId}/project/${projectId}/workspaces/new`
+      : `/tenant/${tenantId}/workspaces/new`;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col px-6 py-8 sm:px-8">
@@ -356,90 +257,8 @@ export function WorkspaceList() {
         </p>
       </header>
 
-      {/* Toolbar: create form + search */}
-      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <form
-          onSubmit={(e) => void onSubmit(e)}
-          className="flex flex-1 flex-col gap-2 lg:max-w-3xl"
-        >
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="sr-only" htmlFor="workspace-name-input">
-              {t('tenant.workspaceList.namePlaceholder', 'Workspace name')}
-            </label>
-            <Input
-              id="workspace-name-input"
-              placeholder={t('tenant.workspaceList.namePlaceholder', 'Workspace name')}
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-              }}
-              maxLength={120}
-              disabled={submitting}
-              className="flex-1"
-            />
-            <Button
-              type="primary"
-              htmlType="submit"
-              icon={<Plus size={14} />}
-              loading={submitting}
-              disabled={
-                !name.trim() ||
-                (workspaceType === 'software_development' &&
-                  !isIsolatedSandboxCodeRoot(sandboxCodeRoot))
-              }
-            >
-              {t('tenant.workspaceList.createButton', 'Create Workspace')}
-            </Button>
-          </div>
-          <div
-            role="radiogroup"
-            aria-label={t('tenant.workspaceList.typeSelector', 'Workspace type')}
-            className="grid grid-cols-2 overflow-hidden rounded-md border border-border-light bg-surface-muted p-0.5 dark:border-border-dark dark:bg-surface-dark-alt sm:grid-cols-4"
-          >
-            {workspaceTypeOptions.map((option) => {
-              const selected = workspaceType === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  disabled={submitting}
-                  onClick={() => {
-                    setWorkspaceType(option.value);
-                  }}
-                  className={[
-                    'flex min-h-8 items-center justify-center gap-1.5 rounded px-2 text-xs font-medium transition-colors',
-                    selected
-                      ? 'bg-surface-light text-primary shadow-sm dark:bg-surface-dark dark:text-primary-light'
-                      : 'text-text-secondary hover:bg-surface-light/70 dark:text-text-muted dark:hover:bg-surface-dark',
-                  ].join(' ')}
-                >
-                  {option.icon}
-                  <span className="truncate">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {workspaceType === 'software_development' ? (
-            <div>
-              <label className="sr-only" htmlFor="workspace-code-root-input">
-                {t('tenant.workspaceList.codeRootPlaceholder', 'Sandbox code root')}
-              </label>
-              <Input
-                id="workspace-code-root-input"
-                prefix={<Code2 size={14} className="text-text-muted" />}
-                placeholder={t('tenant.workspaceList.codeRootPlaceholder', '/workspace/my-evo')}
-                value={sandboxCodeRoot}
-                onChange={(e) => {
-                  setSandboxCodeRoot(e.target.value);
-                }}
-                disabled={submitting}
-              />
-            </div>
-          ) : null}
-        </form>
-        <div className="lg:w-64">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="sm:w-80">
           <label className="sr-only" htmlFor="workspace-search-input">
             {t('tenant.workspaceList.searchPlaceholder', 'Search workspaces...')}
           </label>
@@ -454,6 +273,13 @@ export function WorkspaceList() {
             allowClear
           />
         </div>
+        <Link
+          to={createWorkspacePath}
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white transition hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-white"
+        >
+          <Plus size={14} aria-hidden />
+          {t('tenant.workspaceList.createButton', 'Create Workspace')}
+        </Link>
       </div>
 
       {/* Content */}
@@ -488,7 +314,8 @@ export function WorkspaceList() {
               const updated = workspace.updated_at ?? workspace.created_at;
               const archived = workspace.is_archived === true;
               const summary = summaries[workspace.id];
-              const type = getWorkspaceType(workspace);
+              const useCase = getWorkspaceUseCase(workspace);
+              const collaboration = getWorkspaceCollaborationMode(workspace);
               const codeRoot = getSandboxCodeRoot(workspace);
               return (
                 <li key={workspace.id} className="h-full">
@@ -511,8 +338,11 @@ export function WorkspaceList() {
                       {workspace.description?.trim() || '—'}
                     </p>
                     <div>
-                      <Tag color={type === 'general' ? 'default' : 'blue'} className="!m-0">
-                        {workspaceTypeLabels[type]}
+                      <Tag color={useCase === 'general' ? 'default' : 'blue'} className="!m-0">
+                        {useCaseLabels[useCase]}
+                      </Tag>
+                      <Tag color={collaboration === 'single_agent' ? 'default' : 'purple'}>
+                        {collaborationModeLabels[collaboration]}
                       </Tag>
                       {codeRoot ? (
                         <Tag color="geekblue" className="!mr-0">

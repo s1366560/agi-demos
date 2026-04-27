@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 
 import { Routes, Route, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 
@@ -155,6 +155,9 @@ const AgentWorkspace = lazy(() =>
 const WorkspaceList = lazy(() =>
   import('./pages/tenant/WorkspaceList').then((m) => ({ default: m.WorkspaceList }))
 );
+const WorkspaceCreate = lazy(() =>
+  import('./pages/tenant/WorkspaceCreate').then((m) => ({ default: m.WorkspaceCreate }))
+);
 const WorkspaceBlackboardRedirect = lazy(() =>
   import('./pages/project/WorkspaceBlackboardRedirect').then((m) => ({
     default: m.WorkspaceBlackboardRedirect,
@@ -257,7 +260,9 @@ const EntitiesList = lazy(() =>
   }))
 );
 const CommunitiesList = lazy(() =>
-  import('./pages/project/CommunitiesList').then((m) => ({ default: m.CommunitiesList }))
+  import('./pages/project/CommunitiesList').then((m) => ({
+    default: m.CommunitiesList as ComponentType,
+  }))
 );
 const EnhancedSearch = lazy(() =>
   import('./pages/project/EnhancedSearch').then((m) => ({
@@ -357,11 +362,10 @@ function useResolvedProjectRedirectPath({
       currentTenant?.id && projects.some((project) => project.id === projectId)
         ? currentTenant.id
         : undefined;
-    const candidateTenantIds = [
-      trustedTenantId,
-      currentTenant?.id,
-      user?.tenant_id,
-    ].filter((tenantId, index, values): tenantId is string => Boolean(tenantId) && values.indexOf(tenantId) === index);
+    const candidateTenantIds = [trustedTenantId, currentTenant?.id, user?.tenant_id].filter(
+      (tenantId, index, values): tenantId is string =>
+        Boolean(tenantId) && values.indexOf(tenantId) === index
+    );
 
     const resolvePath = async () => {
       if (trustedTenantId) {
@@ -399,14 +403,21 @@ function useResolvedProjectRedirectPath({
     return () => {
       cancelled = true;
     };
-  }, [currentTenant?.id, fallbackPath, getProject, normalizedQuery, projectId, projects, rest, user?.tenant_id]);
+  }, [
+    currentTenant?.id,
+    fallbackPath,
+    getProject,
+    normalizedQuery,
+    projectId,
+    projects,
+    rest,
+    user?.tenant_id,
+  ]);
 
   return projectId ? resolvedPath : fallbackPath;
 }
 
-function getLegacyWorkspaceRedirectParams(
-  search: string
-): {
+function getLegacyWorkspaceRedirectParams(search: string): {
   projectId?: string | undefined;
   workspaceId: string | null;
 } {
@@ -503,10 +514,7 @@ function App() {
       <ThemeProvider>
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            <Route
-              path="/login"
-              element={!isAuthenticated ? <Login /> : <LoginRedirect />}
-            />
+            <Route path="/login" element={!isAuthenticated ? <Login /> : <LoginRedirect />} />
             <Route
               path="/login/callback/:provider"
               element={
@@ -708,6 +716,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <WorkspaceList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="workspaces/new"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <WorkspaceCreate />
                   </Suspense>
                 }
               />
@@ -1092,6 +1108,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <WorkspaceList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/workspaces/new"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <WorkspaceCreate />
                   </Suspense>
                 }
               />
@@ -1682,6 +1706,14 @@ function App() {
                   }
                 />
                 <Route
+                  path="workspaces/new"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <WorkspaceCreate />
+                    </Suspense>
+                  }
+                />
+                <Route
                   path="workspaces/:workspaceId"
                   element={
                     <Suspense fallback={<PageLoader />}>
@@ -1695,9 +1727,7 @@ function App() {
             {/* Legacy /project/:projectId redirect to tenant-scoped route */}
             <Route
               path="/project/:projectId/*"
-              element={
-                isAuthenticated ? <LegacyProjectRedirect /> : <RedirectToLogin />
-              }
+              element={isAuthenticated ? <LegacyProjectRedirect /> : <RedirectToLogin />}
             />
 
             {/* Fallback */}

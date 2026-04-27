@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.schemas.workspace_agent_autonomy import AutonomyProfileModel
+from src.application.services.workspace_autonomy_profiles import (
+    evaluate_workspace_code_context,
+    normalize_sandbox_code_root,
+)
 from src.application.services.workspace_layout_limits import MAX_WORKSPACE_HEX_COORDINATE
 from src.application.services.workspace_service import WorkspaceService
 from src.domain.model.workspace.workspace import Workspace
@@ -71,10 +77,157 @@ def _ensure_workspace_scope(workspace: Workspace, tenant_id: str, project_id: st
         raise ValueError("Workspace not found")
 
 
+WorkspaceUseCase = Literal["general", "programming", "conversation", "research", "operations"]
+WorkspaceType = Literal["general", "software_development", "research", "operations"]
+WorkspaceCollaborationMode = Literal[
+    "single_agent",
+    "multi_agent_shared",
+    "multi_agent_isolated",
+    "autonomous",
+]
+
+_DEFAULT_WORKSPACE_USE_CASE: WorkspaceUseCase = "general"
+_DEFAULT_COLLABORATION_MODE: WorkspaceCollaborationMode = "single_agent"
+_USE_CASE_TO_WORKSPACE_TYPE: dict[WorkspaceUseCase, WorkspaceType] = {
+    "general": "general",
+    "programming": "software_development",
+    "conversation": "general",
+    "research": "research",
+    "operations": "operations",
+}
+_VALID_USE_CASES = set(_USE_CASE_TO_WORKSPACE_TYPE)
+_VALID_COLLABORATION_MODES = {
+    "single_agent",
+    "multi_agent_shared",
+    "multi_agent_isolated",
+    "autonomous",
+}
+
+
+def _as_mapping(value: Any) -> Mapping[str, Any]:  # noqa: ANN401
+    if isinstance(value, Mapping):
+        return cast(Mapping[str, Any], value)
+    return {}
+
+
+def _coerce_use_case(value: Any) -> WorkspaceUseCase | None:  # noqa: ANN401
+    if value == "software_development":
+        return "programming"
+    if isinstance(value, str) and value in _VALID_USE_CASES:
+        return value
+    return None
+
+
+def _coerce_workspace_type(value: Any) -> WorkspaceType | None:  # noqa: ANN401
+    if value == "software_development":
+        return "software_development"
+    if value == "research":
+        return "research"
+    if value == "operations":
+        return "operations"
+    if value == "general":
+        return "general"
+    return None
+
+
+def _coerce_collaboration_mode(value: Any) -> WorkspaceCollaborationMode | None:  # noqa: ANN401
+    if isinstance(value, str) and value in _VALID_COLLABORATION_MODES:
+        return cast(WorkspaceCollaborationMode, value)
+    return None
+
+
+def _resolve_use_case(
+    explicit: WorkspaceUseCase | None,
+    metadata: Mapping[str, Any],
+) -> WorkspaceUseCase:
+    if explicit is not None:
+        return explicit
+    profile = _as_mapping(metadata.get("autonomy_profile"))
+    for value in (
+        metadata.get("workspace_use_case"),
+        metadata.get("use_case"),
+        metadata.get("workspace_type"),
+        profile.get("workspace_type"),
+    ):
+        use_case = _coerce_use_case(value)
+        if use_case is not None:
+            return use_case
+        workspace_type = _coerce_workspace_type(value)
+        if workspace_type == "software_development":
+            return "programming"
+        if workspace_type in {"research", "operations", "general"}:
+            return cast(WorkspaceUseCase, workspace_type)
+    return _DEFAULT_WORKSPACE_USE_CASE
+
+
+def _resolve_collaboration_mode(
+    explicit: WorkspaceCollaborationMode | None,
+    metadata: Mapping[str, Any],
+) -> WorkspaceCollaborationMode:
+    if explicit is not None:
+        return explicit
+    for value in (
+        metadata.get("collaboration_mode"),
+        metadata.get("agent_conversation_mode"),
+    ):
+        mode = _coerce_collaboration_mode(value)
+        if mode is not None:
+            return mode
+    return _DEFAULT_COLLABORATION_MODE
+
+
+def _workspace_type_for_use_case(use_case: WorkspaceUseCase) -> WorkspaceType:
+    return _USE_CASE_TO_WORKSPACE_TYPE[use_case]
+
+
+def _compose_workspace_metadata(payload: WorkspaceCreateRequest) -> dict[str, Any]:
+    metadata = dict(payload.metadata or {})
+    use_case = _resolve_use_case(payload.use_case, metadata)
+    workspace_type = _workspace_type_for_use_case(use_case)
+    collaboration_mode = _resolve_collaboration_mode(payload.collaboration_mode, metadata)
+
+    profile = dict(_as_mapping(metadata.get("autonomy_profile")))
+    if payload.autonomy_profile is not None:
+        profile.update(payload.autonomy_profile.model_dump(exclude_none=True))
+    profile["workspace_type"] = workspace_type
+
+    metadata.update(
+        {
+            "workspace_use_case": use_case,
+            "workspace_type": workspace_type,
+            "collaboration_mode": collaboration_mode,
+            "agent_conversation_mode": collaboration_mode,
+            "autonomy_profile": profile,
+        }
+    )
+
+    sandbox_code_root = normalize_sandbox_code_root(
+        payload.sandbox_code_root or metadata.get("sandbox_code_root")
+    )
+    if sandbox_code_root:
+        code_context = dict(_as_mapping(metadata.get("code_context")))
+        code_context["sandbox_code_root"] = sandbox_code_root
+        metadata["sandbox_code_root"] = sandbox_code_root
+        metadata["code_context"] = code_context
+
+    code_context_eval = evaluate_workspace_code_context(
+        root_metadata=None,
+        workspace_metadata=metadata,
+    )
+    if not code_context_eval.allowed:
+        raise ValueError(code_context_eval.reason or "Invalid workspace code context")
+
+    return metadata
+
+
 class WorkspaceCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    use_case: WorkspaceUseCase | None = None
+    collaboration_mode: WorkspaceCollaborationMode | None = None
+    autonomy_profile: AutonomyProfileModel | None = None
+    sandbox_code_root: str | None = None
 
 
 class WorkspaceUpdateRequest(BaseModel):
@@ -246,7 +399,7 @@ async def create_workspace(
             name=payload.name,
             created_by=current_user.id,
             description=payload.description,
-            metadata=payload.metadata,
+            metadata=_compose_workspace_metadata(payload),
         )
         await db.commit()
         return _to_workspace_response(workspace)
@@ -342,7 +495,7 @@ async def delete_workspace(
             actor_user_id=current_user.id,
         )
         _ensure_workspace_scope(workspace, tenant_id=tenant_id, project_id=project_id)
-        await workspace_service.delete_workspace(
+        _ = await workspace_service.delete_workspace(
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
         )
@@ -473,7 +626,7 @@ async def remove_workspace_member(
             actor_user_id=current_user.id,
         )
         _ensure_workspace_scope(workspace, tenant_id=tenant_id, project_id=project_id)
-        await workspace_service.remove_member(
+        _ = await workspace_service.remove_member(
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
             target_user_id=user_id,
@@ -619,7 +772,7 @@ async def delete_workspace_agent(
             actor_user_id=current_user.id,
         )
         _ensure_workspace_scope(workspace, tenant_id=tenant_id, project_id=project_id)
-        await workspace_service.unbind_agent(
+        _ = await workspace_service.unbind_agent(
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
             workspace_agent_id=workspace_agent_id,

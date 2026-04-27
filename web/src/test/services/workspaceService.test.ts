@@ -40,6 +40,40 @@ describe('workspaceService', () => {
     expect(result).toEqual([{ id: 'ws-1', name: 'Workspace 1' }]);
   });
 
+  it('creates workspaces with explicit scenario and collaboration settings', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      headers: new Headers(),
+      json: async () => ({
+        id: 'ws-2',
+        name: 'Programming Room',
+        metadata: {
+          workspace_use_case: 'programming',
+          workspace_type: 'software_development',
+          collaboration_mode: 'autonomous',
+        },
+      }),
+    } as Response);
+
+    const result = await workspaceService.create('tenant-1', 'project-1', {
+      name: 'Programming Room',
+      use_case: 'programming',
+      collaboration_mode: 'autonomous',
+      sandbox_code_root: '/workspace/my-evo',
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith('/tenants/tenant-1/projects/project-1/workspaces', {
+      name: 'Programming Room',
+      use_case: 'programming',
+      collaboration_mode: 'autonomous',
+      sandbox_code_root: '/workspace/my-evo',
+    });
+    expect(result.metadata?.collaboration_mode).toBe('autonomous');
+  });
+
   it('creates blackboard post for tenant/project/workspace', async () => {
     const { apiFetch } = await import('@/services/client/urlUtils');
     vi.mocked(apiFetch.post).mockResolvedValueOnce({

@@ -125,6 +125,51 @@ class TestWorkspacesRouter:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["id"] == "ws-1"
         assert mock_workspace_service.create_workspace.await_count == 1
+        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
+        assert metadata["workspace_use_case"] == "general"
+        assert metadata["workspace_type"] == "general"
+        assert metadata["collaboration_mode"] == "single_agent"
+        assert metadata["agent_conversation_mode"] == "single_agent"
+
+    def test_create_workspace_forwards_scenario_and_collaboration_metadata(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={
+                "name": "Delivery Room",
+                "use_case": "programming",
+                "collaboration_mode": "autonomous",
+                "sandbox_code_root": "my-evo",
+                "metadata": {"source": "ui"},
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
+        assert metadata["source"] == "ui"
+        assert metadata["workspace_use_case"] == "programming"
+        assert metadata["workspace_type"] == "software_development"
+        assert metadata["collaboration_mode"] == "autonomous"
+        assert metadata["agent_conversation_mode"] == "autonomous"
+        assert metadata["autonomy_profile"] == {"workspace_type": "software_development"}
+        assert metadata["sandbox_code_root"] == "/workspace/my-evo"
+        assert metadata["code_context"]["sandbox_code_root"] == "/workspace/my-evo"
+
+    def test_create_workspace_rejects_unscoped_programming_root(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={
+                "name": "Unsafe Delivery Room",
+                "use_case": "programming",
+                "sandbox_code_root": "/workspace",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_workspace_service.create_workspace.assert_not_awaited()
 
     def test_list_workspaces_success(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock

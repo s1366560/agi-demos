@@ -5,7 +5,18 @@ export type BlackboardPostStatus = 'open' | 'archived';
 export type WorkspaceTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
 export type WorkspaceTaskPriority = '' | 'P1' | 'P2' | 'P3' | 'P4';
 export type WorkspaceType = 'general' | 'software_development' | 'research' | 'operations';
+export type WorkspaceUseCase =
+  | 'general'
+  | 'programming'
+  | 'conversation'
+  | 'research'
+  | 'operations';
 export type WorkspaceVerificationGrade = 'pass' | 'warn' | 'fail';
+export type WorkspaceCollaborationMode =
+  | 'single_agent'
+  | 'multi_agent_shared'
+  | 'multi_agent_isolated'
+  | 'autonomous';
 
 export interface WorkspaceCompletionPolicyOverride {
   allow_internal_task_artifacts?: boolean | undefined;
@@ -28,7 +39,10 @@ export interface WorkspaceCodeContext {
 }
 
 export type WorkspaceMetadata = Record<string, unknown> & {
+  workspace_use_case?: WorkspaceUseCase | undefined;
   workspace_type?: WorkspaceType | undefined;
+  collaboration_mode?: WorkspaceCollaborationMode | undefined;
+  agent_conversation_mode?: WorkspaceCollaborationMode | undefined;
   autonomy_profile?: WorkspaceAutonomyProfile | undefined;
   sandbox_code_root?: string | undefined;
   code_context?: WorkspaceCodeContext | undefined;
@@ -305,6 +319,10 @@ export interface WorkspaceCreateRequest {
   name: string;
   description?: string | undefined;
   metadata?: WorkspaceMetadata | undefined;
+  use_case?: WorkspaceUseCase | undefined;
+  collaboration_mode?: WorkspaceCollaborationMode | undefined;
+  autonomy_profile?: WorkspaceAutonomyProfile | undefined;
+  sandbox_code_root?: string | undefined;
 }
 
 export interface WorkspaceUpdateRequest {

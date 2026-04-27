@@ -229,7 +229,7 @@ interface WorkspaceState {
     tenantId: string,
     projectId: string,
     data: WorkspaceCreateRequest
-  ) => Promise<void>;
+  ) => Promise<Workspace>;
   createPost: (
     tenantId: string,
     projectId: string,
@@ -589,6 +589,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             currentWorkspace: workspace,
             isLoading: false,
           });
+          return workspace;
         } catch (error) {
           set({ error: getErrorMessage(error), isLoading: false });
           throw error;
