@@ -605,6 +605,14 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     assert projected_task.status.value == "done"
     assert projected_task.metadata["pending_leader_adjudication"] is False
     assert projected_task.metadata["durable_plan_verdict"] == "accepted"
+    reconciled_root = await SqlWorkspaceTaskRepository(db_session).find_by_id("root-task-1")
+    assert reconciled_root is not None
+    assert reconciled_root.metadata["goal_health"] == "achieved"
+    assert reconciled_root.metadata["goal_progress_summary"] == (
+        "1/1 child tasks done; 0 in progress; 0 blocked; 1/1 assigned"
+    )
+    assert reconciled_root.metadata["active_child_task_ids"] == []
+    assert reconciled_root.metadata["blocked_child_task_ids"] == []
     attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, leaf.current_attempt_id)
     assert attempt is not None
     assert attempt.status == "accepted"

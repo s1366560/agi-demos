@@ -31,7 +31,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackb
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
     SqlWorkspacePlanEventRepository,
 )
-from src.infrastructure.agent.workspace.workspace_metadata_keys import PENDING_LEADER_ADJUDICATION
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    PENDING_LEADER_ADJUDICATION,
+    ROOT_GOAL_TASK_ID,
+)
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
 from src.infrastructure.agent.workspace_plan.orchestrator import (
@@ -79,7 +82,7 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
         event_type: str,
         payload: dict[str, Any],
     ) -> None:
-        await SqlWorkspacePlanEventRepository(db).append(
+        _ = await SqlWorkspacePlanEventRepository(db).append(
             plan_id=node.plan_id,
             workspace_id=workspace_id,
             node_id=node.id,
@@ -149,6 +152,20 @@ async def _project_verification_to_workspace_task(
                 task.status = "blocked"
                 task.blocker_reason = summary or "durable plan verification failed"
             task.updated_at = now
+            root_goal_task_id = metadata.get(ROOT_GOAL_TASK_ID)
+            if isinstance(root_goal_task_id, str) and root_goal_task_id:
+                from src.application.services.workspace_agent_autonomy import (
+                    reconcile_root_goal_progress,
+                )
+                from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+                    SqlWorkspaceTaskRepository,
+                )
+
+                _ = await reconcile_root_goal_progress(
+                    task_repo=SqlWorkspaceTaskRepository(db),
+                    workspace_id=task.workspace_id,
+                    root_goal_task_id=root_goal_task_id,
+                )
 
 
 def _payload_string(payload: dict[str, Any], key: str) -> str | None:

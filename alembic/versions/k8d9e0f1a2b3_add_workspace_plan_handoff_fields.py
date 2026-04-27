@@ -18,17 +18,31 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+TABLE_NAME = "workspace_plan_nodes"
+
+
+def _has_column(table_name: str, column_name: str) -> bool:
+    return any(
+        column["name"] == column_name
+        for column in sa.inspect(op.get_bind()).get_columns(table_name)
+    )
+
+
 def upgrade() -> None:
-    op.add_column(
-        "workspace_plan_nodes",
-        sa.Column("feature_checkpoint", sa.JSON(), nullable=True),
-    )
-    op.add_column(
-        "workspace_plan_nodes",
-        sa.Column("handoff_package", sa.JSON(), nullable=True),
-    )
+    if not _has_column(TABLE_NAME, "feature_checkpoint"):
+        op.add_column(
+            TABLE_NAME,
+            sa.Column("feature_checkpoint", sa.JSON(), nullable=True),
+        )
+    if not _has_column(TABLE_NAME, "handoff_package"):
+        op.add_column(
+            TABLE_NAME,
+            sa.Column("handoff_package", sa.JSON(), nullable=True),
+        )
 
 
 def downgrade() -> None:
-    op.drop_column("workspace_plan_nodes", "handoff_package")
-    op.drop_column("workspace_plan_nodes", "feature_checkpoint")
+    if _has_column(TABLE_NAME, "handoff_package"):
+        op.drop_column(TABLE_NAME, "handoff_package")
+    if _has_column(TABLE_NAME, "feature_checkpoint"):
+        op.drop_column(TABLE_NAME, "feature_checkpoint")
