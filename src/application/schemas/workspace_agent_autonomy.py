@@ -12,6 +12,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REPLAN_ATTEMPT_COUNT,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
+    WORKSPACE_HARNESS,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
@@ -35,6 +36,16 @@ ExecutionAction = Literal[
 ]
 OutcomeStatus = Literal["achieved", "blocked", "partial", "failed"]
 VerificationGrade = Literal["pass", "warn", "fail"]
+HarnessFeatureStatus = Literal["todo", "in_progress", "passed", "failed", "blocked"]
+HarnessPreflightKind = Literal[
+    "read_progress",
+    "git_status",
+    "init_command",
+    "test_command",
+    "browser_e2e",
+    "custom",
+]
+HarnessPreflightStatus = Literal["pending", "passed", "failed", "skipped"]
 SignalSourceType = Literal[
     "existing_root_task",
     "existing_objective",
@@ -80,6 +91,50 @@ class WorkspaceCodeContextModel(ContractModel):
     loaded_agents_files: list[str] = Field(default_factory=list)
     agents_digest: str | None = None
     agents_excerpt: str | None = None
+
+
+class HarnessFeatureItemModel(ContractModel):
+    feature_id: str
+    sequence: int = Field(default=0, ge=0)
+    title: str
+    description: str = ""
+    status: HarnessFeatureStatus = "todo"
+    acceptance_refs: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    verification_refs: list[str] = Field(default_factory=list)
+    locked: bool = True
+
+
+class HarnessPreflightCheckModel(ContractModel):
+    check_id: str
+    kind: HarnessPreflightKind = "custom"
+    command: str | None = None
+    required: bool = True
+    status: HarnessPreflightStatus = "pending"
+    evidence_refs: list[str] = Field(default_factory=list)
+    last_run_at: str | None = None
+
+
+class HarnessAcceptancePolicyModel(ContractModel):
+    require_preflight_evidence: bool = True
+    require_clean_git: bool = False
+    require_commit_ref: bool = False
+    require_test_evidence: bool = False
+    require_browser_e2e: bool = False
+    minimum_verification_grade: VerificationGrade | None = None
+
+
+class WorkspaceHarnessContractModel(ContractModel):
+    schema_version: Literal[1] = 1
+    harness_id: str
+    goal_task_id: str | None = None
+    mode: Literal["long_running_agent"] = "long_running_agent"
+    feature_ledger: list[HarnessFeatureItemModel] = Field(default_factory=list)
+    required_preflight_checks: list[HarnessPreflightCheckModel] = Field(default_factory=list)
+    acceptance_policy: HarnessAcceptancePolicyModel = Field(
+        default_factory=HarnessAcceptancePolicyModel
+    )
+    progress_notes: list[str] = Field(default_factory=list)
 
 
 class FeatureCheckpointMetadataModel(ContractModel):
@@ -168,6 +223,14 @@ class CompletionEvidenceModel(ContractModel):
     verification_grade: VerificationGrade
 
 
+class WorkspaceProgressEventModel(ContractModel):
+    event_id: str
+    event_type: str
+    summary: str
+    evidence_refs: list[str] = Field(default_factory=list)
+    created_at: str
+
+
 class ExecutionStateModel(ContractModel):
     phase: ExecutionPhase
     last_agent_reason: str
@@ -202,6 +265,7 @@ class RootGoalMetadataModel(ContractModel):
     last_replan_at: str | None = None
     goal_evidence: CompletionEvidenceModel | None = None
     last_mutation_actor: LastMutationActorModel | None = None
+    workspace_harness: WorkspaceHarnessContractModel | None = None
 
     @model_validator(mode="after")
     def _validate_origin_specific_fields(self) -> RootGoalMetadataModel:
@@ -223,6 +287,8 @@ class ExecutionTaskMetadataModel(ContractModel):
     workspace_plan_id: str | None = None
     workspace_plan_node_id: str | None = None
     code_context: WorkspaceCodeContextModel | None = None
+    harness_feature_id: str | None = None
+    preflight_checks: list[HarnessPreflightCheckModel] = Field(default_factory=list)
     feature_checkpoint: FeatureCheckpointMetadataModel | None = None
     handoff_package: HandoffPackageMetadataModel | None = None
     write_set: list[str] = Field(default_factory=list)
@@ -252,6 +318,8 @@ class ExecutionTaskMetadataModel(ContractModel):
     durable_plan_verdict: str | None = None
     durable_plan_verification_summary: str | None = None
     durable_plan_verified_at: str | None = None
+    progress_events: list[WorkspaceProgressEventModel] = Field(default_factory=list)
+    next_session_briefing: str | None = None
     last_leader_adjudication_status: str | None = None
     last_leader_adjudicated_at: str | None = None
     last_mutation_actor: LastMutationActorModel | None = None
@@ -272,11 +340,14 @@ def has_autonomy_metadata(metadata: dict[str, Any] | None) -> bool:
             "goal_health",
             "workspace_type",
             "autonomy_profile",
+            WORKSPACE_HARNESS,
             REMEDIATION_STATUS,
             "blocked_child_task_ids",
             REPLAN_ATTEMPT_COUNT,
             EXECUTION_STATE,
             ROOT_GOAL_TASK_ID,
+            "harness_feature_id",
+            "preflight_checks",
             "objective_id",
             "root_goal_policy",
             DERIVED_FROM_INTERNAL_PLAN_STEP,

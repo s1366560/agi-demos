@@ -1,9 +1,10 @@
 """Default-wiring factory for :class:`WorkspaceOrchestrator`.
 
-Returns an orchestrator configured with in-memory adapters (:class:`InMemoryPlanRepository`,
-:class:`InMemoryBlackboard`) and stub supervisor callables (no-op dispatcher /
-empty agent pool). The DI container uses this as the initial singleton; future
-milestones swap in SQL repositories and real dispatchers.
+Returns an orchestrator configured either with side-effect-free in-memory
+adapters for tests/CLI callers or SQL-backed repositories for request-scoped
+workspace execution. Production call sites should prefer ``build_sql_orchestrator``
+so durable plans, verifier events, and workspace-task projections stay in one
+transactional path.
 """
 
 from __future__ import annotations
@@ -108,64 +109,139 @@ async def _project_verification_to_workspace_task(
     hard_fail = bool(payload.get("hard_fail"))
     summary = str(payload.get("summary") or "")
     now = datetime.now(UTC)
+    evidence_refs = _verification_payload_evidence_refs(payload)
+    commit_ref = _first_prefixed_evidence_value(evidence_refs, "commit_ref:")
+    git_diff_summary = _first_prefixed_evidence_value(evidence_refs, "git_diff_summary:")
+    test_commands = [
+        ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
+    ]
 
     if attempt_id:
-        attempt = await db.get(WorkspaceTaskSessionAttemptModel, attempt_id)
-        if attempt is not None:
-            if passed:
-                attempt.status = WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
-                attempt.leader_feedback = summary or "accepted by durable plan verifier"
-                attempt.completed_at = now
-            elif hard_fail:
-                attempt.status = WorkspaceTaskSessionAttemptStatus.BLOCKED.value
-                attempt.leader_feedback = summary or "blocked by durable plan verifier"
-                attempt.completed_at = now
-            else:
-                attempt.status = WorkspaceTaskSessionAttemptStatus.REJECTED.value
-                attempt.leader_feedback = summary or "replan requested by durable plan verifier"
-                attempt.completed_at = now
-            attempt.updated_at = now
+        await _project_verification_to_attempt(
+            db=db,
+            attempt_id=attempt_id,
+            passed=passed,
+            hard_fail=hard_fail,
+            summary=summary,
+            now=now,
+        )
 
     if node.workspace_task_id:
         task = await db.get(WorkspaceTaskModel, node.workspace_task_id)
         if task is not None:
-            metadata = dict(task.metadata_json or {})
-            metadata[PENDING_LEADER_ADJUDICATION] = False
-            metadata["durable_plan_verdict"] = (
-                "accepted" if passed else "blocked" if hard_fail else "replan_requested"
+            await _project_verification_to_task(
+                db=db,
+                task=task,
+                passed=passed,
+                hard_fail=hard_fail,
+                summary=summary,
+                evidence_refs=evidence_refs,
+                commit_ref=commit_ref,
+                git_diff_summary=git_diff_summary,
+                test_commands=test_commands,
+                now=now,
             )
-            metadata["durable_plan_verification_summary"] = summary
-            metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
-            metadata["last_attempt_status"] = (
-                WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
-                if passed
-                else WorkspaceTaskSessionAttemptStatus.BLOCKED.value
-                if hard_fail
-                else WorkspaceTaskSessionAttemptStatus.REJECTED.value
-            )
-            task.metadata_json = metadata
-            if passed:
-                task.status = "done"
-                task.blocker_reason = None
-                task.completed_at = now
-            elif hard_fail:
-                task.status = "blocked"
-                task.blocker_reason = summary or "durable plan verification failed"
-            task.updated_at = now
-            root_goal_task_id = metadata.get(ROOT_GOAL_TASK_ID)
-            if isinstance(root_goal_task_id, str) and root_goal_task_id:
-                from src.application.services.workspace_agent_autonomy import (
-                    reconcile_root_goal_progress,
-                )
-                from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
-                    SqlWorkspaceTaskRepository,
-                )
 
-                _ = await reconcile_root_goal_progress(
-                    task_repo=SqlWorkspaceTaskRepository(db),
-                    workspace_id=task.workspace_id,
-                    root_goal_task_id=root_goal_task_id,
-                )
+
+async def _project_verification_to_attempt(
+    *,
+    db: AsyncSession,
+    attempt_id: str,
+    passed: bool,
+    hard_fail: bool,
+    summary: str,
+    now: datetime,
+) -> None:
+    attempt = await db.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+    if attempt is None:
+        return
+    if passed:
+        attempt.status = WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
+        attempt.leader_feedback = summary or "accepted by durable plan verifier"
+    elif hard_fail:
+        attempt.status = WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+        attempt.leader_feedback = summary or "blocked by durable plan verifier"
+    else:
+        attempt.status = WorkspaceTaskSessionAttemptStatus.REJECTED.value
+        attempt.leader_feedback = summary or "replan requested by durable plan verifier"
+    attempt.completed_at = now
+    attempt.updated_at = now
+
+
+async def _project_verification_to_task(
+    *,
+    db: AsyncSession,
+    task: WorkspaceTaskModel,
+    passed: bool,
+    hard_fail: bool,
+    summary: str,
+    evidence_refs: list[str],
+    commit_ref: str | None,
+    git_diff_summary: str | None,
+    test_commands: list[str],
+    now: datetime,
+) -> None:
+    metadata = dict(task.metadata_json or {})
+    metadata[PENDING_LEADER_ADJUDICATION] = False
+    metadata["durable_plan_verdict"] = (
+        "accepted" if passed else "blocked" if hard_fail else "replan_requested"
+    )
+    metadata["durable_plan_verification_summary"] = summary
+    metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
+    if passed:
+        _apply_verification_checkpoint_metadata(
+            metadata=metadata,
+            summary=summary,
+            evidence_refs=evidence_refs,
+            commit_ref=commit_ref,
+            git_diff_summary=git_diff_summary,
+            test_commands=test_commands,
+            created_at=now,
+        )
+    metadata["last_attempt_status"] = _verification_attempt_status(
+        passed=passed,
+        hard_fail=hard_fail,
+    )
+    task.metadata_json = metadata
+    if passed:
+        task.status = "done"
+        task.blocker_reason = None
+        task.completed_at = now
+    elif hard_fail:
+        task.status = "blocked"
+        task.blocker_reason = summary or "durable plan verification failed"
+    task.updated_at = now
+    await _reconcile_root_goal_if_present(db, task, metadata)
+
+
+def _verification_attempt_status(*, passed: bool, hard_fail: bool) -> str:
+    if passed:
+        return WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
+    if hard_fail:
+        return WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+    return WorkspaceTaskSessionAttemptStatus.REJECTED.value
+
+
+async def _reconcile_root_goal_if_present(
+    db: AsyncSession,
+    task: WorkspaceTaskModel,
+    metadata: dict[str, Any],
+) -> None:
+    root_goal_task_id = metadata.get(ROOT_GOAL_TASK_ID)
+    if not isinstance(root_goal_task_id, str) or not root_goal_task_id:
+        return
+    from src.application.services.workspace_agent_autonomy import (
+        reconcile_root_goal_progress,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+        SqlWorkspaceTaskRepository,
+    )
+
+    _ = await reconcile_root_goal_progress(
+        task_repo=SqlWorkspaceTaskRepository(db),
+        workspace_id=task.workspace_id,
+        root_goal_task_id=root_goal_task_id,
+    )
 
 
 def _payload_string(payload: dict[str, Any], key: str) -> str | None:
@@ -173,6 +249,116 @@ def _payload_string(payload: dict[str, Any], key: str) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _verification_payload_evidence_refs(payload: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return refs
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        evidence = result.get("evidence")
+        if not isinstance(evidence, list):
+            continue
+        for item in evidence:
+            if isinstance(item, dict) and isinstance(item.get("ref"), str):
+                refs.append(item["ref"])
+    return list(dict.fromkeys(refs))
+
+
+def _first_prefixed_evidence_value(refs: list[str], prefix: str) -> str | None:
+    for ref in refs:
+        if ref.startswith(prefix):
+            return ref.removeprefix(prefix)
+    return None
+
+
+def _apply_verification_checkpoint_metadata(
+    *,
+    metadata: dict[str, Any],
+    summary: str,
+    evidence_refs: list[str],
+    commit_ref: str | None,
+    git_diff_summary: str | None,
+    test_commands: list[str],
+    created_at: datetime,
+) -> None:
+    if commit_ref or git_diff_summary or test_commands:
+        feature_checkpoint = metadata.get("feature_checkpoint")
+        if isinstance(feature_checkpoint, dict):
+            if commit_ref:
+                feature_checkpoint["commit_ref"] = commit_ref
+            metadata["feature_checkpoint"] = feature_checkpoint
+        handoff = metadata.get("handoff_package")
+        if not isinstance(handoff, dict):
+            handoff = {
+                "reason": "planned",
+                "summary": "Accepted by durable plan verifier.",
+                "next_steps": [],
+                "completed_steps": [],
+                "changed_files": [],
+                "git_head": None,
+                "git_diff_summary": "",
+                "test_commands": [],
+                "verification_notes": "",
+                "created_at": created_at.isoformat(),
+            }
+        if commit_ref:
+            handoff["git_head"] = commit_ref
+        if git_diff_summary:
+            handoff["git_diff_summary"] = git_diff_summary
+        if test_commands:
+            handoff["test_commands"] = test_commands
+        handoff["verification_notes"] = summary
+        metadata["handoff_package"] = handoff
+
+    progress_events = metadata.get("progress_events")
+    if not isinstance(progress_events, list):
+        progress_events = []
+    progress_events.append(
+        {
+            "event_id": f"verification:{created_at.isoformat()}",
+            "event_type": "verification_accepted",
+            "summary": summary or "Accepted by durable plan verifier.",
+            "evidence_refs": evidence_refs,
+            "created_at": created_at.isoformat().replace("+00:00", "Z"),
+        }
+    )
+    metadata["progress_events"] = progress_events[-25:]
+    metadata["next_session_briefing"] = _build_next_session_briefing(
+        summary=summary,
+        evidence_refs=evidence_refs,
+        commit_ref=commit_ref,
+        git_diff_summary=git_diff_summary,
+        test_commands=test_commands,
+    )
+
+
+def _build_next_session_briefing(
+    *,
+    summary: str,
+    evidence_refs: list[str],
+    commit_ref: str | None,
+    git_diff_summary: str | None,
+    test_commands: list[str],
+) -> str:
+    lines = [
+        "Last durable verification passed.",
+        f"Summary: {summary or 'accepted by durable plan verifier'}",
+    ]
+    if commit_ref:
+        lines.append(f"Commit: {commit_ref}")
+    if git_diff_summary:
+        lines.append(f"Git diff: {git_diff_summary}")
+    if test_commands:
+        lines.append("Tests: " + "; ".join(test_commands))
+    browser_refs = [ref for ref in evidence_refs if ref.startswith(("browser_e2e:", "screenshot:"))]
+    if browser_refs:
+        lines.append("Browser evidence: " + "; ".join(browser_refs))
+    lines.append("Next session: inspect git status, feature checkpoint, and latest progress event.")
+    return "\n".join(lines)
 
 
 def build_default_orchestrator(

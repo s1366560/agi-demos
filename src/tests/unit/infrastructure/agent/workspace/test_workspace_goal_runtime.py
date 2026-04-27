@@ -331,6 +331,11 @@ class TestWorkspaceGoalRuntime:
 
             assert len(created_calls) == 2
             assert created_calls[0]["metadata"]["root_goal_task_id"] == "root-1"
+            assert created_calls[0]["metadata"]["harness_feature_id"] == "t1"
+            assert created_calls[0]["metadata"]["feature_checkpoint"]["feature_id"] == "t1"
+            assert created_calls[0]["metadata"]["preflight_checks"][0]["check_id"] == (
+                "read-progress"
+            )
 
     async def test_bootstraps_and_assigns_execution_tasks_to_non_leader_workers(self) -> None:
         workspace = MagicMock()
@@ -459,6 +464,7 @@ class TestWorkspaceGoalRuntime:
 
             assert len(create_calls) == 2
             assert create_calls[0]["metadata"]["execution_state"]["last_agent_action"] == "created"
+            assert create_calls[0]["metadata"]["harness_feature_id"] == "t1"
             assert [call["workspace_agent_id"] for call in assign_calls] == [
                 "bind-worker-a",
                 "bind-worker-b",

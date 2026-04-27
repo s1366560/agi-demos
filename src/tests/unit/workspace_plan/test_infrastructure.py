@@ -15,6 +15,7 @@ from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     Capability,
     CriterionKind,
+    FeatureCheckpoint,
     Plan,
     PlanNode,
     PlanNodeId,
@@ -38,6 +39,7 @@ from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepos
 from src.infrastructure.agent.workspace_plan.supervisor import WorkspaceSupervisor
 from src.infrastructure.agent.workspace_plan.verifier import (
     AcceptanceCriterionVerifier,
+    BrowserE2ECriterionRunner,
     FileExistsCriterionRunner,
     RegexCriterionRunner,
     SchemaCriterionRunner,
@@ -197,6 +199,7 @@ class TestLLMGoalPlanner:
 
         assert leaf.feature_checkpoint is not None
         assert leaf.feature_checkpoint.feature_id == leaf.metadata["feature_id"]
+        assert leaf.metadata["harness_feature_id"] == leaf.feature_checkpoint.feature_id
         assert leaf.feature_checkpoint.sequence == 1
         assert leaf.feature_checkpoint.test_commands == (
             "cd /workspace/my-evo && npm test -- src/sandbox/routes.test.ts --runInBand --coverage=false",
@@ -212,6 +215,11 @@ class TestLLMGoalPlanner:
         commands = leaf.metadata["verification_commands"]
         assert commands == [
             "cd /workspace/my-evo && npm test -- src/sandbox/routes.test.ts --runInBand --coverage=false"
+        ]
+        assert [check["check_id"] for check in leaf.metadata["preflight_checks"]] == [
+            "read-progress",
+            "git-status",
+            "test-command-1",
         ]
         assert any(crit.kind is CriterionKind.CMD for crit in leaf.acceptance_criteria)
         default_report_criteria = [
@@ -334,6 +342,54 @@ class TestVerifier:
         ctx2 = VerificationContext(workspace_id="ws", node=node, artifacts={"payload": {"bar": 1}})
         assert not (await runner.run(crit, ctx2)).passed
 
+    async def test_browser_e2e_requires_structured_browser_evidence(self) -> None:
+        runner = BrowserE2ECriterionRunner()
+        crit = AcceptanceCriterion(
+            kind=CriterionKind.BROWSER_E2E,
+            spec={"name": "checkout-flow"},
+        )
+        node = _leaf_node()
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "execution_verifications": ["browser_e2e:checkout-flow"],
+                "evidence_refs": ["screenshot:/tmp/checkout.png", "console_errors:0"],
+            },
+        )
+
+        result = await runner.run(crit, ctx)
+
+        assert result.passed
+        assert {e.ref for e in result.evidence} == {
+            "browser_e2e:checkout-flow",
+            "screenshot:/tmp/checkout.png",
+            "console_errors:0",
+        }
+
+    async def test_browser_e2e_rejects_missing_screenshot_or_console_evidence(self) -> None:
+        runner = BrowserE2ECriterionRunner()
+        crit = AcceptanceCriterion(
+            kind=CriterionKind.BROWSER_E2E,
+            spec={"name": "checkout-flow"},
+        )
+        node = _leaf_node()
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={"execution_verifications": ["browser_e2e:checkout-flow"]},
+        )
+
+        result = await runner.run(crit, ctx)
+
+        assert not result.passed
+        assert "screenshot evidence" in result.message
+        assert "console_errors:0" in result.message
+
+    async def test_browser_e2e_kind_requires_name_or_path(self) -> None:
+        with pytest.raises(ValueError, match="BROWSER_E2E"):
+            AcceptanceCriterion(kind=CriterionKind.BROWSER_E2E)
+
     async def test_verifier_aggregates_and_hard_fails(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
@@ -400,6 +456,119 @@ class TestVerifier:
         assert not rep.passed
         assert rep.hard_fail
         assert "missing completed worker report" in rep.summary()
+
+    async def test_verifier_rejects_missing_preflight_evidence(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                    {"check_id": "git-status", "kind": "git_status", "required": True},
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "execution_verifications": ["preflight:read-progress"],
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert rep.hard_fail
+        assert "missing preflight evidence: git-status" in rep.summary()
+
+    async def test_verifier_accepts_structured_preflight_evidence(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                    {"check_id": "git-status", "kind": "git_status", "required": True},
+                    {"check_id": "optional", "kind": "custom", "required": False},
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "execution_verifications": ["preflight:read-progress"],
+                "last_worker_report_verifications": ["preflight:git-status"],
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(result.message == "preflight evidence recorded" for result in rep.results)
+
+    async def test_verifier_rejects_missing_feature_checkpoint_evidence(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "write_set": ["src/app.py"],
+                "verification_commands": ["uv run pytest src/tests/unit/example.py"],
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+                test_commands=("uv run pytest src/tests/unit/example.py",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={"last_worker_report_type": "completed"},
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert rep.hard_fail
+        assert "commit_ref or git_diff_summary" in rep.summary()
+        assert "test_run evidence" in rep.summary()
+
+    async def test_verifier_accepts_feature_checkpoint_git_and_test_evidence(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={"write_set": ["src/app.py"]},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+                test_commands=("uv run pytest src/tests/unit/example.py",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:abc123", "git_diff_summary:1 file changed"],
+                "execution_verifications": ["test_run:uv run pytest src/tests/unit/example.py"],
+            },
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        checkpoint_result = next(
+            result
+            for result in rep.results
+            if result.message == "feature checkpoint evidence recorded"
+        )
+        assert {evidence.ref for evidence in checkpoint_result.evidence} == {
+            "commit_ref:abc123",
+            "git_diff_summary:1 file changed",
+            "test_run:uv run pytest src/tests/unit/example.py",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -723,7 +892,12 @@ def _ctx() -> Any:
     return PlanningContext(max_subtasks=4, max_depth=2)
 
 
-def _leaf_node(*, criteria: tuple[AcceptanceCriterion, ...] = ()) -> PlanNode:
+def _leaf_node(
+    *,
+    criteria: tuple[AcceptanceCriterion, ...] = (),
+    metadata: dict[str, Any] | None = None,
+    feature_checkpoint: FeatureCheckpoint | None = None,
+) -> PlanNode:
     return PlanNode(
         id="n1",
         plan_id="p",
@@ -731,4 +905,6 @@ def _leaf_node(*, criteria: tuple[AcceptanceCriterion, ...] = ()) -> PlanNode:
         kind=PlanNodeKind.TASK,
         title="x",
         acceptance_criteria=criteria,
+        feature_checkpoint=feature_checkpoint,
+        metadata=metadata or {},
     )

@@ -944,7 +944,10 @@ def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:
         sandbox: _WorkspaceSandboxCommandRunner | None = None
         workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
         if workspace is not None and getattr(workspace, "project_id", None):
-            sandbox = _WorkspaceSandboxCommandRunner(project_id=workspace.project_id)
+            sandbox = _WorkspaceSandboxCommandRunner(
+                project_id=workspace.project_id,
+                allowed_commands=_node_allowed_sandbox_commands(node),
+            )
         if node.workspace_task_id:
             task = await SqlWorkspaceTaskRepository(session).find_by_id(node.workspace_task_id)
             if task is not None:
@@ -976,10 +979,22 @@ def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:
 class _WorkspaceSandboxCommandRunner:
     """Small adapter that lets durable criteria run commands in the project sandbox."""
 
-    def __init__(self, *, project_id: str) -> None:
+    def __init__(
+        self,
+        *,
+        project_id: str,
+        allowed_commands: set[str] | None = None,
+    ) -> None:
         self._project_id = project_id
+        self._allowed_commands = allowed_commands
 
     async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+        if not self._command_allowed(command):
+            return {
+                "exit_code": 126,
+                "stdout": "",
+                "stderr": f"command not allowed by workspace harness: {command}",
+            }
         from src.infrastructure.agent.state.agent_worker_state import (
             _resolve_project_sandbox_id,
             get_mcp_sandbox_adapter,
@@ -1008,6 +1023,37 @@ class _WorkspaceSandboxCommandRunner:
             "stdout": "" if is_error else text,
             "stderr": text if is_error else "",
         }
+
+    def _command_allowed(self, command: str) -> bool:
+        if self._allowed_commands is None:
+            return True
+        return command in self._allowed_commands or _is_structural_sandbox_command(command)
+
+
+def _node_allowed_sandbox_commands(node: PlanNode) -> set[str]:
+    commands: set[str] = set()
+    raw_commands = node.metadata.get("verification_commands")
+    if isinstance(raw_commands, list):
+        commands.update(str(command) for command in raw_commands if command)
+
+    raw_preflight = node.metadata.get("preflight_checks")
+    if isinstance(raw_preflight, list):
+        for item in raw_preflight:
+            if isinstance(item, Mapping):
+                command = item.get("command")
+                if isinstance(command, str) and command:
+                    commands.add(command)
+
+    feature = node.feature_checkpoint
+    if feature is not None:
+        if feature.init_command:
+            commands.add(feature.init_command)
+        commands.update(command for command in feature.test_commands if command)
+    return commands
+
+
+def _is_structural_sandbox_command(command: str) -> bool:
+    return command.startswith('[ -e "') and 'wc -c < "' in command
 
 
 async def _resolve_root_task_id(
@@ -1076,10 +1122,16 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
         "execution_verifications",
         "last_worker_report_artifacts",
         "last_worker_report_verifications",
+        "preflight_checks",
     ):
         value = metadata.get(key)
         if isinstance(value, list):
-            artifacts[key] = [str(item) for item in value if item]
+            if key == "preflight_checks":
+                artifacts[key] = [
+                    dict(item) for item in value if isinstance(item, Mapping) and item
+                ]
+            else:
+                artifacts[key] = [str(item) for item in value if item]
     for key in (
         "current_attempt_conversation_id",
         "last_attempt_status",
@@ -1098,6 +1150,18 @@ def _execution_task_metadata_from_node(node: PlanNode) -> dict[str, object]:
         metadata["feature_checkpoint"] = node.feature_checkpoint.to_json()
     if node.handoff_package is not None:
         metadata["handoff_package"] = node.handoff_package.to_json()
+    harness_feature_id = node.metadata.get("harness_feature_id") or node.metadata.get(
+        "feature_id"
+    )
+    if isinstance(harness_feature_id, str) and harness_feature_id:
+        metadata["harness_feature_id"] = harness_feature_id
+    preflight_checks = node.metadata.get("preflight_checks")
+    if isinstance(preflight_checks, list):
+        metadata["preflight_checks"] = [
+            dict(item)
+            for item in preflight_checks
+            if isinstance(item, Mapping) and item.get("check_id")
+        ]
     write_set = node.metadata.get("write_set")
     if isinstance(write_set, list):
         metadata["write_set"] = [str(item) for item in write_set if item]
@@ -1197,7 +1261,31 @@ def _feature_checkpoint_brief_lines(node: PlanNode) -> list[str]:
     if feature.handoff_notes:
         lines.append(f"handoff_notes={feature.handoff_notes}")
     lines.append("[/feature-checkpoint]")
+    preflight_checks = node.metadata.get("preflight_checks")
+    if isinstance(preflight_checks, list):
+        lines.extend(_preflight_check_brief_lines(preflight_checks))
     return lines
+
+
+def _preflight_check_brief_lines(preflight_checks: list[object]) -> list[str]:
+    lines = ["", "[preflight-checks]"]
+    for item in preflight_checks:
+        if not isinstance(item, Mapping):
+            continue
+        check_id = item.get("check_id")
+        if not check_id:
+            continue
+        kind = item.get("kind") or "custom"
+        required = item.get("required")
+        command = item.get("command")
+        suffix = f" kind={kind}"
+        if required is not None:
+            suffix += f" required={bool(required)}"
+        if command:
+            suffix += f" command={command}"
+        lines.append(f"check_id={check_id}{suffix}")
+    lines.append("[/preflight-checks]")
+    return lines if len(lines) > 2 else []
 
 
 def _handoff_package_brief_lines(node: PlanNode) -> list[str]:

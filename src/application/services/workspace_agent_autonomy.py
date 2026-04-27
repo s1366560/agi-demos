@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -12,7 +13,10 @@ from src.application.schemas.workspace_agent_autonomy import (
     CompletionEvidenceModel,
     ExecutionTaskMetadataModel,
     GoalCandidateRecordModel,
+    HarnessFeatureItemModel,
+    HarnessPreflightCheckModel,
     RootGoalMetadataModel,
+    WorkspaceHarnessContractModel,
     has_autonomy_metadata,
 )
 from src.application.services.workspace_autonomy_profiles import (
@@ -29,6 +33,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REMEDIATION_SUMMARY,
     REPLAN_ATTEMPT_COUNT,
     TASK_ROLE,
+    WORKSPACE_HARNESS,
 )
 
 _PROTECTED_ROOT_METADATA_KEYS = {
@@ -54,6 +59,169 @@ def validate_autonomy_metadata(metadata: Mapping[str, Any] | None) -> dict[str, 
     if task_role == "execution_task":
         return ExecutionTaskMetadataModel.model_validate(normalized).model_dump(mode="python")
     raise ValueError("Autonomy metadata must declare a supported task_role")
+
+
+def build_harness_preflight_checks(
+    *,
+    init_command: str | None = None,
+    test_commands: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    checks = [
+        HarnessPreflightCheckModel(
+            check_id="read-progress",
+            kind="read_progress",
+            command=None,
+        ),
+        HarnessPreflightCheckModel(
+            check_id="git-status",
+            kind="git_status",
+            command="git status --short",
+        ),
+    ]
+    if init_command and init_command.strip():
+        checks.append(
+            HarnessPreflightCheckModel(
+                check_id="init-command",
+                kind="init_command",
+                command=init_command.strip(),
+            )
+        )
+    for index, command in enumerate(_clean_string_list(test_commands), start=1):
+        checks.append(
+            HarnessPreflightCheckModel(
+                check_id=f"test-command-{index}",
+                kind="test_command",
+                command=command,
+            )
+        )
+    return [check.model_dump(mode="python") for check in checks]
+
+
+def build_harness_feature_item(
+    *,
+    feature_id: str,
+    sequence: int,
+    title: str,
+    description: str | None = None,
+    acceptance_refs: list[str] | tuple[str, ...] | None = None,
+    evidence_refs: list[str] | tuple[str, ...] | None = None,
+    verification_refs: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    return HarnessFeatureItemModel(
+        feature_id=feature_id,
+        sequence=sequence,
+        title=title,
+        description=description or "",
+        acceptance_refs=_clean_string_list(acceptance_refs),
+        evidence_refs=_clean_string_list(evidence_refs),
+        verification_refs=_clean_string_list(verification_refs),
+    ).model_dump(mode="python")
+
+
+def build_workspace_harness_contract(
+    *,
+    goal_title: str,
+    goal_task_id: str | None = None,
+    harness_id: str | None = None,
+    feature_items: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
+    init_command: str | None = None,
+    core_regression_commands: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    return WorkspaceHarnessContractModel(
+        harness_id=harness_id
+        or _stable_harness_id(goal_task_id=goal_task_id, goal_title=goal_title),
+        goal_task_id=goal_task_id,
+        feature_ledger=[
+            HarnessFeatureItemModel.model_validate(dict(item)) for item in (feature_items or ())
+        ],
+        required_preflight_checks=[
+            HarnessPreflightCheckModel.model_validate(check)
+            for check in build_harness_preflight_checks(
+                init_command=init_command,
+                test_commands=core_regression_commands,
+            )
+        ],
+    ).model_dump(mode="python")
+
+
+def build_execution_task_harness_metadata(
+    *,
+    feature_id: str,
+    sequence: int,
+    title: str,
+    description: str | None = None,
+    init_command: str | None = None,
+    test_commands: list[str] | tuple[str, ...] | None = None,
+    expected_artifacts: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    return {
+        "harness_feature_id": feature_id,
+        "preflight_checks": build_harness_preflight_checks(
+            init_command=init_command,
+            test_commands=test_commands,
+        ),
+        "feature_checkpoint": {
+            "feature_id": feature_id,
+            "sequence": sequence,
+            "title": title,
+            "init_command": init_command,
+            "test_commands": _clean_string_list(test_commands),
+            "expected_artifacts": _clean_string_list(expected_artifacts),
+            "worktree_path": None,
+            "branch_name": None,
+            "base_ref": None,
+            "commit_ref": None,
+            "handoff_notes": description or "",
+        },
+        "verification_commands": _clean_string_list(test_commands),
+    }
+
+
+def upsert_workspace_harness_feature_ledger(
+    root_metadata: Mapping[str, Any],
+    *,
+    goal_title: str,
+    goal_task_id: str | None,
+    feature_items: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
+) -> dict[str, Any]:
+    metadata = dict(root_metadata or {})
+    existing = metadata.get(WORKSPACE_HARNESS)
+    if isinstance(existing, Mapping):
+        harness_payload = dict(existing)
+        harness_payload.setdefault(
+            "harness_id",
+            _stable_harness_id(goal_task_id=goal_task_id, goal_title=goal_title),
+        )
+        harness_payload.setdefault("schema_version", 1)
+        harness_payload.setdefault("mode", "long_running_agent")
+        harness_payload.setdefault("required_preflight_checks", build_harness_preflight_checks())
+        harness_payload.setdefault("acceptance_policy", {})
+        harness_payload.setdefault("progress_notes", [])
+        if not harness_payload.get("goal_task_id"):
+            harness_payload["goal_task_id"] = goal_task_id
+    else:
+        harness_payload = build_workspace_harness_contract(
+            goal_title=goal_title,
+            goal_task_id=goal_task_id,
+        )
+
+    by_feature_id: dict[str, dict[str, Any]] = {}
+    existing_items = harness_payload.get("feature_ledger")
+    if isinstance(existing_items, list):
+        for item in existing_items:
+            if isinstance(item, Mapping):
+                normalized = HarnessFeatureItemModel.model_validate(dict(item)).model_dump(
+                    mode="python"
+                )
+                by_feature_id[normalized["feature_id"]] = normalized
+    for item in feature_items:
+        normalized = HarnessFeatureItemModel.model_validate(dict(item)).model_dump(mode="python")
+        by_feature_id[normalized["feature_id"]] = normalized
+    harness_payload["feature_ledger"] = list(by_feature_id.values())
+    metadata[WORKSPACE_HARNESS] = WorkspaceHarnessContractModel.model_validate(
+        harness_payload
+    ).model_dump(mode="python")
+    return validate_autonomy_metadata(metadata)
 
 
 def is_goal_root_task(task: WorkspaceTask) -> bool:
@@ -161,6 +329,10 @@ def build_projected_objective_root_metadata(objective: CyberObjective) -> dict[s
         },
         "goal_health": "healthy",
         REPLAN_ATTEMPT_COUNT: 0,
+        WORKSPACE_HARNESS: build_workspace_harness_contract(
+            goal_title=objective.title,
+            harness_id=f"harness:objective:{objective.id}",
+        ),
     }
 
 
@@ -190,7 +362,21 @@ def build_inferred_goal_root_metadata(candidate: GoalCandidateRecordModel) -> di
         },
         "goal_health": "healthy",
         REPLAN_ATTEMPT_COUNT: 0,
+        WORKSPACE_HARNESS: build_workspace_harness_contract(
+            goal_title=candidate.candidate_text,
+            harness_id=f"harness:candidate:{candidate.candidate_id}",
+        ),
     }
+
+
+def _stable_harness_id(*, goal_task_id: str | None, goal_title: str) -> str:
+    source = goal_task_id or goal_title.strip() or "workspace-goal"
+    digest = hashlib.sha1(source.encode("utf-8")).hexdigest()[:12]
+    return f"harness:{digest}"
+
+
+def _clean_string_list(values: list[str] | tuple[str, ...] | None) -> list[str]:
+    return list(dict.fromkeys(str(value).strip() for value in values or () if str(value).strip()))
 
 
 def record_task_actor(

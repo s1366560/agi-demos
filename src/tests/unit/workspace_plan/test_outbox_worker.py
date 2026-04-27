@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import WorkspaceTask
-from src.domain.model.workspace_plan import PlanNode, TaskExecution, TaskIntent
+from src.domain.model.workspace_plan import (
+    FeatureCheckpoint,
+    PlanNode,
+    PlanNodeId,
+    TaskExecution,
+    TaskIntent,
+)
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentDefinitionModel,
@@ -53,6 +60,8 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     HANDOFF_RESUME_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
+    _node_allowed_sandbox_commands,
+    _WorkspaceSandboxCommandRunner,
     make_handoff_resume_handler,
     make_supervisor_tick_handler,
     make_worker_launch_handler,
@@ -188,6 +197,50 @@ def _session_factory(db_session: AsyncSession) -> WorkspacePlanSessionFactory:
         yield db_session
 
     return factory
+
+
+@pytest.mark.asyncio
+async def test_workspace_sandbox_runner_blocks_commands_outside_harness_allowlist() -> None:
+    runner = _WorkspaceSandboxCommandRunner(
+        project_id="project-1",
+        allowed_commands={"uv run pytest src/tests/unit/example.py"},
+    )
+
+    result = await runner.run_command("rm -rf /tmp/nope")
+
+    assert result["exit_code"] == 126
+    assert result["stdout"] == ""
+    assert "not allowed by workspace harness" in result["stderr"]
+
+
+def test_node_allowed_sandbox_commands_collects_checkpoint_and_preflight_commands() -> None:
+    node = PlanNode(
+        id="node-1",
+        plan_id="plan-1",
+        parent_id=PlanNodeId("goal-1"),
+        title="Ship checkout flow",
+        metadata={
+            "verification_commands": ["uv run pytest src/tests/unit/example.py"],
+            "preflight_checks": [
+                {"check_id": "git-status", "command": "git status --short"},
+                {"check_id": "read-progress"},
+            ],
+        },
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-1",
+            sequence=1,
+            title="Checkout flow",
+            init_command="make init",
+            test_commands=("uv run pytest src/tests/unit/example.py", "npm test -- checkout"),
+        ),
+    )
+
+    assert _node_allowed_sandbox_commands(node) == {
+        "git status --short",
+        "make init",
+        "npm test -- checkout",
+        "uv run pytest src/tests/unit/example.py",
+    }
 
 
 @pytest.mark.asyncio
@@ -422,6 +475,24 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
         title="Ship a durable plan",
         start_supervisor=False,
     )
+    planned_leaf = plan.leaf_tasks()[0]
+    assert planned_leaf.feature_checkpoint is not None
+    plan.replace_node(
+        replace(
+            planned_leaf,
+            feature_checkpoint=replace(
+                planned_leaf.feature_checkpoint,
+                expected_artifacts=("src/example.py",),
+                test_commands=("uv run pytest src/tests/unit/example.py",),
+            ),
+            metadata={
+                **planned_leaf.metadata,
+                "write_set": ["src/example.py"],
+                "verification_commands": ["uv run pytest src/tests/unit/example.py"],
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
     await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
         plan_id=plan.id,
         workspace_id="workspace-1",
@@ -528,6 +599,8 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     assert task.metadata[WORKSPACE_PLAN_ID] == plan.id
     assert task.metadata[WORKSPACE_PLAN_NODE_ID] == leaf.id
     assert leaf.feature_checkpoint is not None
+    assert task.metadata["harness_feature_id"] == leaf.feature_checkpoint.feature_id
+    assert task.metadata["preflight_checks"][0]["check_id"] == "read-progress"
     assert task.metadata["feature_checkpoint"]["feature_id"] == leaf.feature_checkpoint.feature_id
     assert task.metadata["feature_checkpoint"]["worktree_path"] == (
         f"${{sandbox_code_root}}/../.memstack/worktrees/{leaf.current_attempt_id}"
@@ -545,6 +618,7 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     assert task.metadata[EXECUTION_STATE]["last_agent_action"] == "start"
     assert launched and launched[0]["attempt_id"] == leaf.current_attempt_id
     assert "[feature-checkpoint]" in str(launched[0]["extra_instructions"])
+    assert "[preflight-checks]" in str(launched[0]["extra_instructions"])
     assert leaf.feature_checkpoint.feature_id in str(launched[0]["extra_instructions"])
     assert "worktree_path=${sandbox_code_root}/../.memstack/worktrees/" in str(
         launched[0]["extra_instructions"]
@@ -569,7 +643,14 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
         worker_agent_id="worker-agent",
         leader_agent_id=BUILTIN_SISYPHUS_ID,
         report_type="completed",
-        summary="Implemented the durable task and verified it.",
+        summary=(
+            '{"summary":"Implemented the durable task and verified it.",'
+            '"verifications":["preflight:read-progress","preflight:git-status"],'
+            '"commit_ref":"abc123",'
+            '"git_diff_summary":"1 file changed",'
+            '"changed_files":["src/example.py"],'
+            '"test_commands":["uv run pytest src/tests/unit/example.py"]}'
+        ),
     )
     assert updated is not None
     assert updated.metadata["pending_leader_adjudication"] is False
@@ -582,6 +663,13 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     verified_leaf = verified.leaf_tasks()[0]
     assert verified_leaf.intent is TaskIntent.DONE
     assert verified_leaf.execution is TaskExecution.IDLE
+    assert verified_leaf.metadata["verified_commit_ref"] == "abc123"
+    assert verified_leaf.metadata["verified_git_diff_summary"] == "1 file changed"
+    assert verified_leaf.metadata["verified_test_commands"] == [
+        "uv run pytest src/tests/unit/example.py"
+    ]
+    assert verified_leaf.feature_checkpoint is not None
+    assert verified_leaf.feature_checkpoint.commit_ref == "abc123"
     events = list(
         (
             await db_session.execute(
@@ -605,6 +693,16 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     assert projected_task.status.value == "done"
     assert projected_task.metadata["pending_leader_adjudication"] is False
     assert projected_task.metadata["durable_plan_verdict"] == "accepted"
+    assert projected_task.metadata["feature_checkpoint"]["commit_ref"] == "abc123"
+    assert projected_task.metadata["handoff_package"]["git_head"] == "abc123"
+    assert projected_task.metadata["handoff_package"]["git_diff_summary"] == "1 file changed"
+    assert projected_task.metadata["handoff_package"]["test_commands"] == [
+        "uv run pytest src/tests/unit/example.py"
+    ]
+    assert projected_task.metadata["progress_events"][-1]["event_type"] == (
+        "verification_accepted"
+    )
+    assert "Commit: abc123" in projected_task.metadata["next_session_briefing"]
     reconciled_root = await SqlWorkspaceTaskRepository(db_session).find_by_id("root-task-1")
     assert reconciled_root is not None
     assert reconciled_root.metadata["goal_health"] == "achieved"

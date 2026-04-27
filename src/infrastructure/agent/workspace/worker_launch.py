@@ -180,6 +180,9 @@ def _build_worker_system_context(
             ],
         },
     }
+    harness_context = _task_harness_context(task)
+    if harness_context:
+        context["harness"] = harness_context
 
     if code_context is not None and code_context.sandbox_code_root:
         code_context_payload: dict[str, Any] = {
@@ -212,6 +215,56 @@ def _build_worker_system_context(
             context["additional_instructions"] = rendered_extra
 
     return context
+
+
+def _task_harness_context(task: WorkspaceTask) -> dict[str, Any] | None:
+    metadata = getattr(task, "metadata", None)
+    if not isinstance(metadata, Mapping):
+        return None
+
+    feature_id = metadata.get("harness_feature_id")
+    checks = _normalize_preflight_checks(metadata.get("preflight_checks"))
+    if not isinstance(feature_id, str) and not checks:
+        return None
+
+    return {
+        "feature_id": feature_id if isinstance(feature_id, str) else None,
+        "preflight_checks": checks,
+        "required_evidence_prefix": "preflight:",
+        "instructions": [
+            "Read the feature checkpoint, handoff package, and current git status before editing.",
+            "Run or inspect every required preflight check before reporting completion.",
+            (
+                "Record each completed preflight check as an execution verification "
+                "using the form preflight:<check_id>."
+            ),
+            "Report blocked with the failing check_id when a required preflight cannot pass.",
+        ],
+    }
+
+
+def _normalize_preflight_checks(raw_checks: object) -> list[dict[str, Any]]:
+    if not isinstance(raw_checks, list):
+        return []
+    checks: list[dict[str, Any]] = []
+    for raw_check in raw_checks:
+        if not isinstance(raw_check, Mapping):
+            continue
+        check_id = raw_check.get("check_id")
+        if not isinstance(check_id, str) or not check_id:
+            continue
+        checks.append(
+            {
+                "check_id": check_id,
+                "kind": str(raw_check.get("kind") or "custom"),
+                "command": raw_check.get("command")
+                if isinstance(raw_check.get("command"), str)
+                else None,
+                "required": bool(raw_check.get("required", True)),
+                "status": str(raw_check.get("status") or "pending"),
+            }
+        )
+    return checks
 
 
 def _render_workspace_placeholders(

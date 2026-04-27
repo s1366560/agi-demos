@@ -200,9 +200,10 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 )
                 verifies_ran += 1
                 if report.passed:
+                    accepted_node = _node_with_verification_evidence(node, report)
                     plan.replace_node(
                         _force_intent(
-                            _force_execution(node, TaskExecution.IDLE),
+                            _force_execution(accepted_node, TaskExecution.IDLE),
                             TaskIntent.DONE,
                         )
                     )
@@ -361,6 +362,57 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def _node_with_verification_evidence(node: PlanNode, report: VerificationReport) -> PlanNode:
+    refs = _report_evidence_refs(report)
+    commit_ref = _first_prefixed_value(refs, "commit_ref:")
+    git_diff_summary = _first_prefixed_value(refs, "git_diff_summary:")
+    test_commands = tuple(
+        dict.fromkeys(ref.removeprefix("test_run:") for ref in refs if ref.startswith("test_run:"))
+    )
+    metadata = dict(node.metadata)
+    if commit_ref:
+        metadata["verified_commit_ref"] = commit_ref
+    if git_diff_summary:
+        metadata["verified_git_diff_summary"] = git_diff_summary
+    if test_commands:
+        metadata["verified_test_commands"] = list(test_commands)
+
+    feature_checkpoint = node.feature_checkpoint
+    if feature_checkpoint is not None and commit_ref:
+        feature_checkpoint = replace(feature_checkpoint, commit_ref=commit_ref)
+
+    handoff_package = node.handoff_package
+    if handoff_package is not None:
+        handoff_package = replace(
+            handoff_package,
+            git_head=commit_ref or handoff_package.git_head,
+            git_diff_summary=git_diff_summary or handoff_package.git_diff_summary,
+            test_commands=test_commands or handoff_package.test_commands,
+            verification_notes=report.summary(),
+        )
+
+    return replace(
+        node,
+        metadata=metadata,
+        feature_checkpoint=feature_checkpoint,
+        handoff_package=handoff_package,
+    )
+
+
+def _report_evidence_refs(report: VerificationReport) -> list[str]:
+    refs: list[str] = []
+    for result in report.results:
+        refs.extend(evidence.ref for evidence in result.evidence if evidence.ref)
+    return list(dict.fromkeys(refs))
+
+
+def _first_prefixed_value(values: list[str], prefix: str) -> str | None:
+    for value in values:
+        if value.startswith(prefix):
+            return value.removeprefix(prefix)
+    return None
 
 
 def _select_ready_nodes_without_write_conflicts(

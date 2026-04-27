@@ -392,9 +392,14 @@ class DIContainer:
         existing = getattr(self, "_workspace_v2_orchestrator", None)
         if existing is not None:
             return existing
-        from src.infrastructure.agent.workspace_plan import build_default_orchestrator
+        if self._db is not None:
+            from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
 
-        existing = build_default_orchestrator()
+            existing = build_sql_orchestrator(self._db)
+        else:
+            from src.infrastructure.agent.workspace_plan import build_default_orchestrator
+
+            existing = build_default_orchestrator()
         self._workspace_v2_orchestrator = existing  # type: ignore[attr-defined]
         return existing
 

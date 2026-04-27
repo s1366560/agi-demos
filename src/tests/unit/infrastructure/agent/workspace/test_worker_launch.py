@@ -132,6 +132,45 @@ class TestBuildBrief:
         assert system_context["additional_instructions"] == "Be brief."
         assert "native tool-call" in system_context["tool_protocol"]["instruction"]
 
+    def test_system_context_includes_harness_preflight_contract(self) -> None:
+        task = _make_task(
+            metadata={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-1",
+                "harness_feature_id": "feature-001",
+                "preflight_checks": [
+                    {
+                        "check_id": "git-status",
+                        "kind": "git_status",
+                        "command": "git status --short",
+                        "required": True,
+                        "status": "pending",
+                    },
+                    {
+                        "check_id": "test-command-1",
+                        "kind": "test_command",
+                        "command": "uv run pytest src/tests/unit/example.py -q",
+                        "required": True,
+                        "status": "pending",
+                    },
+                ],
+            }
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+        )
+
+        harness = system_context["harness"]
+        assert harness["feature_id"] == "feature-001"
+        assert harness["required_evidence_prefix"] == "preflight:"
+        assert harness["preflight_checks"][0]["command"] == "git status --short"
+        assert harness["preflight_checks"][1]["check_id"] == "test-command-1"
+        assert "preflight:<check_id>" in " ".join(harness["instructions"])
+
     def test_handles_missing_description(self) -> None:
         task = _make_task(description=None)
         brief = wl._build_worker_brief(

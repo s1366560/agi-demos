@@ -15,6 +15,7 @@ import re
 import uuid
 from typing import Protocol, cast
 
+from src.application.services.workspace_agent_autonomy import build_harness_preflight_checks
 from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     Capability,
@@ -344,11 +345,14 @@ def _planner_node_metadata(
 ) -> dict[str, object]:
     metadata: dict[str, object] = {"acceptance_source": "planner_structural_v1"}
     if node_id is not None:
-        metadata["feature_id"] = _feature_id(node_id=node_id, sequence=sequence or 0)
+        feature_id = _feature_id(node_id=node_id, sequence=sequence or 0)
+        metadata["feature_id"] = feature_id
+        metadata["harness_feature_id"] = feature_id
     write_set = _infer_write_set(description)
     if write_set:
         metadata["write_set"] = list(write_set)
     commands = _extract_candidate_commands(description)
+    metadata["preflight_checks"] = build_harness_preflight_checks(test_commands=commands)
     if commands:
         metadata["verification_commands"] = commands
     return metadata

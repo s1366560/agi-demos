@@ -50,6 +50,9 @@ WORKSPACE_PLAN_NODE_ID: Final[str] = "workspace_plan_node_id"
 AUTONOMY_SCHEMA_VERSION_KEY: Final[str] = "autonomy_schema_version"
 """Schema version key for validator forward-compat; see ``autonomy_schema.py``."""
 
+WORKSPACE_HARNESS: Final[str] = "workspace_harness"
+"""Long-running-agent harness contract attached to a workspace root goal."""
+
 # --- State machine buckets -------------------------------------------------
 
 EXECUTION_STATE: Final[str] = "execution_state"
@@ -102,6 +105,7 @@ __all__ = [
     "ROOT_GOAL_TASK_ID",
     "TASK_ROLE",
     "WORKSPACE_AGENT_BINDING_ID",
+    "WORKSPACE_HARNESS",
     "WORKSPACE_PLAN_ID",
     "WORKSPACE_PLAN_NODE_ID",
 ]

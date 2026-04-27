@@ -18,6 +18,7 @@ from src.application.schemas.workspace_agent_autonomy import (
     GoalCandidateRecordModel,
 )
 from src.application.services.workspace_agent_autonomy import (
+    build_execution_task_harness_metadata,
     is_goal_root_task,
     synthesize_goal_evidence_from_children,
     validate_autonomy_metadata,
@@ -678,6 +679,7 @@ async def _maybe_bootstrap_execution_tasks(
     created_tasks: list[WorkspaceTask] = []
     for index, (step_id, description) in enumerate(decomposed_steps, start=1):
         step_title, step_description = _split_title_description(description)
+        feature_id = step_id or f"bootstrap-{index}"
         created_tasks.append(
             await command_service.create_task(
                 workspace_id=workspace_id,
@@ -689,7 +691,13 @@ async def _maybe_bootstrap_execution_tasks(
                     TASK_ROLE: "execution_task",
                     ROOT_GOAL_TASK_ID: root_task_id,
                     LINEAGE_SOURCE: "agent",
-                    DERIVED_FROM_INTERNAL_PLAN_STEP: step_id or f"bootstrap-{index}",
+                    DERIVED_FROM_INTERNAL_PLAN_STEP: feature_id,
+                    **build_execution_task_harness_metadata(
+                        feature_id=feature_id,
+                        sequence=index,
+                        title=step_title,
+                        description=step_description or description,
+                    ),
                     EXECUTION_STATE: _build_execution_state(
                         phase="todo",
                         reason="workspace_goal_runtime.bootstrap_execution_tasks",
@@ -791,6 +799,7 @@ async def _replan_execution_tasks(
     created_tasks: list[WorkspaceTask] = []
     for index, (step_id, description) in enumerate(decomposed_steps, start=1):
         step_title, step_description = _split_title_description(description)
+        feature_id = step_id or f"replan-{index}"
         created_tasks.append(
             await command_service.create_task(
                 workspace_id=workspace_id,
@@ -802,7 +811,13 @@ async def _replan_execution_tasks(
                     TASK_ROLE: "execution_task",
                     ROOT_GOAL_TASK_ID: root_task_id,
                     LINEAGE_SOURCE: "agent",
-                    DERIVED_FROM_INTERNAL_PLAN_STEP: step_id or f"replan-{index}",
+                    DERIVED_FROM_INTERNAL_PLAN_STEP: feature_id,
+                    **build_execution_task_harness_metadata(
+                        feature_id=feature_id,
+                        sequence=index,
+                        title=step_title,
+                        description=step_description or description,
+                    ),
                     EXECUTION_STATE: _build_execution_state(
                         phase="todo",
                         reason="workspace_goal_runtime.replan_execution_tasks",

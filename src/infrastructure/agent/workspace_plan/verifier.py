@@ -252,6 +252,72 @@ class SchemaCriterionRunner(CriterionRunner):
         )
 
 
+class BrowserE2ECriterionRunner(CriterionRunner):
+    """Validates structured evidence from a browser-driven user path.
+
+    This runner deliberately does not infer success from prose. A worker or
+    browser adapter must record explicit evidence such as
+    ``browser_e2e:checkout`` plus screenshot and console-clean markers.
+    """
+
+    async def run(
+        self, criterion: AcceptanceCriterion, ctx: VerificationContext
+    ) -> CriterionResult:
+        scenario = str(criterion.spec.get("name") or criterion.spec.get("path") or "").strip()
+        require_screenshot = bool(criterion.spec.get("require_screenshot", True))
+        require_console_clean = bool(criterion.spec.get("require_console_clean", True))
+        evidence_values = _artifact_text_values(
+            ctx,
+            "browser_e2e",
+            "execution_verifications",
+            "last_worker_report_verifications",
+            "candidate_verifications",
+            "evidence_refs",
+            "last_worker_report_artifacts",
+            "candidate_artifacts",
+        )
+
+        missing: list[str] = []
+        scenario_ref = f"browser_e2e:{scenario}"
+        if scenario_ref not in evidence_values:
+            missing.append(scenario_ref)
+        screenshot_refs = [
+            value
+            for value in evidence_values
+            if value.startswith("screenshot:") or value.startswith("browser_screenshot:")
+        ]
+        if require_screenshot and not screenshot_refs:
+            missing.append("screenshot evidence")
+        console_clean = (
+            "console_errors:0" in evidence_values
+            or "browser_console_errors:0" in evidence_values
+        )
+        if require_console_clean and not console_clean:
+            missing.append("console_errors:0")
+
+        if missing:
+            return CriterionResult(
+                criterion=criterion,
+                passed=False,
+                confidence=1.0,
+                message=f"missing browser e2e evidence: {', '.join(missing)}",
+            )
+        return CriterionResult(
+            criterion=criterion,
+            passed=True,
+            confidence=1.0,
+            message=f"browser e2e evidence recorded: {scenario}",
+            evidence=tuple(
+                EvidenceRef(kind="browser", ref=value)
+                for value in evidence_values
+                if value == scenario_ref
+                or value.startswith("screenshot:")
+                or value.startswith("browser_screenshot:")
+                or value in {"console_errors:0", "browser_console_errors:0"}
+            ),
+        )
+
+
 class _InconclusiveRunner(CriterionRunner):
     """Returns a neutral result so unknown kinds never silently pass."""
 
@@ -281,6 +347,7 @@ class AcceptanceCriterionVerifier(VerifierPort):
             CriterionKind.FILE_EXISTS: FileExistsCriterionRunner(),
             CriterionKind.REGEX: RegexCriterionRunner(),
             CriterionKind.SCHEMA: SchemaCriterionRunner(),
+            CriterionKind.BROWSER_E2E: BrowserE2ECriterionRunner(),
         }
         self._fallback = _InconclusiveRunner()
 
@@ -292,6 +359,12 @@ class AcceptanceCriterionVerifier(VerifierPort):
         terminal_guard = _terminal_worker_report_guard(ctx)
         if terminal_guard is not None:
             results.append(terminal_guard)
+        preflight_guard = _preflight_evidence_guard(ctx)
+        if preflight_guard is not None:
+            results.append(preflight_guard)
+        checkpoint_guard = _feature_checkpoint_evidence_guard(ctx)
+        if checkpoint_guard is not None:
+            results.append(checkpoint_guard)
         for crit in ctx.node.acceptance_criteria:
             runner = self._runners.get(crit.kind, self._fallback)
             try:
@@ -360,6 +433,172 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             confidence=1.0,
             message="missing completed worker report",
         )
+    return None
+
+
+def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
+    """Require structured evidence for each required harness preflight check."""
+
+    required_check_ids = _required_preflight_check_ids(ctx)
+    if not required_check_ids:
+        return None
+
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "preflight_evidence_recorded"},
+        required=True,
+        description="required preflight checks must be evidenced before durable verification",
+    )
+    evidence = _structured_verification_evidence(ctx)
+    missing = [
+        check_id
+        for check_id in required_check_ids
+        if f"preflight:{check_id}" not in evidence
+    ]
+    if missing:
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=f"missing preflight evidence: {', '.join(missing)}",
+        )
+    return CriterionResult(
+        criterion=criterion,
+        passed=True,
+        confidence=1.0,
+        message="preflight evidence recorded",
+        evidence=tuple(
+            EvidenceRef(kind="verification", ref=f"preflight:{check_id}")
+            for check_id in required_check_ids
+        ),
+    )
+
+
+def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
+    feature = ctx.node.feature_checkpoint
+    write_refs = _required_change_refs(ctx)
+    test_commands = _required_test_commands(ctx)
+    if feature is None or (not write_refs and not test_commands):
+        return None
+
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "feature_checkpoint_evidence_recorded"},
+        required=True,
+        description="feature checkpoint requires git/test evidence before acceptance",
+    )
+    evidence_values = _artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "last_worker_report_artifacts",
+        "candidate_artifacts",
+        "execution_verifications",
+        "last_worker_report_verifications",
+        "candidate_verifications",
+    )
+
+    missing: list[str] = []
+    git_evidence = _first_prefixed(evidence_values, "commit_ref:") or _first_prefixed(
+        evidence_values,
+        "git_diff_summary:",
+    )
+    if write_refs and not git_evidence:
+        missing.append("commit_ref or git_diff_summary")
+    test_evidence = _first_prefixed(evidence_values, "test_run:")
+    if test_commands and not test_evidence:
+        missing.append("test_run evidence")
+    if missing:
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=f"missing feature checkpoint evidence: {', '.join(missing)}",
+        )
+
+    refs = [
+        value
+        for value in evidence_values
+        if value.startswith(("commit_ref:", "git_diff_summary:", "test_run:"))
+    ]
+    return CriterionResult(
+        criterion=criterion,
+        passed=True,
+        confidence=1.0,
+        message="feature checkpoint evidence recorded",
+        evidence=tuple(EvidenceRef(kind="checkpoint", ref=value) for value in refs),
+    )
+
+
+def _required_change_refs(ctx: VerificationContext) -> set[str]:
+    refs: set[str] = set()
+    feature = ctx.node.feature_checkpoint
+    if feature is not None:
+        refs.update(str(item) for item in feature.expected_artifacts if item)
+    raw_write_set = ctx.node.metadata.get("write_set")
+    if isinstance(raw_write_set, list):
+        refs.update(str(item) for item in raw_write_set if item)
+    return refs
+
+
+def _required_test_commands(ctx: VerificationContext) -> list[str]:
+    commands: list[str] = []
+    feature = ctx.node.feature_checkpoint
+    if feature is not None:
+        commands.extend(str(command) for command in feature.test_commands if command)
+    raw_commands = ctx.node.metadata.get("verification_commands")
+    if isinstance(raw_commands, list):
+        commands.extend(str(command) for command in raw_commands if command)
+    return list(dict.fromkeys(commands))
+
+
+def _required_preflight_check_ids(ctx: VerificationContext) -> list[str]:
+    raw_checks = ctx.node.metadata.get("preflight_checks")
+    if not isinstance(raw_checks, list):
+        return []
+    check_ids: list[str] = []
+    for raw_check in raw_checks:
+        if not isinstance(raw_check, dict):
+            continue
+        check_id = raw_check.get("check_id")
+        if not isinstance(check_id, str) or not check_id:
+            continue
+        if raw_check.get("required", True) is False:
+            continue
+        check_ids.append(check_id)
+    return list(dict.fromkeys(check_ids))
+
+
+def _structured_verification_evidence(ctx: VerificationContext) -> set[str]:
+    evidence: set[str] = set()
+    for key in (
+        "execution_verifications",
+        "last_worker_report_verifications",
+        "candidate_verifications",
+    ):
+        raw_values = ctx.artifacts.get(key)
+        if not isinstance(raw_values, list):
+            continue
+        evidence.update(str(value) for value in raw_values if value)
+    return evidence
+
+
+def _artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:
+    values: set[str] = set()
+    for key in keys:
+        raw = ctx.artifacts.get(key)
+        if isinstance(raw, str) and raw:
+            values.add(raw)
+        elif isinstance(raw, list):
+            values.update(str(item) for item in raw if item)
+        elif isinstance(raw, dict):
+            values.update(str(item) for item in raw.values() if item)
+    return values
+
+
+def _first_prefixed(values: set[str], prefix: str) -> str | None:
+    for value in sorted(values):
+        if value.startswith(prefix):
+            return value
     return None
 
 

@@ -5,8 +5,12 @@ from datetime import UTC, datetime
 import pytest
 
 from src.application.services.workspace_agent_autonomy import (
+    build_execution_task_harness_metadata,
+    build_harness_feature_item,
+    build_workspace_harness_contract,
     ensure_goal_completion_allowed_for_workspace,
     synthesize_goal_evidence_from_children,
+    upsert_workspace_harness_feature_ledger,
     validate_autonomy_metadata,
 )
 from src.application.services.workspace_autonomy_profiles import (
@@ -14,6 +18,120 @@ from src.application.services.workspace_autonomy_profiles import (
     resolve_autonomy_profile,
 )
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
+
+
+@pytest.mark.unit
+def test_workspace_harness_contract_defaults_to_preflight_and_feature_ledger() -> None:
+    feature = build_harness_feature_item(
+        feature_id="feature-001",
+        sequence=1,
+        title="Implement harness",
+        acceptance_refs=["criterion:worker-report"],
+    )
+    contract = build_workspace_harness_contract(
+        goal_title="Ship long-running harness",
+        goal_task_id="root-1",
+        feature_items=[feature],
+        core_regression_commands=["uv run pytest src/tests/unit/example.py -q"],
+    )
+
+    metadata = validate_autonomy_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+            "workspace_harness": contract,
+        }
+    )
+
+    harness = metadata["workspace_harness"]
+    assert harness["mode"] == "long_running_agent"
+    assert harness["goal_task_id"] == "root-1"
+    assert harness["feature_ledger"][0]["feature_id"] == "feature-001"
+    assert harness["feature_ledger"][0]["locked"] is True
+    assert [check["check_id"] for check in harness["required_preflight_checks"]] == [
+        "read-progress",
+        "git-status",
+        "test-command-1",
+    ]
+
+
+@pytest.mark.unit
+def test_execution_task_harness_metadata_validates_preflight_and_checkpoint() -> None:
+    harness_metadata = build_execution_task_harness_metadata(
+        feature_id="feature-001",
+        sequence=1,
+        title="Implement harness",
+        test_commands=["uv run pytest src/tests/unit/example.py -q"],
+        expected_artifacts=["src/example.py"],
+    )
+
+    metadata = validate_autonomy_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            **harness_metadata,
+        }
+    )
+
+    assert metadata["harness_feature_id"] == "feature-001"
+    assert metadata["feature_checkpoint"]["feature_id"] == "feature-001"
+    assert metadata["feature_checkpoint"]["expected_artifacts"] == ["src/example.py"]
+    assert [check["check_id"] for check in metadata["preflight_checks"]] == [
+        "read-progress",
+        "git-status",
+        "test-command-1",
+    ]
+    assert metadata["verification_commands"] == ["uv run pytest src/tests/unit/example.py -q"]
+
+
+@pytest.mark.unit
+def test_upsert_workspace_harness_feature_ledger_preserves_existing_features() -> None:
+    root_metadata = {
+        "autonomy_schema_version": 1,
+        "task_role": "goal_root",
+        "goal_origin": "human_defined",
+        "goal_source_refs": ["api:test"],
+        "root_goal_policy": {
+            "mutable_by_agent": True,
+            "completion_requires_external_proof": True,
+        },
+        "workspace_harness": build_workspace_harness_contract(
+            goal_title="Ship harness",
+            goal_task_id="root-1",
+            feature_items=[
+                build_harness_feature_item(
+                    feature_id="feature-001",
+                    sequence=1,
+                    title="Existing feature",
+                )
+            ],
+        ),
+    }
+
+    updated = upsert_workspace_harness_feature_ledger(
+        root_metadata,
+        goal_title="Ship harness",
+        goal_task_id="root-1",
+        feature_items=[
+            build_harness_feature_item(
+                feature_id="feature-002",
+                sequence=2,
+                title="New feature",
+            )
+        ],
+    )
+
+    assert [
+        item["feature_id"] for item in updated["workspace_harness"]["feature_ledger"]
+    ] == ["feature-001", "feature-002"]
 
 
 @pytest.mark.unit
