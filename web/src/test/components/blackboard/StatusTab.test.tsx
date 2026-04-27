@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StatusTab } from '@/components/blackboard/tabs/StatusTab';
-import { workspaceAutonomyService, workspacePlanService } from '@/services/workspaceService';
+import {
+  workspaceAutonomyService,
+  workspaceBlackboardService,
+  workspacePlanService,
+} from '@/services/workspaceService';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
 vi.mock('@/services/workspaceService', () => ({
+  workspaceBlackboardService: {
+    getExecutionDiagnostics: vi.fn(),
+  },
   workspaceAutonomyService: {
     tick: vi.fn(),
   },
@@ -25,6 +32,18 @@ describe('StatusTab', () => {
       blackboard: [],
       outbox: [],
       events: [],
+    });
+    vi.mocked(workspaceBlackboardService.getExecutionDiagnostics).mockResolvedValue({
+      workspace_id: 'ws-1',
+      generated_at: '2026-04-27T00:00:00Z',
+      task_status_counts: {},
+      attempt_status_counts: {},
+      tool_status_counts: {},
+      tasks: [],
+      blockers: [],
+      pending_adjudications: [],
+      evidence_gaps: [],
+      recent_tool_failures: [],
     });
     vi.mocked(workspaceAutonomyService.tick).mockResolvedValue({
       triggered: false,
@@ -91,6 +110,72 @@ describe('StatusTab', () => {
     expect(derivedBadge).toHaveAttribute('data-blackboard-surface', 'derived');
     expect(derivedBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
     expect(await screen.findByText('blackboard.planRunEmpty')).toBeInTheDocument();
+  });
+
+  it('renders execution diagnostics signals from the blackboard API', async () => {
+    vi.mocked(workspaceBlackboardService.getExecutionDiagnostics).mockResolvedValueOnce({
+      workspace_id: 'ws-1',
+      generated_at: '2026-04-27T00:00:00Z',
+      task_status_counts: { blocked: 1 },
+      attempt_status_counts: { blocked: 1 },
+      tool_status_counts: { failed: 1 },
+      tasks: [],
+      blockers: [
+        {
+          type: 'attempt_blocked',
+          task_id: 'task-1',
+          title: 'Implement worker tracking',
+          reason: 'Worker reported a blocking dependency',
+        },
+      ],
+      pending_adjudications: [],
+      evidence_gaps: [
+        {
+          task_id: 'task-2',
+          title: 'Verify deployment plan',
+          reason: 'No verification evidence or successful tool execution recorded',
+        },
+      ],
+      recent_tool_failures: [
+        {
+          task_id: 'task-3',
+          title: 'Run diagnostics',
+          tool_execution_id: 'ter-1',
+          tool_name: 'bash',
+          error: 'command failed',
+        },
+      ],
+    });
+
+    render(
+      <StatusTab
+        stats={{
+          completionRatio: 0,
+          discussions: 0,
+          activeAgents: 0,
+          pendingAdjudicationTasks: 0,
+        }}
+        topologyEdges={[]}
+        agents={[]}
+        tasks={[]}
+        workspaceId="ws-1"
+        tenantId="tenant-1"
+        projectId="project-1"
+        statusBadgeTone={() => 'bg-green-500'}
+      />
+    );
+
+    await waitFor(() => {
+      expect(workspaceBlackboardService.getExecutionDiagnostics).toHaveBeenCalledWith(
+        'tenant-1',
+        'project-1',
+        'ws-1'
+      );
+    });
+    expect(await screen.findByText('Implement worker tracking')).toBeInTheDocument();
+    expect(screen.getByText('Verify deployment plan')).toBeInTheDocument();
+    expect(screen.getByText('bash')).toBeInTheDocument();
+    expect(screen.getByText('command failed')).toBeInTheDocument();
   });
 
   it('renders durable plan snapshot state', async () => {

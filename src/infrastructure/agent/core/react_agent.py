@@ -117,6 +117,7 @@ _WORKSPACE_WORKER_REPORT_TOOL_NAMES: tuple[str, ...] = (
     "workspace_report_complete",
     "workspace_report_blocked",
     "workspace_request_clarification",
+    "workspace_health_verdict",
 )
 
 

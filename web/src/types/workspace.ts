@@ -281,6 +281,31 @@ export interface WorkspacePlanActionResult {
   outbox_id?: string | null | undefined;
 }
 
+export type WorkspaceExecutionDiagnosticsRow = Record<string, unknown> & {
+  task_id?: string | null | undefined;
+  title?: string | null | undefined;
+  reason?: string | null | undefined;
+  attempt_id?: string | null | undefined;
+  tool_execution_id?: string | null | undefined;
+  tool_name?: string | null | undefined;
+  status?: string | null | undefined;
+  error?: string | null | undefined;
+  completed_at?: string | null | undefined;
+};
+
+export interface WorkspaceExecutionDiagnostics {
+  workspace_id: string;
+  generated_at: string;
+  task_status_counts: Record<string, number>;
+  attempt_status_counts: Record<string, number>;
+  tool_status_counts: Record<string, number>;
+  tasks: WorkspaceExecutionDiagnosticsRow[];
+  blockers: WorkspaceExecutionDiagnosticsRow[];
+  pending_adjudications: WorkspaceExecutionDiagnosticsRow[];
+  evidence_gaps: WorkspaceExecutionDiagnosticsRow[];
+  recent_tool_failures: WorkspaceExecutionDiagnosticsRow[];
+}
+
 export interface TopologyNode {
   id: string;
   workspace_id: string;

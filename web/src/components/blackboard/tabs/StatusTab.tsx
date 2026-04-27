@@ -1,5 +1,9 @@
+import { useEffect, useMemo, useState } from 'react';
+
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+
+import { workspaceBlackboardService } from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import {
@@ -16,7 +20,13 @@ import { StatBadge } from '../StatBadge';
 
 import { PlanRunSnapshotSection } from './PlanRunSnapshotSection';
 
-import type { TopologyEdge, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+import type {
+  TopologyEdge,
+  WorkspaceAgent,
+  WorkspaceExecutionDiagnostics,
+  WorkspaceExecutionDiagnosticsRow,
+  WorkspaceTask,
+} from '@/types/workspace';
 
 export interface StatusTabProps {
   stats: {
@@ -48,6 +58,48 @@ export function StatusTab({
 }: StatusTabProps) {
   const { t } = useTranslation();
   const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication);
+  const [executionDiagnostics, setExecutionDiagnostics] =
+    useState<WorkspaceExecutionDiagnostics | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tenantId || !projectId) {
+      return;
+    }
+
+    let cancelled = false;
+    workspaceBlackboardService
+      .getExecutionDiagnostics(tenantId, projectId, workspaceId)
+      .then((payload) => {
+        if (!cancelled) {
+          setExecutionDiagnostics(payload);
+          setDiagnosticsError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setDiagnosticsError(message);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, projectId, workspaceId, planRefreshToken]);
+
+  const diagnosticsSignals = useMemo(
+    () => ({
+      blockers: executionDiagnostics?.blockers ?? [],
+      evidenceGaps: executionDiagnostics?.evidence_gaps ?? [],
+      toolFailures: executionDiagnostics?.recent_tool_failures ?? [],
+    }),
+    [executionDiagnostics]
+  );
+  const diagnosticsSignalCount =
+    diagnosticsSignals.blockers.length +
+    diagnosticsSignals.evidenceGaps.length +
+    diagnosticsSignals.toolFailures.length;
 
   return (
     <div className="space-y-5">
@@ -105,6 +157,78 @@ export function StatusTab({
         tasks={tasks}
         refreshToken={planRefreshToken}
       />
+
+      <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
+              {t('blackboard.executionDiagnosticsTitle', 'Execution diagnostics')}
+            </h3>
+            <div className="mt-2">
+              <DerivedSurfaceBadge
+                labelKey="blackboard.executionDiagnosticsSurfaceHint"
+                fallbackLabel="workspace execution diagnostics"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatBadge
+              label={t('blackboard.executionDiagnosticsBlockers', 'Blockers')}
+              value={String(diagnosticsSignals.blockers.length)}
+            />
+            <StatBadge
+              label={t('blackboard.executionDiagnosticsEvidenceGaps', 'Evidence gaps')}
+              value={String(diagnosticsSignals.evidenceGaps.length)}
+            />
+            <StatBadge
+              label={t('blackboard.executionDiagnosticsToolFailures', 'Tool failures')}
+              value={String(diagnosticsSignals.toolFailures.length)}
+            />
+          </div>
+        </div>
+
+        {diagnosticsError ? (
+          <div className="mt-4 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+            {diagnosticsError}
+          </div>
+        ) : diagnosticsSignalCount === 0 ? (
+          <div className="mt-4">
+            <EmptyState>
+              {t(
+                'blackboard.executionDiagnosticsEmpty',
+                'No blockers, evidence gaps, or recent tool failures are recorded.'
+              )}
+            </EmptyState>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 xl:grid-cols-3">
+            <DiagnosticsList
+              title={t('blackboard.executionDiagnosticsBlockers', 'Blockers')}
+              emptyLabel={t('blackboard.executionDiagnosticsNoBlockers', 'No blockers')}
+              rows={diagnosticsSignals.blockers}
+              kind="blocker"
+            />
+            <DiagnosticsList
+              title={t('blackboard.executionDiagnosticsEvidenceGaps', 'Evidence gaps')}
+              emptyLabel={t(
+                'blackboard.executionDiagnosticsNoEvidenceGaps',
+                'No evidence gaps'
+              )}
+              rows={diagnosticsSignals.evidenceGaps}
+              kind="evidence"
+            />
+            <DiagnosticsList
+              title={t('blackboard.executionDiagnosticsToolFailures', 'Tool failures')}
+              emptyLabel={t(
+                'blackboard.executionDiagnosticsNoToolFailures',
+                'No tool failures'
+              )}
+              rows={diagnosticsSignals.toolFailures}
+              kind="tool"
+            />
+          </div>
+        )}
+      </section>
 
       <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex items-center justify-between gap-3">
@@ -274,4 +398,73 @@ export function StatusTab({
       </section>
     </div>
   );
+}
+
+function DiagnosticsList({
+  title,
+  emptyLabel,
+  rows,
+  kind,
+}: {
+  title: string;
+  emptyLabel: string;
+  rows: WorkspaceExecutionDiagnosticsRow[];
+  kind: 'blocker' | 'evidence' | 'tool';
+}) {
+  return (
+    <div className="rounded-lg border border-border-light bg-surface-muted p-3 dark:border-border-dark dark:bg-background-dark/35">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
+          {title}
+        </h4>
+        <span className="rounded-full border border-border-light bg-surface-light px-2 py-0.5 text-[10px] font-semibold text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+          {String(rows.length)}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-xs text-text-muted">{emptyLabel}</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {rows.slice(0, 5).map((row, index) => {
+            const rowKey = stringValue(row.id) || stringValue(row.task_id) || String(index);
+            return <DiagnosticsRow key={`${kind}-${rowKey}`} row={row} />;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagnosticsRow({ row }: { row: WorkspaceExecutionDiagnosticsRow }) {
+  const title = stringValue(row.tool_name) || stringValue(row.title) || stringValue(row.task_id);
+  const reason = stringValue(row.reason) || stringValue(row.error) || stringValue(row.status);
+  const metadata = [
+    stringValue(row.attempt_id),
+    stringValue(row.tool_execution_id),
+    stringValue(row.completed_at),
+  ].filter(Boolean);
+
+  return (
+    <article className="rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+      {title && (
+        <div className="break-words text-sm font-medium text-text-primary dark:text-text-inverse">
+          {title}
+        </div>
+      )}
+      {reason && (
+        <div className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+          {reason}
+        </div>
+      )}
+      {metadata.length > 0 && (
+        <div className="mt-2 break-all font-mono text-[10px] text-text-muted">
+          {metadata.join(' / ')}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
 }

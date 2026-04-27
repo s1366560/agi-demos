@@ -101,11 +101,13 @@ class SqlChunkRepository:
             FROM memory_chunks
             WHERE project_id = :project_id
               AND embedding IS NOT NULL
+              AND vector_dims(embedding) = vector_dims(CAST(:qvec_dims AS vector))
               {category_clause}
             ORDER BY embedding <=> CAST(:qvec_sort AS vector)
             LIMIT :limit
         """).bindparams(
             bindparam("qvec", value=vec_str),
+            bindparam("qvec_dims", value=vec_str),
             bindparam("qvec_sort", value=vec_str),
             bindparam("project_id", value=project_id),
             bindparam("limit", value=limit),
@@ -259,11 +261,13 @@ class SqlChunkRepository:
             FROM memory_chunks
             WHERE project_id = :project_id
               AND embedding IS NOT NULL
+              AND vector_dims(embedding) = vector_dims(CAST(:qvec_dims AS vector))
               AND 1 - (embedding <=> CAST(:qvec_filter AS vector)) >= :threshold
             ORDER BY embedding <=> CAST(:qvec_sort AS vector)
             LIMIT :limit
         """).bindparams(
             bindparam("qvec", value=vec_str),
+            bindparam("qvec_dims", value=vec_str),
             bindparam("qvec_filter", value=vec_str),
             bindparam("qvec_sort", value=vec_str),
             bindparam("project_id", value=project_id),

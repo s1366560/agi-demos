@@ -713,6 +713,9 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         from src.infrastructure.agent.tools.workspace_clarification import (
             configure_workspace_clarification,
         )
+        from src.infrastructure.agent.tools.workspace_health_verdict import (
+            workspace_health_verdict_tool,
+        )
         from src.infrastructure.agent.tools.workspace_leader_wtp import (
             configure_workspace_leader_wtp,
         )
@@ -728,6 +731,7 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         configure_workspace_wtp(orchestrator=orchestrator)
         configure_workspace_leader_wtp(orchestrator=orchestrator)
         configure_workspace_clarification(orchestrator=orchestrator)
+        _ = workspace_health_verdict_tool
 
         registry = get_registered_tools()
         agent_tool_names = (
@@ -745,6 +749,7 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "workspace_respond_clarification",
             "workspace_assign_task",
             "workspace_cancel_task",
+            "workspace_health_verdict",
         )
         for name in agent_tool_names:
             if name in registry:

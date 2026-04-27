@@ -1,3 +1,12 @@
+---
+name: frontend-ui-ux-engineer
+description: >
+  Reference material for frontend, UI, and UX engineering skill conversion,
+  including component structure, scripts, and implementation notes.
+risk: unknown
+source: community
+---
+
 # ML/AI Skills Conversion Project
 
 ## Overview

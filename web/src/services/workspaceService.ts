@@ -8,6 +8,7 @@ import type {
   Workspace,
   WorkspaceAgent,
   WorkspaceCreateRequest,
+  WorkspaceExecutionDiagnostics,
   WorkspaceMember,
   WorkspacePlanActionResult,
   WorkspacePlanSnapshot,
@@ -233,6 +234,22 @@ export const workspaceService = {
 };
 
 export const workspaceBlackboardService = {
+  getExecutionDiagnostics: async (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string
+  ): Promise<WorkspaceExecutionDiagnostics> => {
+    const response = await apiFetch.get(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/execution-diagnostics`,
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
+    return response.json() as Promise<WorkspaceExecutionDiagnostics>;
+  },
+
   listPosts: async (
     tenantId: string,
     projectId: string,

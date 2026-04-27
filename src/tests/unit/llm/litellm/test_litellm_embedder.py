@@ -255,7 +255,31 @@ class TestLiteLLMEmbedder:
             embedder = LiteLLMEmbedder(config=kimi_provider)
 
         assert embedder._embedding_model == "kimi-embedding-1"
+        assert embedder.embedding_dim == 1024
         assert embedder._get_litellm_model_name() == "openai/kimi-embedding-1"
+
+    def test_minimax_default_embedding_dimension(self):
+        """MiniMax default embedding model should be recorded at its native dimension."""
+        minimax_provider = ProviderConfig(
+            id=uuid4(),
+            name="minimax-provider",
+            provider_type=ProviderType.MINIMAX,
+            api_key_encrypted="encrypted_key",
+            llm_model="abab6.5s-chat",
+            llm_small_model="abab6.5s-chat",
+            embedding_model=None,
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        with patch("src.infrastructure.llm.litellm.litellm_embedder.get_encryption_service"):
+            embedder = LiteLLMEmbedder(config=minimax_provider)
+
+        assert embedder._embedding_model == "embo-01"
+        assert embedder.embedding_dim == 1024
+        assert embedder._get_litellm_model_name() == "minimax/embo-01"
 
     @pytest.mark.asyncio
     async def test_ollama_without_api_key_uses_default_base_url(self):

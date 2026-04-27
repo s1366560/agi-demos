@@ -47,6 +47,9 @@ EMBEDDING_DIMENSIONS = {
     # Qwen/Dashscope
     "text-embedding-v3": 1024,
     "text-embedding-v2": 1536,
+    # Kimi / MiniMax
+    "kimi-embedding-1": 1024,
+    "embo-01": 1024,
     # ZhipuAI
     "embedding-3": 1024,
     "embedding-2": 1024,
