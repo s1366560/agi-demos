@@ -42,6 +42,18 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
+    def _to_domain_or_skip(self, db_model: CronJobModel, *, operation: str) -> CronJob | None:
+        try:
+            return self._to_domain(db_model)
+        except ValueError as exc:
+            logger.warning(
+                "Skipping invalid cron job %s during %s: %s",
+                getattr(db_model, "id", "<unknown>"),
+                operation,
+                exc,
+            )
+            return None
+
     @override
     async def find_by_project(
         self,
@@ -60,7 +72,12 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
-        return [d for row in result.scalars().all() if (d := self._to_domain(row)) is not None]
+        jobs: list[CronJob] = []
+        for row in result.scalars().all():
+            domain = self._to_domain_or_skip(row, operation="project listing")
+            if domain is not None:
+                jobs.append(domain)
+        return jobs
 
     @override
     async def count_by_project(
@@ -95,15 +112,7 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
         )
         jobs: list[CronJob] = []
         for row in result.scalars().all():
-            try:
-                domain = self._to_domain(row)
-            except ValueError as exc:
-                logger.warning(
-                    "Skipping invalid cron job %s during scheduler sync: %s",
-                    getattr(row, "id", "<unknown>"),
-                    exc,
-                )
-                continue
+            domain = self._to_domain_or_skip(row, operation="scheduler sync")
             if domain is None:
                 continue
             backoff_until = domain.state.get("backoff_until")

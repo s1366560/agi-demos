@@ -87,3 +87,22 @@ async def test_find_due_jobs_skips_invalid_persisted_schedule(
 
     assert [job.id for job in jobs] == ["valid-job"]
     assert "Skipping invalid cron job invalid-job during scheduler sync" in caplog.text
+
+
+async def test_find_by_project_skips_invalid_persisted_schedule(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    repo = SqlCronJobRepository(
+        FakeSession(
+            [
+                _cron_job_model("invalid-job", {"hours": 0, "minutes": 0, "seconds": 0}),
+                _cron_job_model("valid-job", {"hours": 0, "minutes": 5, "seconds": 0}),
+            ]
+        )
+    )
+    caplog.set_level(logging.WARNING, logger="src.infrastructure.adapters.secondary.persistence")
+
+    jobs = await repo.find_by_project("project-1", include_disabled=True)
+
+    assert [job.id for job in jobs] == ["valid-job"]
+    assert "Skipping invalid cron job invalid-job during project listing" in caplog.text

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from src.application.schemas.cron import (
     DeliveryConfig,
@@ -291,7 +291,9 @@ async def _handle_add(  # noqa: PLR0911
         )
     try:
         schedule_cfg = (
-            ScheduleConfig(**schedule_raw) if isinstance(schedule_raw, dict) else schedule_raw
+            ScheduleConfig(**cast(dict[str, Any], schedule_raw))
+            if isinstance(schedule_raw, dict)
+            else schedule_raw
         )
         schedule = schedule_config_to_domain(schedule_cfg)
     except Exception as exc:
@@ -308,7 +310,11 @@ async def _handle_add(  # noqa: PLR0911
             is_error=True,
         )
     try:
-        payload_cfg = PayloadConfig(**payload_raw) if isinstance(payload_raw, dict) else payload_raw
+        payload_cfg = (
+            PayloadConfig(**cast(dict[str, Any], payload_raw))
+            if isinstance(payload_raw, dict)
+            else payload_raw
+        )
         payload = payload_config_to_domain(payload_cfg)
     except Exception as exc:
         return ToolResult(
@@ -322,7 +328,9 @@ async def _handle_add(  # noqa: PLR0911
     if delivery_raw:
         try:
             delivery_cfg = (
-                DeliveryConfig(**delivery_raw) if isinstance(delivery_raw, dict) else delivery_raw
+                DeliveryConfig(**cast(dict[str, Any], delivery_raw))
+                if isinstance(delivery_raw, dict)
+                else delivery_raw
             )
             delivery = delivery_config_to_domain(delivery_cfg)
         except Exception as exc:
@@ -412,11 +420,23 @@ async def _handle_update(
     updates: dict[str, Any] = {}
     for key, value in patch.items():
         if key == "schedule" and isinstance(value, dict):
-            updates["schedule"] = schedule_config_to_domain(ScheduleConfig(**value))
+            try:
+                updates["schedule"] = schedule_config_to_domain(
+                    ScheduleConfig(**cast(dict[str, Any], value))
+                )
+            except Exception as exc:
+                return ToolResult(
+                    output=_json({"error": f"Invalid schedule: {exc}"}),
+                    is_error=True,
+                )
         elif key == "payload" and isinstance(value, dict):
-            updates["payload"] = payload_config_to_domain(PayloadConfig(**value))
+            updates["payload"] = payload_config_to_domain(
+                PayloadConfig(**cast(dict[str, Any], value))
+            )
         elif key == "delivery" and isinstance(value, dict):
-            updates["delivery"] = delivery_config_to_domain(DeliveryConfig(**value))
+            updates["delivery"] = delivery_config_to_domain(
+                DeliveryConfig(**cast(dict[str, Any], value))
+            )
         elif key == "conversation_mode" and isinstance(value, str):
             updates["conversation_mode"] = ConversationMode(value)
         else:
@@ -710,9 +730,7 @@ VALID_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs"]
                     },
                     "max_retries": {
                         "type": "integer",
-                        "description": (
-                            "Max consecutive failures before disabling. Default: 3."
-                        ),
+                        "description": ("Max consecutive failures before disabling. Default: 3."),
                     },
                 },
                 "required": ["name", "schedule", "payload"],
