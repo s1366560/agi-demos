@@ -3,12 +3,16 @@ Tests for V2 SqlToolExecutionRecordRepository using BaseRepository.
 """
 
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import ToolExecutionRecord
 from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
+from src.infrastructure.adapters.secondary.persistence.models import (
+    ToolExecutionRecord as DBToolExecutionRecord,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
 )
@@ -22,6 +26,10 @@ async def v2_tool_record_repo(v2_db_session: AsyncSession) -> SqlToolExecutionRe
 
 class TestSqlToolExecutionRecordRepositoryCreate:
     """Tests for creating tool execution records."""
+
+    def test_message_id_has_no_legacy_message_foreign_key(self):
+        """Tool evidence references event-timeline message IDs, not legacy messages rows."""
+        assert not DBToolExecutionRecord.__table__.c.message_id.foreign_keys
 
     @pytest.mark.asyncio
     async def test_save_new_record(self, v2_tool_record_repo: SqlToolExecutionRecordRepository):
@@ -49,6 +57,50 @@ class TestSqlToolExecutionRecordRepositoryCreate:
         assert result is not None
         assert result.tool_name == "test_tool"
         assert result.status == ToolExecutionStatus.RUNNING
+
+    @pytest.mark.asyncio
+    async def test_save_and_commit_rolls_back_when_flush_fails(self):
+        """A failed insert must not leave the shared SQLAlchemy session poisoned."""
+
+        class _EmptyResult:
+            def scalar_one_or_none(self) -> None:
+                return None
+
+        class _FailingSession:
+            rolled_back = False
+
+            async def execute(self, *_args: Any, **_kwargs: Any) -> _EmptyResult:
+                return _EmptyResult()
+
+            def add(self, *_args: Any, **_kwargs: Any) -> None:
+                return None
+
+            async def flush(self) -> None:
+                raise RuntimeError("flush failed")
+
+            async def commit(self) -> None:
+                raise AssertionError("commit should not run after flush failure")
+
+            async def rollback(self) -> None:
+                self.rolled_back = True
+
+        session = _FailingSession()
+        repo = SqlToolExecutionRecordRepository(cast(AsyncSession, session))
+        record = ToolExecutionRecord(
+            id="record-rollback-1",
+            conversation_id="conv-1",
+            message_id="event-message-1",
+            call_id="call-rollback-1",
+            tool_name="bash",
+            status=ToolExecutionStatus.RUNNING,
+            sequence_number=1,
+            started_at=datetime.now(UTC),
+        )
+
+        with pytest.raises(RuntimeError, match="flush failed"):
+            await repo.save_and_commit(record)
+
+        assert session.rolled_back is True
 
     @pytest.mark.asyncio
     async def test_save_updates_existing(

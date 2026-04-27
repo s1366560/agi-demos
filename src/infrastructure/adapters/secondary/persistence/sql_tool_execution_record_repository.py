@@ -35,9 +35,11 @@ class SqlToolExecutionRecordRepository(
     async def save(self, record: ToolExecutionRecord) -> ToolExecutionRecord:
         """Save a tool execution record (create or update)."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBToolExecutionRecord).where(DBToolExecutionRecord.id == record.id)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBToolExecutionRecord).where(DBToolExecutionRecord.id == record.id)
+                )
+            )
         )
         db_record = result.scalar_one_or_none()
 
@@ -73,15 +75,21 @@ class SqlToolExecutionRecordRepository(
 
     async def save_and_commit(self, record: ToolExecutionRecord) -> None:
         """Save a tool execution record and commit immediately."""
-        await self.save(record)
-        await self._session.commit()
+        try:
+            await self.save(record)
+            await self._session.commit()
+        except Exception:
+            await self._session.rollback()
+            raise
 
     async def find_by_id(self, record_id: str) -> ToolExecutionRecord | None:
         """Find a tool execution record by its ID."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBToolExecutionRecord).where(DBToolExecutionRecord.id == record_id)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBToolExecutionRecord).where(DBToolExecutionRecord.id == record_id)
+                )
+            )
         )
         db_record = result.scalar_one_or_none()
         return self._to_domain(db_record) if db_record else None
@@ -89,9 +97,11 @@ class SqlToolExecutionRecordRepository(
     async def find_by_call_id(self, call_id: str) -> ToolExecutionRecord | None:
         """Find a tool execution record by its call ID."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBToolExecutionRecord).where(DBToolExecutionRecord.call_id == call_id)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBToolExecutionRecord).where(DBToolExecutionRecord.call_id == call_id)
+                )
+            )
         )
         db_record = result.scalar_one_or_none()
         return self._to_domain(db_record) if db_record else None
@@ -103,12 +113,14 @@ class SqlToolExecutionRecordRepository(
     ) -> list[ToolExecutionRecord]:
         """List tool executions for a message."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBToolExecutionRecord)
-                .where(DBToolExecutionRecord.message_id == message_id)
-                .order_by(DBToolExecutionRecord.sequence_number.asc())
-                .limit(limit)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBToolExecutionRecord)
+                    .where(DBToolExecutionRecord.message_id == message_id)
+                    .order_by(DBToolExecutionRecord.sequence_number.asc())
+                    .limit(limit)
+                )
+            )
         )
         db_records = result.scalars().all()
         return [d for r in db_records if (d := self._to_domain(r)) is not None]
@@ -120,12 +132,14 @@ class SqlToolExecutionRecordRepository(
     ) -> list[ToolExecutionRecord]:
         """List tool executions for a conversation."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBToolExecutionRecord)
-                .where(DBToolExecutionRecord.conversation_id == conversation_id)
-                .order_by(DBToolExecutionRecord.started_at.asc())
-                .limit(limit)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBToolExecutionRecord)
+                    .where(DBToolExecutionRecord.conversation_id == conversation_id)
+                    .order_by(DBToolExecutionRecord.started_at.asc())
+                    .limit(limit)
+                )
+            )
         )
         db_records = result.scalars().all()
         return [d for r in db_records if (d := self._to_domain(r)) is not None]
@@ -133,11 +147,13 @@ class SqlToolExecutionRecordRepository(
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all tool execution records in a conversation."""
         await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                delete(DBToolExecutionRecord).where(
-                    DBToolExecutionRecord.conversation_id == conversation_id
+            refresh_select_statement(
+                self._refresh_statement(
+                    delete(DBToolExecutionRecord).where(
+                        DBToolExecutionRecord.conversation_id == conversation_id
+                    )
                 )
-            ))
+            )
         )
         await self._session.flush()
 
@@ -162,11 +178,13 @@ class SqlToolExecutionRecordRepository(
             update_values["duration_ms"] = duration_ms
 
         await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                update(DBToolExecutionRecord)
-                .where(DBToolExecutionRecord.call_id == call_id)
-                .values(**update_values)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    update(DBToolExecutionRecord)
+                    .where(DBToolExecutionRecord.call_id == call_id)
+                    .values(**update_values)
+                )
+            )
         )
         await self._session.commit()
 

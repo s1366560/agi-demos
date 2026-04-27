@@ -135,7 +135,9 @@ async def _stamp_alembic_head() -> None:
             lambda sync_conn: engine.dialect.has_table(sync_conn, "alembic_version")
         )
         if has_table:
-            result = await conn.execute(refresh_select_statement(text("SELECT COUNT(*) FROM alembic_version")))
+            result = await conn.execute(
+                refresh_select_statement(text("SELECT COUNT(*) FROM alembic_version"))
+            )
             count = result.scalar()
             if count and count > 0:
                 logger.info("Alembic version already set, skipping stamp")
@@ -178,36 +180,56 @@ async def update_agent_events_schema() -> None:
         # Keep correlation IDs wide enough for prefixed UUIDs such as "cron:<uuid>".
         try:
             await conn.execute(
-                refresh_select_statement(text(
-                    "ALTER TABLE agent_execution_events "
-                    "ALTER COLUMN correlation_id "
-                    f"TYPE VARCHAR({AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH})"
-                ))
+                refresh_select_statement(
+                    text(
+                        "ALTER TABLE agent_execution_events "
+                        "ALTER COLUMN correlation_id "
+                        f"TYPE VARCHAR({AGENT_EXECUTION_EVENT_CORRELATION_ID_LENGTH})"
+                    )
+                )
             )
             logger.info("Widened agent_execution_events.correlation_id")
         except Exception as e:
             logger.info(f"correlation_id column may already be updated: {e}")
 
-        # Create unique constraint on (conversation_id, event_time_us, event_counter)
+        # Create unique constraint on (conversation_id, event_time_us, event_counter).
+        # PostgreSQL does not support ``ADD CONSTRAINT IF NOT EXISTS``; check first
+        # so startup schema repair does not poison the surrounding transaction.
         try:
-            await conn.execute(
-                refresh_select_statement(text(
-                    "ALTER TABLE agent_execution_events "
-                    "ADD CONSTRAINT IF NOT EXISTS uq_agent_events_conv_time "
-                    "UNIQUE (conversation_id, event_time_us, event_counter)"
-                ))
+            existing_constraint = await conn.execute(
+                refresh_select_statement(
+                    text(
+                        "SELECT 1 FROM pg_constraint "
+                        "WHERE conname = 'uq_agent_events_conv_time' "
+                        "AND conrelid = 'agent_execution_events'::regclass"
+                    )
+                )
             )
-            logger.info("Added unique constraint uq_agent_events_conv_time")
+            if existing_constraint.scalar_one_or_none() is None:
+                await conn.execute(
+                    refresh_select_statement(
+                        text(
+                            "ALTER TABLE agent_execution_events "
+                            "ADD CONSTRAINT uq_agent_events_conv_time "
+                            "UNIQUE (conversation_id, event_time_us, event_counter)"
+                        )
+                    )
+                )
+                logger.info("Added unique constraint uq_agent_events_conv_time")
+            else:
+                logger.info("Unique constraint uq_agent_events_conv_time already exists")
         except Exception as e:
             logger.info(f"Unique constraint may already exist: {e}")
 
         # Create index on (conversation_id, event_time_us, event_counter)
         try:
             await conn.execute(
-                refresh_select_statement(text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_time "
-                    "ON agent_execution_events (conversation_id, event_time_us, event_counter)"
-                ))
+                refresh_select_statement(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_time "
+                        "ON agent_execution_events (conversation_id, event_time_us, event_counter)"
+                    )
+                )
             )
             logger.info("Created index ix_agent_events_conv_time")
         except Exception as e:
@@ -216,10 +238,12 @@ async def update_agent_events_schema() -> None:
         # Create index on (message_id, event_time_us, event_counter)
         try:
             await conn.execute(
-                refresh_select_statement(text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_msg_time "
-                    "ON agent_execution_events (message_id, event_time_us, event_counter)"
-                ))
+                refresh_select_statement(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_agent_events_msg_time "
+                        "ON agent_execution_events (message_id, event_time_us, event_counter)"
+                    )
+                )
             )
             logger.info("Created index ix_agent_events_msg_time")
         except Exception as e:
@@ -228,10 +252,12 @@ async def update_agent_events_schema() -> None:
         # Create index on correlation_id for request-scoped event lookups.
         try:
             await conn.execute(
-                refresh_select_statement(text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_corr_id "
-                    "ON agent_execution_events (correlation_id)"
-                ))
+                refresh_select_statement(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_agent_events_corr_id "
+                        "ON agent_execution_events (correlation_id)"
+                    )
+                )
             )
             logger.info("Created index ix_agent_events_corr_id")
         except Exception as e:
@@ -257,12 +283,14 @@ async def migrate_messages_to_events() -> None:
     async with engine.begin() as conn:
         # Step 1: Check if messages table exists
         result = await conn.execute(
-            refresh_select_statement(text(
-                "SELECT EXISTS ("
-                "SELECT FROM information_schema.tables "
-                "WHERE table_name = 'messages'"
-                ")"
-            ))
+            refresh_select_statement(
+                text(
+                    "SELECT EXISTS ("
+                    "SELECT FROM information_schema.tables "
+                    "WHERE table_name = 'messages'"
+                    ")"
+                )
+            )
         )
         table_exists = result.scalar()
 
@@ -273,8 +301,9 @@ async def migrate_messages_to_events() -> None:
         # Step 2: Migrate messages to events
         logger.info("📦 Migrating messages to events...")
         migration_result = await conn.execute(
-            refresh_select_statement(text(
-                """
+            refresh_select_statement(
+                text(
+                    """
                 INSERT INTO agent_execution_events (
                     id, conversation_id, message_id, event_type, event_data, 
                     event_time_us, event_counter, created_at
@@ -304,7 +333,8 @@ async def migrate_messages_to_events() -> None:
                 WHERE role IN ('user', 'assistant')
                 ON CONFLICT (conversation_id, event_time_us, event_counter) DO NOTHING
                 """
-            ))
+                )
+            )
         )
         logger.info(f"✅ Migrated {migration_result.rowcount} messages to events")
 
@@ -322,7 +352,11 @@ async def migrate_messages_to_events() -> None:
         for table_name, constraint_name in fk_constraints:
             try:
                 await conn.execute(
-                    refresh_select_statement(text(f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {constraint_name}"))
+                    refresh_select_statement(
+                        text(
+                            f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {constraint_name}"
+                        )
+                    )
                 )
                 logger.info(f"  ✅ Dropped constraint {constraint_name}")
             except Exception as e:
@@ -331,7 +365,9 @@ async def migrate_messages_to_events() -> None:
         # Step 4: Drop messages table
         logger.info("🗑️  Dropping messages table...")
         try:
-            await conn.execute(refresh_select_statement(text("DROP TABLE IF EXISTS messages CASCADE")))
+            await conn.execute(
+                refresh_select_statement(text("DROP TABLE IF EXISTS messages CASCADE"))
+            )
             logger.info("✅ Dropped messages table")
         except Exception as e:
             logger.error(f"❌ Failed to drop messages table: {e}")
@@ -341,10 +377,12 @@ async def migrate_messages_to_events() -> None:
         logger.info("📇 Creating optimized indexes...")
         try:
             await conn.execute(
-                refresh_select_statement(text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_type_time "
-                    "ON agent_execution_events (conversation_id, event_type, event_time_us)"
-                ))
+                refresh_select_statement(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_type_time "
+                        "ON agent_execution_events (conversation_id, event_type, event_time_us)"
+                    )
+                )
             )
             logger.info("Created index ix_agent_events_conv_type_time")
         except Exception as e:
@@ -357,12 +395,14 @@ async def check_messages_table_exists() -> bool:
     """Check if messages table still exists in the database."""
     async with engine.begin() as conn:
         result = await conn.execute(
-            refresh_select_statement(text(
-                "SELECT EXISTS ("
-                "SELECT FROM information_schema.tables "
-                "WHERE table_name = 'messages'"
-                ")"
-            ))
+            refresh_select_statement(
+                text(
+                    "SELECT EXISTS ("
+                    "SELECT FROM information_schema.tables "
+                    "WHERE table_name = 'messages'"
+                    ")"
+                )
+            )
         )
         return bool(result.scalar())
 
@@ -385,12 +425,14 @@ async def migrate_skills_multi_tenant() -> None:
     async with engine.begin() as conn:
         # Step 1: Check if scope column already exists
         result = await conn.execute(
-            refresh_select_statement(text(
-                "SELECT EXISTS ("
-                "SELECT FROM information_schema.columns "
-                "WHERE table_name = 'skills' AND column_name = 'scope'"
-                ")"
-            ))
+            refresh_select_statement(
+                text(
+                    "SELECT EXISTS ("
+                    "SELECT FROM information_schema.columns "
+                    "WHERE table_name = 'skills' AND column_name = 'scope'"
+                    ")"
+                )
+            )
         )
         scope_exists = result.scalar()
 
@@ -400,40 +442,60 @@ async def migrate_skills_multi_tenant() -> None:
             # Add scope column
             logger.info("📦 Adding scope column to skills table...")
             await conn.execute(
-                refresh_select_statement(text("ALTER TABLE skills ADD COLUMN scope VARCHAR(20) DEFAULT 'tenant' NOT NULL"))
+                refresh_select_statement(
+                    text(
+                        "ALTER TABLE skills ADD COLUMN scope VARCHAR(20) DEFAULT 'tenant' NOT NULL"
+                    )
+                )
             )
             logger.info("✅ Added scope column")
 
             # Add is_system_skill column
             await conn.execute(
-                refresh_select_statement(text("ALTER TABLE skills ADD COLUMN is_system_skill BOOLEAN DEFAULT FALSE NOT NULL"))
+                refresh_select_statement(
+                    text(
+                        "ALTER TABLE skills ADD COLUMN is_system_skill BOOLEAN DEFAULT FALSE NOT NULL"
+                    )
+                )
             )
             logger.info("✅ Added is_system_skill column")
 
             # Add full_content column
-            await conn.execute(refresh_select_statement(text("ALTER TABLE skills ADD COLUMN full_content TEXT NULL")))
+            await conn.execute(
+                refresh_select_statement(
+                    text("ALTER TABLE skills ADD COLUMN full_content TEXT NULL")
+                )
+            )
             logger.info("✅ Added full_content column")
 
             # Create index on scope
-            await conn.execute(refresh_select_statement(text("CREATE INDEX IF NOT EXISTS ix_skills_scope ON skills(scope)")))
+            await conn.execute(
+                refresh_select_statement(
+                    text("CREATE INDEX IF NOT EXISTS ix_skills_scope ON skills(scope)")
+                )
+            )
             logger.info("✅ Created index ix_skills_scope")
 
             # Create composite index
             await conn.execute(
-                refresh_select_statement(text(
-                    "CREATE INDEX IF NOT EXISTS ix_skills_tenant_scope ON skills(tenant_id, scope)"
-                ))
+                refresh_select_statement(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_skills_tenant_scope ON skills(tenant_id, scope)"
+                    )
+                )
             )
             logger.info("✅ Created index ix_skills_tenant_scope")
 
         # Step 2: Create tenant_skill_configs table if not exists
         result = await conn.execute(
-            refresh_select_statement(text(
-                "SELECT EXISTS ("
-                "SELECT FROM information_schema.tables "
-                "WHERE table_name = 'tenant_skill_configs'"
-                ")"
-            ))
+            refresh_select_statement(
+                text(
+                    "SELECT EXISTS ("
+                    "SELECT FROM information_schema.tables "
+                    "WHERE table_name = 'tenant_skill_configs'"
+                    ")"
+                )
+            )
         )
         config_table_exists = result.scalar()
 
@@ -442,8 +504,9 @@ async def migrate_skills_multi_tenant() -> None:
         else:
             logger.info("📦 Creating tenant_skill_configs table...")
             await conn.execute(
-                refresh_select_statement(text(
-                    """
+                refresh_select_statement(
+                    text(
+                        """
                     CREATE TABLE tenant_skill_configs (
                         id VARCHAR PRIMARY KEY,
                         tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -455,16 +518,19 @@ async def migrate_skills_multi_tenant() -> None:
                         CONSTRAINT uq_tenant_skill_config UNIQUE(tenant_id, system_skill_name)
                     )
                     """
-                ))
+                    )
+                )
             )
             logger.info("✅ Created tenant_skill_configs table")
 
             # Create index
             await conn.execute(
-                refresh_select_statement(text(
-                    "CREATE INDEX IF NOT EXISTS ix_tenant_skill_configs_tenant "
-                    "ON tenant_skill_configs(tenant_id)"
-                ))
+                refresh_select_statement(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_tenant_skill_configs_tenant "
+                        "ON tenant_skill_configs(tenant_id)"
+                    )
+                )
             )
             logger.info("✅ Created index ix_tenant_skill_configs_tenant")
 

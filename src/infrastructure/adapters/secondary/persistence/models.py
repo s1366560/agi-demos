@@ -1027,9 +1027,9 @@ class ToolExecutionRecord(Base):
     conversation_id: Mapped[str] = mapped_column(
         String, ForeignKey("conversations.id"), nullable=False, index=True
     )
-    message_id: Mapped[str] = mapped_column(
-        String, ForeignKey("messages.id"), nullable=False, index=True
-    )
+    # message_id groups tool calls by unified event-timeline message. It must not
+    # FK to the legacy messages table because new chat turns only persist events.
+    message_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     call_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
     tool_input: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=True)
@@ -1043,7 +1043,6 @@ class ToolExecutionRecord(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(foreign_keys=[conversation_id])
-    message: Mapped["Message"] = relationship(foreign_keys=[message_id])
 
 
 class AgentExecutionEvent(Base):
