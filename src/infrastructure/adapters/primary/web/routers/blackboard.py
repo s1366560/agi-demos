@@ -23,6 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.blackboard_file_service import BlackboardFileService
 from src.application.services.blackboard_service import BlackboardService
+from src.application.services.workspace_execution_diagnostics_service import (
+    WorkspaceExecutionDiagnosticsService,
+)
 from src.application.services.workspace_surface_contract import (
     AUTHORITY_CLASS_KEY,
     BLACKBOARD_OWNERSHIP_METADATA,
@@ -55,6 +58,20 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 
 def _service_from_request(request: Request, db: AsyncSession) -> BlackboardService:
     return get_container_with_db(request, db).blackboard_service()
+
+
+def _execution_diagnostics_service_from_request(
+    request: Request,
+    db: AsyncSession,
+) -> WorkspaceExecutionDiagnosticsService:
+    container = get_container_with_db(request, db)
+    return WorkspaceExecutionDiagnosticsService(
+        workspace_repo=container.workspace_repository(),
+        workspace_member_repo=container.workspace_member_repository(),
+        workspace_task_repo=container.workspace_task_repository(),
+        attempt_repo=container.workspace_task_session_attempt_repository(),
+        tool_execution_record_repo=container.tool_execution_record_repository(),
+    )
 
 
 def _blackboard_event_metadata(tenant_id: str, project_id: str) -> dict[str, Any]:
@@ -142,6 +159,19 @@ class BlackboardReplyListResponse(BaseModel):
     items: list[BlackboardReplyResponse]
 
 
+class WorkspaceExecutionDiagnosticsResponse(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    task_status_counts: dict[str, int]
+    attempt_status_counts: dict[str, int]
+    tool_status_counts: dict[str, int]
+    tasks: list[dict[str, Any]]
+    blockers: list[dict[str, Any]]
+    pending_adjudications: list[dict[str, Any]]
+    evidence_gaps: list[dict[str, Any]]
+    recent_tool_failures: list[dict[str, Any]]
+
+
 def _to_post_response(post: BlackboardPost) -> BlackboardPostResponse:
     return BlackboardPostResponse(
         id=post.id,
@@ -168,6 +198,32 @@ def _to_reply_response(reply: BlackboardReply) -> BlackboardReplyResponse:
         created_at=reply.created_at,
         updated_at=reply.updated_at,
     )
+
+
+@router.get("/execution-diagnostics", response_model=WorkspaceExecutionDiagnosticsResponse)
+async def get_execution_diagnostics(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    request: Request,
+    task_limit: int = Query(100, ge=1, le=200),
+    tool_limit_per_conversation: int = Query(100, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceExecutionDiagnosticsResponse:
+    service = _execution_diagnostics_service_from_request(request, db)
+    try:
+        diagnostics = await service.get_diagnostics(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            task_limit=task_limit,
+            tool_limit_per_conversation=tool_limit_per_conversation,
+        )
+        return WorkspaceExecutionDiagnosticsResponse(**diagnostics.to_dict())
+    except Exception as exc:
+        raise _map_error(exc) from exc
 
 
 @router.post("/posts", response_model=BlackboardPostResponse, status_code=status.HTTP_201_CREATED)
