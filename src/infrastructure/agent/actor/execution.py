@@ -506,22 +506,38 @@ def _inject_app_model_context(
     conversation_context: list[dict[str, Any]],
     app_model_context: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Inject MCP App model context as a system message (SEP-1865).
+    """Inject app-provided model context as a system message (SEP-1865).
 
     If the frontend received a ui/update-model-context from an MCP App,
     the context is serialized and prepended as a system message so the
-    LLM is aware of the app's state in the next turn.
+    LLM is aware of the app's state in the next turn. Workspace worker
+    launches also use this path for operational context that should not be
+    persisted as a visible user task brief.
     """
     if not app_model_context:
         return conversation_context
+    if app_model_context.get("context_type") == "workspace_worker_runtime":
+        header = "".join(
+            (
+                "[Workspace Runtime Context]\n",
+                "The following context is system-level workspace execution metadata. ",
+                "Follow it as execution policy, do not quote or summarize it for the user, ",
+                "and use native tool calls for tool use. Never print textual tool-call ",
+                "markup such as [TOOL_CALL]...[/TOOL_CALL], JSON/function-call stubs, ",
+                "or shell command code blocks as a substitute for calling a tool.\n",
+            )
+        )
+    else:
+        header = "".join(
+            (
+                "[MCP App Context]\n",
+                "The following context was provided by an active MCP App UI. ",
+                "Use it to inform your response.\n",
+            )
+        )
     context_msg = {
         "role": "system",
-        "content": (
-            "[MCP App Context]\n"
-            "The following context was provided by an active MCP App UI. "
-            "Use it to inform your response.\n"
-            f"{json.dumps(app_model_context, ensure_ascii=False)}"
-        ),
+        "content": f"{header}{json.dumps(app_model_context, ensure_ascii=False)}",
     }
     return [context_msg, *conversation_context]
 

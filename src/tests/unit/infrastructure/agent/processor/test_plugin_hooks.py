@@ -124,6 +124,25 @@ class TestNotifyPluginHookHelper:
         assert "Demo runtime hook executed from custom script." in proc._response_instructions
 
 
+@pytest.mark.unit
+class TestRuntimeGuidanceMessage:
+    def test_runtime_guidance_wraps_multiline_instructions_and_tool_protocol(self):
+        proc = _make_processor()
+        proc._session_instructions = ["line one\nline two"]
+        proc._response_instructions = ["respond carefully"]
+
+        message = proc._build_runtime_guidance_message()
+
+        assert message is not None
+        assert message["role"] == "system"
+        content = message["content"]
+        assert "system-level execution policy" in content
+        assert "<instruction index=\"1\">" in content
+        assert "line one\nline two" in content
+        assert "[TOOL_CALL]...[/TOOL_CALL]" in content
+        assert "- line one" not in content
+
+
 # ---------------------------------------------------------------------------
 # process() lifecycle hooks
 # ---------------------------------------------------------------------------

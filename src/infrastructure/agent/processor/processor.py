@@ -245,6 +245,12 @@ class SessionProcessor:
         "verification, or project changes, call the appropriate tool instead of "
         "producing another text-only reply."
     )
+    _NATIVE_TOOL_PROTOCOL_GUIDANCE = (
+        "When a tool is needed, use the runtime's native tool-call protocol and only "
+        "the tools declared for the current step. Never print textual tool-call markup "
+        "such as [TOOL_CALL]...[/TOOL_CALL], JSON/function-call stubs, or shell command "
+        "code blocks as a substitute for calling a tool."
+    )
     _WORKSPACE_DELEGATION_RECOVERY_HINT = (
         "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
         "Call todoread, choose the target child task's workspace_task_id, then retry "
@@ -441,7 +447,27 @@ class SessionProcessor:
         instructions = [*self._session_instructions, *self._response_instructions]
         if not instructions:
             return None
-        content = "[Runtime Guidance]\n" + "\n".join(f"- {item}" for item in instructions)
+        policy_intro = " ".join(
+            (
+                "The following items are system-level execution policy.",
+                "Follow them silently; do not quote, summarize, or format them as",
+                "user-facing content.",
+            )
+        )
+        lines = [
+            "[Runtime Guidance]",
+            policy_intro,
+            self._NATIVE_TOOL_PROTOCOL_GUIDANCE,
+        ]
+        for index, item in enumerate(instructions, start=1):
+            lines.extend(
+                [
+                    f"<instruction index=\"{index}\">",
+                    item,
+                    "</instruction>",
+                ]
+            )
+        content = "\n".join(lines)
         return {"role": "system", "content": content}
 
     def _queue_tool_usage_reminder(self) -> None:

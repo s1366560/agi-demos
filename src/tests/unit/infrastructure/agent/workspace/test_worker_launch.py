@@ -118,8 +118,19 @@ class TestBuildBrief:
             extra_instructions="Be brief.",
         )
         assert "attempt_id=att-2" in brief
-        assert "Additional instructions" in brief
-        assert "Be brief." in brief
+        assert "Additional instructions" not in brief
+        assert "Be brief." not in brief
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            extra_instructions="Be brief.",
+        )
+        assert system_context["workspace_binding"]["attempt_id"] == "att-2"
+        assert system_context["additional_instructions"] == "Be brief."
+        assert "native tool-call" in system_context["tool_protocol"]["instruction"]
 
     def test_handles_missing_description(self) -> None:
         task = _make_task(description=None)
@@ -147,11 +158,21 @@ class TestBuildBrief:
             code_context=code_context,
         )
 
-        assert "[workspace-code-context]" in brief
-        assert "sandbox_code_root=/workspace/my-evo" in brief
-        assert "loaded_agents_files=/workspace/my-evo/AGENTS.md" in brief
-        assert "Always run npm test." in brief
-        assert "perform all repository inspection" in brief
+        assert "[workspace-code-context]" not in brief
+        assert "Always run npm test." not in brief
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+        )
+        code_context_payload = system_context["code_context"]
+        assert code_context_payload["sandbox_code_root"] == "/workspace/my-evo"
+        assert code_context_payload["loaded_agents_files"] == ["/workspace/my-evo/AGENTS.md"]
+        assert code_context_payload["agents_files"][0]["content"] == "Always run npm test."
+        assert "Perform repository inspection" in code_context_payload["rule"]
 
     def test_renders_code_root_placeholder_in_extra_instructions(self) -> None:
         task = _make_task()
@@ -165,7 +186,20 @@ class TestBuildBrief:
             extra_instructions="worktree_path=${sandbox_code_root}/../.memstack/worktrees/att-2",
         )
 
-        assert "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2" in brief
+        assert "worktree_path=" not in brief
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+            extra_instructions="worktree_path=${sandbox_code_root}/../.memstack/worktrees/att-2",
+        )
+
+        assert (
+            system_context["additional_instructions"]
+            == "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2"
+        )
 
     def test_code_context_metadata_preserves_digest_and_agents_scope(self) -> None:
         code_context = WorkspaceCodeContext(

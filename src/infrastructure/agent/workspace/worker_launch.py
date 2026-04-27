@@ -17,8 +17,8 @@ after assignment to fire-and-forget a coroutine that:
 3. Creates the ``Conversation`` row if missing, stamping
    ``agent_config={"selected_agent_id": worker_agent_id}`` so the UI badge
    knows which agent definition owns this conversation.
-4. Posts a structured brief (workspace-task-binding block + task title +
-   description) and streams it through ``stream_chat_v2(agent_id=...)``.
+4. Posts a concise task brief, injects operational workspace context as
+   system model context, and streams it through ``stream_chat_v2(agent_id=...)``.
 
 Safety:
 - Redis ``SETNX`` cooldown (default 5 min) keyed on the conversation id
@@ -55,6 +55,14 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # but short enough that a genuine re-assignment after rework can re-fire.
 WORKER_LAUNCH_COOLDOWN_SECONDS = 300
 
+_WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
+_NATIVE_TOOL_PROTOCOL_GUARD = (
+    "Use only the platform's native tool-call channel for tools. Do not print "
+    "tool-call markup, JSON/function-call stubs, or shell command code blocks as "
+    "a substitute for a tool call. In particular, never emit [TOOL_CALL], "
+    "[/TOOL_CALL], or {tool => ...} text."
+)
+
 
 def _conversation_scope_for_task(task_id: str, attempt_id: str | None = None) -> str:
     """Stable scope string for a worker session bound to a task."""
@@ -87,47 +95,6 @@ def _conversation_id_for_worker(
     )
 
 
-def _build_code_context_sections(code_context: WorkspaceCodeContext | None) -> list[str]:
-    if code_context is None or not code_context.sandbox_code_root:
-        return []
-
-    context_lines = [
-        "[workspace-code-context]",
-        f"sandbox_code_root={code_context.sandbox_code_root}",
-    ]
-    if code_context.loaded_agents_paths:
-        context_lines.append("loaded_agents_files=" + ",".join(code_context.loaded_agents_paths))
-    if code_context.agents_digest:
-        context_lines.append(f"agents_digest={code_context.agents_digest}")
-    context_lines.append("[/workspace-code-context]")
-
-    code_guidance = (
-        "Programming workspace rule: perform all repository inspection, file edits, "
-        "terminal commands, git diff, and tests from `sandbox_code_root`. Ignore "
-        "unrelated files outside that directory unless the task explicitly asks "
-        "for them. Read and follow the listed AGENTS.md files before decomposing "
-        "or executing the task."
-    )
-    sections = [code_guidance, "\n".join(context_lines)]
-    if code_context.agents_files:
-        agents_sections = [
-            "\n".join(
-                [
-                    f"### {agents_file.sandbox_path}{' (truncated)' if agents_file.truncated else ''}",
-                    agents_file.content,
-                ]
-            )
-            for agents_file in code_context.agents_files
-        ]
-        sections.append("## Loaded AGENTS.md instructions\n" + "\n\n".join(agents_sections))
-    elif code_context.warnings:
-        sections.append(
-            "## AGENTS.md instruction status\n"
-            + "\n".join(f"- {warning}" for warning in code_context.warnings)
-        )
-    return sections
-
-
 def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]:
     return {
         "sandbox_code_root": code_context.sandbox_code_root,
@@ -135,6 +102,114 @@ def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]
         "agents_digest": code_context.agents_digest,
         "agents_excerpt": code_context.agents_excerpt,
     }
+
+
+def _workspace_binding_metadata(
+    *,
+    workspace_id: str,
+    task: WorkspaceTask,
+    attempt_id: str | None,
+    leader_agent_id: str | None,
+) -> dict[str, str]:
+    binding = {
+        "workspace_id": workspace_id,
+        "workspace_task_id": task.id,
+    }
+    workspace_agent_binding_id = task.get_workspace_agent_binding_id()
+    if workspace_agent_binding_id:
+        binding["workspace_agent_binding_id"] = workspace_agent_binding_id
+
+    candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
+    if isinstance(candidate, str) and candidate:
+        binding["root_goal_task_id"] = candidate
+    if attempt_id:
+        binding["attempt_id"] = attempt_id
+    if leader_agent_id:
+        binding["leader_agent_id"] = leader_agent_id
+    return binding
+
+
+def _render_workspace_binding_block(binding: Mapping[str, str]) -> str:
+    lines = ["[workspace-task-binding]"]
+    lines.extend(f"{key}={value}" for key, value in binding.items() if value)
+    lines.append("[/workspace-task-binding]")
+    return "\n".join(lines)
+
+
+def _build_worker_system_context(
+    *,
+    workspace_id: str,
+    task: WorkspaceTask,
+    attempt_id: str | None,
+    leader_agent_id: str | None,
+    extra_instructions: str | None = None,
+    code_context: WorkspaceCodeContext | None = None,
+) -> dict[str, Any]:
+    """Build system-level workspace context for a launched worker session."""
+    binding = _workspace_binding_metadata(
+        workspace_id=workspace_id,
+        task=task,
+        attempt_id=attempt_id,
+        leader_agent_id=leader_agent_id,
+    )
+    context: dict[str, Any] = {
+        "context_type": _WORKSPACE_APP_CONTEXT_TYPE,
+        "workspace_binding": binding,
+        "tool_protocol": {
+            "native_tool_calls_required": True,
+            "instruction": _NATIVE_TOOL_PROTOCOL_GUARD,
+            "forbidden_text_markers": [
+                "[TOOL_CALL]",
+                "[/TOOL_CALL]",
+                "{tool => ...}",
+            ],
+        },
+        "reporting": {
+            "required_identifiers": {
+                "task_id": binding.get("workspace_task_id", ""),
+                "attempt_id": binding.get("attempt_id", ""),
+                "leader_agent_id": binding.get("leader_agent_id", ""),
+            },
+            "instructions": [
+                "Execute the assigned workspace task autonomously.",
+                "Call workspace_report_progress periodically during long-running work.",
+                "Call workspace_report_complete once when finished successfully.",
+                "Call workspace_report_blocked if a hard blocker cannot be recovered.",
+            ],
+        },
+    }
+
+    if code_context is not None and code_context.sandbox_code_root:
+        code_context_payload: dict[str, Any] = {
+            "sandbox_code_root": code_context.sandbox_code_root,
+            "loaded_agents_files": list(code_context.loaded_agents_paths),
+            "agents_digest": code_context.agents_digest,
+            "rule": (
+                "Perform repository inspection, file edits, terminal commands, git diff, "
+                "and tests from sandbox_code_root. Ignore unrelated files outside that "
+                "directory unless the task explicitly asks for them. Read and follow the "
+                "listed AGENTS.md files before decomposing or executing the task."
+            ),
+        }
+        if code_context.agents_files:
+            code_context_payload["agents_files"] = [
+                {
+                    "sandbox_path": agents_file.sandbox_path,
+                    "content": agents_file.content,
+                    "truncated": agents_file.truncated,
+                }
+                for agents_file in code_context.agents_files
+            ]
+        if code_context.warnings:
+            code_context_payload["warnings"] = list(code_context.warnings)
+        context["code_context"] = code_context_payload
+
+    if extra_instructions:
+        rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
+        if rendered_extra:
+            context["additional_instructions"] = rendered_extra
+
+    return context
 
 
 def _render_workspace_placeholders(
@@ -155,58 +230,35 @@ def _build_worker_brief(
     extra_instructions: str | None = None,
     code_context: WorkspaceCodeContext | None = None,
 ) -> str:
-    """Compose the initial prompt the worker agent receives.
+    """Compose the visible task brief for the worker agent.
 
-    The binding block makes it easy for the worker to extract identifiers and
-    call the workspace reporting tools (``workspace_report_progress``,
-    ``workspace_report_complete``, ``workspace_report_blocked``) with the
-    right parameters. Free-form context after the block carries the
-    human-readable task brief.
+    Operational policy, code-root context, AGENTS.md content, and reporting
+    requirements are injected as system model context by
+    :func:`_build_worker_system_context`. Keeping the visible user message
+    task-focused avoids teaching the model to imitate tool-call protocol text.
     """
-    root_goal_task_id = ""
-    candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
-    if isinstance(candidate, str) and candidate:
-        root_goal_task_id = candidate
-
     description = (task.description or "").strip()
-    workspace_agent_binding_id = task.get_workspace_agent_binding_id()
-
-    binding_lines = [
-        "[workspace-task-binding]",
-        f"workspace_id={workspace_id}",
-        f"workspace_task_id={task.id}",
-    ]
-    if workspace_agent_binding_id:
-        binding_lines.append(f"workspace_agent_binding_id={workspace_agent_binding_id}")
-    if root_goal_task_id:
-        binding_lines.append(f"root_goal_task_id={root_goal_task_id}")
-    if attempt_id:
-        binding_lines.append(f"attempt_id={attempt_id}")
-    if leader_agent_id:
-        binding_lines.append(f"leader_agent_id={leader_agent_id}")
-    binding_lines.append("[/workspace-task-binding]")
-
-    reporting_guidance = (
-        "You have been assigned a workspace task. Execute it autonomously, then "
-        "report the outcome via the workspace reporting tools:\n"
-        "- Call `workspace_report_progress` periodically during long-running work.\n"
-        "- Call `workspace_report_complete` ONCE when finished successfully.\n"
-        "- Call `workspace_report_blocked` if you hit a hard blocker and cannot recover.\n"
-        "All three tools require `task_id`, `attempt_id`, and `leader_agent_id` — "
-        "copy those verbatim from the [workspace-task-binding] block below."
+    binding = _workspace_binding_metadata(
+        workspace_id=workspace_id,
+        task=task,
+        attempt_id=attempt_id,
+        leader_agent_id=leader_agent_id,
     )
 
+    visible_intro = " ".join(
+        (
+            "Complete the assigned workspace task.",
+            "Workspace execution policy and reporting requirements are provided",
+            "as system context for this turn.",
+        )
+    )
     sections: list[str] = [
-        reporting_guidance,
-        "\n".join(binding_lines),
+        visible_intro,
+        _render_workspace_binding_block(binding),
         f"## Task title\n{task.title}",
     ]
-    sections.extend(_build_code_context_sections(code_context))
     if description:
         sections.append(f"## Task description\n{description}")
-    if extra_instructions:
-        rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
-        sections.append(f"## Additional instructions\n{rendered_extra}")
 
     return "\n\n".join(sections)
 
@@ -606,6 +658,14 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         extra_instructions=extra_instructions,
         code_context=code_context,
     )
+    app_model_context = _build_worker_system_context(
+        workspace_id=workspace_id,
+        task=task,
+        attempt_id=resolved_attempt_id,
+        leader_agent_id=leader_agent_id,
+        extra_instructions=extra_instructions,
+        code_context=code_context,
+    )
     final_content = ""
     accumulated_text = ""
     terminal_event: str | None = None  # "complete" | "error" | None
@@ -631,6 +691,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 user_id=actor_user_id,
                 tenant_id=workspace.tenant_id,
                 agent_id=worker_agent_id,
+                app_model_context=app_model_context,
             ):
                 event_type = event.get("type")
                 if event_type == "text_delta":
@@ -925,6 +986,7 @@ def schedule_worker_session(
 __all__ = [
     "WORKER_LAUNCH_COOLDOWN_SECONDS",
     "_build_worker_brief",
+    "_build_worker_system_context",
     "_conversation_id_for_worker",
     "_conversation_scope_for_task",
     "launch_worker_session",
