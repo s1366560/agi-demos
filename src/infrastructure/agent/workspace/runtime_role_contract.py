@@ -8,9 +8,13 @@ from src.infrastructure.agent.tools.context import ToolContext
 
 WORKSPACE_SESSION_ROLE_KEY: Final[str] = "workspace_session_role"
 WORKSPACE_ID_KEY: Final[str] = "workspace_id"
+WORKSPACE_TOOL_MODE_KEY: Final[str] = "workspace_tool_mode"
+WORKSPACE_TURN_TYPE_KEY: Final[str] = "workspace_turn_type"
 
 WORKSPACE_ROLE_LEADER: Final[str] = "leader"
 WORKSPACE_ROLE_WORKER: Final[str] = "worker"
+WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY: Final[str] = "task_ledger_only"
+WORKSPACE_TURN_TYPE_LEADER_REPLAN: Final[str] = "leader_replan"
 
 
 def derive_workspace_session_role(*, has_workspace_binding: bool) -> str:

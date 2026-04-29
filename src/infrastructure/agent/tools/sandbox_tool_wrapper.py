@@ -23,6 +23,9 @@ from src.infrastructure.agent.tools.mcp_errors import (
 
 logger = logging.getLogger(__name__)
 
+WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS = 6_000
+WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS = 6_000
+
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
     """Convert MCP input_schema to agent tool JSON Schema format.
@@ -48,6 +51,72 @@ def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
         "properties": input_schema.get("properties", {}),
         "required": input_schema.get("required", []),
     }
+
+
+def _append_limit_hint(description: str | None, hint: str) -> str:
+    base = (description or "").strip()
+    if hint in base:
+        return base
+    return f"{base} {hint}".strip()
+
+
+def _apply_workspace_harness_limits(
+    tool_name: str,
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """Inject hard argument limits for tools that commonly overflow JSON streams."""
+    if tool_name not in {"write", "bash"}:
+        return parameters
+
+    limited = dict(parameters)
+    properties = dict(limited.get("properties") or {})
+
+    if tool_name == "write" and isinstance(properties.get("content"), dict):
+        content_schema = dict(properties["content"])
+        content_schema["maxLength"] = WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS
+        content_schema["description"] = _append_limit_hint(
+            content_schema.get("description"),
+            (
+                "HARD LIMIT: at most 6000 characters per call. "
+                "For longer files, create a skeleton first and append/edit small sections."
+            ),
+        )
+        properties["content"] = content_schema
+
+    if tool_name == "bash" and isinstance(properties.get("command"), dict):
+        command_schema = dict(properties["command"])
+        command_schema["maxLength"] = WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS
+        command_schema["description"] = _append_limit_hint(
+            command_schema.get("description"),
+            (
+                "HARD LIMIT: at most 6000 characters per command. "
+                "Do not embed large heredocs; use short append/edit steps instead."
+            ),
+        )
+        properties["command"] = command_schema
+
+    limited["properties"] = properties
+    return limited
+
+
+def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) -> str | None:
+    if tool_name == "write":
+        content = kwargs.get("content")
+        if isinstance(content, str) and len(content) > WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS:
+            return (
+                "write.content exceeds the workspace harness hard limit "
+                f"({len(content)} > {WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS} characters). "
+                "Retry by writing a short skeleton, then append or edit sections under 6000 chars."
+            )
+    if tool_name == "bash":
+        command = kwargs.get("command")
+        if isinstance(command, str) and len(command) > WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS:
+            return (
+                "bash.command exceeds the workspace harness hard limit "
+                f"({len(command)} > {WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS} characters). "
+                "Retry with a short command; do not embed large heredocs."
+            )
+    return None
 
 
 def _extract_error_msg(result: dict[str, Any]) -> str:
@@ -230,13 +299,18 @@ def create_sandbox_mcp_tool(
 
     cfg = retry_config or RetryConfig()
     description = tool_schema.get("description", f"{tool_name} tool")
-    parameters = _convert_mcp_schema(tool_schema.get("input_schema", {}))
+    parameters = _apply_workspace_harness_limits(
+        tool_name,
+        _convert_mcp_schema(tool_schema.get("input_schema", {})),
+    )
     permission = classify_sandbox_tool_permission(tool_name)
 
     async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
         """Execute the sandbox MCP tool with retry logic."""
         _ = ctx  # Context available but not used by MCP tool calls
         try:
+            if argument_error := _workspace_harness_argument_error(tool_name, kwargs):
+                return ToolResult(output=argument_error, is_error=True)
             output, raw_result = await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,

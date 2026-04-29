@@ -15,6 +15,7 @@ from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     Capability,
     CriterionKind,
+    CriterionResult,
     FeatureCheckpoint,
     Plan,
     PlanNode,
@@ -294,6 +295,40 @@ class TestCapabilityAllocator:
         out = await CapabilityAllocator().allocate([node], [a1, a2])
         assert out[0].agent_id == "ag-b"
 
+    async def test_missing_capabilities_prefers_general_execution_worker(self) -> None:
+        node = PlanNode(
+            id="unclear-node",
+            plan_id="plan-1",
+            parent_id=PlanNodeId("goal-1"),
+            kind=PlanNodeKind.TASK,
+            title="Unannotated execution task",
+        )
+        builder = WorkspaceAgent(
+            agent_id="builder",
+            display_name="Builder",
+            capabilities=frozenset(
+                {
+                    "backend",
+                    "codegen",
+                    "file_edit",
+                    "frontend",
+                    "shell",
+                    "software_development",
+                    "testing",
+                }
+            ),
+        )
+        verifier = WorkspaceAgent(
+            agent_id="verifier",
+            display_name="Verifier",
+            capabilities=frozenset({"browser_e2e", "evidence", "shell", "testing"}),
+        )
+
+        out = await CapabilityAllocator().allocate([node], [verifier, builder])
+
+        assert len(out) == 1
+        assert out[0].agent_id == "builder"
+
 
 # ---------------------------------------------------------------------------
 # M5 verifier
@@ -432,6 +467,86 @@ class TestVerifier:
         assert rep.hard_fail
         assert "not a completion report" in rep.summary()
 
+    async def test_verifier_soft_fails_retryable_infrastructure_blocker(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={
+                        "pattern": r"\S",
+                        "source": "stdout",
+                        "requires_terminal_worker_report": True,
+                    },
+                    required=True,
+                ),
+            )
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            stdout="litellm.APIConnectionError: Executor shutdown has been called",
+            artifacts={
+                "last_worker_report_type": "blocked",
+                "last_worker_report_summary": (
+                    "litellm.APIConnectionError: Executor shutdown has been called"
+                ),
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert not rep.hard_fail
+        assert "retryable infrastructure failure" in rep.summary()
+
+    async def test_verifier_soft_fails_rate_limit_blocker(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node()
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            stdout="Rate limit exceeded. Please wait a moment and try again.",
+            artifacts={
+                "last_worker_report_type": "blocked",
+                "last_worker_report_summary": (
+                    "Rate limit exceeded. Please wait a moment and try again."
+                ),
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert not rep.hard_fail
+        assert "retryable infrastructure failure" in rep.summary()
+
+    async def test_verifier_soft_fails_sandbox_tool_timeout_blocker(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                    {"check_id": "git-status", "kind": "git_status", "required": True},
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            stdout="Tool execution failed after 1 attempts: 工具执行超时: bash",
+            artifacts={
+                "last_worker_report_type": "blocked",
+                "last_worker_report_summary": (
+                    "All tool operations are timing out; filesystem appears to be unresponsive"
+                ),
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert not rep.hard_fail
+        assert "retryable infrastructure failure" in rep.summary()
+        assert "missing preflight evidence" not in rep.summary()
+
     async def test_verifier_rejects_default_report_criterion_without_completed_report(
         self,
     ) -> None:
@@ -499,6 +614,32 @@ class TestVerifier:
                 "last_worker_report_type": "completed",
                 "execution_verifications": ["preflight:read-progress"],
                 "last_worker_report_verifications": ["preflight:git-status"],
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(result.message == "preflight evidence recorded" for result in rep.results)
+
+    async def test_verifier_accepts_preflight_evidence_with_details(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                    {"check_id": "git-status", "kind": "git_status", "required": True},
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "last_worker_report_verifications": [
+                    "preflight:read-progress:report created at /workspace/my-evo/docs/report.md",
+                    "preflight:git-status:clean worktree at commit f124e8d",
+                ],
             },
         )
         rep = await verifier.verify(ctx)
@@ -673,6 +814,26 @@ class _AlwaysPassVerifier:
         )
 
 
+class _RetryableInfrastructureVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={"name": "retryable_infrastructure_failure"},
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.5,
+                    message="retryable infrastructure failure; redispatch node",
+                ),
+            ),
+        )
+
+
 class TestSupervisorTick:
     async def test_tick_dispatches_ready_and_verifies_reported(self) -> None:
         repo = InMemoryPlanRepository()
@@ -803,6 +964,136 @@ class TestSupervisorTick:
         assert report.allocations_made == 1
         assert len(dispatched) == 1
         assert events == [("dispatch_deferred_write_conflict", "b")]
+
+    async def test_tick_limits_dispatches_per_tick(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(replace(b, depends_on=frozenset()))
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str, int | None]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload.get("max_dispatches_per_tick")))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+            max_dispatches_per_tick=1,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert len(dispatched) == 1
+        assert events == [("dispatch_deferred_concurrency_limit", "b", 1)]
+
+    async def test_retryable_infrastructure_failure_schedules_backoff(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-search",
+                    display_name="S",
+                    capabilities=frozenset({"web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_RetryableInfrastructureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_blocked == 0
+        assert report.allocations_made == 0
+        assert dispatched == []
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        retry_node = reloaded.nodes[PlanNodeId("a")]
+        assert retry_node.intent is TaskIntent.TODO
+        assert retry_node.execution is TaskExecution.IDLE
+        assert retry_node.current_attempt_id is None
+        assert retry_node.metadata["retry_count"] == 1
+        assert retry_node.metadata["retry_not_before"].endswith("Z")
+        retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
+        assert len(retry_events) == 1
+        assert retry_events[0][2]["retry_count"] == 1
 
 
 # ---------------------------------------------------------------------------

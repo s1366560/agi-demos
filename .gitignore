@@ -147,3 +147,4 @@ local-sandbox-app/
 .ruff_cache/
 .gitnexus
 .omx/
+.memstack/worktrees/

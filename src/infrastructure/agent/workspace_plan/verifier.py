@@ -36,6 +36,22 @@ from src.domain.ports.services.verifier_port import (
 
 logger = logging.getLogger(__name__)
 
+_TRANSIENT_INFRA_FAILURE_MARKERS = (
+    "Executor shutdown has been called",
+    "SystemExit: 15",
+    "All tool operations",
+    "MCP request 'tools/call' timed out",
+    "Server is still running but unresponsive",
+    "Tool execution failed after 1 attempts",
+    "filesystem appears to be unresponsive",
+    "request timed out",
+    "工具执行超时",
+    "litellm.APIConnectionError",
+    "is unavailable and could not be rebuilt",
+    "Rate limit exceeded",
+    "Please wait a moment and try again",
+)
+
 
 # --- Sandbox shim -----------------------------------------------------
 
@@ -355,6 +371,14 @@ class AcceptanceCriterionVerifier(VerifierPort):
         self._runners[kind] = runner
 
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        transient_guard = _transient_infrastructure_failure_guard(ctx)
+        if transient_guard is not None:
+            return VerificationReport(
+                node_id=ctx.node.id,
+                attempt_id=ctx.attempt_id,
+                results=(transient_guard,),
+            )
+
         results: list[CriterionResult] = []
         terminal_guard = _terminal_worker_report_guard(ctx)
         if terminal_guard is not None:
@@ -436,6 +460,31 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
     return None
 
 
+def _transient_infrastructure_failure_guard(ctx: VerificationContext) -> CriterionResult | None:
+    """Return a soft verification failure for retryable runtime interruptions."""
+    report_type = _artifact_text(ctx, "last_worker_report_type")
+    if report_type != "blocked":
+        return None
+
+    report_summary = _artifact_text(ctx, "last_worker_report_summary")
+    haystack = f"{report_summary}\n{ctx.stdout}".casefold()
+    if not any(marker.casefold() in haystack for marker in _TRANSIENT_INFRA_FAILURE_MARKERS):
+        return None
+
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "retryable_infrastructure_failure"},
+        required=True,
+        description="retryable infrastructure failures should redispatch instead of blocking",
+    )
+    return CriterionResult(
+        criterion=criterion,
+        passed=False,
+        confidence=0.5,
+        message="retryable infrastructure failure; redispatch node",
+    )
+
+
 def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
     """Require structured evidence for each required harness preflight check."""
 
@@ -453,7 +502,7 @@ def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | Non
     missing = [
         check_id
         for check_id in required_check_ids
-        if f"preflight:{check_id}" not in evidence
+        if not _has_structured_verification_ref(evidence, f"preflight:{check_id}")
     ]
     if missing:
         return CriterionResult(
@@ -580,6 +629,11 @@ def _structured_verification_evidence(ctx: VerificationContext) -> set[str]:
             continue
         evidence.update(str(value) for value in raw_values if value)
     return evidence
+
+
+def _has_structured_verification_ref(evidence: set[str], expected_ref: str) -> bool:
+    detail_prefix = f"{expected_ref}:"
+    return any(value == expected_ref or value.startswith(detail_prefix) for value in evidence)
 
 
 def _artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:

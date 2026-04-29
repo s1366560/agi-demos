@@ -21,6 +21,7 @@ Reference: OpenCode SessionProcessor architecture
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -28,6 +29,7 @@ from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mappin
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 from uuid import uuid4
 
@@ -49,6 +51,14 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_LEADER,
+    WORKSPACE_SESSION_ROLE_KEY,
+    WORKSPACE_TOOL_MODE_KEY,
+    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+    WORKSPACE_TURN_TYPE_KEY,
+    WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+)
 
 from ..commands.builtins import register_builtin_commands
 from ..commands.interceptor import CommandInterceptor
@@ -118,6 +128,10 @@ _WORKSPACE_WORKER_REPORT_TOOL_NAMES: tuple[str, ...] = (
     "workspace_report_blocked",
     "workspace_request_clarification",
     "workspace_health_verdict",
+)
+_WORKSPACE_LEADER_REPLAN_TOOL_NAMES: tuple[str, ...] = (
+    "todoread",
+    "todowrite",
 )
 
 
@@ -1636,6 +1650,19 @@ class ReActAgent:
         )
         return replace(runtime_profile, allow_tools=expanded)
 
+    @staticmethod
+    def _with_workspace_leader_replan_tool_allowlist(
+        runtime_profile: AgentRuntimeProfile,
+    ) -> AgentRuntimeProfile:
+        """Restrict leader remediation turns to task-ledger inspection and updates."""
+
+        allowed = set(_WORKSPACE_LEADER_REPLAN_TOOL_NAMES)
+        return replace(
+            runtime_profile,
+            allow_tools=sorted(allowed),
+            deny_tools=sorted(set(runtime_profile.deny_tools) - allowed),
+        )
+
     def _resolve_effective_model(
         self,
         *,
@@ -2130,16 +2157,94 @@ class ReActAgent:
         ]
 
     @staticmethod
-    def _has_workspace_runtime_context(conversation_context: Sequence[Mapping[str, Any]]) -> bool:
-        """Detect hidden workspace worker app context injected as system metadata."""
-
+    def _workspace_runtime_context(
+        conversation_context: Sequence[Mapping[str, Any]],
+    ) -> Mapping[str, Any] | None:
+        """Return hidden workspace worker app context injected as system metadata."""
         for message in conversation_context:
             if message.get("role") != "system":
                 continue
             content = message.get("content")
-            if isinstance(content, str) and '"context_type": "workspace_worker_runtime"' in content:
-                return True
-        return False
+            if not isinstance(content, str) or "workspace_worker_runtime" not in content:
+                continue
+            json_start = content.find("{")
+            if json_start < 0:
+                continue
+            try:
+                payload = json.loads(content[json_start:])
+            except json.JSONDecodeError:
+                logger.warning(
+                    "[ReActAgent] Failed to parse workspace runtime app context",
+                    exc_info=True,
+                )
+                continue
+            if (
+                isinstance(payload, Mapping)
+                and payload.get("context_type") == "workspace_worker_runtime"
+            ):
+                return payload
+        return None
+
+    @staticmethod
+    def _is_workspace_leader_replan_context(payload: Mapping[str, Any] | None) -> bool:
+        """Detect task-ledger-only leader remediation turns from structured app context."""
+
+        if not isinstance(payload, Mapping):
+            return False
+        return (
+            payload.get(WORKSPACE_TURN_TYPE_KEY) == WORKSPACE_TURN_TYPE_LEADER_REPLAN
+            or payload.get(WORKSPACE_TOOL_MODE_KEY) == WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        )
+
+    @classmethod
+    def _has_workspace_runtime_context(cls, conversation_context: Sequence[Mapping[str, Any]]) -> bool:
+        """Detect hidden workspace worker app context injected as system metadata."""
+        return cls._workspace_runtime_context(conversation_context) is not None
+
+    @staticmethod
+    def _normalize_workspace_binding(raw: Mapping[str, Any] | None) -> dict[str, str] | None:
+        if not isinstance(raw, Mapping):
+            return None
+        binding = {
+            str(key): str(value).strip()
+            for key, value in raw.items()
+            if isinstance(key, str) and value is not None and str(value).strip()
+        }
+        if not binding.get("workspace_id"):
+            return None
+        return binding
+
+    @classmethod
+    def _workspace_binding_from_context(
+        cls,
+        conversation_context: Sequence[Mapping[str, Any]],
+    ) -> dict[str, str] | None:
+        payload = cls._workspace_runtime_context(conversation_context)
+        raw_binding = payload.get("workspace_binding") if isinstance(payload, Mapping) else None
+        return cls._normalize_workspace_binding(raw_binding)
+
+    @classmethod
+    def _workspace_binding_from_text(cls, text: str | None) -> dict[str, str] | None:
+        """Parse the structural workspace binding block from worker task briefs."""
+        if not isinstance(text, str) or "[workspace-task-binding]" not in text:
+            return None
+        in_block = False
+        raw: dict[str, str] = {}
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped == "[workspace-task-binding]":
+                in_block = True
+                continue
+            if stripped == "[/workspace-task-binding]":
+                break
+            if not in_block or "=" not in stripped:
+                continue
+            key, _, value = stripped.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                raw[key] = value
+        return cls._normalize_workspace_binding(raw)
 
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self,
@@ -2798,27 +2903,43 @@ class ReActAgent:
             selected_agent_id=selected_agent.id,
         )
         has_workspace_binding = False
+        workspace_runtime_payload = self._workspace_runtime_context(conversation_context)
+        workspace_replan_turn = self._is_workspace_leader_replan_context(workspace_runtime_payload)
+        workspace_binding = (
+            self._normalize_workspace_binding(
+                workspace_runtime_payload.get("workspace_binding")
+                if isinstance(workspace_runtime_payload, Mapping)
+                else None
+            )
+            or self._workspace_binding_from_text(processed_user_message)
+        )
         if project_id and tenant_id and user_id:
             from src.infrastructure.agent.workspace.orchestrator import (
                 WorkspaceAutonomyOrchestrator,
             )
 
             orchestrator = WorkspaceAutonomyOrchestrator()
-            has_workspace_binding = "[workspace-task-binding]" in (
-                processed_user_message or ""
-            ) or self._has_workspace_runtime_context(conversation_context)
+            has_workspace_binding = workspace_binding is not None
             if orchestrator.should_activate(
                 processed_user_message,
                 has_workspace_binding=has_workspace_binding,
             ):
-                workspace_root_task = await orchestrator.materialize_goal_candidate(
-                    project_id,
-                    tenant_id,
-                    user_id,
-                    leader_agent_id=selected_agent.id,
-                    task_decomposer=self._task_decomposer,
-                    user_query=processed_user_message,
-                )
+                if workspace_binding is not None:
+                    workspace_root_task = SimpleNamespace(
+                        id=workspace_binding.get("root_goal_task_id")
+                        or workspace_binding.get("workspace_task_id")
+                        or "",
+                        workspace_id=workspace_binding["workspace_id"],
+                    )
+                else:
+                    workspace_root_task = await orchestrator.materialize_goal_candidate(
+                        project_id,
+                        tenant_id,
+                        user_id,
+                        leader_agent_id=selected_agent.id,
+                        task_decomposer=self._task_decomposer,
+                        user_query=processed_user_message,
+                    )
             else:
                 workspace_root_task = None
         else:
@@ -2828,7 +2949,9 @@ class ReActAgent:
             tenant_agent_config_data=tenant_agent_config_data,
             selected_agent=selected_agent,
         )
-        if has_workspace_binding:
+        if workspace_replan_turn:
+            runtime_profile = self._with_workspace_leader_replan_tool_allowlist(runtime_profile)
+        elif has_workspace_binding:
             runtime_profile = self._with_workspace_worker_tool_allowlist(runtime_profile)
         self.config.runtime_hook_overrides = [
             runtime_hook.to_dict()
@@ -3082,18 +3205,38 @@ class ReActAgent:
         }
         if workspace_root_task is not None:
             from src.infrastructure.agent.workspace.runtime_role_contract import (
-                WORKSPACE_SESSION_ROLE_KEY,
                 derive_workspace_session_role,
             )
 
-            config.runtime_context = {
-                **dict(config.runtime_context),
+            workspace_session_role = derive_workspace_session_role(
+                has_workspace_binding=has_workspace_binding
+            )
+            if workspace_replan_turn:
+                workspace_session_role = WORKSPACE_ROLE_LEADER
+            elif isinstance(workspace_runtime_payload, Mapping):
+                runtime_role = workspace_runtime_payload.get(WORKSPACE_SESSION_ROLE_KEY)
+                if isinstance(runtime_role, str) and runtime_role.strip():
+                    workspace_session_role = runtime_role.strip()
+
+            workspace_runtime_context = {
                 "workspace_id": getattr(workspace_root_task, "workspace_id", project_id),
                 "root_goal_task_id": getattr(workspace_root_task, "id", ""),
                 "task_authority": "workspace",
-                WORKSPACE_SESSION_ROLE_KEY: derive_workspace_session_role(
-                    has_workspace_binding=has_workspace_binding
-                ),
+                WORKSPACE_SESSION_ROLE_KEY: workspace_session_role,
+            }
+            if isinstance(workspace_runtime_payload, Mapping):
+                for key in (WORKSPACE_TURN_TYPE_KEY, WORKSPACE_TOOL_MODE_KEY):
+                    value = workspace_runtime_payload.get(key)
+                    if isinstance(value, str) and value.strip():
+                        workspace_runtime_context[key] = value.strip()
+            if workspace_binding is not None:
+                for key in ("workspace_task_id", "attempt_id", "leader_agent_id"):
+                    value = workspace_binding.get(key)
+                    if value:
+                        workspace_runtime_context[key] = value
+            config.runtime_context = {
+                **dict(config.runtime_context),
+                **workspace_runtime_context,
             }
         # Set session_id for announce message polling (P0.5)
         config.session_id = conversation_id
@@ -3278,6 +3421,9 @@ class ReActAgent:
                 parsed = _to_float(llm_overrides["presence_penalty"])
                 if parsed is not None:
                     config.provider_options["presence_penalty"] = parsed
+
+        if workspace_replan_turn:
+            config.provider_options["tool_choice"] = "required"
         processor = self._processor_factory.create_for_main(
             config=config,
             tools=tools_to_use,

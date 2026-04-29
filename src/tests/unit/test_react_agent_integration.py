@@ -4,6 +4,7 @@ Tests that ReActAgent correctly wires MemoryAccessor, BackgroundExecutor,
 and TemplateRegistry when graph_service is available.
 """
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -316,6 +317,64 @@ class TestReActAgentBackgroundExecutor:
 
 @pytest.mark.unit
 class TestReActAgentWorkspaceDelegation:
+    def test_workspace_binding_from_runtime_context_parses_json_header(self):
+        agent = _make_react_agent()
+        context = [
+            {
+                "role": "system",
+                "content": (
+                    "[Workspace Runtime Context]\n"
+                    + json.dumps(
+                        {
+                            "context_type": "workspace_worker_runtime",
+                            "workspace_binding": {
+                                "workspace_id": "ws-bound",
+                                "workspace_task_id": "task-bound",
+                                "root_goal_task_id": "root-bound",
+                                "attempt_id": "attempt-bound",
+                                "leader_agent_id": "leader-bound",
+                            },
+                        }
+                    )
+                ),
+            }
+        ]
+
+        binding = agent._workspace_binding_from_context(context)
+
+        assert binding == {
+            "workspace_id": "ws-bound",
+            "workspace_task_id": "task-bound",
+            "root_goal_task_id": "root-bound",
+            "attempt_id": "attempt-bound",
+            "leader_agent_id": "leader-bound",
+        }
+
+    def test_workspace_binding_from_text_parses_worker_brief_block(self):
+        agent = _make_react_agent()
+
+        binding = agent._workspace_binding_from_text(
+            "\n".join(
+                [
+                    "Task brief",
+                    "[workspace-task-binding]",
+                    "workspace_id=ws-text",
+                    "workspace_task_id=task-text",
+                    "root_goal_task_id=root-text",
+                    "attempt_id=attempt-text",
+                    "[/workspace-task-binding]",
+                    "Do the work.",
+                ]
+            )
+        )
+
+        assert binding == {
+            "workspace_id": "ws-text",
+            "workspace_task_id": "task-text",
+            "root_goal_task_id": "root-text",
+            "attempt_id": "attempt-text",
+        }
+
     async def test_delegate_callback_returns_candidate_report_for_leader_adjudication(self):
         researcher = _make_subagent("researcher")
         agent = _make_react_agent(
@@ -483,6 +542,280 @@ class TestReActAgentWorkspaceDelegation:
                 events.append(event)
 
         assert events[-1]["type"] == "complete"
+
+    async def test_worker_runtime_binding_does_not_materialize_project_root(self):
+        agent = _make_react_agent()
+        captured: dict[str, object] = {}
+        runtime_context = {
+            "context_type": "workspace_worker_runtime",
+            "workspace_binding": {
+                "workspace_id": "ws-bound",
+                "workspace_task_id": "task-bound",
+                "root_goal_task_id": "root-bound",
+                "attempt_id": "attempt-bound",
+                "leader_agent_id": "leader-bound",
+            },
+        }
+
+        async def _empty_async_gen(*args, **kwargs):
+            if False:
+                yield args, kwargs
+
+        async def _process_events(**kwargs):
+            del kwargs
+            agent._stream_final_content = "done"
+            agent._stream_success = True
+            yield {"type": "complete", "data": {"content": "done"}}
+
+        def _capture_processor(**kwargs):
+            captured["config"] = kwargs["config"]
+            return MagicMock()
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.orchestrator."
+                "WorkspaceAutonomyOrchestrator.materialize_goal_candidate",
+                new=AsyncMock(side_effect=AssertionError("should not materialize root")),
+            ),
+            patch.object(agent, "_stream_detect_plan_mode", side_effect=_empty_async_gen),
+            patch.object(
+                agent,
+                "_stream_decide_route",
+                return_value=(SimpleNamespace(), None, None, {}, None, None),
+            ),
+            patch.object(
+                agent,
+                "_load_selected_agent",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                ),
+            ),
+            patch.object(
+                agent,
+                "_build_runtime_profile",
+                return_value=SimpleNamespace(
+                    available_skills=[MagicMock()],
+                    allow_tools=[],
+                    deny_tools=[],
+                    tenant_agent_config=SimpleNamespace(runtime_hooks=[]),
+                    agent_definition_prompt="",
+                    effective_model="test-model",
+                    effective_temperature=0.2,
+                    effective_max_tokens=1024,
+                    effective_max_steps=4,
+                ),
+            ),
+            patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
+            patch.object(
+                agent,
+                "_stream_match_skill",
+                side_effect=AssertionError("skill matching should be skipped"),
+            ),
+            patch.object(
+                agent,
+                "_stream_resolve_mode",
+                return_value=("build", SimpleNamespace(metadata={})),
+            ),
+            patch.object(
+                agent,
+                "_apply_before_prompt_build_hook",
+                new=AsyncMock(return_value=("", [])),
+            ),
+            patch.object(agent, "_build_primary_agent_prompt", return_value=""),
+            patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
+            patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_prepare_tools", return_value=[]),
+            patch.object(agent, "_stream_process_events", side_effect=_process_events),
+            patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_record_skill_usage", return_value=None),
+            patch.object(
+                agent,
+                "_processor_factory",
+                new=SimpleNamespace(create_for_main=_capture_processor),
+            ),
+        ):
+            agent._stream_messages = [{"role": "system", "content": "system"}]
+            agent._stream_tools_to_use = []
+            agent._stream_memory_context = ""
+            events = []
+            async for event in agent.stream(
+                conversation_id="conv-1",
+                user_message="Execute bound worker task.",
+                project_id="proj-1",
+                user_id="user-1",
+                tenant_id="tenant-1",
+                conversation_context=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "[Workspace Runtime Context]\n"
+                            + json.dumps(runtime_context, ensure_ascii=False)
+                        ),
+                    }
+                ],
+                agent_id="agent-1",
+            ):
+                events.append(event)
+
+        config = captured["config"]
+        assert events[-1]["type"] == "complete"
+        assert config.runtime_context["workspace_id"] == "ws-bound"
+        assert config.runtime_context["root_goal_task_id"] == "root-bound"
+        assert config.runtime_context["workspace_task_id"] == "task-bound"
+        assert config.runtime_context["attempt_id"] == "attempt-bound"
+        assert config.runtime_context["leader_agent_id"] == "leader-bound"
+        assert config.runtime_context["workspace_session_role"] == "worker"
+
+    async def test_leader_replan_runtime_context_restricts_tools_to_task_ledger(self):
+        from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+        from src.infrastructure.agent.core.processor import ToolDefinition
+        from src.infrastructure.agent.core.react_agent import AgentRuntimeProfile
+        from src.infrastructure.agent.workspace.runtime_role_contract import (
+            WORKSPACE_ROLE_LEADER,
+            WORKSPACE_SESSION_ROLE_KEY,
+            WORKSPACE_TOOL_MODE_KEY,
+            WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+            WORKSPACE_TURN_TYPE_KEY,
+            WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+        )
+
+        agent = _make_react_agent()
+        tenant_config = TenantAgentConfig.create_default("tenant-1")
+        captured: dict[str, object] = {}
+        runtime_context = {
+            "context_type": "workspace_worker_runtime",
+            "workspace_binding": {
+                "workspace_id": "ws-bound",
+                "root_goal_task_id": "root-bound",
+            },
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_LEADER,
+            WORKSPACE_TURN_TYPE_KEY: WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+            WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+        }
+
+        async def _empty_async_gen(*args, **kwargs):
+            if False:
+                yield args, kwargs
+
+        async def _process_events(**kwargs):
+            del kwargs
+            agent._stream_final_content = "done"
+            agent._stream_success = True
+            yield {"type": "complete", "data": {"content": "done"}}
+
+        def _prepare_tools(*args, **kwargs):
+            del args, kwargs
+            agent._stream_tools_to_use = [
+                ToolDefinition("bash", "", {}, lambda **_: None),
+                ToolDefinition("read", "", {}, lambda **_: None),
+                ToolDefinition("sessions_list", "", {}, lambda **_: None),
+                ToolDefinition("todoread", "", {}, lambda **_: None),
+                ToolDefinition("todowrite", "", {}, lambda **_: None),
+            ]
+            return []
+
+        def _capture_processor(**kwargs):
+            captured["config"] = kwargs["config"]
+            captured["tools"] = kwargs["tools"]
+            return MagicMock()
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.orchestrator."
+                "WorkspaceAutonomyOrchestrator.materialize_goal_candidate",
+                new=AsyncMock(side_effect=AssertionError("should not materialize root")),
+            ),
+            patch.object(agent, "_stream_detect_plan_mode", side_effect=_empty_async_gen),
+            patch.object(
+                agent,
+                "_stream_decide_route",
+                return_value=(SimpleNamespace(), None, None, {}, None, None),
+            ),
+            patch.object(
+                agent,
+                "_load_selected_agent",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                ),
+            ),
+            patch.object(
+                agent,
+                "_build_runtime_profile",
+                return_value=AgentRuntimeProfile(
+                    selected_agent=None,
+                    tenant_agent_config=tenant_config,
+                    available_skills=[],
+                    allow_tools=["bash", "read", "sessions_list", "todoread", "todowrite"],
+                    deny_tools=[],
+                    effective_model="test-model",
+                    effective_temperature=0.2,
+                    effective_max_tokens=1024,
+                    effective_max_steps=4,
+                ),
+            ),
+            patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
+            patch.object(
+                agent,
+                "_stream_match_skill",
+                side_effect=AssertionError("skill matching should be skipped"),
+            ),
+            patch.object(
+                agent,
+                "_stream_resolve_mode",
+                return_value=("build", SimpleNamespace(metadata={})),
+            ),
+            patch.object(
+                agent,
+                "_apply_before_prompt_build_hook",
+                new=AsyncMock(return_value=("", [])),
+            ),
+            patch.object(agent, "_build_primary_agent_prompt", return_value=""),
+            patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
+            patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_prepare_tools", side_effect=_prepare_tools),
+            patch.object(agent, "_stream_process_events", side_effect=_process_events),
+            patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_record_skill_usage", return_value=None),
+            patch.object(
+                agent,
+                "_processor_factory",
+                new=SimpleNamespace(create_for_main=_capture_processor),
+            ),
+        ):
+            agent._stream_messages = [{"role": "system", "content": "system"}]
+            agent._stream_tools_to_use = []
+            agent._stream_memory_context = ""
+            events = []
+            async for event in agent.stream(
+                conversation_id="conv-1",
+                user_message="Replan blocked workspace tasks.",
+                project_id="proj-1",
+                user_id="user-1",
+                tenant_id="tenant-1",
+                conversation_context=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "[Workspace Runtime Context]\n"
+                            + json.dumps(runtime_context, ensure_ascii=False)
+                        ),
+                    }
+                ],
+                agent_id="agent-1",
+            ):
+                events.append(event)
+
+        config = captured["config"]
+        tools = captured["tools"]
+        assert events[-1]["type"] == "complete"
+        assert [tool.name for tool in tools] == ["todoread", "todowrite"]
+        assert config.provider_options["tool_choice"] == "required"
+        assert config.runtime_context["allowed_tools"] == ["todoread", "todowrite"]
+        assert config.runtime_context[WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_LEADER
+        assert config.runtime_context[WORKSPACE_TURN_TYPE_KEY] == WORKSPACE_TURN_TYPE_LEADER_REPLAN
+        assert config.runtime_context[WORKSPACE_TOOL_MODE_KEY] == (
+            WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        )
 
     async def test_stream_passes_tenant_runtime_hook_overrides_to_before_prompt_build(self):
         agent = _make_react_agent()

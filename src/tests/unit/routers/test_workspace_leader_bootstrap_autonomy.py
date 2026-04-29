@@ -312,6 +312,7 @@ class TestSelectRootTaskNeedingProgress:
 class TestCooldownHelpers:
     async def test_cooldown_read_and_write_roundtrip(self, monkeypatch: pytest.MonkeyPatch) -> None:
         store: dict[str, str] = {}
+        expirations: dict[str, int | None] = {}
 
         class _FakeRedis:
             async def exists(self, key: str) -> int:
@@ -319,6 +320,7 @@ class TestCooldownHelpers:
 
             async def set(self, key: str, value: str, ex: int | None = None) -> None:
                 store[key] = value
+                expirations[key] = ex
 
         async def _fake_get_redis_client() -> _FakeRedis:
             return _FakeRedis()
@@ -329,6 +331,37 @@ class TestCooldownHelpers:
         await bootstrap._mark_cooldown("ws-1", "root-1")
         assert await bootstrap._is_on_cooldown("ws-1", "root-1") is True
         assert await bootstrap._is_on_cooldown("ws-1", "root-2") is False
+        key = bootstrap._AUTO_TRIGGER_COOLDOWN_KEY.format(
+            workspace_id="ws-1",
+            root_task_id="root-1",
+        )
+        assert expirations[key] == bootstrap.AUTO_TRIGGER_COOLDOWN_SECONDS
+
+    async def test_replan_trigger_uses_longer_cooldown(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        expirations: dict[str, int | None] = {}
+
+        class _FakeRedis:
+            async def set(self, key: str, value: str, ex: int | None = None) -> None:
+                expirations[key] = ex
+
+        async def _fake_get_redis_client() -> _FakeRedis:
+            return _FakeRedis()
+
+        monkeypatch.setattr(bootstrap, "get_redis_client", _fake_get_redis_client)
+
+        await bootstrap._mark_autonomy_trigger_cooldown(
+            "ws-1",
+            "root-1",
+            remediation_status="replan_required",
+        )
+
+        key = bootstrap._AUTO_TRIGGER_COOLDOWN_KEY.format(
+            workspace_id="ws-1",
+            root_task_id="root-1",
+        )
+        assert expirations[key] == bootstrap.REPLAN_TRIGGER_COOLDOWN_SECONDS
 
     async def test_cooldown_fails_open_when_redis_unavailable(
         self, monkeypatch: pytest.MonkeyPatch

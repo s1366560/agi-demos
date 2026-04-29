@@ -15,6 +15,10 @@ class WorkspaceTaskSessionAttemptRepository(ABC):
         """Save a workspace task session attempt."""
 
     @abstractmethod
+    async def lock_attempt_creation(self, workspace_task_id: str) -> None:
+        """Serialize attempt creation for one workspace task within the current transaction."""
+
+    @abstractmethod
     async def find_by_id(self, attempt_id: str) -> WorkspaceTaskSessionAttempt | None:
         """Find attempt by ID."""
 
@@ -47,9 +51,9 @@ class WorkspaceTaskSessionAttemptRepository(ABC):
         *,
         older_than: datetime,
         limit: int = 500,
+        workspace_id: str | None = None,
     ) -> list[WorkspaceTaskSessionAttempt]:
         """Return non-terminal attempts (pending/running/awaiting_leader_adjudication)
         whose ``updated_at`` (falling back to ``created_at``) is older than
         ``older_than``. Used by the orphan-recovery sweep.
         """
-

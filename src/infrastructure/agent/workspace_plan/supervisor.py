@@ -23,6 +23,7 @@ import contextlib
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.domain.model.workspace_plan import (
@@ -57,6 +58,10 @@ from src.domain.ports.services.workspace_supervisor_port import (
 )
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_INFRASTRUCTURE_CRITERION = "retryable_infrastructure_failure"
+_RETRY_BACKOFF_BASE_SECONDS = 60
+_RETRY_BACKOFF_MAX_SECONDS = 900
 
 
 # Callbacks keep the supervisor pure — infrastructure injects concrete impls.
@@ -95,7 +100,11 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         progress_sink: ProgressSink | None = None,
         event_sink: PlanEventSink | None = None,
         heartbeat_seconds: float = 10.0,
+        max_dispatches_per_tick: int = 2,
     ) -> None:
+        if max_dispatches_per_tick <= 0:
+            msg = f"max_dispatches_per_tick must be > 0, got {max_dispatches_per_tick}"
+            raise ValueError(msg)
         self._repo = plan_repo
         self._allocator = allocator
         self._verifier = verifier
@@ -107,6 +116,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         self._progress_sink = progress_sink
         self._event_sink = event_sink
         self._heartbeat = heartbeat_seconds
+        self._max_dispatches_per_tick = max_dispatches_per_tick
 
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._kick: dict[str, asyncio.Event] = {}
@@ -217,6 +227,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         )
                     )
                     nodes_blocked += 1
+                elif _is_retryable_infrastructure_report(report):
+                    retry_node = _node_with_retry_backoff(node, report)
+                    plan.replace_node(retry_node)
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        retry_node,
+                        "verification_retry_scheduled",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "summary": report.summary(),
+                            "retry_count": retry_node.metadata.get("retry_count"),
+                            "retry_not_before": retry_node.metadata.get("retry_not_before"),
+                        },
+                    )
                 else:
                     # Soft fail → ask the planner to replan this node.
                     await self._planner.replan(
@@ -231,9 +256,8 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 errors.append(f"verify({node.id}): {exc}")
 
         # --- 2. allocate ready nodes -----------------------------------
-        ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(
-            plan.ready_nodes()
-        )
+        ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
+        ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(ready_candidates)
         for deferred_node in deferred_by_write_scope:
             await self._emit_event(
                 errors,
@@ -245,10 +269,23 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "write_set": list(_node_write_set(deferred_node)),
                 },
             )
-        if ready:
+        ready_to_dispatch = ready[: self._max_dispatches_per_tick]
+        deferred_by_dispatch_limit = ready[self._max_dispatches_per_tick :]
+        for deferred_node in deferred_by_dispatch_limit:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                deferred_node,
+                "dispatch_deferred_concurrency_limit",
+                {
+                    "summary": "node deferred because the per-tick dispatch limit was reached",
+                    "max_dispatches_per_tick": self._max_dispatches_per_tick,
+                },
+            )
+        if ready_to_dispatch:
             try:
                 pool = await self._agent_pool(workspace_id)
-                allocations = await self._allocator.allocate(ready, pool)
+                allocations = await self._allocator.allocate(ready_to_dispatch, pool)
             except Exception as exc:
                 errors.append(f"allocate: {exc}")
                 allocations = []
@@ -269,6 +306,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     execution=TaskExecution.DISPATCHED,
                     assignee_agent_id=alloc.agent_id,
                     current_attempt_id=attempt_id,
+                    updated_at=datetime.now(UTC),
                 )
                 try:
                     transition_intent(alloc_node.intent, TaskIntent.IN_PROGRESS)
@@ -330,14 +368,70 @@ def _pid(value: str) -> PlanNodeId:
 
 
 def _force_execution(node: PlanNode, target: TaskExecution) -> PlanNode:
-    return replace(node, execution=target)
+    return replace(node, execution=target, updated_at=datetime.now(UTC))
 
 
 def _force_intent(node: PlanNode, target: TaskIntent, *, summary: str = "") -> PlanNode:
     meta = dict(node.metadata)
     if summary:
         meta["last_verification_summary"] = summary
-    return replace(node, intent=target, metadata=meta)
+    return replace(node, intent=target, metadata=meta, updated_at=datetime.now(UTC))
+
+
+def _is_retryable_infrastructure_report(report: VerificationReport) -> bool:
+    for result in report.results:
+        if not result.criterion.required or result.passed:
+            continue
+        if result.criterion.spec.get("name") == _RETRYABLE_INFRASTRUCTURE_CRITERION:
+            return True
+    return False
+
+
+def _node_with_retry_backoff(node: PlanNode, report: VerificationReport) -> PlanNode:
+    metadata = dict(node.metadata)
+    retry_count = _coerce_positive_int(metadata.get("retry_count")) + 1
+    delay_seconds = min(
+        _RETRY_BACKOFF_BASE_SECONDS * (2 ** (retry_count - 1)),
+        _RETRY_BACKOFF_MAX_SECONDS,
+    )
+    retry_at = datetime.now(UTC) + timedelta(seconds=delay_seconds)
+    metadata["retry_count"] = retry_count
+    metadata["retry_not_before"] = retry_at.isoformat().replace("+00:00", "Z")
+    metadata["retry_last_reason"] = report.summary()
+    return replace(
+        node,
+        intent=TaskIntent.TODO,
+        execution=TaskExecution.IDLE,
+        current_attempt_id=None,
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
+
+
+def _ready_nodes_due(ready_nodes: list[PlanNode], *, now: datetime) -> list[PlanNode]:
+    return [node for node in ready_nodes if _node_retry_not_before(node) <= now]
+
+
+def _node_retry_not_before(node: PlanNode) -> datetime:
+    raw = node.metadata.get("retry_not_before")
+    if not isinstance(raw, str) or not raw.strip():
+        return datetime.min.replace(tzinfo=UTC)
+    value = raw.strip()
+    if value.endswith("Z"):
+        value = value.removesuffix("Z") + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _coerce_positive_int(value: object) -> int:
+    if isinstance(value, int) and value > 0:
+        return value
+    return 0
 
 
 def _verification_payload(report: VerificationReport) -> dict[str, Any]:
@@ -398,6 +492,7 @@ def _node_with_verification_evidence(node: PlanNode, report: VerificationReport)
         metadata=metadata,
         feature_checkpoint=feature_checkpoint,
         handoff_package=handoff_package,
+        updated_at=datetime.now(UTC),
     )
 
 

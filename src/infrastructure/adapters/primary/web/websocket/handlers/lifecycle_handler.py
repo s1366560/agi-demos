@@ -445,29 +445,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
 async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> SandboxInfo | None:
     """Ensure sandbox exists for the project before starting agent."""
     try:
-        from src.application.services.project_sandbox_lifecycle_service import (
-            ProjectSandboxLifecycleService,
-        )
-        from src.application.services.workspace_sync_service import WorkspaceSyncService
-        from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-            SqlProjectSandboxRepository,
-        )
-        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-            MCPSandboxAdapter,
-        )
-
-        settings = get_settings()
-        sandbox_repo = SqlProjectSandboxRepository(context.db)
-        sandbox_adapter = MCPSandboxAdapter()
-        workspace_sync = WorkspaceSyncService(
-            workspace_base=settings.sandbox_workspace_base,
-        )
-        lifecycle_service = ProjectSandboxLifecycleService(
-            repository=sandbox_repo,
-            sandbox_adapter=sandbox_adapter,
-            workspace_sync=workspace_sync,
-        )
+        lifecycle_service = context.get_scoped_container().project_sandbox_lifecycle_service()
 
         # Ensure sandbox exists (will create if not exists, or verify/repair if exists)
         sandbox_info = await lifecycle_service.get_or_create_sandbox(
@@ -508,29 +486,7 @@ async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Sa
 async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> SandboxInfo | None:
     """Sync and repair sandbox on agent restart."""
     try:
-        from src.application.services.project_sandbox_lifecycle_service import (
-            ProjectSandboxLifecycleService,
-        )
-        from src.application.services.workspace_sync_service import WorkspaceSyncService
-        from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-            SqlProjectSandboxRepository,
-        )
-        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-            MCPSandboxAdapter,
-        )
-
-        settings = get_settings()
-        sandbox_repo = SqlProjectSandboxRepository(context.db)
-        sandbox_adapter = MCPSandboxAdapter()
-        workspace_sync = WorkspaceSyncService(
-            workspace_base=settings.sandbox_workspace_base,
-        )
-        lifecycle_service = ProjectSandboxLifecycleService(
-            repository=sandbox_repo,
-            sandbox_adapter=sandbox_adapter,
-            workspace_sync=workspace_sync,
-        )
+        lifecycle_service = context.get_scoped_container().project_sandbox_lifecycle_service()
 
         # Sync and repair sandbox on restart (handles container recreation if needed)
         sandbox_info = await lifecycle_service.sync_and_repair_sandbox(

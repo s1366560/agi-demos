@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import ToolExecutionRecord
@@ -45,9 +46,17 @@ class SqlToolExecutionRecordRepository(
 
         if db_record:
             # Update existing record
+            db_record.conversation_id = record.conversation_id
+            db_record.message_id = record.message_id
+            db_record.call_id = record.call_id
+            db_record.tool_name = record.tool_name
+            db_record.tool_input = record.tool_input
             db_record.status = record.status
             db_record.tool_output = record.tool_output
             db_record.error = record.error
+            db_record.step_number = record.step_number
+            db_record.sequence_number = record.sequence_number
+            db_record.started_at = record.started_at
             db_record.completed_at = record.completed_at
             db_record.duration_ms = record.duration_ms
         else:
@@ -78,6 +87,16 @@ class SqlToolExecutionRecordRepository(
         try:
             await self.save(record)
             await self._session.commit()
+        except IntegrityError:
+            # Live Redis stream bridges can race on the same deterministic
+            # tool_execution_id. Treat duplicate insert as an idempotent update.
+            await self._session.rollback()
+            try:
+                await self.save(record)
+                await self._session.commit()
+            except Exception:
+                await self._session.rollback()
+                raise
         except Exception:
             await self._session.rollback()
             raise

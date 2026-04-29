@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from src.domain.model.workspace_plan import (
     GoalProgress,
@@ -43,6 +44,7 @@ class OrchestratorConfig:
     heartbeat_seconds: float = 10.0
     max_planning_depth: int = 2
     max_subtasks: int = 8
+    max_dispatches_per_tick: int = 2
 
     @classmethod
     def from_env(cls) -> OrchestratorConfig:
@@ -52,6 +54,7 @@ class OrchestratorConfig:
             heartbeat_seconds=float(os.getenv("WORKSPACE_V2_HEARTBEAT_SEC", "10")),
             max_planning_depth=int(os.getenv("WORKSPACE_V2_MAX_DEPTH", "2")),
             max_subtasks=int(os.getenv("WORKSPACE_V2_MAX_SUBTASKS", "8")),
+            max_dispatches_per_tick=int(os.getenv("WORKSPACE_V2_MAX_DISPATCHES_PER_TICK", "2")),
         )
 
 
@@ -165,6 +168,7 @@ class WorkspaceOrchestrator:
                 node,
                 execution=new_exec,
                 current_attempt_id=attempt_id or node.current_attempt_id,
+                updated_at=datetime.now(UTC),
             )
         )
         await self._repo.save(plan)

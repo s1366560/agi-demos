@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import sys
 import uuid
+from dataclasses import asdict
+from pathlib import Path
+from subprocess import DEVNULL
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -21,6 +27,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[Any]] = set()
+_LOCAL_SUBPROCESS_REQUEST_DIR = "MEMSTACK_LOCAL_AGENT_REQUEST_DIR"
+
+
+def _safe_request_file_name(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)
 
 
 class AgentRuntimeBootstrapper:
@@ -156,7 +167,7 @@ class AgentRuntimeBootstrapper:
             parent_session_id=request.parent_session_id,
         )
 
-    async def start_chat_actor(  # noqa: PLR0913
+    async def start_chat_actor(  # noqa: PLR0913, PLR0915
         self,
         conversation: Conversation,
         message_id: str,
@@ -184,7 +195,11 @@ class AgentRuntimeBootstrapper:
 
         settings = get_settings()
         agent_mode = "default"
-        runtime_mode = self._normalize_runtime_mode(settings.agent_runtime_mode)
+        runtime_mode = self._resolve_runtime_mode(
+            configured_mode=settings.agent_runtime_mode,
+            app_model_context=app_model_context,
+            conversation_id=conversation.id,
+        )
         tenant_agent_config = await self._load_tenant_agent_config(conversation.tenant_id)
 
         # Resolve provider config from DB
@@ -240,11 +255,20 @@ class AgentRuntimeBootstrapper:
 
         if runtime_mode == "local":
             await self._register_project_local(conversation.tenant_id, conversation.project_id)
-            await self._start_local_chat(conversation.id, config, chat_request)
-            logger.info(
-                "[AgentService] Using local execution (AGENT_RUNTIME_MODE=local) for conversation %s",
-                conversation.id,
-            )
+            if self._is_workspace_worker_runtime(app_model_context):
+                await self._start_local_subprocess_chat(conversation.id, config, chat_request)
+                logger.info(
+                    "[AgentService] Using local subprocess execution "
+                    "(AGENT_RUNTIME_MODE=local workspace worker) for conversation %s",
+                    conversation.id,
+                )
+            else:
+                await self._start_local_chat(conversation.id, config, chat_request)
+                logger.info(
+                    "[AgentService] Using local execution (AGENT_RUNTIME_MODE=local) "
+                    "for conversation %s",
+                    conversation.id,
+                )
             return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
 
         from src.infrastructure.agent.actor.actor_manager import (
@@ -313,6 +337,45 @@ class AgentRuntimeBootstrapper:
 
         return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
 
+    @classmethod
+    def _resolve_runtime_mode(
+        cls,
+        *,
+        configured_mode: str | None,
+        app_model_context: dict[str, Any] | None,
+        conversation_id: str,
+    ) -> str:
+        """Resolve the runtime mode for this request."""
+        runtime_mode = cls._normalize_runtime_mode(configured_mode)
+        if cls._is_workspace_worker_runtime(app_model_context) and runtime_mode == "auto":
+            logger.warning(
+                "[AgentService] Forcing Ray runtime for workspace worker conversation %s "
+                "(configured AGENT_RUNTIME_MODE=%s)",
+                conversation_id,
+                runtime_mode,
+            )
+            return "ray"
+        if cls._is_workspace_worker_runtime(app_model_context) and runtime_mode == "local":
+            logger.warning(
+                "[AgentService] Workspace worker conversation %s is using local runtime because "
+                "AGENT_RUNTIME_MODE=local is explicit; dev reload can interrupt long-running turns.",
+                conversation_id,
+            )
+        return runtime_mode
+
+    @staticmethod
+    def _is_workspace_worker_runtime(app_model_context: dict[str, Any] | None) -> bool:
+        """Return True for long-running workspace worker turns.
+
+        Workspace workers should run out-of-process. Running them in the API
+        reload process lets dev reload/SIGTERM interrupt LLM execution and
+        turns infrastructure shutdown into false task blockers.
+        """
+        return (
+            isinstance(app_model_context, dict)
+            and app_model_context.get("context_type") == "workspace_worker_runtime"
+        )
+
     @staticmethod
     async def _register_project_local(tenant_id: str, project_id: str) -> None:
         """Register project with local HITL resume consumer."""
@@ -327,6 +390,105 @@ class AgentRuntimeBootstrapper:
         abort_signal = asyncio.Event()
         task = asyncio.create_task(self._run_chat_local(config, request, abort_signal=abort_signal))
         await self._track_local_chat_task(conversation_id, task, abort_signal)
+
+    async def _start_local_subprocess_chat(
+        self,
+        conversation_id: str,
+        config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
+    ) -> None:
+        """Start workspace local execution in a child process.
+
+        Workspace worker turns can outlive a dev-server reload. Running them
+        in the uvicorn process turns reload SIGTERM into false task blockers,
+        so local mode uses a short-lived child process for those turns.
+        """
+        request_path = self._write_local_subprocess_request(config, request)
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "src.infrastructure.agent.actor.local_chat_worker",
+            str(request_path),
+            cwd=str(Path.cwd()),
+            stdout=DEVNULL,
+            stderr=None,
+            env=os.environ.copy(),
+        )
+        monitor = asyncio.create_task(
+            self._monitor_local_subprocess_chat(
+                conversation_id=conversation_id,
+                message_id=request.message_id,
+                correlation_id=request.correlation_id,
+                process=process,
+                request_path=request_path,
+            ),
+            name=f"workspace-local-agent-subprocess:{conversation_id}",
+        )
+        _background_tasks.add(monitor)
+        monitor.add_done_callback(_background_tasks.discard)
+
+    @staticmethod
+    def _write_local_subprocess_request(
+        config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
+    ) -> Path:
+        request_dir = Path(
+            os.getenv(_LOCAL_SUBPROCESS_REQUEST_DIR, "/tmp/memstack-agent-requests")
+        )
+        request_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        file_name = _safe_request_file_name(
+            f"{request.conversation_id}-{request.message_id}.json"
+        )
+        request_path = request_dir / file_name
+        payload = {
+            "config": asdict(config),
+            "request": asdict(request),
+        }
+        fd = os.open(request_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            json.dump(payload, fp, ensure_ascii=False)
+        return request_path
+
+    async def _monitor_local_subprocess_chat(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+        correlation_id: str | None,
+        process: asyncio.subprocess.Process,
+        request_path: Path,
+    ) -> None:
+        return_code = await process.wait()
+        if return_code == 0:
+            return
+        logger.error(
+            "[AgentService] Local subprocess chat failed: conversation=%s return_code=%s",
+            conversation_id,
+            return_code,
+        )
+        try:
+            from src.infrastructure.agent.actor.execution import _publish_error_event
+
+            await _publish_error_event(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                error_message=f"Agent subprocess failed with exit code {return_code}",
+                correlation_id=correlation_id,
+            )
+        except Exception as pub_err:
+            logger.warning(
+                "[AgentService] Failed to publish local subprocess error: %s",
+                pub_err,
+            )
+        finally:
+            try:
+                request_path.unlink(missing_ok=True)
+            except Exception:
+                logger.debug(
+                    "[AgentService] Failed to remove local subprocess request file %s",
+                    request_path,
+                    exc_info=True,
+                )
 
     @classmethod
     async def _track_local_chat_task(

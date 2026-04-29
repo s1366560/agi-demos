@@ -12,6 +12,15 @@ from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repo
     WorkspaceTaskSessionAttemptRepository,
 )
 
+TERMINAL_ATTEMPT_STATUSES = frozenset(
+    {
+        WorkspaceTaskSessionAttemptStatus.ACCEPTED,
+        WorkspaceTaskSessionAttemptStatus.REJECTED,
+        WorkspaceTaskSessionAttemptStatus.BLOCKED,
+        WorkspaceTaskSessionAttemptStatus.CANCELLED,
+    }
+)
+
 
 class WorkspaceTaskSessionAttemptService:
     """Manage session attempts for a workspace task."""
@@ -43,9 +52,10 @@ class WorkspaceTaskSessionAttemptService:
         leader_agent_id: str | None,
         conversation_id: str | None = None,
     ) -> WorkspaceTaskSessionAttempt:
+        await self._attempt_repo.lock_attempt_creation(workspace_task_id)
         active_attempt = await self.get_active_attempt(workspace_task_id)
         if active_attempt is not None:
-            raise ValueError("Workspace task already has an active session attempt")
+            return active_attempt
 
         prior_attempts = await self._attempt_repo.find_by_workspace_task_id(
             workspace_task_id,
@@ -80,12 +90,7 @@ class WorkspaceTaskSessionAttemptService:
         if not conversation_id:
             raise ValueError("conversation_id is required")
         attempt = await self._require_attempt(attempt_id)
-        terminal = {
-            WorkspaceTaskSessionAttemptStatus.ACCEPTED,
-            WorkspaceTaskSessionAttemptStatus.REJECTED,
-            WorkspaceTaskSessionAttemptStatus.BLOCKED,
-        }
-        if attempt.status in terminal:
+        if attempt.status in TERMINAL_ATTEMPT_STATUSES:
             raise ValueError(
                 f"Cannot bind conversation to attempt in terminal status {attempt.status}"
             )
@@ -109,6 +114,8 @@ class WorkspaceTaskSessionAttemptService:
         conversation_id: str | None = None,
     ) -> WorkspaceTaskSessionAttempt:
         attempt = await self._require_attempt(attempt_id)
+        if attempt.status in TERMINAL_ATTEMPT_STATUSES:
+            return attempt
         if conversation_id:
             attempt.conversation_id = conversation_id
         attempt.candidate_summary = summary

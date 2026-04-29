@@ -14,7 +14,11 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
+from src.domain.ports.services.sandbox_port import (
+    SandboxConfig,
+    SandboxConnectionError,
+    SandboxStatus,
+)
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
     MCPSandboxInstance,
@@ -113,6 +117,17 @@ class TestSandboxAutoRebuild:
         assert updated is not None
         assert before is not None
         assert updated > before
+
+    @pytest.mark.asyncio
+    async def test_container_exists_preserves_state_during_executor_shutdown(self, adapter):
+        """Executor shutdown is an unknown Docker state, not proof the container is gone."""
+        loop = MagicMock()
+        loop.run_in_executor.side_effect = RuntimeError("Executor shutdown has been called")
+
+        with patch("asyncio.get_event_loop", return_value=loop):
+            result = await adapter.container_exists("mcp-sandbox-shutdown")
+
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_call_tool_detects_dead_container_and_rebuilds(
@@ -540,6 +555,74 @@ class TestSandboxRestartPolicy:
     """Test that sandbox containers have proper restart policy for auto-recovery."""
 
     @pytest.mark.asyncio
+    async def test_create_sandbox_removes_partial_container_on_failure(self, adapter, mock_docker):
+        """A Docker start failure must not leave a created-but-dead sandbox behind."""
+        partial_container = MagicMock()
+        partial_container.name = "mcp-sandbox-partial"
+        partial_container.status = "created"
+
+        mock_docker.containers.run = Mock(side_effect=RuntimeError("port is already allocated"))
+        mock_docker.containers.get = Mock(return_value=partial_container)
+
+        with (
+            patch.object(adapter, "_is_port_available", return_value=True),
+            pytest.raises(SandboxConnectionError),
+        ):
+            await adapter.create_sandbox(
+                project_path="/tmp/test_project",
+                sandbox_id="mcp-sandbox-partial",
+                project_id="proj-1",
+            )
+
+        partial_container.remove.assert_called_once_with(force=True)
+        assert 18765 not in adapter._used_ports
+        assert 16080 not in adapter._used_ports
+        assert 17681 not in adapter._used_ports
+
+    @pytest.mark.asyncio
+    async def test_rebuild_skips_when_project_replacement_is_running(self, adapter, mock_docker):
+        """A stale sandbox should not rebuild over a newer running project sandbox."""
+        old_instance = MCPSandboxInstance(
+            id="mcp-sandbox-stale",
+            status=SandboxStatus.RUNNING,
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
+            project_path="/tmp/test_project",
+            endpoint="ws://localhost:18765",
+            websocket_url="ws://localhost:18765",
+            mcp_port=18765,
+            desktop_port=16080,
+            terminal_port=17681,
+            labels={
+                "memstack.sandbox": "true",
+                "memstack.sandbox.id": "mcp-sandbox-stale",
+                "memstack.project_id": "proj-1",
+            },
+        )
+        adapter._active_sandboxes[old_instance.id] = old_instance
+
+        stale_container = MagicMock()
+        stale_container.name = "mcp-sandbox-stale"
+        stale_container.status = "created"
+        replacement_container = MagicMock()
+        replacement_container.name = "mcp-sandbox-running"
+        replacement_container.status = "running"
+        replacement_container.labels = {
+            "memstack.sandbox.id": "mcp-sandbox-running",
+            "memstack.project_id": "proj-1",
+        }
+
+        mock_docker.containers.list = Mock(return_value=[stale_container, replacement_container])
+        mock_docker.containers.get = Mock(return_value=stale_container)
+
+        with patch.object(adapter, "sync_sandbox_from_docker", new=AsyncMock()):
+            result = await adapter._rebuild_sandbox(old_instance)
+
+        assert result is None
+        mock_docker.containers.run.assert_not_called()
+        stale_container.remove.assert_called_once_with(force=True)
+        assert "mcp-sandbox-stale" not in adapter._active_sandboxes
+
+    @pytest.mark.asyncio
     async def test_create_sandbox_sets_restart_policy(self, adapter, mock_docker):
         """
         RED Test: Verify that create_sandbox sets restart_policy to on-failure.
@@ -564,7 +647,8 @@ class TestSandboxRestartPolicy:
         mock_docker.containers.run = Mock(side_effect=run_side_effect)
 
         # Act: Create a sandbox
-        await adapter.create_sandbox(project_path=project_path)
+        with patch.object(adapter, "_is_port_available", return_value=True):
+            await adapter.create_sandbox(project_path=project_path)
 
         # Assert: restart_policy should be set
         assert "restart_policy" in captured_config, (

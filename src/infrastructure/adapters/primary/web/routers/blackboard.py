@@ -40,6 +40,10 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+    SqlWorkspacePlanOutboxRepository,
+)
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard",
@@ -71,6 +75,8 @@ def _execution_diagnostics_service_from_request(
         workspace_task_repo=container.workspace_task_repository(),
         attempt_repo=container.workspace_task_session_attempt_repository(),
         tool_execution_record_repo=container.tool_execution_record_repository(),
+        workspace_plan_outbox_repo=SqlWorkspacePlanOutboxRepository(db),
+        workspace_plan_repo=SqlPlanRepository(db),
     )
 
 

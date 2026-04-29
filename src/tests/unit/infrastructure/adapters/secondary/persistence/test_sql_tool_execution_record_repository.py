@@ -3,9 +3,11 @@ Tests for V2 SqlToolExecutionRecordRepository using BaseRepository.
 """
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import ToolExecutionRecord
@@ -101,6 +103,84 @@ class TestSqlToolExecutionRecordRepositoryCreate:
             await repo.save_and_commit(record)
 
         assert session.rolled_back is True
+
+    @pytest.mark.asyncio
+    async def test_save_and_commit_retries_duplicate_insert_as_update(self):
+        """Concurrent stream consumers may both persist the same deterministic event ID."""
+
+        class _Result:
+            def __init__(self, value: Any) -> None:
+                self._value = value
+
+            def scalar_one_or_none(self) -> Any:
+                return self._value
+
+        class _RacingSession:
+            def __init__(self) -> None:
+                self.execute_count = 0
+                self.flush_count = 0
+                self.rollback_count = 0
+                self.commit_count = 0
+                self.existing = SimpleNamespace(
+                    id="record-race-1",
+                    conversation_id="old-conv",
+                    message_id="old-msg",
+                    call_id="old-call",
+                    tool_name="bash",
+                    tool_input={},
+                    tool_output=None,
+                    status=ToolExecutionStatus.RUNNING,
+                    error=None,
+                    step_number=None,
+                    sequence_number=0,
+                    started_at=datetime.now(UTC),
+                    completed_at=None,
+                    duration_ms=None,
+                )
+
+            async def execute(self, *_args: Any, **_kwargs: Any) -> _Result:
+                self.execute_count += 1
+                return _Result(None if self.execute_count == 1 else self.existing)
+
+            def add(self, *_args: Any, **_kwargs: Any) -> None:
+                return None
+
+            async def flush(self) -> None:
+                self.flush_count += 1
+                if self.flush_count == 1:
+                    raise IntegrityError("insert", {}, Exception("duplicate"))
+
+            async def commit(self) -> None:
+                self.commit_count += 1
+
+            async def rollback(self) -> None:
+                self.rollback_count += 1
+
+        session = _RacingSession()
+        repo = SqlToolExecutionRecordRepository(cast(AsyncSession, session))
+        record = ToolExecutionRecord(
+            id="record-race-1",
+            conversation_id="conv-1",
+            message_id="event-message-1",
+            call_id="call-race-1",
+            tool_name="glob",
+            tool_input={"pattern": "**/*"},
+            tool_output="ok",
+            status=ToolExecutionStatus.SUCCESS,
+            sequence_number=7,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=12,
+        )
+
+        await repo.save_and_commit(record)
+
+        assert session.rollback_count == 1
+        assert session.commit_count == 1
+        assert session.existing.conversation_id == "conv-1"
+        assert session.existing.call_id == "call-race-1"
+        assert session.existing.tool_input == {"pattern": "**/*"}
+        assert session.existing.status == ToolExecutionStatus.SUCCESS
 
     @pytest.mark.asyncio
     async def test_save_updates_existing(

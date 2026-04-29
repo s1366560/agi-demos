@@ -45,8 +45,12 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 logger = logging.getLogger(__name__)
 
 AUTO_TRIGGER_COOLDOWN_SECONDS = 60
+REPLAN_TRIGGER_COOLDOWN_SECONDS = 300
 _AUTO_TRIGGER_COOLDOWN_KEY = "workspace:autonomy:last_trigger:{workspace_id}:{root_task_id}"
 _REMEDIATION_STATUSES_NEEDING_PROGRESS = frozenset({"replan_required", "ready_for_completion"})
+_NON_OPEN_ROOT_STATUSES = frozenset({"done", "blocked"})
+_WORKER_SESSION_HEAL_MAX_PER_TICK_ENV = "WORKSPACE_AUTONOMY_MAX_WORKER_SESSION_HEAL_PER_TICK"
+_DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK = 2
 
 _AUTO_TICK_ENV = "WORKSPACE_AUTONOMY_AUTO_TICK_ENABLED"
 _AUTO_COMPLETE_ENV = "WORKSPACE_AUTONOMY_AUTO_COMPLETE_ENABLED"
@@ -79,6 +83,28 @@ def _auto_complete_enabled() -> bool:
     if raw is None:
         return True
     return raw.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def _worker_session_heal_max_per_tick() -> int:
+    raw = os.environ.get(_WORKER_SESSION_HEAL_MAX_PER_TICK_ENV)
+    if raw is None:
+        return _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK
+    try:
+        parsed = int(raw.strip())
+    except ValueError:
+        return _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK
+    return parsed if parsed > 0 else _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK
+
+
+def _durable_plan_can_suppress_leader_message(remediation_status: str) -> bool:
+    """Return whether an active durable plan should absorb this tick.
+
+    Existing V2-linked child tasks mean the durable plan is already driving
+    nominal progress, so the tick should not spam the leader. Remediation
+    statuses are different: they are explicit handoff signals from the child
+    task state machine and must reach the leader even when V2 children exist.
+    """
+    return remediation_status not in _REMEDIATION_STATUSES_NEEDING_PROGRESS
 
 
 def _resolve_container(request: Request | None, db: AsyncSession) -> DIContainer:
@@ -256,6 +282,32 @@ async def _mark_cooldown(workspace_id: str, root_task_id: str) -> None:
     key = _AUTO_TRIGGER_COOLDOWN_KEY.format(workspace_id=workspace_id, root_task_id=root_task_id)
     try:
         await redis_client.set(key, "1", ex=AUTO_TRIGGER_COOLDOWN_SECONDS)
+    except Exception:
+        logger.warning(
+            "Workspace autonomy cooldown write failed",
+            exc_info=True,
+            extra={"workspace_id": workspace_id, "root_task_id": root_task_id},
+        )
+
+
+async def _mark_autonomy_trigger_cooldown(
+    workspace_id: str,
+    root_task_id: str,
+    *,
+    remediation_status: str,
+) -> None:
+    seconds = (
+        REPLAN_TRIGGER_COOLDOWN_SECONDS
+        if remediation_status == "replan_required"
+        else AUTO_TRIGGER_COOLDOWN_SECONDS
+    )
+    try:
+        redis_client = await get_redis_client()
+    except Exception:
+        return
+    key = _AUTO_TRIGGER_COOLDOWN_KEY.format(workspace_id=workspace_id, root_task_id=root_task_id)
+    try:
+        await redis_client.set(key, "1", ex=seconds)
     except Exception:
         logger.warning(
             "Workspace autonomy cooldown write failed",
@@ -471,14 +523,18 @@ async def _heal_assigned_execution_tasks_without_sessions(
         return 0
 
     attempt_repo = SqlWorkspaceTaskSessionAttemptRepository(db)
+    max_heals = _worker_session_heal_max_per_tick()
     healed = 0
     for child in children:
+        if healed >= max_heals:
+            break
         worker_agent_id = getattr(child, "assignee_agent_id", None)
         if not worker_agent_id:
             continue
         if getattr(child, "archived_at", None) is not None:
             continue
-        if child.status == WorkspaceTaskStatus.DONE:
+        status_value = getattr(child.status, "value", child.status)
+        if status_value in {WorkspaceTaskStatus.DONE.value, WorkspaceTaskStatus.BLOCKED.value}:
             continue
         metadata = child.metadata or {}
         role = metadata.get("task_role") if isinstance(metadata, dict) else None
@@ -530,6 +586,7 @@ async def _heal_assigned_execution_tasks_without_sessions(
                 "workspace_id": workspace_id,
                 "root_task_id": root_task_id,
                 "healed_count": healed,
+                "max_heals": max_heals,
             },
         )
     return healed
@@ -820,8 +877,13 @@ async def _durable_plan_allows_root_auto_complete(
     db: AsyncSession,
     workspace_id: str,
 ) -> bool:
-    """Return True only when no active durable plan can still dispatch work."""
+    """Return True when the durable plan cannot still dispatch useful work."""
     from src.domain.model.workspace_plan import PlanStatus
+    from src.domain.model.workspace_plan.plan_node import (
+        PlanNodeKind,
+        TaskExecution,
+        TaskIntent,
+    )
     from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
         SqlPlanRepository,
     )
@@ -838,7 +900,25 @@ async def _durable_plan_allows_root_auto_complete(
             },
         )
         return False
-    return plan is None or plan.status is PlanStatus.COMPLETED
+    allowed = plan is None or plan.status is PlanStatus.COMPLETED
+    if not allowed and plan.status is PlanStatus.ACTIVE:
+        nodes = list(plan.nodes.values()) if isinstance(plan.nodes, Mapping) else []
+        actionable_nodes = [
+            node for node in nodes if node.kind in {PlanNodeKind.TASK, PlanNodeKind.VERIFY}
+        ]
+        active_execution = {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.REPORTED,
+            TaskExecution.VERIFYING,
+        }
+        allowed = bool(actionable_nodes) and not any(
+            node.execution in active_execution for node in actionable_nodes
+        )
+        allowed = allowed and all(
+            node.intent in {TaskIntent.DONE, TaskIntent.BLOCKED} for node in actionable_nodes
+        )
+    return allowed
 
 
 async def _try_auto_complete_root(
@@ -999,8 +1079,15 @@ def _build_autonomy_mention_content(mention: str, title: str, remediation_status
     if remediation_status == "replan_required":
         return (
             f"{mention} 工作区目标「{title}」有子任务阻塞或失败，需要重新规划。"
-            "请根据最新状态调整执行计划或替换失败的子任务。 "
-            "Please replan or remediate the blocked/failed child tasks and continue execution."
+            "这是 leader replan 回合：先调用 todoread 读取 workspace task ledger；"
+            "然后只用 todowrite(add 或 replace) 创建更小的 execution_task、替换失败子任务或更新任务状态；"
+            "不要亲自使用 bash/read/write/edit/glob/web 等实现工具完成子任务；"
+            "拆分与分派完成后停止本轮，由 worker 会话继续执行。 "
+            "This is a leader replan turn: first call todoread, then use only "
+            "todowrite(add or replace) to create smaller workspace execution tasks, "
+            "replace failed tasks, or update task state. Do not use implementation tools "
+            "such as bash/read/write/edit/glob/web in this turn. Stop after decomposition "
+            "and dispatch so worker sessions can continue execution."
         )
     return (
         f"{mention} 中央黑板已有目标：{title}。"
@@ -1068,7 +1155,7 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
         for task in tasks
         if is_goal_root_task(task)
         and task.archived_at is None
-        and getattr(task.status, "value", task.status) != "done"
+        and getattr(task.status, "value", task.status) not in _NON_OPEN_ROOT_STATUSES
     ]
     if not root_tasks:
         return {"triggered": False, "root_task_id": None, "reason": "no_open_root"}
@@ -1232,7 +1319,7 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
             )
 
     if (
-        remediation_status != "ready_for_completion"
+        _durable_plan_can_suppress_leader_message(remediation_status)
         and await _root_has_workspace_plan_linked_children(
             task_repo=task_repo,
             workspace_id=workspace_id,
@@ -1290,7 +1377,11 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
                     "root_task_id": root_task.id,
                 },
             )
-    await _mark_cooldown(workspace_id, root_task.id)
+    await _mark_autonomy_trigger_cooldown(
+        workspace_id,
+        root_task.id,
+        remediation_status=remediation_status,
+    )
     _fire_mention_routing(
         request=request,
         workspace_id=workspace_id,

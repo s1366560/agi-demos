@@ -403,6 +403,7 @@ def build_default_orchestrator(
         dispatcher=_noop_dispatcher,
         attempt_context=_default_attempt_context,
         heartbeat_seconds=cfg.heartbeat_seconds,
+        max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )
     return WorkspaceOrchestrator(
         planner=planner,
@@ -453,6 +454,7 @@ def build_sql_orchestrator(
         progress_sink=progress_sink,
         event_sink=event_sink or _make_sql_plan_event_sink(db),
         heartbeat_seconds=cfg.heartbeat_seconds,
+        max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )
     return WorkspaceOrchestrator(
         planner=planner,

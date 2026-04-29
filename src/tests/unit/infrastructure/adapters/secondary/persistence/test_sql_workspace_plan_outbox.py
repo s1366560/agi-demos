@@ -85,6 +85,38 @@ async def test_enqueue_accepts_workspace_scoped_item_without_plan(
 
 
 @pytest.mark.asyncio
+async def test_list_by_workspace_returns_recent_items_without_leasing(
+    db_session: AsyncSession,
+    workspace_test_seed: dict[str, str],
+) -> None:
+    await _seed_plan(db_session, "workspace-1", "outbox-plan-1")
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    older_time = datetime(2026, 4, 24, 8, 0, tzinfo=UTC)
+    newer_time = older_time + timedelta(minutes=1)
+
+    older = await repo.enqueue(
+        plan_id="outbox-plan-1",
+        workspace_id="workspace-1",
+        event_type="supervisor_tick",
+    )
+    newer = await repo.enqueue(
+        plan_id="outbox-plan-1",
+        workspace_id="workspace-1",
+        event_type="worker_launch",
+    )
+    older.created_at = older_time
+    newer.created_at = newer_time
+    await db_session.flush()
+
+    items = await repo.list_by_workspace("workspace-1", limit=1)
+
+    assert [item.id for item in items] == [newer.id]
+    assert newer.status == "pending"
+    assert newer.lease_owner is None
+    assert newer.lease_expires_at is None
+
+
+@pytest.mark.asyncio
 async def test_claim_due_leases_only_due_items(
     db_session: AsyncSession,
     workspace_test_seed: dict[str, str],
@@ -267,6 +299,43 @@ async def test_mark_failed_retries_then_dead_letters(
         now=current_time + timedelta(minutes=10),
     )
     assert after_dead_letter == []
+
+
+@pytest.mark.asyncio
+async def test_release_processing_requeues_without_consuming_attempt(
+    db_session: AsyncSession,
+    workspace_test_seed: dict[str, str],
+) -> None:
+    await _seed_plan(db_session, "workspace-1", "outbox-plan-1")
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    current_time = datetime(2026, 4, 24, 8, 0, tzinfo=UTC)
+
+    item = await repo.enqueue(
+        plan_id="outbox-plan-1",
+        workspace_id="workspace-1",
+        event_type="worker_launch",
+        max_attempts=1,
+    )
+    await repo.claim_due(limit=1, lease_owner="worker-a", now=current_time)
+
+    assert await repo.release_processing(item.id, "shutdown") is True
+
+    released = await repo.get_by_id(item.id)
+    assert released is not None
+    assert released.status == "pending"
+    assert released.attempt_count == 0
+    assert released.lease_owner is None
+    assert released.lease_expires_at is None
+    assert released.next_attempt_at is None
+    assert released.last_error == "shutdown"
+
+    claimed = await repo.claim_due(
+        limit=1,
+        lease_owner="worker-b",
+        now=current_time + timedelta(seconds=1),
+    )
+    assert [claimed_item.id for claimed_item in claimed] == [item.id]
+    assert claimed[0].attempt_count == 1
 
 
 @pytest.mark.asyncio

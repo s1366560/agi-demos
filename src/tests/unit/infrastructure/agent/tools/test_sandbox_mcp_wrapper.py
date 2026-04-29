@@ -6,6 +6,8 @@ TDD: Tests written first (RED phase).
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.mcp_errors import RetryConfig
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import (
+    WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS,
+    WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS,
     create_sandbox_mcp_tool,
 )
 
@@ -273,6 +275,55 @@ class TestSandboxMCPToolParameters:
         assert "path" in schema["required"]
         assert "offset" in schema["properties"]
 
+    def test_write_tool_schema_includes_workspace_harness_content_limit(self):
+        """Write tool schema should advertise the hard content limit."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string", "description": "Content to write"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        content_schema = tool.parameters["properties"]["content"]
+        assert content_schema["maxLength"] == WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS
+        assert "HARD LIMIT" in content_schema["description"]
+
+    def test_bash_tool_schema_includes_workspace_harness_command_limit(self):
+        """Bash tool schema should discourage giant heredoc commands."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "Command to execute"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        command_schema = tool.parameters["properties"]["command"]
+        assert command_schema["maxLength"] == WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS
+        assert "heredocs" in command_schema["description"]
+
 
 class TestSandboxMCPToolExecute:
     """Test create_sandbox_mcp_tool execution."""
@@ -301,6 +352,68 @@ class TestSandboxMCPToolExecute:
         result = await tool.execute(ctx, path="/tmp/test")
 
         assert "Mock result from file_read" in result.output
+
+    async def test_write_tool_rejects_content_over_workspace_harness_limit(self):
+        """Oversized parsed write calls should fail before reaching the sandbox."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        ctx = _make_ctx()
+        result = await tool.execute(
+            ctx,
+            file_path="/workspace/large.md",
+            content="x" * (WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS + 1),
+        )
+
+        assert result.is_error is True
+        assert "write.content exceeds" in result.output
+        assert adapter.call_count == 0
+
+    async def test_bash_tool_rejects_command_over_workspace_harness_limit(self):
+        """Oversized bash commands should fail before reaching the sandbox."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        ctx = _make_ctx()
+        result = await tool.execute(
+            ctx,
+            command="x" * (WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS + 1),
+        )
+
+        assert result.is_error is True
+        assert "bash.command exceeds" in result.output
+        assert adapter.call_count == 0
 
     async def test_execute_error_response(self):
         """Test tool execution with error response."""

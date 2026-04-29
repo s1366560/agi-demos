@@ -46,6 +46,24 @@ class TestValidation:
                 schedule_tick=lambda _w, _u: None,
             )
 
+    def test_invalid_max_roots_per_sweep_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_roots_per_sweep must be > 0"):
+            WorkspaceAutonomyIdleWaker(
+                check_interval_seconds=60,
+                session_factory=_fake_factory([]),
+                schedule_tick=lambda _w, _u: None,
+                max_roots_per_sweep=0,
+            )
+
+    def test_invalid_max_root_idle_age_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_root_idle_age_seconds must be > 0"):
+            WorkspaceAutonomyIdleWaker(
+                check_interval_seconds=60,
+                session_factory=_fake_factory([]),
+                schedule_tick=lambda _w, _u: None,
+                max_root_idle_age_seconds=0,
+            )
+
 
 class TestSweepOnce:
     @pytest.mark.asyncio
@@ -73,6 +91,23 @@ class TestSweepOnce:
         nudged = await waker._sweep_once()
         assert nudged == 0
         assert scheduled == []
+
+    @pytest.mark.asyncio
+    async def test_query_is_capped_by_max_roots_per_sweep(self) -> None:
+        rows = [("ws-1", "user-a", "root-1")]
+        factory = _fake_factory(rows)
+        ctx = factory()
+        waker = WorkspaceAutonomyIdleWaker(
+            check_interval_seconds=60,
+            session_factory=lambda: ctx,
+            schedule_tick=lambda _w, _u: None,
+            max_roots_per_sweep=7,
+        )
+
+        await waker._fetch_eligible_roots()
+
+        query = ctx.session.execute.await_args.args[0]
+        assert query._limit_clause.value == 7
 
     @pytest.mark.asyncio
     async def test_schedule_failure_does_not_abort_sweep(self) -> None:
@@ -159,11 +194,11 @@ class TestStartStop:
 class TestStartupWrapper:
     """Lightweight tests for the env-flag helpers in the startup wrapper."""
 
-    def test_enabled_default_is_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_enabled_default_is_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("WORKSPACE_AUTONOMY_IDLE_WAKE_ENABLED", raising=False)
         from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
 
-        assert mod._enabled() is False
+        assert mod._enabled() is True
 
     @pytest.mark.parametrize("val", ["1", "true", "TRUE", "yes", "on"])
     def test_enabled_truthy(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
@@ -183,7 +218,7 @@ class TestStartupWrapper:
         monkeypatch.delenv("WORKSPACE_AUTONOMY_IDLE_WAKE_INTERVAL_SECONDS", raising=False)
         from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
 
-        assert mod._interval_seconds() == 300
+        assert mod._interval_seconds() == 60
 
     def test_interval_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_INTERVAL_SECONDS", "45")
@@ -196,7 +231,52 @@ class TestStartupWrapper:
         monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_INTERVAL_SECONDS", val)
         from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
 
-        assert mod._interval_seconds() == 300
+        assert mod._interval_seconds() == 60
+
+    def test_max_roots_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("WORKSPACE_AUTONOMY_IDLE_WAKE_MAX_ROOTS_PER_SWEEP", raising=False)
+        from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
+
+        assert mod._max_roots_per_sweep() == 3
+
+    def test_max_roots_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_MAX_ROOTS_PER_SWEEP", "9")
+        from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
+
+        assert mod._max_roots_per_sweep() == 9
+
+    @pytest.mark.parametrize("val", ["0", "-10", "abc", ""])
+    def test_max_roots_invalid_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, val: str
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_MAX_ROOTS_PER_SWEEP", val)
+        from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
+
+        assert mod._max_roots_per_sweep() == 3
+
+    def test_max_root_idle_age_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(
+            "WORKSPACE_AUTONOMY_IDLE_WAKE_MAX_ROOT_IDLE_AGE_SECONDS",
+            raising=False,
+        )
+        from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
+
+        assert mod._max_root_idle_age_seconds() == 86_400
+
+    def test_max_root_idle_age_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_MAX_ROOT_IDLE_AGE_SECONDS", "120")
+        from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
+
+        assert mod._max_root_idle_age_seconds() == 120
+
+    @pytest.mark.parametrize("val", ["0", "-10", "abc", ""])
+    def test_max_root_idle_age_invalid_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, val: str
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_AUTONOMY_IDLE_WAKE_MAX_ROOT_IDLE_AGE_SECONDS", val)
+        from src.infrastructure.adapters.primary.web.startup import autonomy_waker as mod
+
+        assert mod._max_root_idle_age_seconds() == 86_400
 
     @pytest.mark.asyncio
     async def test_initialize_skipped_when_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:

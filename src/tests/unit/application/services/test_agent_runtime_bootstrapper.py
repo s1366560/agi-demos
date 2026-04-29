@@ -153,6 +153,74 @@ async def test_start_chat_actor_local_mode_uses_local_only(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_start_chat_actor_local_workspace_worker_uses_subprocess(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
+    """Workspace worker local mode should survive API reload by using a subprocess."""
+    _, factory, encryption_service = _build_provider_mocks()
+    settings = SimpleNamespace(
+        agent_runtime_mode="local",
+        agent_max_tokens=4096,
+        agent_max_steps=20,
+    )
+    fake_config_module = _build_fake_module(
+        "src.configuration.config",
+        get_settings=lambda: settings,
+    )
+    fake_provider_module = _build_fake_module(
+        "src.infrastructure.llm.provider_factory",
+        get_ai_service_factory=lambda: factory,
+    )
+    fake_encryption_module = _build_fake_module(
+        "src.infrastructure.security.encryption_service",
+        get_encryption_service=lambda: encryption_service,
+    )
+
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "src.configuration.config": fake_config_module,
+                "src.infrastructure.llm.provider_factory": fake_provider_module,
+                "src.infrastructure.security.encryption_service": fake_encryption_module,
+            },
+        ),
+        patch.object(
+            bootstrapper,
+            "_register_project_local",
+            new_callable=AsyncMock,
+        ) as register_local_mock,
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
+        patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock) as local_run_mock,
+        patch.object(
+            bootstrapper,
+            "_start_local_subprocess_chat",
+            new_callable=AsyncMock,
+        ) as subprocess_mock,
+    ):
+        actor_id = await bootstrapper.start_chat_actor(
+            conversation=conversation,
+            message_id="msg-1",
+            user_message="hello",
+            conversation_context=[],
+            app_model_context={"context_type": "workspace_worker_runtime"},
+        )
+
+    assert actor_id == "agent:tenant-1:proj-1:default"
+    register_local_mock.assert_awaited_once_with("tenant-1", "proj-1")
+    subprocess_mock.assert_awaited_once()
+    local_run_mock.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(
     bootstrapper,
     conversation,
@@ -212,6 +280,75 @@ async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(
             message_id="msg-1",
             user_message="hello",
             conversation_context=[],
+        )
+
+    local_run_mock.assert_not_called()
+    register_local_mock.assert_not_called()
+    fake_actor_manager.ensure_router_actor.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_start_chat_actor_workspace_worker_forces_ray_when_runtime_is_auto(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
+    """Workspace worker turns should not fall back to local when runtime mode is auto."""
+    _, factory, encryption_service = _build_provider_mocks()
+    settings = SimpleNamespace(
+        agent_runtime_mode="auto",
+        agent_max_tokens=4096,
+        agent_max_steps=20,
+    )
+    fake_actor_manager = ModuleType("src.infrastructure.agent.actor.actor_manager")
+    fake_actor_manager.ensure_router_actor = AsyncMock(return_value=None)
+    fake_actor_manager.get_or_create_actor = AsyncMock(return_value=None)
+    fake_actor_manager.register_project = AsyncMock()
+
+    fake_config_module = _build_fake_module(
+        "src.configuration.config",
+        get_settings=lambda: settings,
+    )
+    fake_provider_module = _build_fake_module(
+        "src.infrastructure.llm.provider_factory",
+        get_ai_service_factory=lambda: factory,
+    )
+    fake_encryption_module = _build_fake_module(
+        "src.infrastructure.security.encryption_service",
+        get_encryption_service=lambda: encryption_service,
+    )
+
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "src.configuration.config": fake_config_module,
+                "src.infrastructure.llm.provider_factory": fake_provider_module,
+                "src.infrastructure.security.encryption_service": fake_encryption_module,
+                "src.infrastructure.agent.actor.actor_manager": fake_actor_manager,
+            },
+        ),
+        patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock) as local_run_mock,
+        patch.object(
+            bootstrapper,
+            "_register_project_local",
+            new_callable=AsyncMock,
+        ) as register_local_mock,
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
+        pytest.raises(RuntimeError, match="AGENT_RUNTIME_MODE=ray"),
+    ):
+        await bootstrapper.start_chat_actor(
+            conversation=conversation,
+            message_id="msg-1",
+            user_message="hello",
+            conversation_context=[],
+            app_model_context={"context_type": "workspace_worker_runtime"},
         )
 
     local_run_mock.assert_not_called()

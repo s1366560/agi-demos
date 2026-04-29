@@ -30,6 +30,18 @@ from src.domain.ports.services.task_allocator_port import (
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_EXECUTION_CAPABILITIES = frozenset(
+    {
+        "backend",
+        "codegen",
+        "file_edit",
+        "frontend",
+        "shell",
+        "software_development",
+        "testing",
+    }
+)
+
 
 class CapabilityAllocator(TaskAllocatorPort):
     """Weighted capability scorer; greedy one-node-per-tick assignment."""
@@ -117,6 +129,8 @@ class CapabilityAllocator(TaskAllocatorPort):
         reasons: list[str] = []
 
         skill = _jaccard(cap_names, agent.capabilities)
+        if not cap_names:
+            skill = _default_execution_fit(agent.capabilities)
         if skill > 0:
             reasons.append(f"skill={skill:.2f}")
 
@@ -149,6 +163,15 @@ def _jaccard(a: set[str], b: Iterable[str]) -> float:
     inter = len(a & bs)
     uni = len(a | bs)
     return inter / uni if uni else 0.0
+
+
+def _default_execution_fit(capabilities: Iterable[str]) -> float:
+    caps = set(capabilities)
+    if not caps:
+        return 0.0
+    return len(caps & _DEFAULT_EXECUTION_CAPABILITIES) / len(
+        _DEFAULT_EXECUTION_CAPABILITIES
+    )
 
 
 def _name_token_match(caps: set[str], tools: Iterable[str]) -> float:

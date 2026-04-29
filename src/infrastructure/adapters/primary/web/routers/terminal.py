@@ -34,11 +34,12 @@ _event_publisher: SandboxEventPublisher | None = None
 
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
-    """Get or create the sandbox adapter singleton."""
-    global _sandbox_adapter
-    if _sandbox_adapter is None:
-        _sandbox_adapter = MCPSandboxAdapter()
-    return _sandbox_adapter
+    """Get the shared sandbox adapter singleton."""
+    from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
+        get_sandbox_adapter as _get_shared_sandbox_adapter,
+    )
+
+    return _get_shared_sandbox_adapter()
 
 
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:

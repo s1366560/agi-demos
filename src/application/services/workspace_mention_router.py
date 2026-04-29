@@ -17,7 +17,16 @@ from src.domain.ports.repositories.workspace.workspace_agent_repository import (
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_LEADER,
+    WORKSPACE_SESSION_ROLE_KEY,
+    WORKSPACE_TOOL_MODE_KEY,
+    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+    WORKSPACE_TURN_TYPE_KEY,
+    WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    REMEDIATION_STATUS,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
 )
@@ -34,36 +43,47 @@ async def _resolve_workspace_authority_context(
     workspace_id: str,
     conversation_scope: str | None,
 ) -> dict[str, Any] | None:
-    if not conversation_scope:
-        return None
-
     async with db_session_factory() as meta_db:
-        objective_id: str | None = None
-        if conversation_scope.startswith("objective:"):
-            objective_id = conversation_scope.split(":", 1)[1].strip() or None
-        root_goal_task_id: str | None = None
-        task_repo = SqlWorkspaceTaskRepository(meta_db)
-        if objective_id:
-            root_task = await task_repo.find_root_by_objective_id(workspace_id, objective_id)
-            if root_task is not None:
-                root_goal_task_id = root_task.id
-        if root_goal_task_id is None:
-            tasks = await task_repo.find_by_workspace(
-                workspace_id=workspace_id,
-                limit=100,
-                offset=0,
+        try:
+            objective_id: str | None = None
+            if conversation_scope and conversation_scope.startswith("objective:"):
+                objective_id = conversation_scope.split(":", 1)[1].strip() or None
+            root_goal_task_id: str | None = None
+            task_repo = SqlWorkspaceTaskRepository(meta_db)
+            if objective_id:
+                root_task = await task_repo.find_root_by_objective_id(workspace_id, objective_id)
+                if root_task is not None:
+                    root_goal_task_id = root_task.id
+            if root_goal_task_id is None:
+                tasks = await task_repo.find_by_workspace(
+                    workspace_id=workspace_id,
+                    limit=100,
+                    offset=0,
+                )
+                root_tasks = [
+                    task
+                    for task in tasks
+                    if task.metadata.get(TASK_ROLE) == "goal_root"
+                    and task.archived_at is None
+                    and getattr(task.status, "value", task.status) != "done"
+                ]
+                if len(root_tasks) == 1:
+                    root_goal_task_id = root_tasks[0].id
+        except Exception:
+            logger.warning(
+                "Workspace authority context resolution failed",
+                exc_info=True,
+                extra={"workspace_id": workspace_id, "conversation_scope": conversation_scope},
             )
-            root_tasks = [
-                task
-                for task in tasks
-                if task.metadata.get(TASK_ROLE) == "goal_root"
-                and task.archived_at is None
-                and getattr(task.status, "value", task.status) != "done"
-            ]
-            if len(root_tasks) == 1:
-                root_goal_task_id = root_tasks[0].id
+            return None
         if root_goal_task_id:
+            workspace_binding = {
+                "workspace_id": workspace_id,
+                ROOT_GOAL_TASK_ID: root_goal_task_id,
+            }
             return {
+                "context_type": "workspace_worker_runtime",
+                "workspace_binding": workspace_binding,
                 "workspace_id": workspace_id,
                 ROOT_GOAL_TASK_ID: root_goal_task_id,
                 "task_authority": "workspace",
@@ -217,6 +237,19 @@ class WorkspaceMentionRouter:
             workspace_id=workspace_id,
             conversation_scope=conversation_scope,
         )
+        autonomy_trigger = message.metadata.get("autonomy_trigger")
+        if (
+            app_model_context is not None
+            and isinstance(autonomy_trigger, dict)
+            and autonomy_trigger.get(REMEDIATION_STATUS)
+            in {"replan_required", "ready_for_completion"}
+        ):
+            app_model_context = {
+                **app_model_context,
+                WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_LEADER,
+                WORKSPACE_TURN_TYPE_KEY: WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+                WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+            }
 
         conversation_id = self.workspace_conversation_id(
             workspace_id,

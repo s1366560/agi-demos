@@ -3,6 +3,8 @@ ARG RAY_VERSION=2.53.0
 
 FROM python:${PYTHON_VERSION}-slim
 
+ARG RAY_VERSION=2.53.0
+
 USER root
 WORKDIR /app
 

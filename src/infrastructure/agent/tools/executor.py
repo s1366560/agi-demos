@@ -532,10 +532,11 @@ class ToolExecutor:
             "write": (
                 "The file content is too large to write in a single call. "
                 "RECOVERY OPTIONS: "
-                "(1) Write the file in smaller chunks using multiple write calls with append mode, "
-                "(2) Use the 'edit' tool to add content incrementally, "
-                "(3) Split the content into multiple smaller files. "
-                "Consider reducing the content size to under ~10KB per write call."
+                "(1) Do not retry the same payload, "
+                "(2) Write a short skeleton first, "
+                "(3) Use 'edit' or short append commands to add sections incrementally, "
+                "(4) Split the content into multiple smaller files. "
+                "Keep each write/edit/bash payload under 6000 characters."
             ),
             "edit": (
                 "The edit content is too large. "

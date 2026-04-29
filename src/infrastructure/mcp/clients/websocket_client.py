@@ -16,7 +16,7 @@ Features:
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, cast
@@ -32,6 +32,35 @@ logger = logging.getLogger(__name__)
 
 # Default timeout in seconds (can be overridden per-call)
 DEFAULT_TIMEOUT = 60
+TOOL_REQUEST_TIMEOUT_GRACE_SECONDS = 10.0
+
+
+def _coerce_positive_timeout_seconds(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        parsed = float(value)
+    elif isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _effective_tool_request_timeout(
+    *,
+    base_timeout: float,
+    arguments: Mapping[str, Any],
+) -> float:
+    declared_timeout = _coerce_positive_timeout_seconds(arguments.get("timeout"))
+    if declared_timeout is None:
+        declared_timeout = _coerce_positive_timeout_seconds(arguments.get("timeout_seconds"))
+    if declared_timeout is None:
+        return base_timeout
+    return max(base_timeout, declared_timeout + TOOL_REQUEST_TIMEOUT_GRACE_SECONDS)
 
 
 @dataclass
@@ -113,6 +142,7 @@ class MCPWebSocketClient:
         # Legacy lock - kept for backward compatibility
         self._lock = self._request_id_lock
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
+        self._timed_out_request_ids: set[int] = set()
         self._receive_task: asyncio.Task[None] | None = None
         self._cleanup_lock = asyncio.Lock()  # Lock to prevent double cleanup
         self._is_cleaning_up = False
@@ -362,7 +392,7 @@ class MCPWebSocketClient:
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
 
-    async def _handle_message(self, data: dict[str, Any]) -> None:  # noqa: PLR0912
+    async def _handle_message(self, data: dict[str, Any]) -> None:  # noqa: C901, PLR0912
         """Handle incoming JSON-RPC message."""
         request_id = data.get("id")
 
@@ -378,6 +408,10 @@ class MCPWebSocketClient:
                 future.set_exception(RuntimeError(f"MCP server error: {error_msg}"))
             else:
                 future.set_result(data.get("result", {}))
+
+        elif request_id is not None and request_id in self._timed_out_request_ids:
+            self._timed_out_request_ids.discard(request_id)
+            logger.warning("Discarding late MCP response for timed-out request id=%s", request_id)
 
         elif "method" in data and "id" in data:
             # This is a request FROM the server (server-initiated)
@@ -461,6 +495,10 @@ class MCPWebSocketClient:
             ConnectionError: If the WebSocket connection is lost (enables retry).
         """
         timeout = timeout or self.timeout
+        request_timeout = _effective_tool_request_timeout(
+            base_timeout=timeout,
+            arguments=arguments,
+        )
         logger.info(f"Calling MCP tool: {name}")
         logger.debug(f"Tool arguments: {arguments}")
 
@@ -468,7 +506,7 @@ class MCPWebSocketClient:
             result = await self._send_request(
                 "tools/call",
                 {"name": name, "arguments": arguments},
-                timeout=timeout,
+                timeout=request_timeout,
             )
 
             if result:
@@ -502,7 +540,7 @@ class MCPWebSocketClient:
             content=[
                 {
                     "type": "text",
-                    "text": f"Error: Tool '{name}' request timed out after {timeout}s",
+                    "text": f"Error: Tool '{name}' request timed out after {request_timeout}s",
                 }
             ],
             isError=True,
@@ -751,6 +789,9 @@ class MCPWebSocketClient:
         except TimeoutError:
             async with self._request_id_lock:
                 self._pending_requests.pop(request_id, None)
+                self._timed_out_request_ids.add(request_id)
+                if len(self._timed_out_request_ids) > 1024:
+                    self._timed_out_request_ids.clear()
             error_msg = f"MCP request '{method}' timed out after {timeout}s (url={self.url})"
             logger.error(error_msg)
             return None

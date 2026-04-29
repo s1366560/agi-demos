@@ -1602,8 +1602,19 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
                 await attempt_service.mark_running(resolved_attempt.id)
 
             await db.commit()
-            publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-            await publisher.publish_pending_events(command_service.consume_pending_events())
+            try:
+                publisher = WorkspaceTaskEventPublisher(await get_redis_client())
+                await publisher.publish_pending_events(command_service.consume_pending_events())
+            except Exception:
+                logger.warning(
+                    "Workspace worker report event publish failed after commit",
+                    exc_info=True,
+                    extra={
+                        "workspace_id": workspace_id,
+                        "task_id": task_id,
+                        "attempt_id": resolved_attempt.id,
+                    },
+                )
             if report_type in _WORKER_TERMINAL_REPORT_TYPES:
                 try:
                     from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 from src.infrastructure.adapters.primary.web.routers import (
     workspace_leader_bootstrap as wlb,
 )
@@ -32,6 +34,103 @@ class TestAutoTickEnabled:
     def test_enabled_values(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
         monkeypatch.setenv(wlb._AUTO_TICK_ENV, val)
         assert wlb._auto_tick_enabled() is True
+
+
+class TestWorkerSessionHealLimit:
+    def test_default_is_two(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(wlb._WORKER_SESSION_HEAL_MAX_PER_TICK_ENV, raising=False)
+        assert wlb._worker_session_heal_max_per_tick() == 2
+
+    def test_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(wlb._WORKER_SESSION_HEAL_MAX_PER_TICK_ENV, "5")
+        assert wlb._worker_session_heal_max_per_tick() == 5
+
+    @pytest.mark.parametrize("val", ["0", "-1", "abc", ""])
+    def test_invalid_falls_back(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
+        monkeypatch.setenv(wlb._WORKER_SESSION_HEAL_MAX_PER_TICK_ENV, val)
+        assert wlb._worker_session_heal_max_per_tick() == 2
+
+    @pytest.mark.asyncio
+    async def test_skips_blocked_children(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        child = SimpleNamespace(
+            id="blocked-child",
+            assignee_agent_id="worker-1",
+            archived_at=None,
+            status=WorkspaceTaskStatus.BLOCKED,
+            metadata={"task_role": "execution_task"},
+        )
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        attempt_repo = MagicMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
+        scheduled: list[str] = []
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_task_session_attempt_repository."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            lambda _db: attempt_repo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+            lambda **kwargs: scheduled.append(kwargs["task"].id),
+        )
+
+        healed = await wlb._heal_assigned_execution_tasks_without_sessions(
+            db=MagicMock(),
+            task_repo=task_repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+
+        assert healed == 0
+        assert scheduled == []
+        attempt_repo.find_active_by_workspace_task_id.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_caps_scheduled_sessions_per_tick(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(wlb._WORKER_SESSION_HEAL_MAX_PER_TICK_ENV, "2")
+        children = [
+            SimpleNamespace(
+                id=f"child-{index}",
+                assignee_agent_id=f"worker-{index}",
+                archived_at=None,
+                status=WorkspaceTaskStatus.IN_PROGRESS,
+                metadata={"task_role": "execution_task"},
+            )
+            for index in range(3)
+        ]
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=children)
+        attempt_repo = MagicMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
+        scheduled: list[str] = []
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_task_session_attempt_repository."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            lambda _db: attempt_repo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+            lambda **kwargs: scheduled.append(kwargs["task"].id),
+        )
+
+        healed = await wlb._heal_assigned_execution_tasks_without_sessions(
+            db=MagicMock(),
+            task_repo=task_repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+
+        assert healed == 2
+        assert scheduled == ["child-0", "child-1"]
+        assert attempt_repo.find_active_by_workspace_task_id.await_count == 2
 
 
 class TestScheduleAutonomyTick:
@@ -155,14 +254,20 @@ class TestWorkerReportHook:
         assert reconcile_idx < publish_idx < commit_idx
 
     def test_durable_plan_children_suppress_extra_leader_message(self) -> None:
-        """Once V2 has compat tasks, the tick must not ask Sisyphus to replan."""
+        """Once V2 has nominal compat tasks, the tick must not ask Sisyphus to replan."""
         import inspect
 
         source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
+        gate_idx = source.index("_durable_plan_can_suppress_leader_message")
         lookup_idx = source.index("_root_has_workspace_plan_linked_children")
         message_idx = source.index("message_service.send_message")
-        assert lookup_idx < message_idx
+        assert gate_idx < lookup_idx < message_idx
         assert '"reason": "durable_plan_active"' in source
+
+    def test_durable_plan_gate_does_not_suppress_remediation(self) -> None:
+        assert wlb._durable_plan_can_suppress_leader_message("none") is True
+        assert wlb._durable_plan_can_suppress_leader_message("replan_required") is False
+        assert wlb._durable_plan_can_suppress_leader_message("ready_for_completion") is False
 
     @pytest.mark.asyncio
     async def test_root_has_workspace_plan_linked_children(self) -> None:
@@ -190,9 +295,19 @@ class TestWorkerReportHook:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from src.domain.model.workspace_plan import PlanStatus
+        from src.domain.model.workspace_plan.plan_node import (
+            PlanNodeKind,
+            TaskExecution,
+            TaskIntent,
+        )
 
         plan = MagicMock()
         plan.status = PlanStatus.ACTIVE
+        node = MagicMock()
+        node.kind = PlanNodeKind.TASK
+        node.intent = TaskIntent.TODO
+        node.execution = TaskExecution.IDLE
+        plan.nodes = {"node-1": node}
         repo = MagicMock()
         repo.get_by_workspace = AsyncMock(return_value=plan)
         monkeypatch.setattr(
@@ -207,6 +322,48 @@ class TestWorkerReportHook:
                 workspace_id="ws-1",
             )
             is False
+        )
+
+    @pytest.mark.asyncio
+    async def test_durable_plan_gate_allows_idle_done_or_blocked_plan(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.domain.model.workspace_plan import PlanStatus
+        from src.domain.model.workspace_plan.plan_node import (
+            PlanNodeKind,
+            TaskExecution,
+            TaskIntent,
+        )
+
+        goal_node = MagicMock()
+        goal_node.kind = PlanNodeKind.GOAL
+        goal_node.intent = TaskIntent.TODO
+        goal_node.execution = TaskExecution.IDLE
+        done_node = MagicMock()
+        done_node.kind = PlanNodeKind.TASK
+        done_node.intent = TaskIntent.DONE
+        done_node.execution = TaskExecution.IDLE
+        blocked_node = MagicMock()
+        blocked_node.kind = PlanNodeKind.TASK
+        blocked_node.intent = TaskIntent.BLOCKED
+        blocked_node.execution = TaskExecution.IDLE
+        plan = MagicMock()
+        plan.status = PlanStatus.ACTIVE
+        plan.nodes = {"goal": goal_node, "done": done_node, "blocked": blocked_node}
+        repo = MagicMock()
+        repo.get_by_workspace = AsyncMock(return_value=plan)
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_plan_repository"
+            ".SqlPlanRepository",
+            lambda _db: repo,
+        )
+
+        assert (
+            await wlb._durable_plan_allows_root_auto_complete(
+                db=MagicMock(),
+                workspace_id="ws-1",
+            )
+            is True
         )
 
     @pytest.mark.asyncio
@@ -380,6 +537,9 @@ class TestAutonomyMentionContent:
         content = wlb._build_autonomy_mention_content("@leader", "Ship MVP", "replan_required")
         assert "重新规划" in content
         assert "replan" in content.lower()
+        assert "todoread" in content
+        assert "todowrite" in content
+        assert "Do not use implementation tools" in content
 
     def test_default_variant(self) -> None:
         content = wlb._build_autonomy_mention_content("@leader", "Ship MVP", "nominal")

@@ -13,9 +13,14 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttemptStatus,
 )
 from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
+    RECOVERY_SUMMARY_AGENT_ERROR_EVENT,
     RECOVERY_SUMMARY_RESTART,
     RECOVERY_SUMMARY_STALE,
     WorkspaceAttemptRecoveryService,
+)
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    WORKSPACE_PLAN_ID,
+    WORKSPACE_PLAN_NODE_ID,
 )
 
 
@@ -65,6 +70,7 @@ def _make_service(
     liveness_lookup: Any = None,
     task_lookup: dict[str, str] | None = None,
     task_status_lookup: dict[str, Any] | None = None,
+    task_metadata_lookup: dict[str, dict[str, object]] | None = None,
     attempt_lookup: dict[str, WorkspaceTaskSessionAttempt] | None = None,
     attempt_saves: list[WorkspaceTaskSessionAttempt] | None = None,
 ) -> tuple[WorkspaceAttemptRecoveryService, AsyncMock, MagicMock]:
@@ -79,6 +85,7 @@ def _make_service(
         if task_status_lookup is not None
         else dict.fromkeys(lookup, WorkspaceTaskStatus.IN_PROGRESS)
     )
+    metadata_lookup = task_metadata_lookup if task_metadata_lookup is not None else {}
     attempts_by_id = (
         attempt_lookup if attempt_lookup is not None else {a.id: a for a in stale_attempts}
     )
@@ -124,6 +131,7 @@ def _make_service(
             task = MagicMock()
             task.created_by = uid
             task.status = status_lookup.get(task_id, WorkspaceTaskStatus.IN_PROGRESS)
+            task.metadata = metadata_lookup.get(task_id, {})
             return task
 
         task_repo.find_by_id = AsyncMock(side_effect=_find_by_id)
@@ -138,6 +146,10 @@ def _make_service(
         stale_seconds=60,
         startup_grace_seconds=5,
         check_interval_seconds=30,
+        max_attempts_per_sweep=3,
+    )
+    service._fetch_error_terminated_attempts = AsyncMock(  # type: ignore[method-assign]
+        return_value=[]
     )
 
     patch_attempt_repo = patch(
@@ -150,6 +162,7 @@ def _make_service(
     )
     service._patches = (patch_attempt_repo, patch_task_repo)  # type: ignore[attr-defined]
     service._saves = saves_sink  # type: ignore[attr-defined]
+    service._repo_instance = repo_instance  # type: ignore[attr-defined]
     return service, apply_report, schedule_tick
 
 
@@ -186,6 +199,23 @@ class TestStartupSweep:
         assert ticked == {("ws-1", "user-1"), ("ws-2", "user-2")}
 
     @pytest.mark.asyncio
+    async def test_workspace_sweep_filters_stale_attempts_to_workspace(self) -> None:
+        att = _make_attempt(attempt_id="att-ws", workspace_id="ws-target")
+        service, _apply_report, _schedule_tick = _make_service(stale_attempts=[att])
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.workspace_sweep("ws-target")
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        repo = service._repo_instance  # type: ignore[attr-defined]
+        assert repo.find_stale_non_terminal.await_args.kwargs["workspace_id"] == "ws-target"
+        assert repo.find_stale_non_terminal.await_args.kwargs["limit"] == 3
+
+    @pytest.mark.asyncio
     async def test_successful_recovery_enqueues_resume_job(self) -> None:
         enqueue_resume = AsyncMock()
         att = _make_attempt(attempt_id="att-resume", workspace_task_id="task-1")
@@ -206,6 +236,39 @@ class TestStartupSweep:
         enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
 
     @pytest.mark.asyncio
+    async def test_plan_linked_attempt_resumes_without_fake_worker_report(self) -> None:
+        enqueue_resume = AsyncMock()
+        saves: list[WorkspaceTaskSessionAttempt] = []
+        att = _make_attempt(attempt_id="att-plan", workspace_task_id="task-1")
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            enqueue_resume=enqueue_resume,
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+            attempt_saves=saves,
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_not_awaited()
+        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
+        schedule_tick.assert_called_once_with("ws-1", "user-1")
+        assert len(saves) == 1
+        assert saves[0].status == WorkspaceTaskSessionAttemptStatus.BLOCKED
+        assert saves[0].adjudication_reason == f"recovery:{RECOVERY_SUMMARY_RESTART}"
+
+    @pytest.mark.asyncio
     async def test_noop_when_no_stale_attempts(self) -> None:
         service, apply_report, schedule_tick = _make_service(stale_attempts=[])
         for p in service._patches:  # type: ignore[attr-defined]
@@ -219,6 +282,32 @@ class TestStartupSweep:
         assert recovered == 0
         apply_report.assert_not_awaited()
         schedule_tick.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_recovers_attempt_with_persisted_agent_error_event(self) -> None:
+        att = _make_attempt(attempt_id="att-error", workspace_task_id="task-1")
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[],
+            task_lookup={"task-1": "user-1"},
+        )
+        service._fetch_error_terminated_attempts = AsyncMock(  # type: ignore[method-assign]
+            return_value=[(att, f"{RECOVERY_SUMMARY_AGENT_ERROR_EVENT}: Executor shutdown")]
+        )
+
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_awaited_once()
+        kwargs = apply_report.await_args.kwargs
+        assert kwargs["attempt_id"] == "att-error"
+        assert kwargs["summary"] == f"{RECOVERY_SUMMARY_AGENT_ERROR_EVENT}: Executor shutdown"
+        schedule_tick.assert_called_once_with("ws-1", "user-1")
 
     @pytest.mark.asyncio
     async def test_skips_attempt_when_parent_task_deleted(self) -> None:
@@ -444,4 +533,22 @@ class TestValidation:
                 apply_report=AsyncMock(),
                 schedule_tick=MagicMock(),
                 check_interval_seconds=0,
+            )
+
+    def test_max_attempts_per_sweep_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            WorkspaceAttemptRecoveryService(
+                session_factory=lambda: _SessionContext(MagicMock()),
+                apply_report=AsyncMock(),
+                schedule_tick=MagicMock(),
+                max_attempts_per_sweep=0,
+            )
+
+    def test_error_event_grace_must_not_be_negative(self) -> None:
+        with pytest.raises(ValueError):
+            WorkspaceAttemptRecoveryService(
+                session_factory=lambda: _SessionContext(MagicMock()),
+                apply_report=AsyncMock(),
+                schedule_tick=MagicMock(),
+                error_event_grace_seconds=-1,
             )

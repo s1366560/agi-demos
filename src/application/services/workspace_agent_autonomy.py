@@ -520,10 +520,15 @@ def _child_has_accepted_completion(task: WorkspaceTask) -> bool:
     if task.status != WorkspaceTaskStatus.DONE:
         return False
     metadata = task.metadata if isinstance(task.metadata, dict) else {}
+    execution_verifications = metadata.get("execution_verifications")
+    has_completed_worker_report = isinstance(execution_verifications, list) and any(
+        str(verification) == "worker_report:completed" for verification in execution_verifications
+    )
     return (
         metadata.get("durable_plan_verdict") == "accepted"
         or metadata.get("last_attempt_status") == "accepted"
         or metadata.get("last_leader_adjudication_status") in {"accepted", "done"}
+        or has_completed_worker_report
     )
 
 

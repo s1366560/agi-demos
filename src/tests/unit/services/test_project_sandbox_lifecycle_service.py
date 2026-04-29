@@ -78,6 +78,7 @@ class TestProjectSandboxLifecycleService:
         adapter.connect_mcp = AsyncMock(return_value=True)
         # Container existence check (for detecting externally killed containers)
         adapter.container_exists = AsyncMock(return_value=True)
+        adapter.get_sandbox_id_by_project = AsyncMock(return_value=None)
         adapter.cleanup_project_containers = AsyncMock(return_value=0)
         return adapter
 
@@ -161,6 +162,102 @@ class TestProjectSandboxLifecycleService:
         assert result.sandbox_id == "sb-abc"
         assert result.status == "running"
         mock_adapter.create_sandbox.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_sandbox_adopts_running_container_without_association(
+        self, service, mock_repository, mock_adapter
+    ) -> None:
+        """Should adopt a running project container before creating a new one."""
+        mock_repository.find_by_project.return_value = None
+        mock_adapter.get_sandbox_id_by_project.return_value = "sb-running"
+
+        mock_instance = MagicMock()
+        mock_instance.id = "sb-running"
+        mock_instance.status = SandboxStatus.RUNNING
+        mock_instance.endpoint = "ws://localhost:8765"
+        mock_adapter.get_sandbox.return_value = mock_instance
+
+        result = await service.get_or_create_sandbox(
+            project_id="proj-456",
+            tenant_id="tenant-789",
+        )
+
+        assert result.sandbox_id == "sb-running"
+        assert result.is_healthy is True
+        mock_adapter.create_sandbox.assert_not_called()
+        mock_adapter.cleanup_project_containers.assert_not_called()
+        saved_association = mock_repository.save.await_args_list[-1].args[0]
+        assert saved_association.project_id == "proj-456"
+        assert saved_association.sandbox_id == "sb-running"
+        assert saved_association.status == ProjectSandboxStatus.RUNNING
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_sandbox_adopts_running_container_from_error_association(
+        self, service, mock_repository, mock_adapter
+    ) -> None:
+        """Should reconcile stale ERROR records to the running project container."""
+        error_association = ProjectSandbox(
+            id="assoc-123",
+            project_id="proj-456",
+            tenant_id="tenant-789",
+            sandbox_id="sb-error",
+            status=ProjectSandboxStatus.ERROR,
+            error_message="old failure",
+            created_at=datetime.now(UTC),
+        )
+        mock_repository.find_by_project.return_value = error_association
+        mock_adapter.get_sandbox_id_by_project.return_value = "sb-running"
+
+        mock_instance = MagicMock()
+        mock_instance.id = "sb-running"
+        mock_instance.status = SandboxStatus.RUNNING
+        mock_adapter.get_sandbox.return_value = mock_instance
+
+        result = await service.get_or_create_sandbox(
+            project_id="proj-456",
+            tenant_id="tenant-789",
+        )
+
+        assert result.sandbox_id == "sb-running"
+        assert error_association.sandbox_id == "sb-running"
+        assert error_association.status == ProjectSandboxStatus.RUNNING
+        assert error_association.error_message is None
+        mock_adapter.create_sandbox.assert_not_called()
+        mock_adapter.cleanup_project_containers.assert_not_called()
+        mock_repository.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_or_create_sandbox_adopts_replacement_when_running_record_is_stale(
+        self, service, mock_repository, mock_adapter
+    ) -> None:
+        """Should not delete a healthy replacement when the DB points to a missing container."""
+        stale_association = ProjectSandbox(
+            id="assoc-123",
+            project_id="proj-456",
+            tenant_id="tenant-789",
+            sandbox_id="sb-missing",
+            status=ProjectSandboxStatus.RUNNING,
+            created_at=datetime.now(UTC),
+        )
+        mock_repository.find_by_project.return_value = stale_association
+        mock_adapter.container_exists.side_effect = [False, True]
+        mock_adapter.get_sandbox_id_by_project.return_value = "sb-replacement"
+
+        mock_instance = MagicMock()
+        mock_instance.id = "sb-replacement"
+        mock_instance.status = SandboxStatus.RUNNING
+        mock_adapter.get_sandbox.return_value = mock_instance
+
+        result = await service.get_or_create_sandbox(
+            project_id="proj-456",
+            tenant_id="tenant-789",
+        )
+
+        assert result.sandbox_id == "sb-replacement"
+        assert stale_association.sandbox_id == "sb-replacement"
+        mock_adapter.create_sandbox.assert_not_called()
+        mock_adapter.cleanup_project_containers.assert_not_called()
+        mock_repository.delete.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_or_create_sandbox_restarts_stopped(
@@ -491,6 +588,7 @@ class TestRecreateSandboxLifecycleFixes:
         )
         adapter.connect_mcp = AsyncMock(return_value=True)
         adapter.container_exists = AsyncMock(return_value=True)
+        adapter.get_sandbox_id_by_project = AsyncMock(return_value=None)
         adapter.cleanup_project_containers = AsyncMock(return_value=0)
         return adapter
 
@@ -606,6 +704,7 @@ class TestWorkspaceRestoreOnCreate:
         adapter.call_tool = AsyncMock(return_value={"content": [], "is_error": False})
         adapter.connect_mcp = AsyncMock(return_value=True)
         adapter.container_exists = AsyncMock(return_value=True)
+        adapter.get_sandbox_id_by_project = AsyncMock(return_value=None)
         adapter.cleanup_project_containers = AsyncMock(return_value=0)
         return adapter
 

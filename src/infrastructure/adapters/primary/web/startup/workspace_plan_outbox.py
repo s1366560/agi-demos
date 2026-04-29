@@ -8,7 +8,6 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from src.domain.events.types import AgentEventType
-from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
@@ -75,8 +74,17 @@ async def initialize_workspace_plan_outbox_worker(
             extra={"event": "workspace_plan_outbox.disabled"},
         )
         return None
-    if _worker is not None:
+    if _worker is not None and _worker.is_running:
         return _worker
+    if _worker is not None:
+        logger.warning(
+            "workspace_plan_outbox.stale_worker_replaced",
+            extra={
+                "event": "workspace_plan_outbox.stale_worker_replaced",
+                "worker_id": _worker.worker_id,
+            },
+        )
+        _worker = None
 
     try:
         _worker = WorkspacePlanOutboxWorker(
@@ -114,6 +122,10 @@ def _make_plan_update_publisher(
     redis_client: object,
 ) -> Callable[[dict[str, Any]], Awaitable[None]]:
     async def _publish(payload: dict[str, Any]) -> None:
+        from src.infrastructure.adapters.primary.web.routers.workspace_events import (
+            publish_workspace_event,
+        )
+
         workspace_id = payload.get("workspace_id")
         if not isinstance(workspace_id, str) or not workspace_id:
             return

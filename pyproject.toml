@@ -47,8 +47,8 @@ dependencies = [
     "aioboto3>=15.5.0",
     # MCP (Model Context Protocol) for tool integration
     "mcp>=1.0.0",
-    # Ray for Actor-based agent runtime
-    "ray>=2.9.0",
+    # Ray for Actor-based agent runtime. Keep Docker actor images and ray-head aligned.
+    "ray==2.53.0",
     "lark-oapi",
     "neo4j>=6.0.3",
     # APScheduler 4.x for distributed scheduled tasks

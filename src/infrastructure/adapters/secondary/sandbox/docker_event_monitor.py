@@ -20,13 +20,13 @@ SANDBOX_LABEL_KEY = "memstack.sandbox"
 PROJECT_LABEL_KEY = "memstack.project_id"
 TENANT_LABEL_KEY = "memstack.tenant_id"
 
-# Docker events we care about
+# Docker events we care about. Docker can emit an "oom" event while the
+# container keeps running and remains healthy; die/stop will follow if it exits.
 CONTAINER_EVENTS = {
     "start": "running",
     "stop": "stopped",
     "die": "stopped",
     "kill": "stopped",
-    "oom": "error",
     "pause": "stopped",
     "unpause": "running",
     "restart": "running",

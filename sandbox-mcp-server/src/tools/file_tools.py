@@ -3,10 +3,13 @@
 Implements read, write, edit, glob, and grep operations.
 """
 
+import asyncio
 import difflib
+import fnmatch
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -74,6 +77,59 @@ _EXTRA_ALLOWED_PATHS: list[Path] = [
 _host_source = os.getenv("MCP_HOST_SOURCE", "")
 if _host_source:
     _EXTRA_ALLOWED_PATHS.append(Path(_host_source))
+
+
+_DEFAULT_SCAN_EXCLUDES = {
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".next",
+    "dist",
+    ".cache",
+    ".venv",
+    "venv",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "build",
+    ".eggs",
+    "*.egg-info",
+    ".gradle",
+    ".m2",
+    "target",
+}
+
+
+def _env_int(name: str, default: int, *, minimum: int = 1, maximum: int = 100_000) -> int:
+    """Read a bounded integer from the environment."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _env_float(name: str, default: float, *, minimum: float = 1.0, maximum: float = 300.0) -> float:
+    """Read a bounded float from the environment."""
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, minimum), maximum)
+
+
+_DEFAULT_SCAN_MAX_FILES = _env_int("MCP_FILE_TOOL_MAX_SCAN_FILES", 5000)
+_DEFAULT_SCAN_TIME_BUDGET_SECONDS = _env_float("MCP_FILE_TOOL_SCAN_TIME_BUDGET_SECONDS", 20.0)
+
+
+@dataclass(frozen=True)
+class _FileScanResult:
+    files: list[Path]
+    files_seen: int
+    skipped_dirs: int
+    truncated: bool
+    elapsed_seconds: float
 
 
 def _expand_user_path(path: str) -> str:
@@ -728,6 +784,9 @@ def create_edit_tool() -> MCPTool:
 async def glob_files(
     pattern: str,
     path: Optional[str] = None,
+    max_results: int = 100,
+    max_files: int = _DEFAULT_SCAN_MAX_FILES,
+    exclude: Optional[list[str]] = None,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -781,16 +840,23 @@ async def glob_files(
                 metadata={"requested_path": path, "pattern": pattern},
             )
 
-        # Use pathlib glob
+        scan = await asyncio.to_thread(
+            _collect_scan_files,
+            base_dir,
+            pattern=normalized_pattern,
+            excludes=_scan_excludes(exclude),
+            max_files=_coerce_scan_limit(max_files, _DEFAULT_SCAN_MAX_FILES),
+            time_budget_seconds=_DEFAULT_SCAN_TIME_BUDGET_SECONDS,
+        )
+
         matches = []
-        for match in base_dir.glob(normalized_pattern):
-            if match.is_file():
-                # Return relative path from workspace
-                try:
-                    rel_path = match.relative_to(workspace)
-                    matches.append(str(rel_path))
-                except ValueError:
-                    matches.append(str(match))
+        for match in scan.files:
+            # Return relative path from workspace
+            try:
+                rel_path = match.relative_to(workspace)
+                matches.append(str(rel_path))
+            except ValueError:
+                matches.append(str(match))
 
         # Sort by modification time (newest first)
         def get_mtime(p):
@@ -801,6 +867,8 @@ async def glob_files(
 
         matches.sort(key=get_mtime, reverse=True)
 
+        max_results = _coerce_scan_limit(max_results, 100, maximum=1000)
+
         if not matches:
             return _success_result(
                 f"No files found matching: {pattern}",
@@ -808,12 +876,18 @@ async def glob_files(
                     "total_matches": 0,
                     "pattern": normalized_pattern,
                     "search_root": str(base_dir.resolve()),
+                    "files_seen": scan.files_seen,
+                    "skipped_dirs": scan.skipped_dirs,
+                    "search_truncated": scan.truncated,
+                    "elapsed_seconds": round(scan.elapsed_seconds, 3),
                 },
             )
 
-        result = "\n".join(matches[:100])  # Limit to 100 files
-        if len(matches) > 100:
-            result += f"\n... and {len(matches) - 100} more files"
+        result = "\n".join(matches[:max_results])
+        if len(matches) > max_results:
+            result += f"\n... and {len(matches) - max_results} more files"
+        if scan.truncated:
+            result += "\n... (search stopped early by scan safety limits)"
 
         return _success_result(
             result,
@@ -821,6 +895,10 @@ async def glob_files(
                 "total_matches": len(matches),
                 "pattern": normalized_pattern,
                 "search_root": str(base_dir.resolve()),
+                "files_seen": scan.files_seen,
+                "skipped_dirs": scan.skipped_dirs,
+                "search_truncated": scan.truncated,
+                "elapsed_seconds": round(scan.elapsed_seconds, 3),
             },
         )
 
@@ -855,6 +933,21 @@ def create_glob_tool() -> MCPTool:
                 "path": {
                     "type": "string",
                     "description": "Base directory to search in (default: workspace root)",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of matching paths to return (default: 100)",
+                    "default": 100,
+                },
+                "max_files": {
+                    "type": "integer",
+                    "description": "Maximum candidate files to scan before stopping (default: 5000)",
+                    "default": _DEFAULT_SCAN_MAX_FILES,
+                },
+                "exclude": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Additional directory/file names or glob patterns to skip",
                 },
             },
             "required": ["pattern"],
@@ -902,6 +995,126 @@ def _format_grep_path(file_path: Path, workspace_dir: str, base_dir: Path) -> st
             return str(resolved_file)
 
 
+def _coerce_scan_limit(value: int | None, default: int, *, maximum: int = 50_000) -> int:
+    """Clamp caller-provided scan limits to a bounded positive range."""
+    if value is None:
+        return default
+    try:
+        return min(max(int(value), 1), maximum)
+    except (TypeError, ValueError):
+        return default
+
+
+def _scan_excludes(extra_excludes: Optional[list[str]] = None) -> set[str]:
+    """Return the default scan excludes plus caller-provided names/patterns."""
+    excludes = set(_DEFAULT_SCAN_EXCLUDES)
+    if extra_excludes:
+        excludes.update(str(item) for item in extra_excludes if str(item).strip())
+    return excludes
+
+
+def _is_scan_excluded(relative_path: Path, excludes: set[str]) -> bool:
+    """Return True when any path segment matches the scan exclude list."""
+    for part in relative_path.parts:
+        for exclude in excludes:
+            if part == exclude or fnmatch.fnmatch(part, exclude):
+                return True
+    return False
+
+
+def _matches_file_pattern(relative_path: Path, pattern: str | None) -> bool:
+    """Match pathlib glob-style patterns without traversing excluded directories."""
+    if not pattern:
+        return True
+
+    normalized = pattern.replace(os.sep, "/")
+    path_text = relative_path.as_posix()
+
+    if "/" not in normalized and "**" not in normalized:
+        return len(relative_path.parts) == 1 and fnmatch.fnmatch(relative_path.name, normalized)
+
+    if fnmatch.fnmatch(path_text, normalized):
+        return True
+
+    if normalized.startswith("**/"):
+        return fnmatch.fnmatch(path_text, normalized[3:])
+
+    return False
+
+
+def _collect_scan_files(
+    base_dir: Path,
+    *,
+    pattern: str | None,
+    excludes: set[str],
+    max_files: int,
+    time_budget_seconds: float,
+) -> _FileScanResult:
+    """Collect candidate files in a bounded synchronous scan."""
+    started_at = time.monotonic()
+    files: list[Path] = []
+    files_seen = 0
+    skipped_dirs = 0
+    truncated = False
+
+    if base_dir.is_file():
+        return _FileScanResult(
+            files=[base_dir] if _matches_file_pattern(Path(base_dir.name), pattern) else [],
+            files_seen=1,
+            skipped_dirs=0,
+            truncated=False,
+            elapsed_seconds=time.monotonic() - started_at,
+        )
+
+    for root, dirnames, filenames in os.walk(base_dir, topdown=True, followlinks=False):
+        elapsed = time.monotonic() - started_at
+        if elapsed > time_budget_seconds:
+            truncated = True
+            break
+
+        current = Path(root)
+        try:
+            relative_root = current.relative_to(base_dir)
+        except ValueError:
+            relative_root = Path(".")
+
+        kept_dirs = []
+        for dirname in dirnames:
+            relative_dir = relative_root / dirname if str(relative_root) != "." else Path(dirname)
+            if _is_scan_excluded(relative_dir, excludes):
+                skipped_dirs += 1
+                continue
+            kept_dirs.append(dirname)
+        dirnames[:] = kept_dirs
+
+        for filename in filenames:
+            relative_file = relative_root / filename if str(relative_root) != "." else Path(filename)
+            if _is_scan_excluded(relative_file, excludes):
+                continue
+
+            files_seen += 1
+            if _matches_file_pattern(relative_file, pattern):
+                files.append(current / filename)
+                if len(files) >= max_files:
+                    truncated = True
+                    break
+
+            if time.monotonic() - started_at > time_budget_seconds:
+                truncated = True
+                break
+
+        if truncated:
+            break
+
+    return _FileScanResult(
+        files=files,
+        files_seen=files_seen,
+        skipped_dirs=skipped_dirs,
+        truncated=truncated,
+        elapsed_seconds=time.monotonic() - started_at,
+    )
+
+
 async def grep_files(
     pattern: str,
     path: Optional[str] = None,
@@ -909,6 +1122,8 @@ async def grep_files(
     case_insensitive: bool = False,
     context_lines: int = 0,
     max_results: int = 100,
+    max_files: int = _DEFAULT_SCAN_MAX_FILES,
+    exclude: Optional[list[str]] = None,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -954,19 +1169,25 @@ async def grep_files(
                 metadata={"pattern": pattern},
             )
 
+        max_results = _coerce_scan_limit(max_results, 100, maximum=1000)
+        max_files = _coerce_scan_limit(max_files, _DEFAULT_SCAN_MAX_FILES)
+
+        scan = await asyncio.to_thread(
+            _collect_scan_files,
+            base_dir,
+            pattern=glob_pattern,
+            excludes=_scan_excludes(exclude),
+            max_files=max_files,
+            time_budget_seconds=_DEFAULT_SCAN_TIME_BUDGET_SECONDS,
+        )
+
         results = []
         files_searched = 0
         matches_found = 0
+        search_truncated = scan.truncated
+        started_at = time.monotonic()
 
-        # Get files to search
-        if base_dir.is_file():
-            files = [base_dir]
-        elif glob_pattern:
-            files = list(base_dir.glob(glob_pattern))
-        else:
-            files = list(base_dir.rglob("*"))
-
-        for file_path in files:
+        for file_path in scan.files:
             if not file_path.is_file():
                 continue
 
@@ -1021,21 +1242,38 @@ async def grep_files(
             if matches_found >= max_results:
                 break
 
+            if time.monotonic() - started_at > _DEFAULT_SCAN_TIME_BUDGET_SECONDS:
+                search_truncated = True
+                break
+
         if not results:
             return _success_result(
                 f"No matches found for: {pattern}",
-                metadata={"files_searched": files_searched, "matches_found": 0},
+                metadata={
+                    "files_searched": files_searched,
+                    "files_seen": scan.files_seen,
+                    "matches_found": 0,
+                    "skipped_dirs": scan.skipped_dirs,
+                    "search_truncated": search_truncated,
+                    "elapsed_seconds": round(scan.elapsed_seconds, 3),
+                },
             )
 
         result_text = "\n".join(results)
         if matches_found >= max_results:
             result_text += f"\n... (truncated, showing first {max_results} matches)"
+        elif search_truncated:
+            result_text += "\n... (search stopped early by scan safety limits)"
 
         return _success_result(
             result_text,
             metadata={
                 "files_searched": files_searched,
+                "files_seen": scan.files_seen,
                 "matches_found": matches_found,
+                "skipped_dirs": scan.skipped_dirs,
+                "search_truncated": search_truncated,
+                "elapsed_seconds": round(scan.elapsed_seconds, 3),
             },
         )
 
@@ -1089,6 +1327,16 @@ def create_grep_tool() -> MCPTool:
                     "type": "integer",
                     "description": "Maximum number of results",
                     "default": 100,
+                },
+                "max_files": {
+                    "type": "integer",
+                    "description": "Maximum candidate files to scan before stopping (default: 5000)",
+                    "default": _DEFAULT_SCAN_MAX_FILES,
+                },
+                "exclude": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Additional directory/file names or glob patterns to skip",
                 },
             },
             "required": ["pattern"],

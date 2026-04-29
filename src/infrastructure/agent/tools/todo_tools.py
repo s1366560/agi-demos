@@ -72,6 +72,22 @@ def _todo_status_to_workspace(status: str | None) -> WorkspaceTaskStatus:
     }[status]
 
 
+def _todo_status_value(todo: dict[str, Any]) -> str | None:
+    raw = todo.get("status")
+    if raw is None:
+        return None
+    normalized = str(raw).strip().lower()
+    return normalized or None
+
+
+def _workspace_todo_requests_cancellation(todo: dict[str, Any]) -> bool:
+    return _todo_status_value(todo) == "cancelled"
+
+
+def _workspace_todo_is_executable_create(todo: dict[str, Any]) -> bool:
+    return _todo_status_value(todo) in {None, "pending", "in_progress"}
+
+
 def _todo_priority_to_workspace(priority: str | None) -> WorkspaceTaskPriority:
     return {
         "high": WorkspaceTaskPriority.P1,
@@ -401,11 +417,98 @@ def _workspace_todo_match_key(todo: dict[str, Any]) -> str | None:
     return None
 
 
-def _workspace_task_match_key(task: WorkspaceTask) -> str:
+def _workspace_task_match_keys(task: WorkspaceTask) -> tuple[str, ...]:
+    keys = [f"id:{task.id}"]
     step_id = task.metadata.get("derived_from_internal_plan_step")
-    if isinstance(step_id, str) and step_id:
-        return f"id:{step_id}"
-    return f"content:{task.title.strip().lower()}"
+    if isinstance(step_id, str) and step_id and step_id != task.id:
+        keys.append(f"id:{step_id}")
+    keys.append(f"content:{task.title.strip().lower()}")
+    return tuple(keys)
+
+
+def _workspace_replace_should_create_fresh_task(
+    match: WorkspaceTask,
+    next_status: WorkspaceTaskStatus | None,
+) -> bool:
+    return match.status == WorkspaceTaskStatus.BLOCKED and next_status == WorkspaceTaskStatus.TODO
+
+
+async def _workspace_start_root_for_reactivated_task(
+    *,
+    command_service: Any,
+    task_repo: Any,
+    workspace_id: str,
+    actor_user_id: str,
+    match: WorkspaceTask,
+) -> None:
+    match_root_goal_task_id = match.metadata.get("root_goal_task_id")
+    if not isinstance(match_root_goal_task_id, str) or not match_root_goal_task_id:
+        return
+    finder = getattr(task_repo, "find_by_id", None)
+    if not callable(finder):
+        return
+    try:
+        root_task_result = finder(match_root_goal_task_id)
+        root_task = (
+            await root_task_result if inspect.isawaitable(root_task_result) else root_task_result
+        )
+    except Exception:
+        root_task = None
+    root_status = getattr(root_task, "status", None)
+    if root_task is None or root_status != WorkspaceTaskStatus.TODO:
+        return
+    await command_service.start_task(
+        workspace_id=workspace_id,
+        task_id=match_root_goal_task_id,
+        actor_user_id=actor_user_id,
+        actor_type="agent",
+        reason="todowrite.workspace_authority.replace.start_root",
+        authority=WorkspaceTaskAuthorityContext.leader(None),
+    )
+
+
+async def _workspace_update_matched_replacement(
+    *,
+    command_service: Any,
+    task_repo: Any,
+    workspace_id: str,
+    actor_user_id: str,
+    match: WorkspaceTask,
+    todo: dict[str, Any],
+    next_status: WorkspaceTaskStatus | None,
+    next_priority: WorkspaceTaskPriority | None,
+) -> WorkspaceTask:
+    title_update = (
+        str(todo.get("content"))
+        if todo.get("content") is not None and str(todo.get("content")) != match.title
+        else None
+    )
+    status_update = next_status if next_status is not None and next_status != match.status else None
+    priority_update = (
+        next_priority if next_priority is not None and next_priority != match.priority else None
+    )
+    if title_update is None and status_update is None and priority_update is None:
+        return match
+
+    if status_update == WorkspaceTaskStatus.IN_PROGRESS:
+        await _workspace_start_root_for_reactivated_task(
+            command_service=command_service,
+            task_repo=task_repo,
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            match=match,
+        )
+    return await command_service.update_task(
+        workspace_id=workspace_id,
+        task_id=match.id,
+        actor_user_id=actor_user_id,
+        title=title_update,
+        status=status_update,
+        priority=priority_update,
+        actor_type="agent",
+        reason="todowrite.workspace_authority.replace",
+        authority=WorkspaceTaskAuthorityContext.leader(None),
+    )
 
 
 async def _workspace_todowrite_replace(
@@ -418,90 +521,105 @@ async def _workspace_todowrite_replace(
     todos: list[dict[str, Any]],
 ) -> tuple[list[WorkspaceTask], list[WorkspaceTask], list[str]]:
     existing_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-    existing_by_key = {_workspace_task_match_key(task): task for task in existing_tasks}
+    existing_by_key = {
+        key: task
+        for task in existing_tasks
+        for key in _workspace_task_match_keys(task)
+    }
     matched_keys: set[str] = set()
     updated_tasks: list[WorkspaceTask] = []
     created_tasks: list[WorkspaceTask] = []
+    deleted_ids: list[str] = []
+    deleted_task_ids: set[str] = set()
 
     for todo in todos:
         key = _workspace_todo_match_key(todo)
         match = existing_by_key.get(key or "")
-        if match is not None:
-            matched_keys.add(key or "")
-            next_status = (
-                _todo_status_to_workspace(todo.get("status"))
-                if todo.get("status") is not None
-                else None
-            )
-            if next_status == WorkspaceTaskStatus.IN_PROGRESS:
-                root_goal_task_id = match.metadata.get("root_goal_task_id")
-                if isinstance(root_goal_task_id, str) and root_goal_task_id:
-                    finder = getattr(task_repo, "find_by_id", None)
-                    if callable(finder):
-                        try:
-                            root_task_result = finder(root_goal_task_id)
-                            root_task = (
-                                await root_task_result
-                                if inspect.isawaitable(root_task_result)
-                                else root_task_result
-                            )
-                        except Exception:
-                            root_task = None
-                        root_status = getattr(root_task, "status", None)
-                        if root_task is not None and root_status == WorkspaceTaskStatus.TODO:
-                            await command_service.start_task(
-                                workspace_id=workspace_id,
-                                task_id=root_goal_task_id,
-                                actor_user_id=actor_user_id,
-                                actor_type="agent",
-                                reason="todowrite.workspace_authority.replace.start_root",
-                                authority=WorkspaceTaskAuthorityContext.leader(None),
-                            )
-            updated_tasks.append(
-                await command_service.update_task(
+        if _workspace_todo_requests_cancellation(todo):
+            if match is not None:
+                matched_keys.update(_workspace_task_match_keys(match))
+                deleted_ids.append(match.id)
+                deleted_task_ids.add(match.id)
+                await command_service.delete_task(
                     workspace_id=workspace_id,
                     task_id=match.id,
                     actor_user_id=actor_user_id,
-                    title=todo.get("content"),
-                    status=next_status,
-                    priority=(
-                        _todo_priority_to_workspace(todo.get("priority"))
-                        if todo.get("priority") is not None
-                        else None
-                    ),
-                    actor_type="agent",
-                    reason="todowrite.workspace_authority.replace",
                     authority=WorkspaceTaskAuthorityContext.leader(None),
                 )
-            )
             continue
+        next_status = (
+            _todo_status_to_workspace(todo.get("status"))
+            if todo.get("status") is not None
+            else None
+        )
+        next_priority = (
+            _todo_priority_to_workspace(todo.get("priority"))
+            if todo.get("priority") is not None
+            else None
+        )
+        if match is not None:
+            if _workspace_replace_should_create_fresh_task(match, next_status):
+                # A replan replaces blocked work with a fresh execution task.
+                # Workspace tasks intentionally do not transition blocked -> todo.
+                match = None
+            else:
+                matched_keys.add(key or "")
+                updated_tasks.append(
+                    await _workspace_update_matched_replacement(
+                        command_service=command_service,
+                        task_repo=task_repo,
+                        workspace_id=workspace_id,
+                        actor_user_id=actor_user_id,
+                        match=match,
+                        todo=todo,
+                        next_status=next_status,
+                        next_priority=next_priority,
+                    )
+                )
+                continue
 
-        created_tasks.append(
-            await command_service.create_task(
+        created = await command_service.create_task(
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            title=str(todo.get("content", "")),
+            metadata={
+                "autonomy_schema_version": 1,
+                "task_role": "execution_task",
+                "root_goal_task_id": root_goal_task_id,
+                "lineage_source": "agent",
+                "derived_from_internal_plan_step": todo.get("id"),
+            },
+            priority=(
+                _todo_priority_to_workspace(todo.get("priority"))
+                if todo.get("priority") is not None
+                else None
+            ),
+            actor_type="agent",
+            reason="todowrite.workspace_authority.replace",
+            authority=WorkspaceTaskAuthorityContext.leader(None),
+        )
+        next_status = (
+            _todo_status_to_workspace(todo.get("status"))
+            if todo.get("status") is not None
+            else None
+        )
+        if next_status is not None and next_status != WorkspaceTaskStatus.TODO:
+            updated = await command_service.update_task(
                 workspace_id=workspace_id,
+                task_id=created.id,
                 actor_user_id=actor_user_id,
-                title=str(todo.get("content", "")),
-                metadata={
-                    "autonomy_schema_version": 1,
-                    "task_role": "execution_task",
-                    "root_goal_task_id": root_goal_task_id,
-                    "lineage_source": "agent",
-                    "derived_from_internal_plan_step": todo.get("id"),
-                },
-                priority=(
-                    _todo_priority_to_workspace(todo.get("priority"))
-                    if todo.get("priority") is not None
-                    else None
-                ),
+                status=next_status,
                 actor_type="agent",
-                reason="todowrite.workspace_authority.replace",
+                reason="todowrite.workspace_authority.replace.created_status",
                 authority=WorkspaceTaskAuthorityContext.leader(None),
             )
-        )
+            created = updated or created
+        created_tasks.append(created)
 
-    deleted_ids: list[str] = []
     for task in existing_tasks:
-        if _workspace_task_match_key(task) in matched_keys:
+        if task.id in deleted_task_ids:
+            continue
+        if any(key in matched_keys for key in _workspace_task_match_keys(task)):
             continue
         deleted_ids.append(task.id)
         await command_service.delete_task(
@@ -526,14 +644,21 @@ async def _workspace_todowrite_add(
     """Create execution tasks under a root goal, de-duplicating by match-key.
 
     Returns (created_tasks, skipped_titles). Duplicates are identified by
-    ``_workspace_task_match_key`` against existing tasks on the root goal.
+    workspace id, internal plan step id, or content against existing tasks on the root goal.
     """
     existing_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-    existing_keys = {_workspace_task_match_key(task) for task in existing_tasks}
+    existing_keys = {
+        key
+        for task in existing_tasks
+        for key in _workspace_task_match_keys(task)
+    }
 
     created_tasks: list[WorkspaceTask] = []
     skipped_titles: list[str] = []
     for todo in todos:
+        if not _workspace_todo_is_executable_create(todo):
+            skipped_titles.append(str(todo.get("content", "")))
+            continue
         key = _workspace_todo_match_key(todo)
         if key is not None and key in existing_keys:
             skipped_titles.append(str(todo.get("content", "")))
@@ -581,6 +706,16 @@ async def _dispatch_created_workspace_tasks(
     """
     if not created_tasks:
         return {"dispatched": False, "dispatch_skipped_reason": "no_created_tasks"}
+    created_tasks = [
+        task
+        for task in created_tasks
+        if task.status in {WorkspaceTaskStatus.TODO, WorkspaceTaskStatus.IN_PROGRESS}
+    ]
+    if not created_tasks:
+        return {
+            "dispatched": False,
+            "dispatch_skipped_reason": "no_dispatchable_created_tasks",
+        }
     if not leader_agent_id:
         logger.warning(
             "todowrite dispatch skipped: selected_agent_id missing from runtime context",
@@ -607,7 +742,38 @@ async def _dispatch_created_workspace_tasks(
         leader_agent_id=leader_agent_id,
         reason=reason,
     )
-    return {"dispatched": True}
+    started_count = 0
+    start_failed_count = 0
+    for task in created_tasks:
+        if task.status != WorkspaceTaskStatus.TODO:
+            continue
+        try:
+            await command_service.start_task(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                actor_user_id=actor_user_id,
+                actor_type="agent",
+                actor_agent_id=leader_agent_id,
+                reason=f"{reason}.start",
+                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
+            )
+            started_count += 1
+        except Exception:
+            start_failed_count += 1
+            logger.warning(
+                "todowrite dispatch could not start created workspace task",
+                exc_info=True,
+                extra={
+                    "workspace_id": workspace_id,
+                    "task_id": task.id,
+                    "reason": reason,
+                },
+            )
+    return {
+        "dispatched": True,
+        "started_count": started_count,
+        "start_failed_count": start_failed_count,
+    }
 
 
 @tool_define(
@@ -745,6 +911,11 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                 workspace_task_repo=task_repo,
             )
             command_service = WorkspaceTaskCommandService(task_service)
+            runtime_ctx = ctx.runtime_context or {}
+            leader_agent_id_raw = runtime_ctx.get("selected_agent_id")
+            leader_agent_id = (
+                leader_agent_id_raw if isinstance(leader_agent_id_raw, str) else None
+            )
             if action in {"replace", "add"}:
                 skipped_titles: list[str] = []
                 if action == "replace":
@@ -771,11 +942,6 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     created_count = len(created_tasks)
                     updated_count = 0
                     deleted_count = 0
-                runtime_ctx = ctx.runtime_context or {}
-                leader_agent_id_raw = runtime_ctx.get("selected_agent_id")
-                leader_agent_id = (
-                    leader_agent_id_raw if isinstance(leader_agent_id_raw, str) else None
-                )
                 dispatch_result = await _dispatch_created_workspace_tasks(
                     session=session,
                     command_service=command_service,
@@ -832,6 +998,10 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     "skipped_titles": skipped_titles,
                     "total_count": len(all_tasks),
                     "dispatched": dispatch_result.get("dispatched", False),
+                    "dispatch_started_count": dispatch_result.get("started_count", 0),
+                    "dispatch_start_failed_count": dispatch_result.get(
+                        "start_failed_count", 0
+                    ),
                     "message": (
                         "Workspace-authoritative "
                         f"{action} reconciled tasks "
@@ -856,7 +1026,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                             (
                                 task
                                 for task in candidates
-                                if _workspace_task_match_key(task) == f"id:{todo_id}"
+                                if f"id:{todo_id}" in _workspace_task_match_keys(task)
                             ),
                             None,
                         )
@@ -869,6 +1039,59 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                         }
                     else:
                         todo_patch = todos_list[0] if todos_list else {}
+                        if todo_patch.get("status") == "cancelled":
+                            deleted = await command_service.delete_task(
+                                workspace_id=workspace_id,
+                                task_id=existing_task.id,
+                                actor_user_id=ctx.user_id,
+                                authority=WorkspaceTaskAuthorityContext.leader(None),
+                            )
+                            await session.commit()
+                            try:
+                                from src.application.services.workspace_task_event_publisher import (
+                                    WorkspaceTaskEventPublisher,
+                                )
+                                from src.infrastructure.agent.state.agent_worker_state import (
+                                    get_redis_client,
+                                )
+
+                                publisher = WorkspaceTaskEventPublisher(
+                                    await get_redis_client()
+                                )
+                                await publisher.publish_pending_events(
+                                    command_service.consume_pending_events()
+                                )
+                            except Exception:
+                                logger.warning(
+                                    "todowrite.workspace_authority cancel publish failed",
+                                    exc_info=True,
+                                )
+                            all_tasks = await task_repo.find_by_root_goal_task_id(
+                                workspace_id,
+                                root_goal_task_id,
+                            )
+                            await ctx.emit(
+                                {
+                                    "type": "task_list_updated",
+                                    "conversation_id": conversation_id,
+                                    "tasks": [
+                                        _workspace_task_to_todo(task) for task in all_tasks
+                                    ],
+                                }
+                            )
+                            result = {
+                                "success": deleted,
+                                "action": "update",
+                                "todo_id": todo_id,
+                                "archived": deleted,
+                                "message": (
+                                    f"Archived workspace task {existing_task.id}"
+                                    if deleted
+                                    else f"Workspace task {todo_id} could not be archived"
+                                ),
+                            }
+                            logger.info("todowrite: %s completed for %s", action, conversation_id)
+                            return ToolResult(output=json.dumps(result, indent=2))
                         next_status = (
                             _todo_status_to_workspace(todo_patch.get("status"))
                             if todo_patch.get("status") is not None
@@ -905,6 +1128,31 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                 )
                             )
                         else:
+                            metadata_update: dict[str, object] | None = None
+                            if (
+                                next_status == WorkspaceTaskStatus.DONE
+                                and existing_task.metadata.get("task_role") == "goal_root"
+                            ):
+                                from src.application.services.workspace_agent_autonomy import (
+                                    synthesize_goal_evidence_from_children,
+                                )
+
+                                child_tasks = [
+                                    task
+                                    for task in await task_repo.find_by_root_goal_task_id(
+                                        workspace_id, existing_task.id
+                                    )
+                                    if getattr(task, "archived_at", None) is None
+                                ]
+                                synthesized = synthesize_goal_evidence_from_children(
+                                    root_task=existing_task,
+                                    child_tasks=child_tasks,
+                                    generated_by_agent_id=leader_agent_id
+                                    or ctx.agent_name
+                                    or ctx.user_id,
+                                )
+                                if synthesized is not None:
+                                    metadata_update = {"goal_evidence": synthesized}
                             if next_status == WorkspaceTaskStatus.IN_PROGRESS:
                                 root_goal_task_id = existing_task.metadata.get("root_goal_task_id")
                                 if isinstance(root_goal_task_id, str) and root_goal_task_id:
@@ -940,6 +1188,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                 actor_user_id=ctx.user_id,
                                 title=todo_patch.get("content"),
                                 status=next_status,
+                                metadata=metadata_update,
                                 priority=next_priority,
                                 actor_type="agent",
                                 reason="todowrite.workspace_authority",

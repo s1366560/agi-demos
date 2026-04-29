@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -21,6 +21,9 @@ from src.domain.model.workspace_plan.state_machine import transition_execution, 
 from src.domain.ports.services.blackboard_port import BlackboardEntry
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
+from src.infrastructure.adapters.primary.web.startup.workspace_plan_outbox import (
+    initialize_workspace_plan_outbox_worker,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -40,10 +43,15 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox
     SqlWorkspacePlanOutboxRepository,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import ROOT_GOAL_TASK_ID, TASK_ROLE
-from src.infrastructure.agent.workspace_plan.outbox_handlers import SUPERVISOR_TICK_EVENT
+from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    HANDOFF_RESUME_EVENT,
+    SUPERVISOR_TICK_EVENT,
+    WORKER_LAUNCH_EVENT,
+)
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["workspace-plans"])
 logger = logging.getLogger(__name__)
+_SNAPSHOT_RECOVERY_STALE_SECONDS = 180
 
 
 class WorkspacePlanActionCapabilityResponse(BaseModel):
@@ -629,6 +637,179 @@ async def _publish_plan_updated_event(
         )
 
 
+async def _ensure_plan_outbox_worker_running(request: Request) -> None:
+    """Idempotently restart the durable plan outbox worker from plan traffic."""
+    state = getattr(getattr(request, "app", None), "state", None)
+    container = getattr(state, "container", None)
+    if container is None:
+        return
+    redis_client = None
+    try:
+        redis_client = container.redis()
+    except Exception:
+        redis_client = None
+    try:
+        await initialize_workspace_plan_outbox_worker(redis_client=redis_client)
+    except Exception:
+        logger.warning(
+            "workspace_plan.outbox_worker_ensure_failed",
+            exc_info=True,
+            extra={"event": "workspace_plan.outbox_worker_ensure_failed"},
+        )
+
+
+def _stale_running_nodes(plan: Plan) -> list[PlanNode]:
+    now = datetime.now(UTC)
+    threshold = timedelta(seconds=_SNAPSHOT_RECOVERY_STALE_SECONDS)
+    stale_nodes: list[PlanNode] = []
+    for node in plan.nodes.values():
+        if node.execution not in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}:
+            continue
+        last_update = node.updated_at or node.created_at
+        if last_update.tzinfo is None:
+            last_update = last_update.replace(tzinfo=UTC)
+        if now - last_update > threshold:
+            stale_nodes.append(node)
+    return stale_nodes
+
+
+async def _has_pending_node_recovery_job(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> bool:
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanOutboxModel.id)
+            .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+            .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+            .where(
+                WorkspacePlanOutboxModel.event_type.in_(
+                    [HANDOFF_RESUME_EVENT, WORKER_LAUNCH_EVENT]
+                )
+            )
+            .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
+            .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _enqueue_stale_plan_node_recovery(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan: Plan,
+    nodes: list[PlanNode],
+    actor_id: str,
+) -> int:
+    root_goal_task_id = plan.goal_node.workspace_task_id or ""
+    enqueued = 0
+    repo = SqlWorkspacePlanOutboxRepository(session)
+    for node in nodes[:1]:
+        if not node.workspace_task_id or not node.assignee_agent_id:
+            continue
+        if await _has_pending_node_recovery_job(
+            session=session,
+            workspace_id=workspace_id,
+            plan_id=plan.id,
+            node_id=node.id,
+        ):
+            continue
+        _ = await repo.enqueue(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            event_type=HANDOFF_RESUME_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "task_id": node.workspace_task_id,
+                "node_id": node.id,
+                "worker_agent_id": node.assignee_agent_id,
+                "actor_user_id": actor_id,
+                "previous_attempt_id": node.current_attempt_id,
+                "root_goal_task_id": root_goal_task_id,
+                "summary": "auto_recovery_stale_plan_node_no_terminal_worker_report",
+                "reason": "retry",
+                "force_schedule": True,
+            },
+            metadata={
+                "source": "workspace_plan.snapshot_stale_node_recovery",
+                "previous_attempt_id": node.current_attempt_id,
+            },
+        )
+        _ = await SqlWorkspacePlanEventRepository(session).append(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            node_id=node.id,
+            attempt_id=node.current_attempt_id,
+            event_type="auto_stale_node_recovery_queued",
+            source="workspace_plan_snapshot",
+            actor_id=actor_id,
+            payload={
+                "reason": "stale_plan_node_without_recoverable_attempt",
+                "execution": node.execution.value,
+            },
+        )
+        enqueued += 1
+    if enqueued:
+        await session.commit()
+        logger.warning(
+            "workspace_plan.snapshot_stale_node_recovery_queued",
+            extra={
+                "event": "workspace_plan.snapshot_stale_node_recovery_queued",
+                "workspace_id": workspace_id,
+                "plan_id": plan.id,
+                "enqueued": enqueued,
+            },
+        )
+    return enqueued
+
+
+async def _recover_stale_attempts_for_snapshot(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan: Plan,
+    actor_id: str,
+) -> bool:
+    """Best-effort targeted recovery for stale plan nodes observed by the UI."""
+
+    stale_nodes = _stale_running_nodes(plan)
+    if not stale_nodes:
+        return False
+    try:
+        from src.infrastructure.adapters.primary.web.startup.attempt_recovery import (
+            recover_workspace_attempts_once,
+        )
+
+        recovered_attempts = await recover_workspace_attempts_once(workspace_id)
+        if recovered_attempts > 0:
+            return True
+        return (
+            await _enqueue_stale_plan_node_recovery(
+                session=session,
+                workspace_id=workspace_id,
+                plan=plan,
+                nodes=stale_nodes,
+                actor_id=actor_id,
+            )
+            > 0
+        )
+    except Exception:
+        logger.warning(
+            "workspace_plan.snapshot_recovery_failed",
+            exc_info=True,
+            extra={
+                "event": "workspace_plan.snapshot_recovery_failed",
+                "workspace_id": workspace_id,
+            },
+        )
+        return False
+
+
 @router.get("", response_model=WorkspacePlanSnapshotResponse)
 async def get_workspace_plan_snapshot(
     workspace_id: str,
@@ -646,9 +827,20 @@ async def get_workspace_plan_snapshot(
             db=db,
             current_user=current_user,
         )
-        plan = await SqlPlanRepository(db).get_by_workspace(workspace_id)
+        await _ensure_plan_outbox_worker_running(request)
+        plan_repo = SqlPlanRepository(db)
+        plan = await plan_repo.get_by_workspace(workspace_id)
         if plan is None:
             return WorkspacePlanSnapshotResponse(workspace_id=workspace_id)
+        if await _recover_stale_attempts_for_snapshot(
+            session=db,
+            workspace_id=workspace_id,
+            plan=plan,
+            actor_id=current_user.id,
+        ):
+            plan = await plan_repo.get_by_workspace(workspace_id)
+            if plan is None:
+                return WorkspacePlanSnapshotResponse(workspace_id=workspace_id)
 
         blackboard_entries = await SqlWorkspacePlanBlackboard(db).list(plan.id)
         result = await db.execute(

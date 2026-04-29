@@ -26,7 +26,9 @@ class TestConcurrentCreationFix:
     @pytest.fixture
     def mock_adapter(self):
         """Create mock adapter."""
-        return MagicMock()
+        adapter = MagicMock()
+        adapter.get_sandbox_id_by_project = AsyncMock(return_value=None)
+        return adapter
 
     @pytest.fixture
     def lifecycle_service(self, mock_repository, mock_adapter):
@@ -159,6 +161,7 @@ class TestConcurrentCreationFix:
         # Simulate container was deleted externally
         mock_adapter = lifecycle_service._adapter
         mock_adapter.container_exists = AsyncMock(return_value=False)
+        mock_adapter.get_sandbox_id_by_project = AsyncMock(return_value=None)
         mock_adapter.terminate_sandbox = AsyncMock()
         mock_adapter.cleanup_project_containers = AsyncMock(return_value=0)
 
@@ -230,7 +233,7 @@ class TestAgentWorkerSandboxConsistency:
 
     These tests verify that:
     1. Agent Worker queries database FIRST for sandbox associations
-    2. Agent Worker NEVER creates sandboxes directly
+    2. Agent Worker only recovers through the lifecycle service for stale DB associations
     3. Agent Worker syncs with Docker to ensure cache consistency
     """
 
@@ -386,6 +389,90 @@ class TestAgentWorkerSandboxConsistency:
                 # Verify MCP was connected to the DB sandbox
                 mock_sandbox_adapter.connect_mcp.assert_called_with("db-sandbox-id")
 
+        finally:
+            worker_state._mcp_sandbox_adapter = original_adapter
+
+    async def test_load_project_sandbox_tools_recovers_stale_db_sandbox(
+        self, mock_sandbox_adapter, monkeypatch
+    ):
+        """Recover through lifecycle service when DB points at a missing sandbox."""
+        from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
+        from src.domain.ports.services.sandbox_resource_port import SandboxInfo
+
+        existing_sandbox = ProjectSandbox(
+            id="assoc-1",
+            project_id="test-proj",
+            tenant_id="test-tenant",
+            sandbox_id="stale-sandbox-id",
+            status=ProjectSandboxStatus.RUNNING,
+        )
+
+        mock_repo = MagicMock()
+        mock_repo.find_by_project = AsyncMock(return_value=existing_sandbox)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock()
+
+        mock_sandbox_adapter.container_exists = AsyncMock(return_value=False)
+        mock_sandbox_adapter.sync_from_docker = AsyncMock()
+        mock_sandbox_adapter._docker.containers.list = MagicMock(return_value=[])
+        mock_sandbox_adapter.list_tools = AsyncMock(return_value=[{"name": "bash"}])
+
+        recovered = SandboxInfo(
+            sandbox_id="recovered-sandbox-id",
+            project_id="test-proj",
+            tenant_id="test-tenant",
+            status="running",
+            endpoint="ws://localhost:8765",
+            created_at=None,
+            last_accessed_at=None,
+        )
+
+        lifecycle = MagicMock()
+        lifecycle.get_or_create_sandbox = AsyncMock(return_value=recovered)
+        lifecycle_cls = MagicMock(return_value=lifecycle)
+
+        def add_recovered_to_cache() -> None:
+            mock_sandbox_adapter._active_sandboxes["recovered-sandbox-id"] = MagicMock()
+
+        mock_sandbox_adapter.sync_from_docker.side_effect = add_recovered_to_cache
+
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
+
+        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+
+        try:
+            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+
+            with monkeypatch.context() as m:
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+                    MagicMock(return_value=mock_session),
+                )
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository.SqlProjectSandboxRepository",
+                    MagicMock(return_value=mock_repo),
+                )
+                m.setattr(
+                    "src.application.services.project_sandbox_lifecycle_service.ProjectSandboxLifecycleService",
+                    lifecycle_cls,
+                )
+
+                from src.infrastructure.agent.state.agent_worker_state import (
+                    _load_project_sandbox_tools,
+                )
+
+                await _load_project_sandbox_tools(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                )
+
+                lifecycle.get_or_create_sandbox.assert_awaited_once_with(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                )
+                mock_sandbox_adapter.connect_mcp.assert_called_with("recovered-sandbox-id")
         finally:
             worker_state._mcp_sandbox_adapter = original_adapter
 
@@ -593,3 +680,20 @@ class TestWebSocketSandboxIntegration:
         assert "except Exception" in source or "except" in source, (
             "Sandbox integration should have error handling"
         )
+
+    def test_websocket_lifecycle_uses_context_container(self):
+        """WebSocket lifecycle helpers should not instantiate a new sandbox adapter."""
+        import inspect
+
+        from src.infrastructure.adapters.primary.web.websocket.handlers.lifecycle_handler import (
+            _ensure_sandbox_exists,
+            _sync_and_repair_sandbox,
+        )
+
+        ensure_source = inspect.getsource(_ensure_sandbox_exists)
+        repair_source = inspect.getsource(_sync_and_repair_sandbox)
+
+        assert "context.get_scoped_container().project_sandbox_lifecycle_service()" in ensure_source
+        assert "context.get_scoped_container().project_sandbox_lifecycle_service()" in repair_source
+        assert "MCPSandboxAdapter()" not in ensure_source
+        assert "MCPSandboxAdapter()" not in repair_source

@@ -1,16 +1,21 @@
 """Unit tests for SessionProcessor delegate/escalate detection."""
 
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentActEvent, AgentStatusEvent
+from src.domain.events.agent_events import AgentActEvent, AgentCompleteEvent, AgentStatusEvent
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     ProcessorResult,
     SessionProcessor,
+)
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_TOOL_MODE_KEY,
+    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
 )
 
 _RE = SessionProcessor._DELEGATE_ESCALATE_RE
@@ -179,7 +184,9 @@ class TestEvaluateNoToolResultDelegation:
 
         mock_config = MagicMock()
         mock_config.max_no_progress_steps = 5
+        mock_config.runtime_context = {}
         proc.config = mock_config
+        proc._saw_task_events = False
 
         return proc
 
@@ -303,6 +310,206 @@ class TestEvaluateNoToolResultDelegation:
         status_events = [e for e in events if isinstance(e, AgentStatusEvent)]
         assert not any("conversational_response" in e.status for e in status_events)
         assert any("goal_pending" in e.status for e in status_events)
+
+    @pytest.mark.asyncio
+    async def test_task_ledger_only_replan_requires_tool_calls_before_text_completion(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval(
+            "Replan complete",
+            goal_should_stop=True,
+        )
+        proc.config.runtime_context = {
+            WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        }
+        proc._is_conversational_response = MagicMock(return_value=True)  # type: ignore[method-assign]
+
+        events: list[Any] = []
+        async for ev in proc._evaluate_no_tool_result("session-1", []):
+            events.append(ev)
+
+        proc._goal_evaluator.evaluate_goal_completion.assert_not_awaited()
+        assert proc._last_process_result == ProcessorResult.CONTINUE
+        assert proc._no_progress_steps == 1
+        assert SessionProcessor._WORKSPACE_REPLAN_TOOL_CALL_HINT in proc._response_instructions
+        assert [e.status for e in events if isinstance(e, AgentStatusEvent)] == [
+            "workspace_replan_requires_todoread_todowrite"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_task_ledger_only_replan_falls_back_to_protocol_recovery(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Replan complete")
+        proc.config.runtime_context = {
+            WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        }
+        proc.config.max_no_progress_steps = 1
+
+        async def _fake_recovery(session_id: str):
+            assert session_id == "session-1"
+            proc._saw_task_events = True
+            yield AgentStatusEvent(status="fake_recovery_done")
+
+        proc._run_workspace_replan_protocol_recovery = _fake_recovery  # type: ignore[method-assign]
+
+        events: list[Any] = []
+        async for ev in proc._evaluate_no_tool_result("session-1", []):
+            events.append(ev)
+
+        assert proc._last_process_result == ProcessorResult.COMPLETE
+        assert proc._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
+        assert [e.status for e in events if isinstance(e, AgentStatusEvent)] == [
+            "workspace_replan_requires_todoread_todowrite",
+            "workspace_replan_protocol_recovery",
+            "fake_recovery_done",
+        ]
+
+    def test_workspace_replan_recovery_retains_completed_tasks_and_replaces_failed(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Replan complete")
+        todoread_payload = {
+            "todos": [
+                {
+                    "id": "done-step",
+                    "content": "Completed implementation",
+                    "status": "completed",
+                    "priority": "high",
+                },
+                {
+                    "id": "blocked-step",
+                    "content": "Blocked verification",
+                    "status": "failed",
+                    "priority": "high",
+                },
+            ]
+        }
+
+        todos, action = proc._build_workspace_replan_recovery_todowrite_args(
+            json.dumps(todoread_payload)
+        )
+
+        assert action == "replace"
+        assert todos[0] == {
+            "id": "done-step",
+            "content": "Completed implementation",
+            "status": "completed",
+            "priority": "high",
+        }
+        assert todos[1]["status"] == "pending"
+        assert "Protocol recovery" in todos[1]["content"]
+
+    def test_workspace_replan_recovery_uses_retry_task_when_recovery_is_blocked(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Replan complete")
+        todoread_payload = {
+            "todos": [
+                {
+                    "id": "recovery-step",
+                    "content": (
+                        "Protocol recovery: reconcile blocked workspace tasks, verify current "
+                        "implementation and architecture docs against the root goal, make only "
+                        "minimal missing fixes, and report build/test evidence."
+                    ),
+                    "status": "failed",
+                    "priority": "high",
+                }
+            ]
+        }
+
+        todos, action = proc._build_workspace_replan_recovery_todowrite_args(
+            json.dumps(todoread_payload)
+        )
+
+        assert action == "replace"
+        assert todos == [
+            {
+                "content": (
+                    "Protocol recovery retry 2: reconcile blocked workspace tasks, "
+                    "verify current implementation and architecture docs against the root goal, "
+                    "make only minimal missing fixes, and report build/test evidence."
+                ),
+                "status": "pending",
+                "priority": "high",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_task_ledger_only_replan_completes_after_workspace_task_event(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Replan dispatched")
+        proc.config.runtime_context = {
+            WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        }
+        proc._saw_task_events = True
+        proc._response_instructions = [SessionProcessor._WORKSPACE_REPLAN_TOOL_CALL_HINT]
+
+        events: list[Any] = []
+        async for ev in proc._evaluate_no_tool_result("session-1", []):
+            events.append(ev)
+
+        proc._goal_evaluator.evaluate_goal_completion.assert_not_awaited()
+        assert events == []
+        assert proc._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
+        assert proc._last_process_result == ProcessorResult.COMPLETE
+        assert SessionProcessor._WORKSPACE_REPLAN_TOOL_CALL_HINT not in proc._response_instructions
+
+    @pytest.mark.asyncio
+    async def test_task_ledger_only_replan_completes_after_todowrite_tool_event(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Replan dispatched")
+        proc.config.runtime_context = {
+            WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        }
+        proc._saw_task_events = True
+
+        result, events = await proc._evaluate_goal_progress(
+            ProcessorResult.CONTINUE,
+            had_tool_calls=True,
+            session_id="session-1",
+            messages=[],
+        )
+
+        assert events == []
+        assert result == ProcessorResult.COMPLETE
+        assert proc._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
+
+    @pytest.mark.asyncio
+    async def test_task_ledger_only_replan_completion_skips_root_task_gate(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Replan dispatched")
+        proc.config.runtime_context = {
+            WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        }
+        proc._saw_task_events = True
+        proc._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+        proc._goal_evaluator.has_task_reader = MagicMock(return_value=True)
+        proc._goal_evaluator.evaluate_task_completion_gate = AsyncMock(
+            side_effect=AssertionError("root gate should be skipped")
+        )
+        proc._goal_evaluator.generate_suggestions = AsyncMock(return_value=[])
+        proc._build_trace_url = MagicMock(return_value=None)  # type: ignore[method-assign]
+        proc._build_execution_summary = AsyncMock(return_value={})  # type: ignore[method-assign]
+
+        events: list[Any] = []
+        async for ev in proc._emit_completion_events(
+            ProcessorResult.COMPLETE,
+            "session-1",
+            [],
+        ):
+            events.append(ev)
+
+        assert any(
+            isinstance(event, AgentStatusEvent)
+            and event.status == "goal_achieved:workspace_replan_dispatched"
+            for event in events
+        )
+        assert any(isinstance(event, AgentCompleteEvent) for event in events)
 
     @pytest.mark.asyncio
     async def test_second_no_progress_turn_injects_tool_reminder(self) -> None:

@@ -70,6 +70,12 @@ from ..doom_loop import DoomLoopDetector
 from ..hitl.coordinator import HITLCoordinator, complete_hitl_request
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
+from ..workspace.runtime_role_contract import (
+    WORKSPACE_TOOL_MODE_KEY,
+    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+    WORKSPACE_TURN_TYPE_KEY,
+    WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+)
 from .artifact_handler import ArtifactHandler, strip_artifact_binary_data
 from .goal_evaluator import GoalEvaluator
 from .hitl_tool_handler import (
@@ -256,6 +262,11 @@ class SessionProcessor:
         "[RECOVERY HINT] Workspace delegation failed because workspace_task_id was missing. "
         "Call todoread, choose the target child task's workspace_task_id, then retry "
         "delegate_to_subagent or parallel_delegate_subagents with that workspace_task_id."
+    )
+    _WORKSPACE_REPLAN_TOOL_CALL_HINT = (
+        "[WORKSPACE REPLAN REQUIRED TOOL CALLS] This is a task-ledger-only leader replan "
+        "turn. You must call todoread, then call todowrite(add or replace) to update the "
+        "workspace task ledger. Text-only summaries do not satisfy this turn."
     )
     _WORKSPACE_TODOREAD_SNAPSHOT_PREFIX = "[WORKSPACE TODOREAD SNAPSHOT]"
     _WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX = "[WORKSPACE DELEGATION RETRY]"
@@ -506,6 +517,21 @@ class SessionProcessor:
             if item != self._WORKSPACE_DELEGATION_RECOVERY_HINT
         ]
 
+    def _queue_workspace_replan_tool_call_hint(self) -> None:
+        """Inject a hard reminder for task-ledger-only leader replan turns."""
+        if self._WORKSPACE_REPLAN_TOOL_CALL_HINT not in self._response_instructions:
+            self._response_instructions.append(self._WORKSPACE_REPLAN_TOOL_CALL_HINT)
+
+    def _clear_workspace_replan_tool_call_hint(self) -> None:
+        """Remove the task-ledger-only replan hint once the turn makes progress."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_REPLAN_TOOL_CALL_HINT
+        ]
+
     def _queue_workspace_todoread_snapshot(self, snapshot: str) -> None:
         """Inject a compact todoread snapshot to guide recovery after delegation guardrail errors."""
         self._clear_workspace_todoread_snapshot()
@@ -543,8 +569,197 @@ class SessionProcessor:
         self._tool_reminder_issued_for_streak = False
         self._clear_tool_usage_reminder()
         self._clear_workspace_delegation_recovery_hint()
+        self._clear_workspace_replan_tool_call_hint()
         self._clear_workspace_todoread_snapshot()
         self._clear_workspace_delegation_retry_action()
+
+    def _is_workspace_task_ledger_only_turn(self) -> bool:
+        """Return whether this processor turn is restricted to workspace task-ledger work."""
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        return (
+            runtime_context.get(WORKSPACE_TURN_TYPE_KEY) == WORKSPACE_TURN_TYPE_LEADER_REPLAN
+            or runtime_context.get(WORKSPACE_TOOL_MODE_KEY) == WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        )
+
+    async def _evaluate_workspace_replan_no_tool_result(
+        self,
+        session_id: str,
+    ) -> list[ProcessorEvent] | None:
+        """Handle no-tool text turns for task-ledger-only leader replans."""
+        if not self._is_workspace_task_ledger_only_turn():
+            return None
+        if self._saw_task_events:
+            self._no_progress_steps = 0
+            self._reset_tool_usage_reminder_streak()
+            self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+            self._last_process_result = ProcessorResult.COMPLETE
+            return []
+
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_workspace_replan_tool_call_hint()
+        events: list[ProcessorEvent] = [
+            AgentStatusEvent(status="workspace_replan_requires_todoread_todowrite")
+        ]
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            events.append(AgentStatusEvent(status="workspace_replan_protocol_recovery"))
+            async for evt in self._run_workspace_replan_protocol_recovery(session_id):
+                events.append(evt)
+            if self._saw_task_events:
+                self._no_progress_steps = 0
+                self._reset_tool_usage_reminder_streak()
+                self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+                self._last_process_result = ProcessorResult.COMPLETE
+                return events
+            events.append(
+                AgentErrorEvent(
+                    message=(
+                        "Workspace leader replan turn did not update the task ledger. "
+                        "Call todoread and then todowrite(add or replace)."
+                    ),
+                    code="GOAL_NOT_ACHIEVED",
+                )
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return events
+        self._last_process_result = ProcessorResult.CONTINUE
+        return events
+
+    async def _run_workspace_replan_protocol_recovery(
+        self,
+        session_id: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Repair a task-ledger-only replan when the model refuses tool calls."""
+        if "todoread" not in self.tools or "todowrite" not in self.tools:
+            return
+
+        async for evt in self._execute_synthetic_tool_call(
+            session_id=session_id,
+            tool_name="todoread",
+            arguments={},
+            call_id_prefix="workspace-replan-read",
+        ):
+            yield evt
+
+        todos, action = self._build_workspace_replan_recovery_todowrite_args(
+            self._last_output_str
+        )
+        async for evt in self._execute_synthetic_tool_call(
+            session_id=session_id,
+            tool_name="todowrite",
+            arguments={"action": action, "todos": todos},
+            call_id_prefix="workspace-replan-write",
+        ):
+            self._record_task_event_if_present(evt)
+            yield evt
+
+    async def _execute_synthetic_tool_call(
+        self,
+        *,
+        session_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        call_id_prefix: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        call_id = f"{call_id_prefix}-{uuid.uuid4().hex[:8]}"
+        tool_part = (
+            self._current_message.add_tool_call(
+                call_id=call_id,
+                tool=tool_name,
+                input=arguments,
+            )
+            if self._current_message is not None
+            else ToolPart(
+                call_id=call_id,
+                tool=tool_name,
+                input=arguments,
+                status=ToolState.RUNNING,
+            )
+        )
+        tool_part.status = ToolState.RUNNING
+        tool_part.start_time = time.time()
+        tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
+        self._pending_tool_calls[call_id] = tool_part
+        yield AgentActEvent(
+            tool_name=tool_name,
+            tool_input=arguments,
+            call_id=call_id,
+            status="running",
+            tool_execution_id=tool_part.tool_execution_id,
+        )
+        async for evt in self._execute_tool(session_id, call_id, tool_name, arguments):
+            yield evt
+
+    def _record_task_event_if_present(self, event: ProcessorEvent) -> None:
+        event_type_raw = (
+            event.get("type") if isinstance(event, dict) else getattr(event, "event_type", None)
+        )
+        event_type = (
+            event_type_raw.value if isinstance(event_type_raw, AgentEventType) else event_type_raw
+        )
+        if event_type in {"task_list_updated", "task_updated"}:
+            self._saw_task_events = True
+
+    def _build_workspace_replan_recovery_todowrite_args(
+        self,
+        todoread_output: str,
+    ) -> tuple[list[dict[str, str]], str]:
+        """Build a conservative recovery task list from a workspace todoread payload."""
+        recovery_task_base = (
+            "Protocol recovery: reconcile blocked workspace tasks, verify current "
+            "implementation and architecture docs against the root goal, make only "
+            "minimal missing fixes, and report build/test evidence."
+        )
+        recovery_task = {
+            "content": recovery_task_base,
+            "status": "pending",
+            "priority": "high",
+        }
+        try:
+            payload = json.loads(todoread_output)
+        except Exception:
+            return [recovery_task], "add"
+        todos_raw = payload.get("todos") if isinstance(payload, dict) else None
+        if not isinstance(todos_raw, list):
+            return [recovery_task], "add"
+
+        retained: list[dict[str, str]] = []
+        blocked_recovery_count = 0
+        for todo in todos_raw:
+            if not isinstance(todo, dict):
+                continue
+            content = todo.get("content")
+            if not isinstance(content, str) or not content.strip():
+                continue
+            status = str(todo.get("status") or "pending")
+            if status != "completed" and content.strip().startswith("Protocol recovery"):
+                blocked_recovery_count += 1
+            if status != "completed":
+                continue
+            item = {
+                "content": content.strip(),
+                "status": "completed",
+                "priority": str(todo.get("priority") or "medium"),
+            }
+            todo_id = todo.get("id")
+            if isinstance(todo_id, str) and todo_id.strip():
+                item["id"] = todo_id.strip()
+            retained.append(item)
+
+        if blocked_recovery_count:
+            retry_index = blocked_recovery_count + 1
+            recovery_task["content"] = (
+                f"Protocol recovery retry {retry_index}: reconcile blocked workspace tasks, "
+                "verify current implementation and architecture docs against the root goal, "
+                "make only minimal missing fixes, and report build/test evidence."
+            )
+
+        return [*retained, recovery_task], "replace"
 
     async def _attempt_workspace_todoread_snapshot(self, session_id: str) -> str | None:
         """Best-effort direct todoread call used only for recovery guidance injection."""
@@ -1187,6 +1402,9 @@ class SessionProcessor:
         if had_tool_calls:
             self._no_progress_steps = 0
             self._reset_tool_usage_reminder_streak()
+            if self._is_workspace_task_ledger_only_turn() and self._saw_task_events:
+                self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
+                result = ProcessorResult.COMPLETE
         else:
             async for evt in self._evaluate_no_tool_result(session_id, messages):
                 events.append(evt)
@@ -1224,6 +1442,12 @@ class SessionProcessor:
 
         Sets self._last_process_result for the caller to read.
         """
+        replan_events = await self._evaluate_workspace_replan_no_tool_result(session_id)
+        if replan_events is not None:
+            for evt in replan_events:
+                yield evt
+            return
+
         goal_check = await self._goal_evaluator.evaluate_goal_completion(session_id, messages)
         if goal_check.achieved:
             self._no_progress_steps = 0
@@ -1336,7 +1560,16 @@ class SessionProcessor:
     ) -> AsyncIterator[ProcessorEvent]:
         """Emit final completion or compact events."""
         if result == ProcessorResult.COMPLETE:
-            if self._saw_task_events and not self._goal_evaluator.has_task_reader():
+            replan_dispatched = (
+                self._is_workspace_task_ledger_only_turn()
+                and self._pending_completion_status
+                == "goal_achieved:workspace_replan_dispatched"
+            )
+            if (
+                self._saw_task_events
+                and not replan_dispatched
+                and not self._goal_evaluator.has_task_reader()
+            ):
                 self._pending_completion_status = None
                 yield AgentStatusEvent(status="goal_pending:tasks")
                 yield AgentErrorEvent(
@@ -1346,17 +1579,18 @@ class SessionProcessor:
                 self._state = ProcessorState.ERROR
                 self._last_process_result = ProcessorResult.STOP
                 return
-            task_gate = await self._goal_evaluator.evaluate_task_completion_gate(session_id)
-            if task_gate is not None and not task_gate.achieved:
-                self._pending_completion_status = None
-                yield AgentStatusEvent(status=f"goal_pending:{task_gate.source}")
-                yield AgentErrorEvent(
-                    message=task_gate.reason or "Goal not achieved",
-                    code="GOAL_NOT_ACHIEVED",
-                )
-                self._state = ProcessorState.ERROR
-                self._last_process_result = ProcessorResult.STOP
-                return
+            if not replan_dispatched:
+                task_gate = await self._goal_evaluator.evaluate_task_completion_gate(session_id)
+                if task_gate is not None and not task_gate.achieved:
+                    self._pending_completion_status = None
+                    yield AgentStatusEvent(status=f"goal_pending:{task_gate.source}")
+                    yield AgentErrorEvent(
+                        message=task_gate.reason or "Goal not achieved",
+                        code="GOAL_NOT_ACHIEVED",
+                    )
+                    self._state = ProcessorState.ERROR
+                    self._last_process_result = ProcessorResult.STOP
+                    return
             if self._pending_completion_status:
                 yield AgentStatusEvent(status=self._pending_completion_status)
                 self._pending_completion_status = None
@@ -2446,10 +2680,11 @@ class SessionProcessor:
             "write": (
                 "The file content is too large to write in a single call. "
                 "RECOVERY OPTIONS: "
-                "(1) Write the file in smaller chunks using multiple write calls with append mode, "
-                "(2) Use the 'edit' tool to add content incrementally, "
-                "(3) Split the content into multiple smaller files. "
-                "Consider reducing the content size to under ~10KB per write call."
+                "(1) Do not retry the same payload, "
+                "(2) Write a short skeleton first, "
+                "(3) Use 'edit' or short append commands to add sections incrementally, "
+                "(4) Split the content into multiple smaller files. "
+                "Keep each write/edit/bash payload under 6000 characters."
             ),
             "edit": (
                 "The edit content is too large. "

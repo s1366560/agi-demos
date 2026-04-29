@@ -1012,6 +1012,30 @@ class MCPSandboxAdapter(SandboxPort):
             logger.warning(f"Failed to stop/remove container {container_name}: {e}")
             return False
 
+    async def _remove_partial_container(self, sandbox_id: str, reason: str) -> None:
+        """Best-effort cleanup for Docker containers left behind by failed starts."""
+        loop = asyncio.get_event_loop()
+        try:
+            container = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.get(sandbox_id),
+            )
+        except NotFound:
+            return
+        except Exception as e:
+            logger.warning("Failed to inspect partial sandbox %s after %s: %s", sandbox_id, reason, e)
+            return
+
+        container_name = container.name or sandbox_id
+        removed = await self._safe_stop_and_remove_container(
+            container,
+            container_name,
+            stop_timeout=1,
+            overall_timeout=10.0,
+        )
+        if removed:
+            logger.info("Removed partial sandbox container %s after %s", container_name, reason)
+
     @override
     async def create_sandbox(  # noqa: PLR0915, C901, PLR0912
         self,
@@ -1231,6 +1255,7 @@ class MCPSandboxAdapter(SandboxPort):
             # Release allocated ports on failure
             async with self._port_allocation_lock:
                 self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
+            await self._remove_partial_container(sandbox_id, "create_sandbox failure")
             logger.error(f"Failed to create MCP sandbox: {e}")
             raise SandboxConnectionError(
                 message=f"Failed to create sandbox: {e}",
@@ -1759,6 +1784,16 @@ class MCPSandboxAdapter(SandboxPort):
             return container.status == "running"
         except NotFound:
             # Container doesn't exist
+            return False
+        except RuntimeError as e:
+            if "Executor shutdown has been called" in str(e):
+                logger.warning(
+                    "Docker container existence check for %s was skipped because the "
+                    "event loop executor is shutting down; preserving sandbox state",
+                    sandbox_id,
+                )
+                return True
+            logger.warning(f"Error checking container existence for {sandbox_id}: {e}")
             return False
         except Exception as e:
             logger.warning(f"Error checking container existence for {sandbox_id}: {e}")
@@ -2873,6 +2908,43 @@ class MCPSandboxAdapter(SandboxPort):
         except Exception:
             logger.debug(f"Old container {sandbox_id} not found, proceeding with rebuild")
 
+    async def _find_running_project_sandbox(
+        self,
+        project_id: str | None,
+        *,
+        exclude_sandbox_id: str | None = None,
+    ) -> str | None:
+        """Find another running sandbox container for the same project."""
+        if not project_id:
+            return None
+
+        loop = asyncio.get_event_loop()
+        try:
+            containers = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(
+                    all=True,
+                    filters={
+                        "label": [
+                            "memstack.sandbox=true",
+                            f"memstack.project_id={project_id}",
+                        ]
+                    },
+                ),
+            )
+        except Exception as e:
+            logger.warning("Failed to inspect project sandboxes for %s: %s", project_id, e)
+            return None
+
+        for container in containers:
+            labels = container.labels or {}
+            sandbox_id = labels.get("memstack.sandbox.id") or container.name
+            if not sandbox_id or sandbox_id == exclude_sandbox_id:
+                continue
+            if container.status == "running":
+                return cast(str, sandbox_id)
+        return None
+
     def _build_rebuild_container_config(
         self,
         sandbox_id: str,
@@ -3012,7 +3084,29 @@ class MCPSandboxAdapter(SandboxPort):
         original_config = old_instance.config or SandboxConfig(image=self._mcp_image)
         original_project_path = old_instance.project_path
         original_labels = old_instance.labels
+        original_project_id = old_instance.project_id
         old_ports = self._get_instance_ports(old_instance)
+
+        replacement_id = await self._find_running_project_sandbox(
+            original_project_id,
+            exclude_sandbox_id=original_sandbox_id,
+        )
+        if replacement_id:
+            logger.warning(
+                "Skipping rebuild for stale sandbox %s because project %s already has "
+                "running sandbox %s",
+                original_sandbox_id,
+                original_project_id,
+                replacement_id,
+            )
+            await self.sync_sandbox_from_docker(replacement_id)
+            await self._remove_partial_container(original_sandbox_id, "stale rebuild skipped")
+            async with self._instance_lock:
+                self._active_sandboxes.pop(original_sandbox_id, None)
+            async with self._port_allocation_lock:
+                self._release_ports_unsafe(old_ports)
+            await self._last_healthy_at.delete(original_sandbox_id)
+            return None
 
         # Release old ports before rebuild
         async with self._port_allocation_lock:
@@ -3076,6 +3170,7 @@ class MCPSandboxAdapter(SandboxPort):
             return new_instance
 
         except Exception as e:
+            await self._remove_partial_container(original_sandbox_id, "rebuild failure")
             logger.error(f"Failed to rebuild sandbox {original_sandbox_id}: {e}")
             return None
 
@@ -3468,7 +3563,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
             return True
 
-        if remove_exited and status in ("exited", "dead"):
+        if remove_exited and status in ("created", "exited", "dead"):
             logger.info(f"Marking exited container for cleanup: {container_name} (status={status})")
             return True
 

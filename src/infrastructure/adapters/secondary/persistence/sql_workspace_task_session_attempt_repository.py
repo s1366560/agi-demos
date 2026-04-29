@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import override
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task_session_attempt import (
@@ -32,6 +32,21 @@ class SqlWorkspaceTaskSessionAttemptRepository(
 
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
+
+    @override
+    async def lock_attempt_creation(self, workspace_task_id: str) -> None:
+        """Serialize per-task attempt creation across concurrent launch paths."""
+        get_bind = getattr(self._session, "get_bind", None)
+        if callable(get_bind):
+            bind = get_bind()
+            dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+            if dialect_name and dialect_name != "postgresql":
+                return
+
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:workspace_task_id, 0))"),
+            {"workspace_task_id": workspace_task_id},
+        )
 
     @override
     async def find_by_workspace_task_id(
@@ -103,6 +118,7 @@ class SqlWorkspaceTaskSessionAttemptRepository(
         *,
         older_than: datetime,
         limit: int = 500,
+        workspace_id: str | None = None,
     ) -> list[WorkspaceTaskSessionAttempt]:
         """Return non-terminal attempts whose last activity is older than ``older_than``.
 
@@ -123,9 +139,10 @@ class SqlWorkspaceTaskSessionAttemptRepository(
             select(WorkspaceTaskSessionAttemptModel)
             .where(WorkspaceTaskSessionAttemptModel.status.in_(non_terminal))
             .where(last_activity < older_than)
-            .order_by(last_activity.asc())
-            .limit(limit)
         )
+        if workspace_id:
+            stmt = stmt.where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+        stmt = stmt.order_by(last_activity.asc()).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )

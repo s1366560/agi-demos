@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import TYPE_CHECKING
 
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -30,6 +31,8 @@ _ENABLED_ENV = "WORKSPACE_ATTEMPT_RECOVERY_ENABLED"
 _STALE_ENV = "WORKSPACE_ATTEMPT_RECOVERY_STALE_SECONDS"
 _INTERVAL_ENV = "WORKSPACE_ATTEMPT_RECOVERY_INTERVAL_SECONDS"
 _GRACE_ENV = "WORKSPACE_ATTEMPT_RECOVERY_STARTUP_GRACE_SECONDS"
+_MAX_ATTEMPTS_ENV = "WORKSPACE_ATTEMPT_RECOVERY_MAX_ATTEMPTS_PER_SWEEP"
+_ERROR_EVENT_GRACE_ENV = "WORKSPACE_ATTEMPT_RECOVERY_ERROR_EVENT_GRACE_SECONDS"
 
 _recovery: WorkspaceAttemptRecoveryService | None = None
 
@@ -118,6 +121,9 @@ async def _enqueue_handoff_resume(
 async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | None:
     global _recovery
 
+    if _recovery is not None and _recovery.is_running:
+        return _recovery
+
     if not _enabled():
         logger.info(
             "workspace_attempt_recovery.disabled",
@@ -131,6 +137,8 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
         )
         from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
             DEFAULT_CHECK_INTERVAL_SECONDS,
+            DEFAULT_ERROR_EVENT_GRACE_SECONDS,
+            DEFAULT_MAX_ATTEMPTS_PER_SWEEP,
             DEFAULT_STALE_SECONDS,
             DEFAULT_STARTUP_GRACE_SECONDS,
             WorkspaceAttemptRecoveryService,
@@ -142,11 +150,31 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             get_workspace_supervisor,
         )
 
+        stale_seconds = _int_env(_STALE_ENV, DEFAULT_STALE_SECONDS)
+        check_interval_seconds = _int_env(_INTERVAL_ENV, DEFAULT_CHECK_INTERVAL_SECONDS)
+        startup_grace_seconds = _int_env(_GRACE_ENV, DEFAULT_STARTUP_GRACE_SECONDS)
+        max_attempts_per_sweep = _int_env(
+            _MAX_ATTEMPTS_ENV, DEFAULT_MAX_ATTEMPTS_PER_SWEEP
+        )
+        error_event_grace_seconds = _int_env(
+            _ERROR_EVENT_GRACE_ENV, DEFAULT_ERROR_EVENT_GRACE_SECONDS
+        )
+
         def _liveness_lookup() -> list[str]:
             supervisor = get_workspace_supervisor()
             if supervisor is None:
                 return []
-            return list(supervisor.get_liveness_snapshot().keys())
+            snapshot = supervisor.get_liveness_snapshot()
+            current_monotonic = time.monotonic()
+            max_live_age = stale_seconds + check_interval_seconds + 5
+            live: list[str] = []
+            for attempt_id, info in snapshot.items():
+                last_seen = info.get("last_seen_monotonic")
+                if not isinstance(last_seen, int | float):
+                    continue
+                if current_monotonic - last_seen <= max_live_age:
+                    live.append(attempt_id)
+            return live
 
         _recovery = WorkspaceAttemptRecoveryService(
             session_factory=async_session_factory,
@@ -154,9 +182,11 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             schedule_tick=schedule_autonomy_tick,
             enqueue_resume=_enqueue_handoff_resume,
             liveness_lookup=_liveness_lookup,
-            stale_seconds=_int_env(_STALE_ENV, DEFAULT_STALE_SECONDS),
-            startup_grace_seconds=_int_env(_GRACE_ENV, DEFAULT_STARTUP_GRACE_SECONDS),
-            check_interval_seconds=_int_env(_INTERVAL_ENV, DEFAULT_CHECK_INTERVAL_SECONDS),
+            stale_seconds=stale_seconds,
+            startup_grace_seconds=startup_grace_seconds,
+            check_interval_seconds=check_interval_seconds,
+            max_attempts_per_sweep=max_attempts_per_sweep,
+            error_event_grace_seconds=error_event_grace_seconds,
         )
         await _recovery.start()
         return _recovery
@@ -167,6 +197,13 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             extra={"event": "workspace_attempt_recovery.start_failed"},
         )
         return None
+
+
+async def recover_workspace_attempts_once(workspace_id: str) -> int:
+    recovery = await initialize_attempt_recovery()
+    if recovery is None:
+        return 0
+    return await recovery.workspace_sweep(workspace_id)
 
 
 async def shutdown_attempt_recovery() -> None:

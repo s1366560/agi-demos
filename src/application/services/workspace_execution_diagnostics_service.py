@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Protocol, cast
 
 from src.domain.model.agent import ToolExecutionRecord
 from src.domain.model.workspace.workspace import Workspace
@@ -16,6 +17,7 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
+from src.domain.model.workspace_plan import Plan, TaskExecution, TaskIntent
 from src.domain.ports.repositories.agent_repository import ToolExecutionRecordRepository
 from src.domain.ports.repositories.workspace.workspace_member_repository import (
     WorkspaceMemberRepository,
@@ -31,6 +33,26 @@ from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repo
 
 def _empty_rows() -> list[dict[str, Any]]:
     return []
+
+
+class WorkspacePlanOutboxDiagnosticsRepository(Protocol):
+    """Read-only projection of workspace plan outbox records for diagnostics."""
+
+    async def list_by_workspace(
+        self,
+        workspace_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[Any]:
+        """Return recent outbox items for one workspace."""
+        ...
+
+
+class WorkspacePlanDiagnosticsRepository(Protocol):
+    """Read-only projection of the active workspace plan for diagnostics."""
+
+    async def get_by_workspace(self, workspace_id: str) -> Plan | None:
+        """Return the active plan for one workspace, if any."""
 
 
 @dataclass(frozen=True)
@@ -66,6 +88,9 @@ class WorkspaceExecutionDiagnostics:
 class WorkspaceExecutionDiagnosticsService:
     """Build structural diagnostics from durable workspace execution records."""
 
+    _PENDING_OUTBOX_GRACE_SECONDS: ClassVar[int] = 30
+    _STALE_PLAN_DISPATCH_GRACE_SECONDS: ClassVar[int] = 90
+    _STALE_PLAN_RUNNING_GRACE_SECONDS: ClassVar[int] = 900
     _BLOCKING_ATTEMPT_STATUSES: ClassVar[set[WorkspaceTaskSessionAttemptStatus]] = {
         WorkspaceTaskSessionAttemptStatus.BLOCKED,
         WorkspaceTaskSessionAttemptStatus.REJECTED,
@@ -85,6 +110,8 @@ class WorkspaceExecutionDiagnosticsService:
         workspace_task_repo: WorkspaceTaskRepository,
         attempt_repo: WorkspaceTaskSessionAttemptRepository,
         tool_execution_record_repo: ToolExecutionRecordRepository,
+        workspace_plan_outbox_repo: WorkspacePlanOutboxDiagnosticsRepository | None = None,
+        workspace_plan_repo: WorkspacePlanDiagnosticsRepository | None = None,
     ) -> None:
         super().__init__()
         self._workspace_repo = workspace_repo
@@ -92,6 +119,8 @@ class WorkspaceExecutionDiagnosticsService:
         self._workspace_task_repo = workspace_task_repo
         self._attempt_repo = attempt_repo
         self._tool_execution_record_repo = tool_execution_record_repo
+        self._workspace_plan_outbox_repo = workspace_plan_outbox_repo
+        self._workspace_plan_repo = workspace_plan_repo
 
     async def get_diagnostics(
         self,
@@ -149,6 +178,8 @@ class WorkspaceExecutionDiagnosticsService:
             if gap is not None:
                 evidence_gaps.append(gap)
 
+        blockers.extend(await self._outbox_blocker_rows(workspace.id))
+        blockers.extend(await self._plan_blocker_rows(workspace.id))
         recent_tool_failures.sort(
             key=lambda item: str(item.get("completed_at") or ""), reverse=True
         )
@@ -317,6 +348,148 @@ class WorkspaceExecutionDiagnosticsService:
             if record.status.value == "failed"
         ]
 
+    async def _plan_blocker_rows(self, workspace_id: str) -> list[dict[str, Any]]:
+        if self._workspace_plan_repo is None:
+            return []
+        plan = await self._workspace_plan_repo.get_by_workspace(workspace_id)
+        if plan is None:
+            return []
+
+        now = datetime.now(UTC)
+        rows: list[dict[str, Any]] = []
+        for node in plan.nodes.values():
+            row = self._plan_node_stale_row(node, now)
+            if row is not None:
+                rows.append({"plan_id": plan.id, "workspace_id": workspace_id, **row})
+        return rows
+
+    def _plan_node_stale_row(
+        self,
+        node: object,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        intent = getattr(node, "intent", None)
+        execution = getattr(node, "execution", None)
+        if intent is not TaskIntent.IN_PROGRESS:
+            return None
+        if execution not in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}:
+            return None
+
+        last_activity = self._as_aware(getattr(node, "updated_at", None)) or self._as_aware(
+            getattr(node, "created_at", None)
+        )
+        if last_activity is None:
+            return None
+
+        age_seconds = (now - last_activity).total_seconds()
+        grace_seconds = (
+            self._STALE_PLAN_DISPATCH_GRACE_SECONDS
+            if execution is TaskExecution.DISPATCHED
+            else self._STALE_PLAN_RUNNING_GRACE_SECONDS
+        )
+        if age_seconds < grace_seconds:
+            return None
+
+        row_type = (
+            "plan_node_stale_dispatch"
+            if execution is TaskExecution.DISPATCHED
+            else "plan_node_stale_running"
+        )
+        return {
+            "type": row_type,
+            "node_id": getattr(node, "id", None),
+            "task_id": getattr(node, "workspace_task_id", None),
+            "title": getattr(node, "title", None),
+            "attempt_id": getattr(node, "current_attempt_id", None),
+            "assignee_agent_id": getattr(node, "assignee_agent_id", None),
+            "intent": intent.value,
+            "execution": execution.value,
+            "age_seconds": int(age_seconds),
+            "last_activity_at": last_activity.isoformat(),
+            "reason": (
+                f"Plan node has been {execution.value} for {int(age_seconds)}s "
+                "without reaching a terminal worker report"
+            ),
+        }
+
+    async def _outbox_blocker_rows(self, workspace_id: str) -> list[dict[str, Any]]:
+        if self._workspace_plan_outbox_repo is None:
+            return []
+        items = await self._workspace_plan_outbox_repo.list_by_workspace(
+            workspace_id,
+            limit=50,
+        )
+        now = datetime.now(UTC)
+        rows: list[dict[str, Any]] = []
+        for item in items:
+            row = self._outbox_blocker_row(item, now)
+            if row is not None:
+                rows.append(row)
+        return rows
+
+    def _outbox_blocker_row(
+        self,
+        item: object,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        status = getattr(item, "status", None)
+        lease_expires_at = self._as_aware(getattr(item, "lease_expires_at", None))
+        if status == "processing":
+            if lease_expires_at is None:
+                reason = "Processing outbox item has no lease expiry"
+            elif lease_expires_at <= now:
+                reason = (
+                    "Processing outbox item lease expired at "
+                    f"{lease_expires_at.isoformat()}"
+                )
+            else:
+                return None
+            row_type = "outbox_stale_processing"
+        elif status == "dead_letter":
+            row_type = "outbox_dead_letter"
+            reason = getattr(item, "last_error", None) or "Outbox item reached dead letter"
+        elif status in {"pending", "failed"}:
+            next_attempt_at = self._as_aware(getattr(item, "next_attempt_at", None))
+            created_at = self._as_aware(getattr(item, "created_at", None))
+            if next_attempt_at is not None and next_attempt_at > now:
+                return None
+            if created_at is None:
+                return None
+            age_seconds = (now - created_at).total_seconds()
+            if age_seconds < self._PENDING_OUTBOX_GRACE_SECONDS:
+                return None
+            row_type = "outbox_not_draining"
+            reason = (
+                f"Outbox item has been due for {int(age_seconds)}s "
+                "without being claimed"
+            )
+        else:
+            return None
+
+        payload = self._mapping(getattr(item, "payload_json", None))
+        metadata = self._mapping(getattr(item, "metadata_json", None))
+        row: dict[str, Any] = {
+            "type": row_type,
+            "outbox_id": getattr(item, "id", None),
+            "plan_id": getattr(item, "plan_id", None),
+            "workspace_id": getattr(item, "workspace_id", None),
+            "event_type": getattr(item, "event_type", None),
+            "status": status,
+            "attempt_count": getattr(item, "attempt_count", None),
+            "max_attempts": getattr(item, "max_attempts", None),
+            "lease_owner": getattr(item, "lease_owner", None),
+            "lease_expires_at": lease_expires_at.isoformat() if lease_expires_at else None,
+            "next_attempt_at": self._datetime_iso(getattr(item, "next_attempt_at", None)),
+            "created_at": self._datetime_iso(getattr(item, "created_at", None)),
+            "last_error": getattr(item, "last_error", None),
+            "reason": reason,
+        }
+        for key in ("node_id", "task_id", "attempt_id", "root_goal_task_id"):
+            value = payload.get(key) or metadata.get(key)
+            if isinstance(value, str) and value:
+                row[key] = value
+        return row
+
     @staticmethod
     def _tool_row(record: ToolExecutionRecord) -> dict[str, Any]:
         return {
@@ -364,6 +537,23 @@ class WorkspaceExecutionDiagnosticsService:
     def _metadata_str(task: WorkspaceTask, key: str) -> str | None:
         value = task.metadata.get(key)
         return value if isinstance(value, str) and value else None
+
+    @staticmethod
+    def _mapping(value: object) -> Mapping[str, Any]:
+        if isinstance(value, Mapping):
+            return cast(Mapping[str, Any], value)
+        return {}
+
+    @staticmethod
+    def _as_aware(value: object) -> datetime | None:
+        if not isinstance(value, datetime):
+            return None
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    @classmethod
+    def _datetime_iso(cls, value: object) -> str | None:
+        aware = cls._as_aware(value)
+        return aware.isoformat() if aware is not None else None
 
     async def _require_workspace_scope(
         self,

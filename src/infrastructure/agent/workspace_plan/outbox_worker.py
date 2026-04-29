@@ -59,9 +59,14 @@ class WorkspacePlanOutboxWorker:
     def worker_id(self) -> str:
         return self._worker_id
 
+    @property
+    def is_running(self) -> bool:
+        """Return whether the background poll task is currently alive."""
+        return self._running and self._task is not None and not self._task.done()
+
     def start(self) -> None:
         """Start the polling loop."""
-        if self._running:
+        if self.is_running:
             return
         self._running = True
         self._task = asyncio.create_task(self._poll_loop(), name=f"{self._worker_id}:poll")
@@ -98,15 +103,25 @@ class WorkspacePlanOutboxWorker:
         return len(claimed_ids)
 
     async def _poll_loop(self) -> None:
-        while self._running:
-            try:
-                _ = await self.run_once()
-                await asyncio.sleep(self._poll_interval_seconds)
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.exception("workspace plan outbox worker poll failed")
-                await asyncio.sleep(self._poll_interval_seconds)
+        try:
+            while self._running:
+                try:
+                    _ = await self.run_once()
+                except asyncio.CancelledError:
+                    if not self._running:
+                        break
+                    logger.warning(
+                        "workspace plan outbox job cancelled; poll loop will continue",
+                        extra={"event": "workspace_plan_outbox.job_cancelled"},
+                    )
+                except Exception:
+                    logger.exception("workspace plan outbox worker poll failed")
+                try:
+                    await asyncio.sleep(self._poll_interval_seconds)
+                except asyncio.CancelledError:
+                    break
+        finally:
+            self._running = False
 
     async def _process_claimed(self, outbox_id: str) -> None:
         try:
@@ -137,6 +152,15 @@ class WorkspacePlanOutboxWorker:
                 await session.commit()
                 if payload is not None:
                     await self._publish_outbox_update(payload)
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception):
+                await asyncio.shield(
+                    self._release_claim_cleanly(
+                        outbox_id,
+                        "workspace plan outbox processing cancelled",
+                    )
+                )
+            raise
         except Exception as exc:
             await self._mark_failed_cleanly(outbox_id, str(exc))
 
@@ -152,6 +176,22 @@ class WorkspacePlanOutboxWorker:
                 await session.commit()
         except Exception:
             logger.exception("failed to mark workspace plan outbox item failed: %s", outbox_id)
+            return
+        if payload is not None:
+            await self._publish_outbox_update(payload)
+
+    async def _release_claim_cleanly(self, outbox_id: str, error_message: str) -> None:
+        payload: dict[str, Any] | None = None
+        try:
+            async with self._session_factory() as session:
+                repo = SqlWorkspacePlanOutboxRepository(session)
+                item = await repo.get_by_id(outbox_id)
+                released = await repo.release_processing(outbox_id, error_message)
+                if released and item is not None:
+                    payload = _outbox_update_payload(item, "outbox_released")
+                await session.commit()
+        except Exception:
+            logger.exception("failed to release workspace plan outbox item: %s", outbox_id)
             return
         if payload is not None:
             await self._publish_outbox_update(payload)

@@ -59,6 +59,7 @@ WORKER_LAUNCH_COOLDOWN_SECONDS = 300
 WORKER_LAUNCH_HEARTBEAT_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45")
 )
+WORKER_MAX_SINGLE_WRITE_CHARS = 6000
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
 _NATIVE_TOOL_PROTOCOL_GUARD = (
@@ -190,12 +191,16 @@ def _build_worker_system_context(
             ],
         },
         "artifact_write_policy": {
-            "max_single_write_chars": 12000,
+            "max_single_write_chars": WORKER_MAX_SINGLE_WRITE_CHARS,
             "instructions": [
                 "Do not write large documents or code files in one oversized tool call.",
                 (
                     "For long generated files, write a small skeleton first, then append "
                     "or edit sections in chunks under max_single_write_chars."
+                ),
+                (
+                    "Do not use a giant heredoc or shell command with generated content "
+                    "larger than max_single_write_chars; split the content first."
                 ),
                 (
                     "If a write/edit tool reports truncated arguments or incomplete JSON, "
@@ -340,6 +345,12 @@ def _build_worker_brief(
     ]
     if description:
         sections.append(f"## Task description\n{description}")
+    sections.append(
+        "## Artifact write discipline\n"
+        f"Keep any single write/edit/bash payload under {WORKER_MAX_SINGLE_WRITE_CHARS} "
+        "characters. For long docs or generated code, write a skeleton first and append "
+        "small sections; do not send one giant heredoc."
+    )
 
     return "\n\n".join(sections)
 
@@ -447,6 +458,46 @@ async def _worker_launch_heartbeat_loop(
         )
 
 
+async def _report_pre_stream_launch_failure(
+    *,
+    workspace_id: str,
+    root_goal_task_id: str,
+    task_id: str,
+    attempt_id: str | None,
+    conversation_id: str | None,
+    actor_user_id: str,
+    worker_agent_id: str,
+    leader_agent_id: str | None,
+    launch_state: str,
+    summary: str,
+    apply_fn: Callable[..., Awaitable[Any]],
+) -> None:
+    """Close a pre-stream worker launch attempt so the harness can retry."""
+
+    if not attempt_id or not root_goal_task_id:
+        return
+    await _report_terminal(
+        workspace_id=workspace_id,
+        root_goal_task_id=root_goal_task_id,
+        task_id=task_id,
+        attempt_id=attempt_id,
+        conversation_id=conversation_id,
+        actor_user_id=actor_user_id,
+        worker_agent_id=worker_agent_id,
+        leader_agent_id=leader_agent_id,
+        report_type="blocked",
+        summary=summary,
+        apply_fn=apply_fn,
+    )
+    await _patch_task_launch_state(
+        workspace_id=workspace_id,
+        task_id=task_id,
+        actor_user_id=actor_user_id,
+        leader_agent_id=leader_agent_id,
+        launch_state=launch_state,
+    )
+
+
 async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     *,
     workspace_id: str,
@@ -478,9 +529,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     Completion detection: the stream is parsed for in-band ``error`` events
     (mirroring :class:`WorkspaceMentionRouter`). On ``error`` the attempt is
     pushed through ``apply_workspace_worker_report`` with ``report_type="blocked"``.
-    A plain stream ``complete`` is not a workspace terminal report; the attempt
-    is left RUNNING and we log ``no_terminal_event`` so the worker must call
-    the explicit workspace reporting tools.
+    A plain stream ``complete`` without an explicit workspace terminal report
+    is converted into a completed candidate report so the verifier can accept
+    or reject it. Leaving the attempt RUNNING would stop launcher-owned
+    heartbeats and eventually produce a misleading watchdog ``blocked`` state.
     """
     if not worker_agent_id:
         return {
@@ -597,6 +649,22 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                         "reason": code_context_evaluation.reason,
                     },
                 )
+                await _report_pre_stream_launch_failure(
+                    workspace_id=workspace_id,
+                    root_goal_task_id=root_goal_task_id,
+                    task_id=task.id,
+                    attempt_id=resolved_attempt_id,
+                    conversation_id=resolved_conversation_id,
+                    actor_user_id=actor_user_id,
+                    worker_agent_id=worker_agent_id,
+                    leader_agent_id=leader_agent_id,
+                    launch_state="code_context_not_ready",
+                    summary=(
+                        "worker_launch.code_context_not_ready: "
+                        f"{code_context_evaluation.reason}"
+                    ),
+                    apply_fn=apply_workspace_worker_report,
+                )
                 return {
                     "launched": False,
                     "conversation_id": None,
@@ -633,6 +701,22 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                         "binding_found": worker_binding is not None,
                     },
                 )
+                await _report_pre_stream_launch_failure(
+                    workspace_id=workspace_id,
+                    root_goal_task_id=root_goal_task_id,
+                    task_id=task.id,
+                    attempt_id=resolved_attempt_id,
+                    conversation_id=resolved_conversation_id,
+                    actor_user_id=actor_user_id,
+                    worker_agent_id=worker_agent_id,
+                    leader_agent_id=leader_agent_id,
+                    launch_state="worker_not_workspace_member",
+                    summary=(
+                        "worker_launch.worker_not_workspace_member: "
+                        f"agent_id={worker_agent_id}"
+                    ),
+                    apply_fn=apply_workspace_worker_report,
+                )
                 return {
                     "launched": False,
                     "conversation_id": None,
@@ -658,6 +742,22 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                         "leader_agent_id": leader_agent_id,
                         "attempt_id": resolved_attempt_id,
                     },
+                )
+                await _report_pre_stream_launch_failure(
+                    workspace_id=workspace_id,
+                    root_goal_task_id=root_goal_task_id,
+                    task_id=task.id,
+                    attempt_id=resolved_attempt_id,
+                    conversation_id=resolved_conversation_id,
+                    actor_user_id=actor_user_id,
+                    worker_agent_id=worker_agent_id,
+                    leader_agent_id=leader_agent_id,
+                    launch_state="worker_is_leader",
+                    summary=(
+                        "worker_launch.worker_is_leader: "
+                        "leader cannot execute its own assigned worker task"
+                    ),
+                    apply_fn=apply_workspace_worker_report,
                 )
                 return {
                     "launched": False,
@@ -798,7 +898,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 )
 
             await db.commit()
-    except Exception:
+    except Exception as exc:
         logger.warning(
             "workspace_worker_launch.setup_failed",
             extra={
@@ -807,6 +907,19 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 "task_id": task.id,
             },
             exc_info=True,
+        )
+        await _report_pre_stream_launch_failure(
+            workspace_id=workspace_id,
+            root_goal_task_id=root_goal_task_id,
+            task_id=task.id,
+            attempt_id=resolved_attempt_id,
+            conversation_id=resolved_conversation_id,
+            actor_user_id=actor_user_id,
+            worker_agent_id=worker_agent_id,
+            leader_agent_id=leader_agent_id,
+            launch_state="setup_failed",
+            summary=f"worker_launch.setup_failed: {exc}",
+            apply_fn=apply_workspace_worker_report,
         )
         return {
             "launched": False,
@@ -926,22 +1039,39 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     # --- Stage 3: terminal report -----------------------------------------
     outcome_reason: str
     if terminal_event == "complete":
-        outcome_reason = "no_terminal_event"
+        summary = _stream_completion_summary(final_content, accumulated_text)
+        reported = await _report_terminal(
+            workspace_id=workspace_id,
+            root_goal_task_id=root_goal_task_id,
+            task_id=task.id,
+            attempt_id=resolved_attempt_id,
+            conversation_id=resolved_conversation_id,
+            actor_user_id=actor_user_id,
+            worker_agent_id=worker_agent_id,
+            leader_agent_id=leader_agent_id,
+            report_type="completed",
+            summary=summary,
+            apply_fn=apply_workspace_worker_report,
+        )
+        outcome_reason = "completed" if reported else "report_failed"
         await _patch_task_launch_state(
             workspace_id=workspace_id,
             task_id=task.id,
             actor_user_id=actor_user_id,
             leader_agent_id=leader_agent_id,
-            launch_state="no_terminal_event",
+            launch_state=(
+                "completed_via_stream" if reported else "terminal_report_failed"
+            ),
         )
-        logger.warning(
-            "workspace_worker_launch.stream_complete_without_terminal_report",
+        logger.info(
+            "workspace_worker_launch.stream_complete_synthesized_report",
             extra={
-                "event": "workspace_worker_launch.stream_complete_without_terminal_report",
+                "event": "workspace_worker_launch.stream_complete_synthesized_report",
                 "workspace_id": workspace_id,
                 "task_id": task.id,
                 "conversation_id": resolved_conversation_id,
                 "attempt_id": resolved_attempt_id,
+                "reported": reported,
             },
         )
     elif terminal_event == "error":
@@ -1089,7 +1219,7 @@ async def _report_terminal(
     report_type: str,
     summary: str,
     apply_fn: Callable[..., Awaitable[Any]],
-) -> None:
+) -> bool:
     """Call ``apply_workspace_worker_report`` with structured error capture.
 
     Failures are swallowed and logged because the launch coroutine is itself
@@ -1109,6 +1239,7 @@ async def _report_terminal(
             summary=summary,
             leader_agent_id=leader_agent_id,
         )
+        return True
     except Exception:
         logger.warning(
             "workspace_worker_launch.report_failed",
@@ -1121,6 +1252,17 @@ async def _report_terminal(
             },
             exc_info=True,
         )
+        return False
+
+
+def _stream_completion_summary(final_content: str, accumulated_text: str) -> str:
+    """Bound unstructured stream completion text for synthesized reports."""
+    summary = (final_content or accumulated_text or "").strip()
+    if not summary:
+        summary = "Worker stream completed without an explicit workspace terminal report."
+    if len(summary) > 2000:
+        return summary[:1997] + "..."
+    return summary
 
 
 def schedule_worker_session(

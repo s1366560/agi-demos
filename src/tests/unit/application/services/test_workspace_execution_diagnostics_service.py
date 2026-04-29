@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,6 +16,15 @@ from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTa
 from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
+)
+from src.domain.model.workspace_plan import (
+    Plan,
+    PlanNode,
+    PlanNodeId,
+    PlanNodeKind,
+    PlanStatus,
+    TaskExecution,
+    TaskIntent,
 )
 from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 
@@ -89,6 +99,47 @@ class _ToolExecutionRepo:
         return self.records_by_conversation.get(conversation_id, [])[:limit]
 
 
+@dataclass
+class _OutboxItem:
+    id: str
+    workspace_id: str
+    event_type: str
+    status: str
+    plan_id: str | None = None
+    payload_json: dict[str, object] = field(default_factory=dict)
+    metadata_json: dict[str, object] = field(default_factory=dict)
+    attempt_count: int = 0
+    max_attempts: int = 5
+    lease_owner: str | None = None
+    lease_expires_at: datetime | None = None
+    next_attempt_at: datetime | None = None
+    created_at: datetime | None = None
+    last_error: str | None = None
+
+
+class _OutboxRepo:
+    def __init__(self, items: list[_OutboxItem]) -> None:
+        self.items = items
+
+    async def list_by_workspace(
+        self,
+        workspace_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[_OutboxItem]:
+        return [item for item in self.items if item.workspace_id == workspace_id][:limit]
+
+
+class _PlanRepo:
+    def __init__(self, plan: Plan | None) -> None:
+        self.plan = plan
+
+    async def get_by_workspace(self, workspace_id: str) -> Plan | None:
+        if self.plan is not None and self.plan.workspace_id == workspace_id:
+            return self.plan
+        return None
+
+
 def _service(
     *,
     workspace: Workspace | None,
@@ -96,6 +147,8 @@ def _service(
     tasks: list[WorkspaceTask],
     attempts_by_task: dict[str, list[WorkspaceTaskSessionAttempt]] | None = None,
     records_by_conversation: dict[str, list[ToolExecutionRecord]] | None = None,
+    outbox_items: list[_OutboxItem] | None = None,
+    plan: Plan | None = None,
 ) -> WorkspaceExecutionDiagnosticsService:
     return WorkspaceExecutionDiagnosticsService(
         workspace_repo=_WorkspaceRepo(workspace),
@@ -103,6 +156,10 @@ def _service(
         workspace_task_repo=_TaskRepo(tasks),
         attempt_repo=_AttemptRepo(attempts_by_task or {}),
         tool_execution_record_repo=_ToolExecutionRepo(records_by_conversation or {}),
+        workspace_plan_outbox_repo=(
+            _OutboxRepo(outbox_items) if outbox_items is not None else None
+        ),
+        workspace_plan_repo=_PlanRepo(plan) if plan is not None else None,
     )
 
 
@@ -190,6 +247,40 @@ def _tool_record(
         completed_at=completed_at,
         duration_ms=20,
     )
+
+
+def _plan_with_stale_dispatch(*, age_seconds: int = 180) -> Plan:
+    plan = Plan(
+        id="plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("goal-1"),
+        status=PlanStatus.ACTIVE,
+    )
+    goal = PlanNode(
+        id="goal-1",
+        plan_id="plan-1",
+        parent_id=None,
+        kind=PlanNodeKind.GOAL,
+        title="Root goal",
+        intent=TaskIntent.IN_PROGRESS,
+    )
+    plan.add_node(goal)
+    plan.add_node(
+        PlanNode(
+            id="node-stale",
+            plan_id="plan-1",
+            parent_id=goal.node_id,
+            kind=PlanNodeKind.TASK,
+            title="Stale dispatched node",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.DISPATCHED,
+            assignee_agent_id="agent-1",
+            current_attempt_id="attempt-1",
+            workspace_task_id="task-stale",
+            updated_at=datetime.now(UTC) - timedelta(seconds=age_seconds),
+        )
+    )
+    return plan
 
 
 @pytest.mark.unit
@@ -348,3 +439,119 @@ async def test_done_task_latest_blocked_attempt_is_not_reported_as_blocker() -> 
     )
 
     assert diagnostics.blockers == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_diagnostics_reports_outbox_blockers() -> None:
+    expired_at = datetime.now(UTC) - timedelta(seconds=5)
+    retry_at = datetime.now(UTC) + timedelta(minutes=2)
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[],
+        outbox_items=[
+            _OutboxItem(
+                id="outbox-stale",
+                workspace_id="workspace-1",
+                plan_id="plan-1",
+                event_type="worker_launch",
+                status="processing",
+                payload_json={"node_id": "node-1", "attempt_id": "attempt-1"},
+                attempt_count=2,
+                max_attempts=5,
+                lease_owner="worker-a",
+                lease_expires_at=expired_at,
+            ),
+            _OutboxItem(
+                id="outbox-dead",
+                workspace_id="workspace-1",
+                plan_id="plan-1",
+                event_type="supervisor_tick",
+                status="dead_letter",
+                payload_json={"node_id": "node-2"},
+                attempt_count=5,
+                max_attempts=5,
+                next_attempt_at=retry_at,
+                last_error="handler failed",
+            ),
+            _OutboxItem(
+                id="outbox-active",
+                workspace_id="workspace-1",
+                event_type="worker_launch",
+                status="processing",
+                lease_expires_at=datetime.now(UTC) + timedelta(seconds=30),
+            ),
+            _OutboxItem(
+                id="outbox-pending",
+                workspace_id="workspace-1",
+                event_type="supervisor_tick",
+                status="pending",
+                created_at=datetime.now(UTC) - timedelta(seconds=45),
+            ),
+        ],
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    outbox_blockers = [
+        blocker
+        for blocker in diagnostics.blockers
+        if str(blocker.get("type")).startswith("outbox_")
+    ]
+    assert [blocker["type"] for blocker in outbox_blockers] == [
+        "outbox_stale_processing",
+        "outbox_dead_letter",
+        "outbox_not_draining",
+    ]
+    assert outbox_blockers[0]["outbox_id"] == "outbox-stale"
+    assert outbox_blockers[0]["node_id"] == "node-1"
+    assert outbox_blockers[0]["attempt_id"] == "attempt-1"
+    assert outbox_blockers[0]["lease_expires_at"] == expired_at.isoformat()
+    assert outbox_blockers[1]["outbox_id"] == "outbox-dead"
+    assert outbox_blockers[1]["last_error"] == "handler failed"
+    assert outbox_blockers[2]["outbox_id"] == "outbox-pending"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_diagnostics_reports_stale_dispatched_plan_node() -> None:
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[],
+        plan=_plan_with_stale_dispatch(age_seconds=180),
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    plan_blockers = [
+        blocker
+        for blocker in diagnostics.blockers
+        if blocker.get("type") == "plan_node_stale_dispatch"
+    ]
+    assert plan_blockers == [
+        {
+            "plan_id": "plan-1",
+            "workspace_id": "workspace-1",
+            "type": "plan_node_stale_dispatch",
+            "node_id": "node-stale",
+            "task_id": "task-stale",
+            "title": "Stale dispatched node",
+            "attempt_id": "attempt-1",
+            "assignee_agent_id": "agent-1",
+            "intent": "in_progress",
+            "execution": "dispatched",
+            "age_seconds": plan_blockers[0]["age_seconds"],
+            "last_activity_at": plan_blockers[0]["last_activity_at"],
+            "reason": plan_blockers[0]["reason"],
+        }
+    ]
+    assert plan_blockers[0]["age_seconds"] >= 170

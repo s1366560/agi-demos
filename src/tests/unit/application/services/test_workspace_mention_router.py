@@ -11,11 +11,21 @@ import pytest
 
 from src.application.services.workspace_mention_router import (
     WorkspaceMentionRouter,
+    _resolve_workspace_authority_context,
 )
 from src.domain.model.workspace.workspace_message import (
     MessageSenderType,
     WorkspaceMessage,
 )
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_LEADER,
+    WORKSPACE_SESSION_ROLE_KEY,
+    WORKSPACE_TOOL_MODE_KEY,
+    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
+    WORKSPACE_TURN_TYPE_KEY,
+    WORKSPACE_TURN_TYPE_LEADER_REPLAN,
+)
+from src.infrastructure.agent.workspace.workspace_metadata_keys import REMEDIATION_STATUS, TASK_ROLE
 
 
 def _make_agent(agent_id: str, display_name: str = "TestAgent") -> MagicMock:
@@ -366,6 +376,148 @@ class TestMultipleAgentMentions:
             )
 
         assert captured["app_model_context"] == {
+            "workspace_id": "ws-1",
+            "root_goal_task_id": "root-1",
+            "task_authority": "workspace",
+        }
+
+    @patch(
+        "src.configuration.factories.create_llm_client",
+        new_callable=AsyncMock,
+    )
+    async def test_trigger_agent_marks_replan_turn_as_task_ledger_only(
+        self, mock_create_llm: AsyncMock
+    ) -> None:
+        mock_create_llm.return_value = MagicMock()
+        agent = _make_agent("agent-1", "Leader Agent")
+        router, mocks = _build_router(agents=[agent], existing_conversation=MagicMock())
+        captured: dict[str, Any] = {}
+
+        async def _capturing_stream(**kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            captured.update(kwargs)
+            yield {"type": "complete", "data": {"content": "Agent response"}}
+
+        mocks["agent_service"].stream_chat_v2 = _capturing_stream
+        msg = _make_message(
+            mentions=["agent-1"],
+            content='@"Leader Agent" replan blocked work',
+        )
+        msg.metadata["autonomy_trigger"] = {REMEDIATION_STATUS: "replan_required"}
+
+        with patch(
+            "src.application.services.workspace_mention_router._resolve_workspace_authority_context",
+            new=AsyncMock(
+                return_value={
+                    "context_type": "workspace_worker_runtime",
+                    "workspace_binding": {
+                        "workspace_id": "ws-1",
+                        "root_goal_task_id": "root-1",
+                    },
+                    "workspace_id": "ws-1",
+                    "root_goal_task_id": "root-1",
+                    "task_authority": "workspace",
+                }
+            ),
+        ):
+            await router.route_mentions(
+                workspace_id="ws-1",
+                message=msg,
+                tenant_id="t-1",
+                project_id="p-1",
+                user_id="user-1",
+            )
+
+        assert captured["app_model_context"][WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_LEADER
+        assert captured["app_model_context"][WORKSPACE_TURN_TYPE_KEY] == (
+            WORKSPACE_TURN_TYPE_LEADER_REPLAN
+        )
+        assert captured["app_model_context"][WORKSPACE_TOOL_MODE_KEY] == (
+            WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        )
+
+    @patch(
+        "src.configuration.factories.create_llm_client",
+        new_callable=AsyncMock,
+    )
+    async def test_trigger_agent_marks_ready_completion_turn_as_task_ledger_only(
+        self, mock_create_llm: AsyncMock
+    ) -> None:
+        mock_create_llm.return_value = MagicMock()
+        agent = _make_agent("agent-1", "Leader Agent")
+        router, mocks = _build_router(agents=[agent], existing_conversation=MagicMock())
+        captured: dict[str, Any] = {}
+
+        async def _capturing_stream(**kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            captured.update(kwargs)
+            yield {"type": "complete", "data": {"content": "Agent response"}}
+
+        mocks["agent_service"].stream_chat_v2 = _capturing_stream
+        msg = _make_message(
+            mentions=["agent-1"],
+            content='@"Leader Agent" close completed goal',
+        )
+        msg.metadata["autonomy_trigger"] = {REMEDIATION_STATUS: "ready_for_completion"}
+
+        with patch(
+            "src.application.services.workspace_mention_router._resolve_workspace_authority_context",
+            new=AsyncMock(
+                return_value={
+                    "context_type": "workspace_worker_runtime",
+                    "workspace_binding": {
+                        "workspace_id": "ws-1",
+                        "root_goal_task_id": "root-1",
+                    },
+                    "workspace_id": "ws-1",
+                    "root_goal_task_id": "root-1",
+                    "task_authority": "workspace",
+                }
+            ),
+        ):
+            await router.route_mentions(
+                workspace_id="ws-1",
+                message=msg,
+                tenant_id="t-1",
+                project_id="p-1",
+                user_id="user-1",
+            )
+
+        assert captured["app_model_context"][WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_LEADER
+        assert captured["app_model_context"][WORKSPACE_TURN_TYPE_KEY] == (
+            WORKSPACE_TURN_TYPE_LEADER_REPLAN
+        )
+        assert captured["app_model_context"][WORKSPACE_TOOL_MODE_KEY] == (
+            WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
+        )
+
+
+@pytest.mark.unit
+class TestWorkspaceAuthorityContextResolution:
+    async def test_falls_back_to_single_active_root_when_scope_missing(self) -> None:
+        session_factory, _mock_db = _mock_db_session_factory()
+        root_task = MagicMock()
+        root_task.id = "root-1"
+        root_task.metadata = {TASK_ROLE: "goal_root"}
+        root_task.archived_at = None
+        root_task.status = "in_progress"
+        repo = MagicMock()
+        repo.find_by_workspace = AsyncMock(return_value=[root_task])
+
+        with patch(
+            "src.application.services.workspace_mention_router.SqlWorkspaceTaskRepository",
+            return_value=repo,
+        ):
+            context = await _resolve_workspace_authority_context(
+                session_factory,
+                workspace_id="ws-1",
+                conversation_scope=None,
+            )
+
+        assert context == {
+            "context_type": "workspace_worker_runtime",
+            "workspace_binding": {
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
             "workspace_id": "ws-1",
             "root_goal_task_id": "root-1",
             "task_authority": "workspace",

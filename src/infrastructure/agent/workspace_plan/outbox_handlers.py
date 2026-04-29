@@ -5,14 +5,15 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import shlex
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_agent_autonomy import AUTONOMY_SCHEMA_VERSION
@@ -51,6 +52,7 @@ from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
+    WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
     SqlAgentRegistryRepository,
@@ -104,6 +106,20 @@ WORKER_LAUNCH_EVENT = "worker_launch"
 HANDOFF_RESUME_EVENT = "handoff_resume"
 ATTEMPT_RETRY_EVENT = "attempt_retry"
 logger = logging.getLogger(__name__)
+_WORKER_LAUNCH_MAX_ACTIVE_ENV = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE"
+_WORKER_LAUNCH_DEFER_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS"
+_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES"
+_DEFAULT_WORKER_LAUNCH_MAX_ACTIVE = 4
+_DEFAULT_WORKER_LAUNCH_DEFER_SECONDS = 20
+_DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES = 3
+_TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
+    {
+        "accepted",
+        "rejected",
+        "blocked",
+        "cancelled",
+    }
+)
 
 WorktreePreparer = Callable[[AsyncSession, str, WorkspaceTask, str | None], Awaitable[str | None]]
 
@@ -120,6 +136,7 @@ _AUTO_TEAM_TOOL_NAMES = [
     "workspace_report_progress",
     "workspace_report_complete",
 ]
+_AUTO_TEAM_MAX_ITERATIONS = 80
 _AUTO_TEAM_ROLES = (
     {
         "key": "architect",
@@ -190,6 +207,12 @@ def make_supervisor_tick_handler(
         workspace_id = str(item.payload_json.get("workspace_id") or item.workspace_id)
         payload = dict(item.payload_json or {})
         leader_agent_id = _payload_string(payload, "leader_agent_id") or BUILTIN_SISYPHUS_ID
+        if item.plan_id:
+            await _reconcile_plan_nodes_with_terminal_attempts(
+                session=session,
+                plan_id=item.plan_id,
+                workspace_id=workspace_id,
+            )
         resolved_agent_pool = agent_pool
         if resolved_agent_pool is None:
             await _ensure_leader_execution_team(
@@ -214,6 +237,123 @@ def make_supervisor_tick_handler(
             raise RuntimeError("; ".join(report.errors))
 
     return _handle
+
+
+async def _reconcile_plan_nodes_with_terminal_attempts(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> None:
+    """Release V2 plan nodes that still point at terminal or missing attempts."""
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return
+
+    now = datetime.now(UTC)
+    changed = False
+    for node in list(plan.nodes.values()):
+        recoverable_execution = node.execution in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.REPORTED,
+            TaskExecution.VERIFYING,
+        }
+        recoverable_blocked = (
+            node.intent is TaskIntent.BLOCKED
+            and node.execution is TaskExecution.IDLE
+            and bool(node.current_attempt_id)
+        )
+        if not (recoverable_execution or recoverable_blocked):
+            continue
+        if not node.current_attempt_id:
+            continue
+        attempt = await _load_plan_attempt(session, node.current_attempt_id)
+        if attempt is None:
+            plan.replace_node(
+                _plan_node_released_for_retry(
+                    node,
+                    reason="missing_attempt",
+                    now=now,
+                )
+            )
+            changed = True
+            continue
+        status = str(attempt.status or "")
+        if status == "accepted":
+            plan.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.DONE,
+                    execution=TaskExecution.IDLE,
+                    metadata={
+                        **dict(node.metadata or {}),
+                        "terminal_attempt_status": status,
+                        "terminal_attempt_reconciled_at": now.isoformat().replace(
+                            "+00:00", "Z"
+                        ),
+                    },
+                    updated_at=now,
+                )
+            )
+            changed = True
+            continue
+        if status in _TERMINAL_ATTEMPT_STATUS_VALUES:
+            plan.replace_node(
+                _plan_node_released_for_retry(
+                    node,
+                    reason=f"terminal_attempt_{status}",
+                    now=now,
+                )
+            )
+            changed = True
+
+    if changed:
+        await repo.save(plan)
+
+
+async def _load_plan_attempt(
+    session: AsyncSession,
+    attempt_id: str,
+) -> WorkspaceTaskSessionAttemptModel | None:
+    return await session.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+
+
+def _plan_node_released_for_retry(
+    node: PlanNode,
+    *,
+    reason: str,
+    now: datetime,
+) -> PlanNode:
+    metadata = dict(node.metadata or {})
+    retry_count = int(metadata.get("terminal_attempt_retry_count") or 0) + 1
+    metadata.update(
+        {
+            "terminal_attempt_retry_count": retry_count,
+            "terminal_attempt_retry_reason": reason,
+            "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
+        }
+    )
+    if retry_count > _plan_terminal_attempt_max_retries():
+        return replace(
+            node,
+            intent=TaskIntent.BLOCKED,
+            execution=TaskExecution.IDLE,
+            current_attempt_id=None,
+            metadata=metadata,
+            updated_at=now,
+        )
+    metadata.pop("retry_not_before", None)
+    return replace(
+        node,
+        intent=TaskIntent.TODO,
+        execution=TaskExecution.IDLE,
+        current_attempt_id=None,
+        metadata=metadata,
+        updated_at=now,
+    )
 
 
 def _make_sql_agent_pool(
@@ -308,6 +448,11 @@ async def _ensure_leader_execution_team(
     binding_repo = SqlWorkspaceAgentRepository(session)
     bindings = await binding_repo.find_by_workspace(workspace_id, active_only=True, limit=500)
     if any(_is_execution_worker_binding(binding, leader_agent_id) for binding in bindings):
+        await _upgrade_existing_auto_team_agents(
+            session=session,
+            workspace_id=workspace_id,
+            workspace=workspace,
+        )
         return
 
     registry = SqlAgentRegistryRepository(session)
@@ -331,7 +476,7 @@ async def _ensure_leader_execution_team(
                 allowed_tools=list(_AUTO_TEAM_AGENT_TOOLS),
                 allowed_skills=[],
                 allowed_mcp_servers=[],
-                max_iterations=30,
+                max_iterations=_AUTO_TEAM_MAX_ITERATIONS,
                 agent_to_agent_enabled=True,
                 agent_to_agent_allowlist=[leader_agent_id],
                 discoverable=True,
@@ -377,6 +522,16 @@ async def _ensure_leader_execution_team(
                 )
             )
         else:
+            if _should_upgrade_auto_team_agent(agent, workspace_id):
+                agent.max_iterations = max(agent.max_iterations, _AUTO_TEAM_MAX_ITERATIONS)
+                agent.metadata = {
+                    **dict(agent.metadata or {}),
+                    "created_by": "leader_team_setup",
+                    "workspace_id": workspace_id,
+                    "max_iterations_explicit": True,
+                }
+                agent.updated_at = datetime.now(UTC)
+                await registry.update(agent)
             existing_binding.is_active = True
             existing_binding.status = "idle"
             existing_binding.config = {
@@ -385,6 +540,45 @@ async def _ensure_leader_execution_team(
             }
             existing_binding.updated_at = datetime.now(UTC)
             await binding_repo.save(existing_binding)
+
+
+async def _upgrade_existing_auto_team_agents(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    workspace: object,
+) -> None:
+    tenant_id = getattr(workspace, "tenant_id", None)
+    if not isinstance(tenant_id, str) or not tenant_id:
+        return
+    registry = SqlAgentRegistryRepository(session)
+    for role in _AUTO_TEAM_ROLES:
+        agent = await registry.get_by_name(
+            tenant_id,
+            _team_agent_name(workspace_id, str(role["key"])),
+        )
+        if agent is None:
+            continue
+        if not _should_upgrade_auto_team_agent(agent, workspace_id):
+            continue
+        agent.max_iterations = max(agent.max_iterations, _AUTO_TEAM_MAX_ITERATIONS)
+        agent.metadata = {
+            **dict(agent.metadata or {}),
+            "created_by": "leader_team_setup",
+            "workspace_id": workspace_id,
+            "max_iterations_explicit": True,
+        }
+        agent.updated_at = datetime.now(UTC)
+        await registry.update(agent)
+
+
+def _should_upgrade_auto_team_agent(agent: Agent, workspace_id: str) -> bool:
+    metadata = dict(agent.metadata or {})
+    if metadata.get("created_by") != "leader_team_setup":
+        return False
+    if metadata.get("workspace_id") != workspace_id:
+        return False
+    return int(agent.max_iterations or 0) < _AUTO_TEAM_MAX_ITERATIONS
 
 
 def _is_execution_worker_binding(binding: WorkspaceAgent, leader_agent_id: str) -> bool:
@@ -588,6 +782,19 @@ def make_worker_launch_handler(
         if not resolved_worker_agent_id:
             raise ValueError(f"workspace task {task_id} has no worker agent")
 
+        if await _should_defer_worker_launch(
+            session=session,
+            workspace_id=workspace_id,
+            attempt_id=attempt_id,
+        ):
+            await _defer_worker_launch(
+                session=session,
+                item=item,
+                payload=payload,
+                active_count=await _active_worker_conversation_count(session, workspace_id),
+            )
+            return
+
         setup_note = await _worker_launch_worktree_note(
             worktree_preparer or _prepare_attempt_worktree_if_available,
             session=session,
@@ -610,8 +817,152 @@ def make_worker_launch_handler(
             attempt_id=attempt_id,
             extra_instructions=extra_instructions,
         )
+        await _mark_plan_node_running_after_launch_schedule(
+            session=session,
+            plan_id=item.plan_id,
+            node_id=_payload_string(payload, "node_id"),
+            attempt_id=attempt_id,
+        )
 
     return _handle
+
+
+async def _should_defer_worker_launch(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    attempt_id: str | None,
+) -> bool:
+    max_active = _worker_launch_max_active()
+    if max_active <= 0:
+        return False
+    if attempt_id and await _attempt_has_conversation(session, attempt_id):
+        return False
+    return await _active_worker_conversation_count(session, workspace_id) >= max_active
+
+
+async def _active_worker_conversation_count(session: AsyncSession, workspace_id: str) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(WorkspaceTaskSessionAttemptModel)
+        .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+        .where(WorkspaceTaskSessionAttemptModel.status == "running")
+        .where(WorkspaceTaskSessionAttemptModel.conversation_id.is_not(None))
+    )
+    return int(result.scalar_one() or 0)
+
+
+async def _attempt_has_conversation(session: AsyncSession, attempt_id: str) -> bool:
+    result = await session.execute(
+        select(WorkspaceTaskSessionAttemptModel.conversation_id).where(
+            WorkspaceTaskSessionAttemptModel.id == attempt_id
+        )
+    )
+    conversation_id = result.scalar_one_or_none()
+    return isinstance(conversation_id, str) and bool(conversation_id)
+
+
+async def _defer_worker_launch(
+    *,
+    session: AsyncSession,
+    item: WorkspacePlanOutboxModel,
+    payload: Mapping[str, Any],
+    active_count: int,
+) -> None:
+    max_active = _worker_launch_max_active()
+    delay_seconds = _worker_launch_defer_seconds()
+    metadata = dict(item.metadata_json or {})
+    defer_count = int(metadata.get("defer_count") or 0) + 1
+    metadata.update(
+        {
+            "source": "workspace_plan.worker_launch.deferred_capacity",
+            "deferred_from_outbox_id": item.id,
+            "defer_count": defer_count,
+            "active_worker_conversations": active_count,
+            "max_active_worker_conversations": max_active,
+        }
+    )
+    _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
+        plan_id=item.plan_id,
+        workspace_id=item.workspace_id,
+        event_type=WORKER_LAUNCH_EVENT,
+        payload=dict(payload),
+        metadata=metadata,
+        max_attempts=item.max_attempts,
+        next_attempt_at=datetime.now(UTC) + timedelta(seconds=delay_seconds),
+    )
+    logger.info(
+        "workspace worker launch deferred by active-worker capacity",
+        extra={
+            "event": "workspace_plan.worker_launch.deferred_capacity",
+            "workspace_id": item.workspace_id,
+            "outbox_id": item.id,
+            "active_worker_conversations": active_count,
+            "max_active_worker_conversations": max_active,
+            "delay_seconds": delay_seconds,
+            "defer_count": defer_count,
+        },
+    )
+
+
+def _worker_launch_max_active() -> int:
+    return _positive_int_env(_WORKER_LAUNCH_MAX_ACTIVE_ENV, _DEFAULT_WORKER_LAUNCH_MAX_ACTIVE)
+
+
+def _worker_launch_defer_seconds() -> int:
+    return _positive_int_env(
+        _WORKER_LAUNCH_DEFER_SECONDS_ENV, _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS
+    )
+
+
+def _plan_terminal_attempt_max_retries() -> int:
+    return _positive_int_env(
+        _PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV,
+        _DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES,
+    )
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
+async def _mark_plan_node_running_after_launch_schedule(
+    *,
+    session: AsyncSession,
+    plan_id: str | None,
+    node_id: str | None,
+    attempt_id: str | None,
+) -> None:
+    """Mark a launched node RUNNING once the worker launch job has scheduled."""
+
+    if not plan_id or not node_id:
+        return
+    plan = await SqlPlanRepository(session).get(plan_id)
+    if plan is None:
+        return
+    node = plan.nodes.get(PlanNodeId(node_id))
+    if node is None:
+        return
+    if attempt_id and node.current_attempt_id and node.current_attempt_id != attempt_id:
+        return
+    if node.execution not in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}:
+        return
+    plan.replace_node(
+        replace(
+            node,
+            execution=TaskExecution.RUNNING,
+            current_attempt_id=attempt_id or node.current_attempt_id,
+            updated_at=datetime.now(UTC),
+        )
+    )
+    await SqlPlanRepository(session).save(plan)
 
 
 def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:

@@ -118,6 +118,25 @@ class TestOrphanContainerCleanup:
         exited_container.remove.assert_called()
 
     @pytest.mark.asyncio
+    async def test_cleanup_orphans_removes_created_containers(self, adapter, mock_docker):
+        """Created containers are failed starts and should be removed as stale."""
+        created_container = MagicMock()
+        created_container.name = "created-sandbox-789"
+        created_container.status = "created"
+        created_container.labels = {
+            "memstack.sandbox": "true",
+            "memstack.project_id": "proj-789",
+        }
+        created_container.id = "container-created-789"
+
+        mock_docker.containers.list = Mock(return_value=[created_container])
+
+        count = await adapter.cleanup_orphans()
+
+        assert count >= 1, "Should have cleaned up created container"
+        created_container.remove.assert_called()
+
+    @pytest.mark.asyncio
     async def test_cleanup_orphans_removes_stale_containers(self, adapter, mock_docker):
         """
         Test that cleanup_orphans removes containers not in DB association.

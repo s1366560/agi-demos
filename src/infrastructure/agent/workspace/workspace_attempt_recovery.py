@@ -28,9 +28,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
@@ -38,11 +39,19 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
+    WorkspaceTaskSessionAttemptModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
     SqlWorkspaceTaskSessionAttemptRepository,
+)
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    WORKSPACE_PLAN_ID,
+    WORKSPACE_PLAN_NODE_ID,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,14 +61,42 @@ logger = logging.getLogger(__name__)
 DEFAULT_STALE_SECONDS = 180
 DEFAULT_STARTUP_GRACE_SECONDS = 15
 DEFAULT_CHECK_INTERVAL_SECONDS = 60
+DEFAULT_MAX_ATTEMPTS_PER_SWEEP = 3
+DEFAULT_ERROR_EVENT_GRACE_SECONDS = 5
 RECOVERY_SUMMARY_RESTART = "recovered_after_restart_no_heartbeat"
 RECOVERY_SUMMARY_STALE = "recovered_stale_no_heartbeat"
+RECOVERY_SUMMARY_AGENT_ERROR_EVENT = "recovered_agent_error_event"
 TERMINAL_ATTEMPT_STATUSES = {
     WorkspaceTaskSessionAttemptStatus.ACCEPTED,
     WorkspaceTaskSessionAttemptStatus.REJECTED,
     WorkspaceTaskSessionAttemptStatus.BLOCKED,
     WorkspaceTaskSessionAttemptStatus.CANCELLED,
 }
+
+
+def _attempt_summary(summary: str | Mapping[str, str], attempt_id: str) -> str:
+    if isinstance(summary, Mapping):
+        return summary.get(attempt_id) or RECOVERY_SUMMARY_STALE
+    return summary
+
+
+def _error_event_recovery_summary(event_data: object) -> str:
+    message = ""
+    if isinstance(event_data, Mapping):
+        raw = (
+            event_data.get("message")
+            or event_data.get("error")
+            or event_data.get("reason")
+            or event_data.get("detail")
+        )
+        if isinstance(raw, str):
+            message = raw.strip()
+    if not message:
+        return RECOVERY_SUMMARY_AGENT_ERROR_EVENT
+    compact = message.replace("\r", "\n").strip()
+    if len(compact) > 1800:
+        compact = compact[:1785] + "...[truncated]"
+    return f"{RECOVERY_SUMMARY_AGENT_ERROR_EVENT}: {compact}"
 
 
 ApplyReportCallable = Callable[..., Awaitable[object]]
@@ -82,6 +119,8 @@ class WorkspaceAttemptRecoveryService:
         stale_seconds: int = DEFAULT_STALE_SECONDS,
         startup_grace_seconds: int = DEFAULT_STARTUP_GRACE_SECONDS,
         check_interval_seconds: int = DEFAULT_CHECK_INTERVAL_SECONDS,
+        max_attempts_per_sweep: int = DEFAULT_MAX_ATTEMPTS_PER_SWEEP,
+        error_event_grace_seconds: int = DEFAULT_ERROR_EVENT_GRACE_SECONDS,
     ) -> None:
         if stale_seconds <= 0:
             raise ValueError("stale_seconds must be > 0")
@@ -89,6 +128,10 @@ class WorkspaceAttemptRecoveryService:
             raise ValueError("startup_grace_seconds must be >= 0")
         if check_interval_seconds <= 0:
             raise ValueError("check_interval_seconds must be > 0")
+        if max_attempts_per_sweep <= 0:
+            raise ValueError("max_attempts_per_sweep must be > 0")
+        if error_event_grace_seconds < 0:
+            raise ValueError("error_event_grace_seconds must be >= 0")
         self._session_factory = session_factory
         self._apply_report = apply_report
         self._schedule_tick = schedule_tick
@@ -97,6 +140,8 @@ class WorkspaceAttemptRecoveryService:
         self._stale_seconds = stale_seconds
         self._startup_grace_seconds = startup_grace_seconds
         self._check_interval_seconds = check_interval_seconds
+        self._max_attempts_per_sweep = max_attempts_per_sweep
+        self._error_event_grace_seconds = error_event_grace_seconds
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
@@ -120,6 +165,7 @@ class WorkspaceAttemptRecoveryService:
                 "event": "workspace_attempt_recovery.started",
                 "stale_seconds": self._stale_seconds,
                 "check_interval_seconds": self._check_interval_seconds,
+                "max_attempts_per_sweep": self._max_attempts_per_sweep,
             },
         )
 
@@ -143,8 +189,9 @@ class WorkspaceAttemptRecoveryService:
         Returns the number of attempts recovered.
         """
         threshold = datetime.now(UTC) - timedelta(seconds=self._startup_grace_seconds)
+        recovered = await self._recover_error_events()
         stale = await self._fetch_stale(threshold)
-        recovered = await self._recover_all(stale, RECOVERY_SUMMARY_RESTART)
+        recovered += await self._recover_all(stale, RECOVERY_SUMMARY_RESTART)
         if recovered:
             logger.warning(
                 "workspace_attempt_recovery.startup_swept",
@@ -160,18 +207,42 @@ class WorkspaceAttemptRecoveryService:
         """Recover non-terminal attempts stale for ``stale_seconds`` and
         not present in the supervisor liveness map. Returns the recovered count.
         """
+        recovered = await self._recover_error_events()
         threshold = datetime.now(UTC) - timedelta(seconds=self._stale_seconds)
         stale = await self._fetch_stale(threshold)
         if not stale:
-            return 0
+            return recovered
         live_ids = set(self._liveness_lookup() or ())
         candidates = [a for a in stale if a.id not in live_ids]
-        recovered = await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
+        recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
         if recovered:
             logger.warning(
                 "workspace_attempt_recovery.periodic_swept",
                 extra={
                     "event": "workspace_attempt_recovery.periodic_swept",
+                    "recovered": recovered,
+                    "total_candidates": len(candidates),
+                    "live_skipped": len(stale) - len(candidates),
+                },
+            )
+        return recovered
+
+    async def workspace_sweep(self, workspace_id: str) -> int:
+        """Recover stale attempts for one workspace without sweeping all history."""
+        threshold = datetime.now(UTC) - timedelta(seconds=self._stale_seconds)
+        recovered = await self._recover_error_events(workspace_id=workspace_id)
+        stale = await self._fetch_stale(threshold, workspace_id=workspace_id)
+        if not stale:
+            return recovered
+        live_ids = set(self._liveness_lookup() or ())
+        candidates = [attempt for attempt in stale if attempt.id not in live_ids]
+        recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
+        if recovered:
+            logger.warning(
+                "workspace_attempt_recovery.workspace_swept",
+                extra={
+                    "event": "workspace_attempt_recovery.workspace_swept",
+                    "workspace_id": workspace_id,
                     "recovered": recovered,
                     "total_candidates": len(candidates),
                     "live_skipped": len(stale) - len(candidates),
@@ -199,15 +270,95 @@ class WorkspaceAttemptRecoveryService:
                     extra={"event": "workspace_attempt_recovery.periodic_sweep_failed"},
                 )
 
-    async def _fetch_stale(self, older_than: datetime) -> list[WorkspaceTaskSessionAttempt]:
+    async def _fetch_stale(
+        self,
+        older_than: datetime,
+        *,
+        workspace_id: str | None = None,
+    ) -> list[WorkspaceTaskSessionAttempt]:
         async with self._session_factory() as session:
             repo = SqlWorkspaceTaskSessionAttemptRepository(session)
-            return await repo.find_stale_non_terminal(older_than=older_than)
+            return await repo.find_stale_non_terminal(
+                older_than=older_than,
+                limit=self._max_attempts_per_sweep,
+                workspace_id=workspace_id,
+            )
+
+    async def _recover_error_events(self, *, workspace_id: str | None = None) -> int:
+        """Recover active attempts whose agent stream already emitted an error event.
+
+        A dev reload or local executor shutdown can cancel ``worker_launch``
+        after ``agent_execution_events`` records an ``error`` but before the
+        launcher emits a terminal WTP report. Heartbeat liveness alone keeps
+        such attempts looking alive for minutes. The persisted error event is
+        authoritative enough to close the attempt and enqueue the normal
+        handoff/retry path.
+        """
+        older_than = datetime.now(UTC) - timedelta(seconds=self._error_event_grace_seconds)
+        error_attempts = await self._fetch_error_terminated_attempts(
+            older_than=older_than,
+            workspace_id=workspace_id,
+        )
+        if not error_attempts:
+            return 0
+        summaries = {attempt.id: summary for attempt, summary in error_attempts}
+        return await self._recover_all(
+            [attempt for attempt, _summary in error_attempts],
+            summaries,
+        )
+
+    async def _fetch_error_terminated_attempts(
+        self,
+        *,
+        older_than: datetime,
+        workspace_id: str | None = None,
+    ) -> list[tuple[WorkspaceTaskSessionAttempt, str]]:
+        non_terminal = [
+            WorkspaceTaskSessionAttemptStatus.PENDING.value,
+            WorkspaceTaskSessionAttemptStatus.RUNNING.value,
+            WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value,
+        ]
+        async with self._session_factory() as session:
+            repo = SqlWorkspaceTaskSessionAttemptRepository(session)
+            stmt = (
+                select(
+                    WorkspaceTaskSessionAttemptModel,
+                    AgentExecutionEvent.event_data,
+                )
+                .join(
+                    AgentExecutionEvent,
+                    AgentExecutionEvent.conversation_id
+                    == WorkspaceTaskSessionAttemptModel.conversation_id,
+                )
+                .where(WorkspaceTaskSessionAttemptModel.status.in_(non_terminal))
+                .where(WorkspaceTaskSessionAttemptModel.conversation_id.is_not(None))
+                .where(AgentExecutionEvent.event_type == "error")
+                .where(AgentExecutionEvent.created_at >= WorkspaceTaskSessionAttemptModel.created_at)
+                .where(AgentExecutionEvent.created_at < older_than)
+            )
+            if workspace_id:
+                stmt = stmt.where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+            stmt = stmt.order_by(
+                WorkspaceTaskSessionAttemptModel.updated_at.asc(),
+                AgentExecutionEvent.created_at.desc(),
+            ).limit(self._max_attempts_per_sweep * 4)
+            result = await session.execute(stmt)
+            recovered: list[tuple[WorkspaceTaskSessionAttempt, str]] = []
+            seen: set[str] = set()
+            for attempt_model, event_data in result.all():
+                attempt = repo._to_domain(attempt_model)
+                if attempt is None or attempt.id in seen:
+                    continue
+                seen.add(attempt.id)
+                recovered.append((attempt, _error_event_recovery_summary(event_data)))
+                if len(recovered) >= self._max_attempts_per_sweep:
+                    break
+            return recovered
 
     async def _recover_all(
         self,
         attempts: list[WorkspaceTaskSessionAttempt],
-        summary: str,
+        summary: str | Mapping[str, str],
     ) -> int:
         recovered = 0
         scheduled_roots: set[tuple[str, str]] = set()
@@ -216,6 +367,7 @@ class WorkspaceAttemptRecoveryService:
             WorkspaceTaskStatus.BLOCKED,
         }
         for attempt in attempts:
+            attempt_summary = _attempt_summary(summary, attempt.id)
             resolution = await self._resolve_parent_task(attempt.workspace_task_id)
             if resolution is None:
                 logger.info(
@@ -234,7 +386,7 @@ class WorkspaceAttemptRecoveryService:
                     status=WorkspaceTaskSessionAttemptStatus.CANCELLED,
                 )
                 continue
-            actor_user_id, parent_status = resolution
+            actor_user_id, parent_status, parent_metadata = resolution
             if attempt.status is WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION:
                 if parent_status in terminal_parent_statuses:
                     await self._quiet_finalize_attempt(
@@ -253,7 +405,7 @@ class WorkspaceAttemptRecoveryService:
                         "attempt_id": attempt.id,
                         "workspace_task_id": attempt.workspace_task_id,
                         "workspace_id": attempt.workspace_id,
-                        "reason": summary,
+                        "reason": attempt_summary,
                     },
                 )
                 continue
@@ -276,6 +428,30 @@ class WorkspaceAttemptRecoveryService:
                     status=self._terminal_status_for_parent(parent_status),
                 )
                 continue
+            if self._is_v2_plan_linked(parent_metadata):
+                await self._quiet_finalize_attempt(
+                    attempt,
+                    reason=attempt_summary,
+                    status=WorkspaceTaskSessionAttemptStatus.BLOCKED,
+                )
+                recovered += 1
+                await self._enqueue_resume_if_configured(
+                    attempt=attempt,
+                    summary=attempt_summary,
+                    actor_user_id=actor_user_id,
+                )
+                scheduled_roots.add((attempt.workspace_id, actor_user_id))
+                logger.warning(
+                    "workspace_attempt_recovery.plan_attempt_resumed",
+                    extra={
+                        "event": "workspace_attempt_recovery.plan_attempt_resumed",
+                        "attempt_id": attempt.id,
+                        "workspace_task_id": attempt.workspace_task_id,
+                        "workspace_id": attempt.workspace_id,
+                        "reason": attempt_summary,
+                    },
+                )
+                continue
             try:
                 result = await self._apply_report(
                     workspace_id=attempt.workspace_id,
@@ -286,7 +462,7 @@ class WorkspaceAttemptRecoveryService:
                     actor_user_id=actor_user_id,
                     worker_agent_id=attempt.worker_agent_id or "",
                     report_type="blocked",
-                    summary=summary,
+                    summary=attempt_summary,
                     artifacts=None,
                     leader_agent_id=attempt.leader_agent_id,
                     report_id=f"recovery:{attempt.id}",
@@ -312,7 +488,7 @@ class WorkspaceAttemptRecoveryService:
                 recovered += 1
                 await self._enqueue_resume_if_configured(
                     attempt=attempt,
-                    summary=summary,
+                    summary=attempt_summary,
                     actor_user_id=actor_user_id,
                 )
                 scheduled_roots.add((attempt.workspace_id, actor_user_id))
@@ -323,7 +499,7 @@ class WorkspaceAttemptRecoveryService:
                         "attempt_id": attempt.id,
                         "workspace_task_id": attempt.workspace_task_id,
                         "workspace_id": attempt.workspace_id,
-                        "reason": summary,
+                        "reason": attempt_summary,
                     },
                 )
             except Exception:
@@ -377,8 +553,8 @@ class WorkspaceAttemptRecoveryService:
 
     async def _resolve_parent_task(
         self, workspace_task_id: str
-    ) -> tuple[str, WorkspaceTaskStatus] | None:
-        """Return ``(actor_user_id, task_status)`` or None if the task is gone."""
+    ) -> tuple[str, WorkspaceTaskStatus, Mapping[str, object]] | None:
+        """Return parent execution context or None if the task is gone."""
         try:
             async with self._session_factory() as session:
                 task_repo = SqlWorkspaceTaskRepository(session)
@@ -387,7 +563,10 @@ class WorkspaceAttemptRecoveryService:
                     return None
                 if not task.created_by:
                     return None
-                return task.created_by, task.status
+                metadata = (
+                    task.metadata if isinstance(task.metadata, Mapping) else {}
+                )
+                return task.created_by, task.status, metadata
         except Exception:
             logger.exception(
                 "workspace_attempt_recovery.resolve_parent_failed task=%s",
@@ -402,6 +581,14 @@ class WorkspaceAttemptRecoveryService:
         if parent_status is WorkspaceTaskStatus.DONE:
             return WorkspaceTaskSessionAttemptStatus.CANCELLED
         return WorkspaceTaskSessionAttemptStatus.BLOCKED
+
+    @staticmethod
+    def _is_v2_plan_linked(metadata: Mapping[str, object]) -> bool:
+        plan_id = metadata.get(WORKSPACE_PLAN_ID)
+        node_id = metadata.get(WORKSPACE_PLAN_NODE_ID)
+        return bool(isinstance(plan_id, str) and plan_id) and bool(
+            isinstance(node_id, str) and node_id
+        )
 
     async def _touch_awaiting_leader_attempt(
         self,

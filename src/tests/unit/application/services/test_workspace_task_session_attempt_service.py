@@ -38,6 +38,7 @@ def _make_attempt(
 @pytest.fixture
 def attempt_repo() -> MagicMock:
     repo = MagicMock()
+    repo.lock_attempt_creation = AsyncMock()
     repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
     repo.find_by_workspace_task_id = AsyncMock(return_value=[])
     repo.find_by_id = AsyncMock(return_value=None)
@@ -72,6 +73,7 @@ class TestWorkspaceTaskSessionAttemptService:
 
         assert attempt.attempt_number == 1
         assert attempt.status == WorkspaceTaskSessionAttemptStatus.PENDING
+        attempt_repo.lock_attempt_creation.assert_awaited_once_with("task-1")
         attempt_repo.save.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -93,21 +95,25 @@ class TestWorkspaceTaskSessionAttemptService:
         assert attempt.attempt_number == 3
 
     @pytest.mark.asyncio
-    async def test_create_attempt_rejects_when_active_attempt_exists(
+    async def test_create_attempt_reuses_active_attempt_after_lock(
         self,
         attempt_service,
         attempt_repo: MagicMock,
     ) -> None:
-        attempt_repo.find_active_by_workspace_task_id.return_value = _make_attempt()
+        active_attempt = _make_attempt()
+        attempt_repo.find_active_by_workspace_task_id.return_value = active_attempt
 
-        with pytest.raises(ValueError, match="active session attempt"):
-            await attempt_service.create_attempt(
-                workspace_task_id="task-1",
-                root_goal_task_id="root-1",
-                workspace_id="ws-1",
-                worker_agent_id="worker-1",
-                leader_agent_id="leader-1",
-            )
+        attempt = await attempt_service.create_attempt(
+            workspace_task_id="task-1",
+            root_goal_task_id="root-1",
+            workspace_id="ws-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+        )
+
+        assert attempt is active_attempt
+        attempt_repo.find_by_workspace_task_id.assert_not_awaited()
+        attempt_repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_record_candidate_output_moves_attempt_to_pending_adjudication(
@@ -132,6 +138,31 @@ class TestWorkspaceTaskSessionAttemptService:
         assert updated.candidate_artifacts == ["artifact:1"]
         assert updated.candidate_verifications == ["check:1"]
         assert updated.conversation_id == "conv-123"
+
+    @pytest.mark.asyncio
+    async def test_record_candidate_output_does_not_reopen_terminal_attempt(
+        self,
+        attempt_service,
+        attempt_repo: MagicMock,
+    ) -> None:
+        accepted = _make_attempt(status=WorkspaceTaskSessionAttemptStatus.ACCEPTED)
+        accepted.candidate_summary = "Already verified"
+        accepted.completed_at = datetime.now(UTC)
+        attempt_repo.find_by_id.return_value = accepted
+
+        updated = await attempt_service.record_candidate_output(
+            "attempt-1",
+            summary="late watchdog report",
+            artifacts=["artifact:late"],
+            verifications=["check:late"],
+            conversation_id="conv-late",
+        )
+
+        assert updated is accepted
+        assert updated.status == WorkspaceTaskSessionAttemptStatus.ACCEPTED
+        assert updated.candidate_summary == "Already verified"
+        assert updated.conversation_id is None
+        attempt_repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_accept_marks_attempt_accepted(

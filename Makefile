@@ -298,7 +298,7 @@ dev-all: dev-infra-dev db-init
 	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"
 	@echo "   Ray Actor Worker: running in Docker (logs: docker compose logs -f agent-actor-worker)"
 	@mkdir -p logs
-	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 > logs/api.log 2>&1 & echo $$! > logs/api.pid
+	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude ".memstack/*" --reload-exclude "logs/*" > logs/api.log 2>&1 & echo $$! > logs/api.pid
 	@(cd web && nohup pnpm run dev > ../logs/web.log 2>&1) & echo $$! > logs/web.pid
 	@sleep 3
 	@echo " Services started!"

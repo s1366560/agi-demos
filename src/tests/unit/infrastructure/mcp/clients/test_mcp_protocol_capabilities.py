@@ -249,6 +249,49 @@ class TestEdgeCases:
             assert result is True
 
 
+class TestToolCallTimeouts:
+    """Tool calls should respect long-running sandbox command budgets."""
+
+    @pytest.mark.asyncio
+    async def test_call_tool_uses_declared_tool_timeout_plus_grace(self):
+        from src.infrastructure.mcp.clients.websocket_client import (
+            TOOL_REQUEST_TIMEOUT_GRACE_SECONDS,
+            MCPWebSocketClient,
+        )
+
+        client = MCPWebSocketClient(url="ws://localhost:8765", timeout=60)
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
+            mock_send.return_value = {"content": [{"type": "text", "text": "ok"}]}
+
+            await client.call_tool("bash", {"command": "npm run build", "timeout": 120})
+
+        assert mock_send.await_args.kwargs["timeout"] == 120 + TOOL_REQUEST_TIMEOUT_GRACE_SECONDS
+
+    @pytest.mark.asyncio
+    async def test_call_tool_keeps_explicit_client_timeout_when_larger(self):
+        from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+        client = MCPWebSocketClient(url="ws://localhost:8765", timeout=60)
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
+            mock_send.return_value = {"content": [{"type": "text", "text": "ok"}]}
+
+            await client.call_tool("bash", {"command": "npm run build", "timeout": 120}, timeout=200)
+
+        assert mock_send.await_args.kwargs["timeout"] == 200
+
+    @pytest.mark.asyncio
+    async def test_late_timed_out_response_is_discarded(self, caplog):
+        from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+        client = MCPWebSocketClient(url="ws://localhost:8765")
+        client._timed_out_request_ids.add(7)
+
+        await client._handle_message({"jsonrpc": "2.0", "id": 7, "result": {"ok": True}})
+
+        assert 7 not in client._timed_out_request_ids
+        assert "late MCP response" in caplog.text
+
+
 # ============================================================================
 # Ping Mechanism Tests (Phase 1 - Highest Priority)
 # ============================================================================

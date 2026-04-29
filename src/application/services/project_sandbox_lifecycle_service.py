@@ -300,6 +300,13 @@ class ProjectSandboxLifecycleService:
                     if result is not None:
                         return result
 
+                adopted = await self._adopt_running_project_sandbox(
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                )
+                if adopted is not None:
+                    return adopted
+
                 # Create new sandbox (under both locks)
                 # The distributed lock is held until this method returns
                 return await self._create_new_sandbox(
@@ -437,6 +444,13 @@ class ProjectSandboxLifecycleService:
             f"marked as {existing.status.value} but container doesn't exist. "
             f"Triggering rebuild..."
         )
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=existing.tenant_id,
+            association=existing,
+        )
+        if adopted is not None:
+            return adopted
         await self._cleanup_failed_sandbox(existing)
         return None
 
@@ -444,6 +458,13 @@ class ProjectSandboxLifecycleService:
         self, existing: ProjectSandbox, project_id: str
     ) -> SandboxInfo | None:
         """Handle sandbox in STOPPED state by restarting."""
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=existing.tenant_id,
+            association=existing,
+        )
+        if adopted is not None:
+            return adopted
         logger.info(f"Project {project_id} sandbox stopped, restarting...")
         return await self._restart_sandbox(existing)
 
@@ -451,6 +472,13 @@ class ProjectSandboxLifecycleService:
         self, existing: ProjectSandbox, project_id: str
     ) -> SandboxInfo | None:
         """Handle sandbox in ERROR state by cleaning up for recreation."""
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=existing.tenant_id,
+            association=existing,
+        )
+        if adopted is not None:
+            return adopted
         logger.warning(f"Project {project_id} sandbox in error state, recreating...")
         await self._cleanup_failed_sandbox(existing)
         return None
@@ -461,6 +489,13 @@ class ProjectSandboxLifecycleService:
         """Handle sandbox in UNHEALTHY state with recovery attempt."""
         if not self._auto_recover:
             return None
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=existing.tenant_id,
+            association=existing,
+        )
+        if adopted is not None:
+            return adopted
         logger.info(f"Project {project_id} sandbox unhealthy, attempting recovery...")
         recovered = await self._recover_sandbox(existing)
         if recovered:
@@ -484,6 +519,13 @@ class ProjectSandboxLifecycleService:
             f"Project {project_id} sandbox stuck in CREATING state "
             f"but container doesn't exist. Rebuilding..."
         )
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=existing.tenant_id,
+            association=existing,
+        )
+        if adopted is not None:
+            return adopted
         await self._cleanup_failed_sandbox(existing)
         return None
 
@@ -491,6 +533,13 @@ class ProjectSandboxLifecycleService:
         self, existing: ProjectSandbox, project_id: str
     ) -> SandboxInfo | None:
         """Handle sandbox in TERMINATED state by cleaning up for recreation."""
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=existing.tenant_id,
+            association=existing,
+        )
+        if adopted is not None:
+            return adopted
         logger.info(f"Project {project_id} sandbox terminated, creating new...")
         await self._cleanup_failed_sandbox(existing)
         return None
@@ -815,6 +864,63 @@ class ProjectSandboxLifecycleService:
     # -------------------------------------------------------------------------
     # Private helper methods
     # -------------------------------------------------------------------------
+
+    async def _adopt_running_project_sandbox(
+        self,
+        project_id: str,
+        tenant_id: str,
+        association: ProjectSandbox | None = None,
+    ) -> SandboxInfo | None:
+        """Adopt an already-running Docker sandbox for this project.
+
+        Multiple API/worker processes can briefly disagree about sandbox state:
+        one process may create a replacement container while another still has
+        an ERROR or stale association. Before cleanup/recreate paths remove
+        project containers, adopt the healthy replacement into the DB record.
+        """
+        sandbox_id = await self._adapter.get_sandbox_id_by_project(project_id)
+        if not sandbox_id:
+            return None
+
+        container_exists = await self._adapter.container_exists(sandbox_id)
+        if not container_exists:
+            return None
+
+        target = association
+        if target is None:
+            target = ProjectSandbox(
+                id=str(uuid.uuid4()),
+                project_id=project_id,
+                tenant_id=tenant_id,
+                sandbox_id=sandbox_id,
+                status=ProjectSandboxStatus.RUNNING,
+            )
+
+        previous_sandbox_id = target.sandbox_id
+        target.sandbox_id = sandbox_id
+        target.tenant_id = tenant_id
+        target.started_at = target.started_at or datetime.now(UTC)
+        target.mark_healthy()
+        target.mark_accessed()
+        await self._repository.save(target)
+
+        with contextlib.suppress(Exception):
+            await self._adapter.connect_mcp(sandbox_id)
+
+        if previous_sandbox_id != sandbox_id:
+            logger.info(
+                "Adopted running sandbox %s for project %s, replacing stale association %s",
+                sandbox_id,
+                project_id,
+                previous_sandbox_id,
+            )
+        else:
+            logger.info(
+                "Reconciled running sandbox %s for project %s from stale status",
+                sandbox_id,
+                project_id,
+            )
+        return await self._get_sandbox_info(target)
 
     async def _create_new_sandbox(
         self,
@@ -1369,6 +1475,14 @@ class ProjectSandboxLifecycleService:
             f"Project {project_id} sandbox {association.sandbox_id} "
             f"is marked as {association.status.value} but container doesn't exist"
         )
+
+        adopted = await self._adopt_running_project_sandbox(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            association=association,
+        )
+        if adopted is not None:
+            return adopted
 
         if not auto_rebuild:
             # Update state to reflect reality

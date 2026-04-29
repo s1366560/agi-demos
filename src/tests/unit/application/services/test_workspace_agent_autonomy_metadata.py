@@ -359,6 +359,48 @@ def test_child_blocked_worker_report_forces_goal_evidence_failure() -> None:
 
 
 @pytest.mark.unit
+def test_completed_worker_report_verification_ignores_stale_blocked_metadata() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/my-evo",
+            "goal_source_refs": [],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        metadata={
+            "evidence_refs": [
+                "git_diff:/workspace/my-evo#abc123",
+                "test_run:/workspace/my-evo#jest-search",
+            ],
+            "execution_verifications": ["command:npm test", "worker_report:completed"],
+            "last_worker_report_type": "blocked",
+            "last_worker_report_summary": "stale_no_heartbeat",
+            "last_attempt_status": "blocked",
+            "last_leader_adjudication_status": "blocked",
+        }
+    )
+
+    evidence = synthesize_goal_evidence_from_children(
+        root_task=root,
+        child_tasks=[child],
+        generated_by_agent_id="agent-1",
+    )
+
+    assert evidence is not None
+    assert evidence["verification_grade"] == "pass"
+    assert "child_report_not_completed:child-1:blocked" not in evidence["verifications"]
+    assert "child_attempt_not_accepted:child-1:blocked" not in evidence["verifications"]
+
+
+@pytest.mark.unit
 def test_accepted_durable_plan_child_ignores_stale_blocked_report_metadata() -> None:
     root = _root_task(
         {

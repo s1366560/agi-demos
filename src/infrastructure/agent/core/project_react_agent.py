@@ -761,15 +761,26 @@ class ProjectReActAgent:
             project_sandbox_id = None
 
             for sandbox in all_sandboxes:
+                candidate_id = None
                 project_path = getattr(sandbox, "project_path", "") or ""
                 if project_path and f"memstack_{self.config.project_id}" in project_path:
-                    project_sandbox_id = sandbox.id
-                    break
+                    candidate_id = sandbox.id
 
                 labels = getattr(sandbox, "labels", {}) or {}
-                if labels.get("memstack.project_id") == self.config.project_id:
-                    project_sandbox_id = sandbox.id
+                if not candidate_id and labels.get("memstack.project_id") == self.config.project_id:
+                    candidate_id = sandbox.id
+
+                if not candidate_id:
+                    continue
+
+                container_exists = await sandbox_adapter.container_exists(candidate_id)
+                if container_exists:
+                    project_sandbox_id = candidate_id
                     break
+                logger.info(
+                    f"ProjectReActAgent[{self.project_key}]: "
+                    f"Ignoring non-running sandbox {candidate_id} while refreshing tools"
+                )
 
             if not project_sandbox_id:
                 return False

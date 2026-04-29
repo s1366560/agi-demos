@@ -4,6 +4,7 @@ import pytest
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.infrastructure.agent.core.processor import ToolDefinition
 from src.infrastructure.agent.core.react_agent import ReActAgent
 
 
@@ -89,3 +90,32 @@ class TestReActAgentRuntimeProfile:
         assert "workspace_report_complete" in workspace_profile.allow_tools
         assert "write" not in workspace_profile.allow_tools
         assert "bash" not in workspace_profile.allow_tools
+
+    def test_workspace_leader_replan_restricts_tools_to_task_ledger(self) -> None:
+        agent = ReActAgent(model="test-model", tools={})
+        tenant_config = TenantAgentConfig.create_default("tenant-1")
+        tenant_config.disabled_tools = ["TodoRead", "Bash"]
+        selected_agent = _make_agent(allowed_tools=["Read", "Bash", "TodoRead", "TodoWrite"])
+
+        profile = agent._build_runtime_profile(
+            tenant_id="tenant-1",
+            tenant_agent_config_data=tenant_config.to_dict(),
+            selected_agent=selected_agent,
+        )
+        replan_profile = agent._with_workspace_leader_replan_tool_allowlist(profile)
+        tools = [
+            ToolDefinition("bash", "", {}, lambda **_: None),
+            ToolDefinition("read", "", {}, lambda **_: None),
+            ToolDefinition("todoread", "", {}, lambda **_: None),
+            ToolDefinition("todowrite", "", {}, lambda **_: None),
+        ]
+
+        filtered = agent._filter_tools_by_name_policy(
+            tools,
+            allow_tools=replan_profile.allow_tools,
+            deny_tools=replan_profile.deny_tools,
+        )
+
+        assert replan_profile.allow_tools == ["todoread", "todowrite"]
+        assert "todoread" not in replan_profile.deny_tools
+        assert [tool.name for tool in filtered] == ["todoread", "todowrite"]

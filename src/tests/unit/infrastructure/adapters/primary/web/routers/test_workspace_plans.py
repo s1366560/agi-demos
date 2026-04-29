@@ -209,6 +209,47 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
 
 
 @pytest.mark.asyncio
+async def test_stale_plan_node_recovery_enqueues_handoff_resume(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-stale"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    stale_node = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        workspace_task_id="workspace-task-api",
+        assignee_agent_id="agent-api",
+        current_attempt_id="attempt-stale",
+    )
+    plan.nodes[task_node_id] = stale_node
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    enqueued = await workspace_plans._enqueue_stale_plan_node_recovery(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        nodes=[stale_node],
+        actor_id="plan-api-user",
+    )
+
+    assert enqueued == 1
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id, limit=5
+    )
+    assert outbox[0].event_type == "handoff_resume"
+    assert outbox[0].payload_json["node_id"] == "task-api"
+    assert outbox[0].payload_json["force_schedule"] is True
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(
+        plan.id,
+        limit=5,
+    )
+    assert events[0].event_type == "auto_stale_node_recovery_queued"
+
+
+@pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_includes_root_closure_state(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

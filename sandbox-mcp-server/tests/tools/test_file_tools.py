@@ -62,6 +62,31 @@ class TestGrepTool:
         assert not result.get("isError")
         assert "outside.txt:1: needle" in result["content"][0]["text"]
 
+    @pytest.mark.asyncio
+    async def test_grep_files_skips_default_heavy_directories(self, tmp_path, monkeypatch):
+        """Default grep scans should not traverse dependency caches."""
+        workspace = tmp_path / "workspace"
+        src = workspace / "src"
+        dependency = workspace / "node_modules" / "pkg"
+        src.mkdir(parents=True)
+        dependency.mkdir(parents=True)
+        (src / "app.ts").write_text("needle from source\n", encoding="utf-8")
+        (dependency / "index.ts").write_text("needle from dependency\n", encoding="utf-8")
+
+        monkeypatch.setattr("src.tools.file_tools._EXTRA_ALLOWED_PATHS", [])
+
+        result = await grep_files(
+            pattern="needle",
+            glob_pattern="**/*.ts",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        text = result["content"][0]["text"]
+        assert "src/app.ts:1: needle from source" in text
+        assert "node_modules" not in text
+        assert result["metadata"]["skipped_dirs"] >= 1
+
 
 class TestReadTool:
     """Regression coverage for read-oriented file helpers."""
@@ -151,6 +176,30 @@ class TestGlobTool:
 
         assert not result.get("isError")
         assert "src/demo.py" in result["content"][0]["text"]
+
+    @pytest.mark.asyncio
+    async def test_glob_skips_default_heavy_directories(self, tmp_path, monkeypatch):
+        """Recursive glob should prune large dependency directories by default."""
+        workspace = tmp_path / "workspace"
+        src = workspace / "src"
+        dependency = workspace / "node_modules" / "pkg"
+        src.mkdir(parents=True)
+        dependency.mkdir(parents=True)
+        (src / "app.tsx").write_text("export default function App() {}\n", encoding="utf-8")
+        (dependency / "index.tsx").write_text("export const dep = true;\n", encoding="utf-8")
+
+        monkeypatch.setattr("src.tools.file_tools._EXTRA_ALLOWED_PATHS", [])
+
+        result = await glob_files(
+            pattern="**/*.tsx",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        text = result["content"][0]["text"]
+        assert "src/app.tsx" in text
+        assert "node_modules" not in text
+        assert result["metadata"]["skipped_dirs"] >= 1
 
 
 class TestBatchReadTool:

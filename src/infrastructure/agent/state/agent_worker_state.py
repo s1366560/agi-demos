@@ -1671,7 +1671,10 @@ async def _load_project_sandbox_tools(
 
     try:
         # STEP 1-3: Resolve the sandbox ID (DB lookup, verification, Docker fallback)
-        project_sandbox_id = await _resolve_project_sandbox_id(project_id)
+        project_sandbox_id = await _resolve_project_sandbox_id(
+            project_id,
+            tenant_id=tenant_id,
+        )
 
         # STEP 4: If still no sandbox found, DON'T CREATE ONE
         if not project_sandbox_id:
@@ -1704,7 +1707,11 @@ async def _load_project_sandbox_tools(
     return tools
 
 
-async def _resolve_project_sandbox_id(project_id: str) -> str | None:
+async def _resolve_project_sandbox_id(
+    project_id: str,
+    *,
+    tenant_id: str | None = None,
+) -> str | None:
     """Resolve sandbox ID for a project from DB or Docker discovery.
 
     Steps:
@@ -1730,10 +1737,62 @@ async def _resolve_project_sandbox_id(project_id: str) -> str | None:
                 project_id,
             )
             return discovered_id
+        if tenant_id:
+            return await _recover_existing_project_sandbox(project_id, tenant_id)
         return None
 
     # STEP 3: If not in DB, fall back to Docker discovery
     return await _discover_sandbox_from_docker(project_id)
+
+
+async def _recover_existing_project_sandbox(project_id: str, tenant_id: str) -> str | None:
+    """Recover a DB-associated project sandbox through the lifecycle service.
+
+    Agent workers still avoid creating sandboxes when no DB association exists.
+    This recovery path is only reached after the DB points at a sandbox that is
+    no longer usable and Docker discovery found no replacement.
+    """
+    if _mcp_sandbox_adapter is None:
+        return None
+
+    try:
+        from src.application.services.project_sandbox_lifecycle_service import (
+            ProjectSandboxLifecycleService,
+        )
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+            SqlProjectSandboxRepository,
+        )
+
+        async with async_session_factory() as db:
+            sandbox_repo = SqlProjectSandboxRepository(db)
+            existing = await sandbox_repo.find_by_project(project_id)
+            if existing is None:
+                return None
+
+            lifecycle = ProjectSandboxLifecycleService(
+                repository=sandbox_repo,
+                sandbox_adapter=_mcp_sandbox_adapter,
+            )
+            info = await lifecycle.get_or_create_sandbox(
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+            logger.warning(
+                "[AgentWorker] Recovered unavailable sandbox for project %s: %s",
+                project_id,
+                info.sandbox_id,
+            )
+            return info.sandbox_id
+    except Exception as e:
+        logger.warning(
+            "[AgentWorker] Failed to recover unavailable sandbox for project %s: %s",
+            project_id,
+            e,
+        )
+        return None
 
 
 async def _lookup_sandbox_from_db(project_id: str) -> str | None:

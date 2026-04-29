@@ -63,6 +63,28 @@ class SqlWorkspacePlanOutboxRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_by_workspace(
+        self,
+        workspace_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[WorkspacePlanOutboxModel]:
+        """Return recent outbox items for one workspace without taking a lease."""
+        if limit <= 0:
+            return []
+        result = await self._db.execute(
+            refresh_select_statement(
+                select(WorkspacePlanOutboxModel)
+                .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+                .order_by(
+                    WorkspacePlanOutboxModel.created_at.desc(),
+                    WorkspacePlanOutboxModel.id.desc(),
+                )
+                .limit(limit)
+            )
+        )
+        return list(result.scalars().all())
+
     async def claim_due(
         self,
         *,
@@ -159,6 +181,32 @@ class SqlWorkspacePlanOutboxRepository:
             item.status = "failed"
             backoff_seconds = min(2 ** int(item.attempt_count), 300)
             item.next_attempt_at = current_time + timedelta(seconds=backoff_seconds)
+        await self._db.flush()
+        return True
+
+    async def release_processing(
+        self,
+        outbox_id: str,
+        error_message: str | None = None,
+    ) -> bool:
+        """Release a claimed item without counting it as a handler failure.
+
+        Process cancellation usually means the API worker is shutting down or
+        reloading. The outbox job should be retried by the next worker, but the
+        shutdown itself must not consume retry budget or push the item toward
+        dead-letter state.
+        """
+        item = await self.get_by_id(outbox_id)
+        if item is None or item.status != "processing":
+            return False
+
+        item.status = "pending"
+        item.lease_owner = None
+        item.lease_expires_at = None
+        item.last_error = error_message
+        item.next_attempt_at = None
+        if int(item.attempt_count) > 0:
+            item.attempt_count = int(item.attempt_count) - 1
         await self._db.flush()
         return True
 

@@ -134,6 +134,108 @@ class TestWorkerLaunchHeartbeat:
         publish.assert_not_awaited()
 
 
+class TestPreStreamLaunchFailure:
+    @pytest.mark.asyncio
+    async def test_reports_blocked_and_patches_launch_state(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        apply_report = AsyncMock()
+        patch_launch_state = AsyncMock()
+        monkeypatch.setattr(wl, "_patch_task_launch_state", patch_launch_state)
+
+        await wl._report_pre_stream_launch_failure(
+            workspace_id="ws-1",
+            root_goal_task_id="root-1",
+            task_id="task-1",
+            attempt_id="attempt-1",
+            conversation_id=None,
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+            launch_state="setup_failed",
+            summary="worker_launch.setup_failed: boom",
+            apply_fn=apply_report,
+        )
+
+        apply_report.assert_awaited_once()
+        kwargs = apply_report.await_args.kwargs
+        assert kwargs["attempt_id"] == "attempt-1"
+        assert kwargs["report_type"] == "blocked"
+        assert kwargs["summary"] == "worker_launch.setup_failed: boom"
+        patch_launch_state.assert_awaited_once_with(
+            workspace_id="ws-1",
+            task_id="task-1",
+            actor_user_id="user-1",
+            leader_agent_id="leader-1",
+            launch_state="setup_failed",
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_without_attempt_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        apply_report = AsyncMock()
+        patch_launch_state = AsyncMock()
+        monkeypatch.setattr(wl, "_patch_task_launch_state", patch_launch_state)
+
+        await wl._report_pre_stream_launch_failure(
+            workspace_id="ws-1",
+            root_goal_task_id="root-1",
+            task_id="task-1",
+            attempt_id=None,
+            conversation_id=None,
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+            launch_state="setup_failed",
+            summary="boom",
+            apply_fn=apply_report,
+        )
+
+        apply_report.assert_not_awaited()
+        patch_launch_state.assert_not_awaited()
+
+
+class TestStreamCompletionFallback:
+    @pytest.mark.asyncio
+    async def test_reports_completed_when_stream_finishes_without_terminal_report(
+        self,
+    ) -> None:
+        apply_report = AsyncMock()
+
+        reported = await wl._report_terminal(
+            workspace_id="ws-1",
+            root_goal_task_id="root-1",
+            task_id="task-1",
+            attempt_id="attempt-1",
+            conversation_id="conv-1",
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+            report_type="completed",
+            summary=wl._stream_completion_summary("Finished the implementation.", ""),
+            apply_fn=apply_report,
+        )
+
+        assert reported is True
+        apply_report.assert_awaited_once()
+        kwargs = apply_report.await_args.kwargs
+        assert kwargs["attempt_id"] == "attempt-1"
+        assert kwargs["conversation_id"] == "conv-1"
+        assert kwargs["report_type"] == "completed"
+        assert kwargs["summary"] == "Finished the implementation."
+
+    def test_stream_completion_summary_is_bounded(self) -> None:
+        summary = wl._stream_completion_summary("", "x" * 2500)
+
+        assert len(summary) == 2000
+        assert summary.endswith("...")
+
+    def test_stream_completion_summary_has_default(self) -> None:
+        assert (
+            wl._stream_completion_summary("", "")
+            == "Worker stream completed without an explicit workspace terminal report."
+        )
+
+
 class TestBuildBrief:
     def test_includes_binding_block_and_title(self) -> None:
         task = _make_task(
@@ -192,8 +294,14 @@ class TestBuildBrief:
         assert system_context["workspace_binding"]["attempt_id"] == "att-2"
         assert system_context["additional_instructions"] == "Be brief."
         assert "native tool-call" in system_context["tool_protocol"]["instruction"]
-        assert system_context["artifact_write_policy"]["max_single_write_chars"] == 12000
+        assert (
+            system_context["artifact_write_policy"]["max_single_write_chars"]
+            == wl.WORKER_MAX_SINGLE_WRITE_CHARS
+        )
         assert "smaller chunks" in " ".join(
+            system_context["artifact_write_policy"]["instructions"]
+        )
+        assert "giant heredoc" in " ".join(
             system_context["artifact_write_policy"]["instructions"]
         )
 
@@ -264,6 +372,7 @@ class TestBuildBrief:
 
         assert "[workspace-code-context]" not in brief
         assert "Always run npm test." not in brief
+        assert "Artifact write discipline" in brief
 
         system_context = wl._build_worker_system_context(
             workspace_id="w",
