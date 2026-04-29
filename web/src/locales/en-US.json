@@ -3958,20 +3958,70 @@
   },
   "workspaceSettings": {
     "title": "Workspace Settings",
-    "description": "Manage workspace configuration and members.",
+    "description": "Control the operating model, autonomy policy, code context, and access for this workspace.",
+    "actions": {
+      "reset": "Reset"
+    },
+    "summary": {
+      "useCase": "Use case",
+      "type": "Workspace type",
+      "mode": "Agent mode",
+      "members": "Members"
+    },
     "generalSettings": "General Settings",
+    "generalDescription": "Keep the workspace identity clear for people and agents.",
     "nameLabel": "Workspace Name",
     "namePlaceholder": "Enter workspace name",
+    "archiveLabel": "Archive state",
+    "active": "Active",
+    "archived": "Archived",
     "descriptionLabel": "Description",
     "descriptionPlaceholder": "Enter workspace description",
     "updateSuccess": "Workspace updated successfully.",
     "updateFailed": "Failed to update workspace.",
+    "operatingModel": {
+      "title": "Operating Model",
+      "description": "Set how the workspace is interpreted by autonomous planning, task routing, and agent collaboration.",
+      "useCase": "Workspace use case",
+      "collaborationMode": "Collaboration mode",
+      "typeHint": "Derived runtime type: {{type}}"
+    },
+    "codeContext": {
+      "title": "Code Context",
+      "description": "Pin software workspaces to a stable sandbox root so agents read, write, verify, and report against the same project.",
+      "codeRoot": "Sandbox code root",
+      "codeRootHint": "Programming workspaces require an isolated path under /workspace.",
+      "codeRootInvalid": "Programming workspaces need a sandbox code root like /workspace/my-project."
+    },
+    "autonomy": {
+      "title": "Autonomy Policy",
+      "description": "Define what counts as acceptable evidence before autonomous work is treated as complete.",
+      "allowInternalArtifacts": "Allow internal task artifacts as completion evidence",
+      "requiresExternalArtifact": "Require external code or test evidence",
+      "minimumVerificationGrade": "Minimum verification grade",
+      "requiredArtifactPrefixes": "Required artifact prefixes",
+      "requiredArtifactPrefixesHint": "One prefix per line, for example git_diff: or test_run:.",
+      "grade": {
+        "pass": "Pass",
+        "warn": "Warn",
+        "fail": "Fail"
+      }
+    },
+    "metadata": {
+      "title": "Advanced Metadata",
+      "description": "Review and edit the persisted configuration payload. Form fields above will be merged into this JSON on save.",
+      "rawJson": "Metadata JSON",
+      "rawJsonHint": "Use this for less common metadata while keeping the main fields structured.",
+      "invalidJson": "Metadata must be valid JSON.",
+      "objectRequired": "Metadata JSON must be an object."
+    },
     "members": {
       "title": "Members",
       "description": "Manage who has access to this workspace.",
       "email": "Email",
       "role": "Role",
       "actions": "Actions",
+      "removeMember": "Remove member",
       "addMember": "Add Member",
       "addMemberPlaceholder": "Enter user email or ID",
       "addSuccess": "Member added successfully.",

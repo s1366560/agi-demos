@@ -307,7 +307,7 @@ export function WorkspaceList() {
           />
         ) : (
           <ul
-            className="grid gap-3"
+            className="grid min-w-0 gap-3"
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
           >
             {filtered.map((workspace) => {
@@ -318,13 +318,13 @@ export function WorkspaceList() {
               const collaboration = getWorkspaceCollaborationMode(workspace);
               const codeRoot = getSandboxCodeRoot(workspace);
               return (
-                <li key={workspace.id} className="h-full">
+                <li key={workspace.id} className="min-w-0 h-full">
                   <Link
                     to={`/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`}
                     aria-label={workspace.name}
-                    className="group flex h-full flex-col gap-2 rounded-md border border-border-light bg-surface-light p-4 transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:bg-surface-dark"
+                    className="group flex h-full min-w-0 flex-col gap-2 overflow-hidden rounded-md border border-border-light bg-surface-light p-4 transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-border-dark dark:bg-surface-dark"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
                       <h3 className="line-clamp-1 text-[15px] font-medium text-text-primary group-hover:text-primary dark:text-text-inverse">
                         {workspace.name}
                       </h3>
@@ -334,18 +334,28 @@ export function WorkspaceList() {
                         </Tag>
                       ) : null}
                     </div>
-                    <p className="line-clamp-2 min-h-[2.5rem] text-xs text-text-secondary dark:text-text-muted">
+                    <p className="line-clamp-2 min-h-[2.5rem] min-w-0 break-words text-xs text-text-secondary dark:text-text-muted">
                       {workspace.description?.trim() || '—'}
                     </p>
-                    <div>
-                      <Tag color={useCase === 'general' ? 'default' : 'blue'} className="!m-0">
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      <Tag
+                        color={useCase === 'general' ? 'default' : 'blue'}
+                        className="!m-0 shrink-0"
+                      >
                         {useCaseLabels[useCase]}
                       </Tag>
-                      <Tag color={collaboration === 'single_agent' ? 'default' : 'purple'}>
+                      <Tag
+                        color={collaboration === 'single_agent' ? 'default' : 'purple'}
+                        className="!m-0 shrink-0"
+                      >
                         {collaborationModeLabels[collaboration]}
                       </Tag>
                       {codeRoot ? (
-                        <Tag color="geekblue" className="!mr-0">
+                        <Tag
+                          color="geekblue"
+                          className="!m-0 min-w-0 max-w-full truncate"
+                          title={codeRoot}
+                        >
                           {codeRoot}
                         </Tag>
                       ) : null}
@@ -353,28 +363,30 @@ export function WorkspaceList() {
 
                     {/* Objective / task progress */}
                     <div
-                      className="mt-1 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
+                      className="mt-1 min-w-0 rounded border border-border-light/60 bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
                       aria-label={t('tenant.workspaceList.objectiveProgress', 'Objective progress')}
                     >
                       <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                        <span className="flex items-center gap-1.5 text-text-secondary dark:text-text-muted">
+                        <span className="flex min-w-0 items-center gap-1.5 text-text-secondary dark:text-text-muted">
                           <Target size={12} aria-hidden />
-                          {!summary || summary.loading
-                            ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
-                            : summary.source === 'objectives'
-                              ? t('tenant.workspaceList.objectivesCount', {
-                                  count:
-                                    summary.objectives > 0 ? summary.objectives : summary.total,
-                                  defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
-                                })
-                              : summary.source === 'tasks'
-                                ? t('tenant.workspaceList.tasksCount', {
-                                    count: summary.total,
-                                    defaultValue: `${String(summary.total)} tasks`,
+                          <span className="truncate">
+                            {!summary || summary.loading
+                              ? t('tenant.workspaceList.loadingObjectives', 'Loading…')
+                              : summary.source === 'objectives'
+                                ? t('tenant.workspaceList.objectivesCount', {
+                                    count:
+                                      summary.objectives > 0 ? summary.objectives : summary.total,
+                                    defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
                                   })
-                                : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
+                                : summary.source === 'tasks'
+                                  ? t('tenant.workspaceList.tasksCount', {
+                                      count: summary.total,
+                                      defaultValue: `${String(summary.total)} tasks`,
+                                    })
+                                  : t('tenant.workspaceList.noObjectives', 'No objectives yet')}
+                          </span>
                         </span>
-                        <span className="font-medium tabular-nums text-text-primary dark:text-text-inverse">
+                        <span className="shrink-0 font-medium tabular-nums text-text-primary dark:text-text-inverse">
                           {summary && !summary.loading && summary.source !== 'empty'
                             ? `${String(summary.avgProgress)}%`
                             : '—'}
@@ -390,7 +402,7 @@ export function WorkspaceList() {
                         aria-hidden
                       />
                       {summary && !summary.loading && summary.source !== 'empty' ? (
-                        <div className="mt-1 text-[11px] text-text-muted">
+                        <div className="mt-1 truncate text-[11px] text-text-muted">
                           {t('tenant.workspaceList.completedCount', {
                             completed: summary.completed,
                             total:
@@ -411,15 +423,15 @@ export function WorkspaceList() {
                       ) : null}
                     </div>
 
-                    <div className="mt-auto flex items-center justify-between pt-2 text-xs text-text-muted dark:text-text-muted">
-                      <span>
+                    <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-xs text-text-muted dark:text-text-muted">
+                      <span className="min-w-0 truncate">
                         {t('tenant.workspaceList.updated', {
                           time: formatDistanceToNow(updated),
                           defaultValue: `Updated ${formatDistanceToNow(updated)}`,
                         })}
                       </span>
                       {workspace.office_status ? (
-                        <Tag color="default" className="!m-0">
+                        <Tag color="default" className="!m-0 shrink-0">
                           {workspace.office_status}
                         </Tag>
                       ) : null}

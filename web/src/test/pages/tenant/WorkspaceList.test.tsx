@@ -82,4 +82,41 @@ describe('WorkspaceList', () => {
       '/tenant/tenant-1/project/project-1/workspaces/new'
     );
   });
+
+  it('keeps long code roots constrained inside workspace cards', async () => {
+    const longCodeRoot =
+      '/workspace/8800f9fc-484e-4bb5-8151-8e1a213dd0b2/some/really/long/project/path';
+    workspaceState.workspaces = [
+      {
+        id: 'ws-long-root',
+        name: 'Workspace With Long Code Root',
+        description:
+          'A workspace with a long description and an even longer sandbox path that should not stretch the card grid.',
+        metadata: {
+          workspace_use_case: 'programming',
+          collaboration_mode: 'autonomous',
+          sandbox_code_root: longCodeRoot,
+        },
+        created_at: '2026-04-29T00:00:00Z',
+      },
+    ];
+
+    render(
+      <Routes>
+        <Route path="/tenant/workspaces" element={<WorkspaceList />} />
+      </Routes>,
+      { route: '/tenant/workspaces' }
+    );
+
+    await waitFor(() => {
+      expect(workspaceState.actions.loadWorkspaces).toHaveBeenCalledWith('tenant-1', 'project-1');
+    });
+
+    const card = screen.getByRole('link', { name: 'Workspace With Long Code Root' });
+    const codeRootTag = screen.getByText(longCodeRoot);
+
+    expect(card).toHaveClass('min-w-0', 'overflow-hidden');
+    expect(codeRootTag).toHaveClass('min-w-0', 'max-w-full', 'truncate');
+    expect(codeRootTag).toHaveAttribute('title', longCodeRoot);
+  });
 });

@@ -841,46 +841,51 @@ export function PlanRunSnapshotSection({
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
             <div className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-t-0">
-              <div className="flex flex-col gap-3 border-b border-border-separator px-4 py-3 dark:border-border-dark 2xl:flex-row 2xl:items-center 2xl:justify-between">
+              <div className="border-b border-border-separator px-4 py-3 dark:border-border-dark">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
                   <Split className="h-4 w-4" aria-hidden />
                   {t('blackboard.planRunNodesTitle', 'Execution DAG')}
                 </div>
-                <label className="relative min-w-0 flex-1 2xl:max-w-64">
-                  <span className="sr-only">
-                    {t('blackboard.planRunSearch', 'Search plan run')}
-                  </span>
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
-                    aria-hidden
-                  />
-                  <input
-                    value={query}
-                    onChange={(event) => {
-                      setQuery(event.target.value);
-                    }}
-                    placeholder={t('blackboard.planRunSearchPlaceholder', 'Search run')}
-                    className="h-11 w-full rounded-md border border-border-light bg-surface-light pl-9 pr-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-info-border focus:ring-2 focus:ring-ring dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse lg:h-9 lg:text-xs"
-                  />
-                </label>
-                <div className="flex flex-wrap gap-2" aria-label="Filter plan nodes">
-                  {FILTERS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setFilter(item.id);
+                <div className="mt-3 flex min-w-0 flex-col gap-2 md:flex-row md:items-start">
+                  <label className="relative min-w-0 md:w-56 md:shrink-0">
+                    <span className="sr-only">
+                      {t('blackboard.planRunSearch', 'Search plan run')}
+                    </span>
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+                      aria-hidden
+                    />
+                    <input
+                      value={query}
+                      onChange={(event) => {
+                        setQuery(event.target.value);
                       }}
-                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors lg:min-h-9 ${
-                        filter === item.id
-                          ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
-                          : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
-                      }`}
-                    >
-                      <Filter className="h-3.5 w-3.5" aria-hidden />
-                      {item.label}
-                    </button>
-                  ))}
+                      placeholder={t('blackboard.planRunSearchPlaceholder', 'Search run')}
+                      className="h-10 w-full rounded-md border border-border-light bg-surface-light pl-9 pr-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-info-border focus:ring-2 focus:ring-ring dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse lg:h-9 lg:text-xs"
+                    />
+                  </label>
+                  <div
+                    className="flex min-w-0 flex-1 flex-wrap gap-2"
+                    aria-label="Filter plan nodes"
+                  >
+                    {FILTERS.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setFilter(item.id);
+                        }}
+                        className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors lg:min-h-9 ${
+                          filter === item.id
+                            ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                            : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
+                        }`}
+                      >
+                        <Filter className="h-3.5 w-3.5" aria-hidden />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

@@ -301,13 +301,11 @@ export function CentralBlackboardContent({
                 )}
 
                 {activeTab === 'settings' && (
-                  <div className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
-                    <WorkspaceSettingsPanel
-                      tenantId={tenantId}
-                      projectId={projectId}
-                      workspaceId={workspaceId}
-                    />
-                  </div>
+                  <WorkspaceSettingsPanel
+                    tenantId={tenantId}
+                    projectId={projectId}
+                    workspaceId={workspaceId}
+                  />
                 )}
         </div>
       </div>

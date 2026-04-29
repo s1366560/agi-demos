@@ -4098,20 +4098,70 @@
   },
   "workspaceSettings": {
     "title": "工作空间设置",
-    "description": "管理工作空间配置和成员。",
+    "description": "管理此工作空间的运行模型、自治策略、代码上下文和访问权限。",
+    "actions": {
+      "reset": "重置"
+    },
+    "summary": {
+      "useCase": "用途",
+      "type": "工作空间类型",
+      "mode": "Agent 模式",
+      "members": "成员"
+    },
     "generalSettings": "基本设置",
+    "generalDescription": "让成员和 Agent 都能清楚识别这个工作空间。",
     "nameLabel": "工作空间名称",
     "namePlaceholder": "输入工作空间名称",
+    "archiveLabel": "归档状态",
+    "active": "启用",
+    "archived": "已归档",
     "descriptionLabel": "描述",
     "descriptionPlaceholder": "输入工作空间描述",
     "updateSuccess": "工作空间更新成功。",
     "updateFailed": "更新工作空间失败。",
+    "operatingModel": {
+      "title": "运行模型",
+      "description": "设置自治规划、任务路由和 Agent 协作时如何理解这个工作空间。",
+      "useCase": "工作空间用途",
+      "collaborationMode": "协作模式",
+      "typeHint": "派生运行类型：{{type}}"
+    },
+    "codeContext": {
+      "title": "代码上下文",
+      "description": "为软件开发工作空间固定 sandbox 根目录，确保 Agent 在同一个项目内读取、写入、验证和汇报。",
+      "codeRoot": "Sandbox 代码根目录",
+      "codeRootHint": "编程工作空间需要使用 /workspace 下的隔离路径。",
+      "codeRootInvalid": "编程工作空间需要类似 /workspace/my-project 的 sandbox 代码根目录。"
+    },
+    "autonomy": {
+      "title": "自治验收策略",
+      "description": "定义自治任务被视为完成前，必须具备哪些验收证据。",
+      "allowInternalArtifacts": "允许内部任务产物作为完成证据",
+      "requiresExternalArtifact": "要求外部代码或测试证据",
+      "minimumVerificationGrade": "最低验证等级",
+      "requiredArtifactPrefixes": "必需产物前缀",
+      "requiredArtifactPrefixesHint": "每行一个前缀，例如 git_diff: 或 test_run:。",
+      "grade": {
+        "pass": "通过",
+        "warn": "警告",
+        "fail": "失败"
+      }
+    },
+    "metadata": {
+      "title": "高级 Metadata",
+      "description": "查看和编辑持久化配置 payload。保存时上方结构化字段会合并到这份 JSON。",
+      "rawJson": "Metadata JSON",
+      "rawJsonHint": "用于维护较少见的 metadata，同时保留主要字段的结构化编辑。",
+      "invalidJson": "Metadata 必须是合法 JSON。",
+      "objectRequired": "Metadata JSON 必须是对象。"
+    },
     "members": {
       "title": "成员管理",
       "description": "管理谁可以访问此工作空间。",
       "email": "邮箱",
       "role": "角色",
       "actions": "操作",
+      "removeMember": "移除成员",
       "addMember": "添加成员",
       "addMemberPlaceholder": "输入用户邮箱或 ID",
       "addSuccess": "成员添加成功。",
