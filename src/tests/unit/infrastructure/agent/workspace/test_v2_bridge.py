@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -65,6 +65,29 @@ def test_workspace_decomposer_max_subtasks_reads_v2_env(
     assert v2_bridge._workspace_decomposer_max_subtasks() == 6
 
 
+def test_workspace_decomposer_max_subtasks_uses_software_iteration_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WORKSPACE_V2_SOFTWARE_MAX_SUBTASKS", raising=False)
+
+    assert (
+        v2_bridge._workspace_decomposer_max_subtasks(
+            root_metadata={"workspace_type": "software_development"},
+            workspace_metadata={},
+        )
+        == 6
+    )
+
+    monkeypatch.setenv("WORKSPACE_V2_SOFTWARE_MAX_SUBTASKS", "5")
+    assert (
+        v2_bridge._workspace_decomposer_max_subtasks(
+            root_metadata={"workspace_type": "software_development"},
+            workspace_metadata={},
+        )
+        == 5
+    )
+
+
 def test_workspace_decomposer_max_subtasks_bounds_invalid_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -73,6 +96,30 @@ def test_workspace_decomposer_max_subtasks_bounds_invalid_env(
 
     monkeypatch.setenv("WORKSPACE_V2_MAX_SUBTASKS", "99")
     assert v2_bridge._workspace_decomposer_max_subtasks() == 12
+
+
+@pytest.mark.asyncio
+async def test_workspace_plan_decomposer_adapter_adds_iteration_context() -> None:
+    captured: dict[str, str | None] = {}
+
+    class _Recorder:
+        async def decompose(self, query: str, conversation_context: str | None = None) -> object:
+            captured["query"] = query
+            captured["context"] = conversation_context
+            return DecompositionResult(
+                subtasks=(SubTask(id="research", description="Research"),),
+                reasoning="recorded",
+            )
+
+    adapter = v2_bridge._WorkspacePlanTaskDecomposerAdapter(
+        cast(Any, _Recorder()),
+        extra_context="Software workspace planning contract",
+    )
+
+    await adapter.decompose(query="Ship feature", conversation_context="Existing context")
+
+    assert captured["query"] == "Ship feature"
+    assert captured["context"] == "Software workspace planning contract\n\nExisting context"
 
 
 def test_workspace_decomposer_min_subtasks_defaults_to_one_for_general(
@@ -333,8 +380,14 @@ async def test_kickoff_skips_duplicate_plan_for_completed_root(
     assert duplicate_started is True
     decomposer_builder.assert_not_awaited()
     plans = (
-        await db_session.execute(select(WorkspacePlanOutboxModel).order_by(WorkspacePlanOutboxModel.id))
-    ).scalars().all()
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).order_by(WorkspacePlanOutboxModel.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert plans == []
 
 
@@ -449,6 +502,8 @@ async def test_kickoff_swallows_orchestrator_failures() -> None:
     with (
         patch.object(v2_bridge, "build_sql_orchestrator", side_effect=RuntimeError("boom")),
     ):
-        started = await kickoff_v2_plan(workspace_id="ws-x", title="T", description="", created_by="")
+        started = await kickoff_v2_plan(
+            workspace_id="ws-x", title="T", description="", created_by=""
+        )
 
     assert started is False

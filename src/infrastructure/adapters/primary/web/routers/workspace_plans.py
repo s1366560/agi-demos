@@ -54,6 +54,15 @@ router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["works
 logger = logging.getLogger(__name__)
 _SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS = 180
 _SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS = 900
+_ITERATION_PHASE_ORDER = ("research", "plan", "implement", "test", "deploy", "review")
+_ITERATION_PHASE_LABELS = {
+    "research": "Research",
+    "plan": "Plan",
+    "implement": "Implement",
+    "test": "Test",
+    "deploy": "Deploy",
+    "review": "Review",
+}
 
 
 class WorkspacePlanActionCapabilityResponse(BaseModel):
@@ -97,6 +106,30 @@ class WorkspacePlanResponse(BaseModel):
     updated_at: datetime | None
     nodes: list[WorkspacePlanNodeResponse] = Field(default_factory=list)
     counts: dict[str, int] = Field(default_factory=dict)
+
+
+class WorkspacePlanIterationPhaseResponse(BaseModel):
+    id: str
+    label: str
+    total: int = 0
+    done: int = 0
+    running: int = 0
+    blocked: int = 0
+    progress: int = 0
+
+
+class WorkspacePlanIterationSummaryResponse(BaseModel):
+    current_iteration: int = 1
+    loop_label: str = "Scrum feedback loop"
+    cadence: str = "research -> plan -> implement -> test -> deploy -> review"
+    active_phase: str = "research"
+    active_phase_label: str = "Research"
+    next_action: str = ""
+    task_count: int = 0
+    task_budget: int = 6
+    phases: list[WorkspacePlanIterationPhaseResponse] = Field(default_factory=list)
+    deliverables: list[str] = Field(default_factory=list)
+    feedback_items: list[str] = Field(default_factory=list)
 
 
 class WorkspacePlanBlackboardEntryResponse(BaseModel):
@@ -160,6 +193,7 @@ class WorkspacePlanSnapshotResponse(BaseModel):
     workspace_id: str
     plan: WorkspacePlanResponse | None = None
     root_goal: WorkspacePlanRootGoalResponse | None = None
+    iteration: WorkspacePlanIterationSummaryResponse | None = None
     blackboard: list[WorkspacePlanBlackboardEntryResponse] = Field(default_factory=list)
     outbox: list[WorkspacePlanOutboxItemResponse] = Field(default_factory=list)
     events: list[WorkspacePlanEventResponse] = Field(default_factory=list)
@@ -329,6 +363,212 @@ def _to_plan_response(plan: Plan) -> WorkspacePlanResponse:
         nodes=_to_node_response(plan),
         counts=counts,
     )
+
+
+def _to_iteration_summary(
+    *,
+    plan: Plan,
+    root_goal: WorkspacePlanRootGoalResponse | None,
+    blackboard_entries: list[BlackboardEntry],
+    outbox_items: list[WorkspacePlanOutboxModel],
+    event_items: list[WorkspacePlanEventModel],
+) -> WorkspacePlanIterationSummaryResponse:
+    runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
+    current_iteration = _current_iteration(runnable_nodes)
+    iteration_nodes = [
+        node for node in runnable_nodes if _node_iteration_index(node) == current_iteration
+    ]
+    phases = [_phase_response(phase_id, iteration_nodes) for phase_id in _ITERATION_PHASE_ORDER]
+    active_phase = _active_iteration_phase(iteration_nodes)
+    return WorkspacePlanIterationSummaryResponse(
+        current_iteration=current_iteration,
+        active_phase=active_phase,
+        active_phase_label=_ITERATION_PHASE_LABELS[active_phase],
+        next_action=_iteration_next_action(
+            phase_id=active_phase,
+            nodes=iteration_nodes,
+            root_goal=root_goal,
+            outbox_items=outbox_items,
+        ),
+        task_count=len(iteration_nodes),
+        task_budget=len(_ITERATION_PHASE_ORDER),
+        phases=phases,
+        deliverables=_iteration_deliverables(iteration_nodes, blackboard_entries),
+        feedback_items=_iteration_feedback_items(root_goal, outbox_items, event_items),
+    )
+
+
+def _current_iteration(nodes: list[PlanNode]) -> int:
+    if not nodes:
+        return 1
+    active = [
+        index
+        for node in nodes
+        if node.intent is not TaskIntent.DONE
+        for index in [_node_iteration_index(node)]
+    ]
+    if active:
+        return min(active)
+    return max(_node_iteration_index(node) for node in nodes)
+
+
+def _node_iteration_index(node: PlanNode) -> int:
+    value = dict(node.metadata or {}).get("iteration_index")
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return max(1, int(value))
+    return 1
+
+
+def _node_iteration_phase(node: PlanNode) -> str:
+    phase = dict(node.metadata or {}).get("iteration_phase")
+    if isinstance(phase, str) and phase in _ITERATION_PHASE_ORDER:
+        return phase
+    sequence = node.feature_checkpoint.sequence if node.feature_checkpoint is not None else 0
+    if sequence > 0:
+        return _ITERATION_PHASE_ORDER[(sequence - 1) % len(_ITERATION_PHASE_ORDER)]
+    return "plan"
+
+
+def _phase_response(
+    phase_id: str,
+    nodes: list[PlanNode],
+) -> WorkspacePlanIterationPhaseResponse:
+    phase_nodes = [node for node in nodes if _node_iteration_phase(node) == phase_id]
+    done = sum(1 for node in phase_nodes if node.intent is TaskIntent.DONE)
+    blocked = sum(1 for node in phase_nodes if node.intent is TaskIntent.BLOCKED)
+    running = sum(
+        1
+        for node in phase_nodes
+        if node.execution
+        in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.REPORTED,
+            TaskExecution.VERIFYING,
+        }
+        or node.intent is TaskIntent.IN_PROGRESS
+    )
+    progress = 0
+    if phase_nodes:
+        progress = round(
+            sum(
+                100 if node.intent is TaskIntent.DONE else node.progress.percent
+                for node in phase_nodes
+            )
+            / len(phase_nodes)
+        )
+    return WorkspacePlanIterationPhaseResponse(
+        id=phase_id,
+        label=_ITERATION_PHASE_LABELS[phase_id],
+        total=len(phase_nodes),
+        done=done,
+        running=running,
+        blocked=blocked,
+        progress=max(0, min(progress, 100)),
+    )
+
+
+def _active_iteration_phase(nodes: list[PlanNode]) -> str:
+    if not nodes:
+        return "research"
+    for phase_id in _ITERATION_PHASE_ORDER:
+        if any(
+            _node_iteration_phase(node) == phase_id and node.intent is TaskIntent.BLOCKED
+            for node in nodes
+        ):
+            return phase_id
+    for phase_id in _ITERATION_PHASE_ORDER:
+        if any(
+            _node_iteration_phase(node) == phase_id
+            and (
+                node.intent is TaskIntent.IN_PROGRESS
+                or node.execution
+                in {
+                    TaskExecution.DISPATCHED,
+                    TaskExecution.RUNNING,
+                    TaskExecution.REPORTED,
+                    TaskExecution.VERIFYING,
+                }
+            )
+            for node in nodes
+        ):
+            return phase_id
+    for phase_id in _ITERATION_PHASE_ORDER:
+        if any(
+            _node_iteration_phase(node) == phase_id and node.intent is TaskIntent.TODO
+            for node in nodes
+        ):
+            return phase_id
+    return "review"
+
+
+def _iteration_next_action(
+    *,
+    phase_id: str,
+    nodes: list[PlanNode],
+    root_goal: WorkspacePlanRootGoalResponse | None,
+    outbox_items: list[WorkspacePlanOutboxModel],
+) -> str:
+    phase_label = _ITERATION_PHASE_LABELS[phase_id].lower()
+    if any(item.status in {"failed", "dead_letter"} for item in outbox_items):
+        return "Recover failed queue work before advancing the sprint."
+    if any(node.intent is TaskIntent.BLOCKED for node in nodes):
+        return f"Resolve blockers in {phase_label}, then re-run the supervisor tick."
+    if root_goal and root_goal.completion_blocker_reason:
+        return "Close root-goal evidence gaps before starting the next iteration."
+    if any(
+        node.execution
+        in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.REPORTED,
+            TaskExecution.VERIFYING,
+        }
+        for node in nodes
+    ):
+        return f"Let active {phase_label} work finish and collect verification evidence."
+    if any(node.intent is TaskIntent.TODO for node in nodes):
+        return f"Dispatch the next {phase_label} task in the current sprint."
+    return "Review feedback and create the next bounded sprint if the goal is not done."
+
+
+def _iteration_deliverables(
+    nodes: list[PlanNode],
+    blackboard_entries: list[BlackboardEntry],
+) -> list[str]:
+    values: list[str] = []
+    for node in nodes:
+        if node.feature_checkpoint is not None:
+            values.extend(node.feature_checkpoint.expected_artifacts)
+        write_set = dict(node.metadata or {}).get("write_set")
+        if isinstance(write_set, list):
+            values.extend(item for item in write_set if isinstance(item, str) and item)
+    for entry in blackboard_entries:
+        if entry.key.startswith("artifact."):
+            values.append(entry.key)
+    return list(dict.fromkeys(values))[:8]
+
+
+def _iteration_feedback_items(
+    root_goal: WorkspacePlanRootGoalResponse | None,
+    outbox_items: list[WorkspacePlanOutboxModel],
+    event_items: list[WorkspacePlanEventModel],
+) -> list[str]:
+    feedback: list[str] = []
+    if root_goal and root_goal.completion_blocker_reason:
+        feedback.append(root_goal.completion_blocker_reason)
+    for item in outbox_items:
+        if item.last_error and item.status in {"failed", "dead_letter"}:
+            feedback.append(item.last_error)
+    for event in event_items:
+        payload = dict(event.payload_json or {})
+        if event.event_type == "verification_completed" and payload.get("passed") is not True:
+            summary = payload.get("summary") or payload.get("reason") or payload.get("error")
+            if isinstance(summary, str) and summary:
+                feedback.append(summary)
+    return list(dict.fromkeys(feedback))[:5]
 
 
 def _to_blackboard_response(entry: BlackboardEntry) -> WorkspacePlanBlackboardEntryResponse:
@@ -754,7 +994,9 @@ async def _nodes_without_live_worker(
         return nodes
 
     filtered = [
-        node for node in nodes if not node.current_attempt_id or node.current_attempt_id not in live_attempt_ids
+        node
+        for node in nodes
+        if not node.current_attempt_id or node.current_attempt_id not in live_attempt_ids
     ]
     suppressed = len(nodes) - len(filtered)
     if suppressed:
@@ -781,9 +1023,7 @@ async def _has_pending_node_recovery_job(
             .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
             .where(WorkspacePlanOutboxModel.plan_id == plan_id)
             .where(
-                WorkspacePlanOutboxModel.event_type.in_(
-                    [HANDOFF_RESUME_EVENT, WORKER_LAUNCH_EVENT]
-                )
+                WorkspacePlanOutboxModel.event_type.in_([HANDOFF_RESUME_EVENT, WORKER_LAUNCH_EVENT])
             )
             .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
             .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
@@ -962,10 +1202,18 @@ async def get_workspace_plan_snapshot(
             )
         )
         event_items = list(event_result.scalars().all())
+        root_goal = await _load_root_goal_response(db, workspace_id=workspace_id, plan=plan)
         return WorkspacePlanSnapshotResponse(
             workspace_id=workspace_id,
             plan=_to_plan_response(plan),
-            root_goal=await _load_root_goal_response(db, workspace_id=workspace_id, plan=plan),
+            root_goal=root_goal,
+            iteration=_to_iteration_summary(
+                plan=plan,
+                root_goal=root_goal,
+                blackboard_entries=blackboard_entries,
+                outbox_items=outbox_items,
+                event_items=event_items,
+            ),
             blackboard=[_to_blackboard_response(entry) for entry in blackboard_entries],
             outbox=[_to_outbox_response(item) for item in outbox_items],
             events=[_to_event_response(item) for item in event_items],

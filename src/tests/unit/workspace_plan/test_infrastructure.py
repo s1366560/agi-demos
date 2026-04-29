@@ -201,6 +201,10 @@ class TestLLMGoalPlanner:
         assert leaf.feature_checkpoint is not None
         assert leaf.feature_checkpoint.feature_id == leaf.metadata["feature_id"]
         assert leaf.metadata["harness_feature_id"] == leaf.feature_checkpoint.feature_id
+        assert leaf.metadata["iteration_index"] == 1
+        assert leaf.metadata["iteration_phase"] == "research"
+        assert leaf.metadata["iteration_loop"] == "scrum_feedback_loop_v1"
+        assert leaf.metadata["scrum_artifact"] == "product_discovery"
         assert leaf.feature_checkpoint.sequence == 1
         assert leaf.feature_checkpoint.test_commands == (
             "cd /workspace/my-evo && npm test -- src/sandbox/routes.test.ts --runInBand --coverage=false",
@@ -1104,7 +1108,9 @@ class TestSupervisorTick:
             return f"attempt-{node.id}"
 
         async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
-            return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
 
         async def event_sink(
             _wid: str,

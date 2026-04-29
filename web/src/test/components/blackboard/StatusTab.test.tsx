@@ -184,9 +184,7 @@ describe('StatusTab', () => {
     expect(screen.getByText('Verify deployment plan')).toBeInTheDocument();
     expect(screen.getByText('bash')).toBeInTheDocument();
     expect(screen.getByText('command failed')).toBeInTheDocument();
-    expect(consoleError.mock.calls.some((call) => call.join(' ').includes('same key'))).toBe(
-      false
-    );
+    expect(consoleError.mock.calls.some((call) => call.join(' ').includes('same key'))).toBe(false);
     consoleError.mockRestore();
   });
 
@@ -287,6 +285,42 @@ describe('StatusTab', () => {
           created_at: '2026-04-23T00:00:00Z',
         },
       ],
+      iteration: {
+        current_iteration: 1,
+        loop_label: 'Scrum feedback loop',
+        cadence: 'research -> plan -> implement -> test -> deploy -> review',
+        active_phase: 'implement',
+        active_phase_label: 'Implement',
+        next_action: 'Let active implement work finish and collect verification evidence.',
+        task_count: 1,
+        task_budget: 6,
+        phases: [
+          {
+            id: 'research',
+            label: 'Research',
+            total: 0,
+            done: 0,
+            running: 0,
+            blocked: 0,
+            progress: 0,
+          },
+          { id: 'plan', label: 'Plan', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
+          {
+            id: 'implement',
+            label: 'Implement',
+            total: 1,
+            done: 0,
+            running: 1,
+            blocked: 0,
+            progress: 25,
+          },
+          { id: 'test', label: 'Test', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
+          { id: 'deploy', label: 'Deploy', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
+          { id: 'review', label: 'Review', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
+        ],
+        deliverables: ['artifact.spec'],
+        feedback_items: [],
+      },
     });
 
     render(
@@ -306,7 +340,13 @@ describe('StatusTab', () => {
     );
 
     expect((await screen.findAllByText('Ship autonomous plan'))[0]).toBeInTheDocument();
-    expect(screen.getByText('artifact.spec')).toBeInTheDocument();
+    expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Iteration 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Implement')[0]).toBeInTheDocument();
+    expect(
+      screen.getByText('Let active implement work finish and collect verification evidence.')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('supervisor_tick')).toBeInTheDocument();
     expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {

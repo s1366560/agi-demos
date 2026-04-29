@@ -57,16 +57,19 @@ logger = logging.getLogger(__name__)
 # Test hook only. Production uses SQL-backed, request-scoped orchestrators.
 _orchestrator_singleton: WorkspaceOrchestrator | None = None
 _DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 8
+_DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
 _DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS = 6
 _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
+_SOFTWARE_ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
 
 
 class _WorkspacePlanTaskDecomposerAdapter:
     """Adapter for planner's keyword-only decomposer protocol."""
 
-    def __init__(self, decomposer: TaskDecomposer) -> None:
+    def __init__(self, decomposer: TaskDecomposer, extra_context: str | None = None) -> None:
         super().__init__()
         self._decomposer = decomposer
+        self._extra_context = extra_context
 
     async def decompose(
         self,
@@ -74,9 +77,10 @@ class _WorkspacePlanTaskDecomposerAdapter:
         query: str,
         conversation_context: str | None = None,
     ) -> DecompositionResultLike:
+        context = _join_context(self._extra_context, conversation_context)
         result = await self._decomposer.decompose(
             query=query,
-            conversation_context=conversation_context,
+            conversation_context=context,
         )
         return cast("DecompositionResultLike", result)
 
@@ -238,7 +242,11 @@ async def _build_workspace_task_decomposer(
             operation_type=OperationType.LLM,
         )
         llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
-        max_subtasks = _workspace_decomposer_max_subtasks()
+        workspace_type = resolve_workspace_type(root_metadata, workspace.metadata)
+        max_subtasks = _workspace_decomposer_max_subtasks(
+            root_metadata=root_metadata,
+            workspace_metadata=workspace.metadata,
+        )
         return _WorkspacePlanTaskDecomposerAdapter(
             TaskDecomposer(
                 llm_client=llm_client,
@@ -248,7 +256,11 @@ async def _build_workspace_task_decomposer(
                     workspace_metadata=workspace.metadata,
                     max_subtasks=max_subtasks,
                 ),
-            )
+            ),
+            extra_context=_workspace_iteration_decomposition_context(
+                workspace_type=workspace_type,
+                max_subtasks=max_subtasks,
+            ),
         )
     except Exception:
         logger.warning(
@@ -259,14 +271,27 @@ async def _build_workspace_task_decomposer(
         return None
 
 
-def _workspace_decomposer_max_subtasks() -> int:
-    raw_value = os.getenv("WORKSPACE_V2_MAX_SUBTASKS")
+def _workspace_decomposer_max_subtasks(
+    *,
+    root_metadata: Mapping[str, Any] | None = None,
+    workspace_metadata: Mapping[str, Any] | None = None,
+) -> int:
+    is_software = (
+        resolve_workspace_type(root_metadata, workspace_metadata) == "software_development"
+    )
+    env_name = "WORKSPACE_V2_SOFTWARE_MAX_SUBTASKS" if is_software else "WORKSPACE_V2_MAX_SUBTASKS"
+    default = (
+        _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS
+        if is_software
+        else _DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS
+    )
+    raw_value = os.getenv(env_name)
     if raw_value is None:
-        return _DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS
+        return default
     try:
         value = int(raw_value)
     except ValueError:
-        return _DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS
+        return default
     return max(1, min(value, _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS))
 
 
@@ -287,6 +312,31 @@ def _workspace_decomposer_min_subtasks(
         except ValueError:
             value = _DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS
     return max(1, min(value, max_subtasks))
+
+
+def _workspace_iteration_decomposition_context(
+    *,
+    workspace_type: str,
+    max_subtasks: int,
+) -> str | None:
+    if workspace_type != "software_development":
+        return None
+    phases = ", ".join(_SOFTWARE_ITERATION_PHASES)
+    return (
+        "Software workspace planning contract: create only the current Scrum-style sprint, "
+        "not the full future backlog. Use at most "
+        f"{max_subtasks} subtasks total. Cover the iteration lifecycle in this order when "
+        f"possible: {phases}. Treat later unknown work as feedback for a future sprint, "
+        "not as extra tasks in this plan. Each subtask should be independently verifiable "
+        "and should name concrete evidence or artifacts."
+    )
+
+
+def _join_context(*parts: str | None) -> str | None:
+    values = [part.strip() for part in parts if isinstance(part, str) and part.strip()]
+    if not values:
+        return None
+    return "\n\n".join(values)
 
 
 __all__ = [

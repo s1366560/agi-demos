@@ -265,10 +265,35 @@ export interface WorkspacePlanEvent {
   created_at: string;
 }
 
+export interface WorkspacePlanIterationPhase {
+  id: string;
+  label: string;
+  total: number;
+  done: number;
+  running: number;
+  blocked: number;
+  progress: number;
+}
+
+export interface WorkspacePlanIterationSummary {
+  current_iteration: number;
+  loop_label: string;
+  cadence: string;
+  active_phase: string;
+  active_phase_label: string;
+  next_action: string;
+  task_count: number;
+  task_budget: number;
+  phases: WorkspacePlanIterationPhase[];
+  deliverables: string[];
+  feedback_items: string[];
+}
+
 export interface WorkspacePlanSnapshot {
   workspace_id: string;
   plan: WorkspacePlan | null;
   root_goal?: WorkspacePlanRootGoal | null | undefined;
+  iteration?: WorkspacePlanIterationSummary | null | undefined;
   blackboard: WorkspacePlanBlackboardEntry[];
   outbox: WorkspacePlanOutboxItem[];
   events: WorkspacePlanEvent[];

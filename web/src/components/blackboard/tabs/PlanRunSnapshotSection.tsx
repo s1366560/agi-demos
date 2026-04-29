@@ -11,7 +11,9 @@ import {
   Filter,
   GitBranch,
   Loader2,
+  PackageCheck,
   RefreshCw,
+  Repeat2,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -55,6 +57,7 @@ import {
 
 import type {
   WorkspacePlanActionCapability,
+  WorkspacePlanIterationSummary,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
   WorkspaceTask,
@@ -87,6 +90,123 @@ function actionDisabledReason(
 
 function reasonOrFallback(value: string, fallback: string): string {
   return value.trim() || fallback;
+}
+
+function nodePhaseLabel(nodeMetadata: Record<string, unknown>): string {
+  const phase = nodeMetadata.iteration_phase;
+  return typeof phase === 'string' && phase ? phase : 'plan';
+}
+
+function IterationLoopPanel({
+  iteration,
+}: {
+  iteration: WorkspacePlanIterationSummary | null | undefined;
+}) {
+  if (!iteration) {
+    return null;
+  }
+
+  return (
+    <div className="border-t border-border-separator px-4 py-4 dark:border-border-dark">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+            <Repeat2 className="h-4 w-4" aria-hidden />
+            Iteration {iteration.current_iteration}
+          </div>
+          <div className="mt-2 text-sm font-medium text-text-primary dark:text-text-inverse">
+            {iteration.active_phase_label}
+          </div>
+          <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+            {iteration.next_action}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <StatBadge
+            label="Sprint tasks"
+            value={`${String(iteration.task_count)}/${String(iteration.task_budget)}`}
+          />
+          <StatBadge label="Loop" value={iteration.loop_label} />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {iteration.phases.map((phase) => {
+          const isActive = phase.id === iteration.active_phase;
+          return (
+            <div
+              key={phase.id}
+              className={`min-w-0 rounded-md border px-3 py-2 ${
+                isActive
+                  ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                  : 'border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold">{phase.label}</span>
+                <span className="font-mono text-[11px]">{phase.progress}%</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background-light/70 dark:bg-background-dark/60">
+                <div
+                  className={`h-full rounded-full ${
+                    phase.blocked > 0
+                      ? 'bg-status-text-error'
+                      : isActive
+                        ? 'bg-status-text-info'
+                        : 'bg-text-muted'
+                  }`}
+                  style={{ width: `${String(Math.max(0, Math.min(phase.progress, 100)))}%` }}
+                />
+              </div>
+              <div className="mt-1.5 text-[11px]">
+                {phase.done}/{phase.total || 0}
+                {phase.running > 0 ? ` · ${String(phase.running)} active` : ''}
+                {phase.blocked > 0 ? ` · ${String(phase.blocked)} blocked` : ''}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {(iteration.deliverables.length > 0 || iteration.feedback_items.length > 0) && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {iteration.deliverables.length > 0 && (
+            <div className="min-w-0 rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                <PackageCheck className="h-4 w-4" aria-hidden />
+                Outputs
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {iteration.deliverables.map((item) => (
+                  <span
+                    key={item}
+                    className="max-w-full truncate rounded border border-border-light bg-surface-muted px-2 py-1 font-mono text-[11px] text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {iteration.feedback_items.length > 0 && (
+            <div className="min-w-0 rounded-md border border-warning-border bg-warning-bg p-3 text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase">
+                <AlertTriangle className="h-4 w-4" aria-hidden />
+                Feedback
+              </div>
+              <ul className="mt-2 space-y-1 text-xs leading-5">
+                {iteration.feedback_items.map((item) => (
+                  <li key={item} className="break-words">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PlanRunSnapshotSection({
@@ -232,6 +352,7 @@ export function PlanRunSnapshotSection({
   const events = useMemo(() => snapshot?.events ?? [], [snapshot]);
   const blackboard = useMemo(() => snapshot?.blackboard ?? [], [snapshot]);
   const rootGoal = snapshot?.root_goal ?? null;
+  const iteration = snapshot?.iteration ?? null;
   const stage = planStage(snapshot);
   const doneCount = countDone(runnableNodes);
   const rootUnitCount = rootGoal ? 1 : 0;
@@ -579,6 +700,7 @@ export function PlanRunSnapshotSection({
               {rootGoal.completion_blocker_reason}
             </div>
           )}
+          <IterationLoopPanel iteration={iteration} />
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
             <div className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-t-0">
@@ -703,6 +825,12 @@ export function PlanRunSnapshotSection({
                           Updated
                         </span>{' '}
                         {formatTime(selectedNode.updated_at ?? selectedNode.created_at)}
+                      </div>
+                      <div>
+                        <span className="font-medium text-text-primary dark:text-text-inverse">
+                          Phase
+                        </span>{' '}
+                        {nodePhaseLabel(asRecord(selectedNode.metadata))}
                       </div>
                       <div>
                         <span className="font-medium text-text-primary dark:text-text-inverse">

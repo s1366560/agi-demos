@@ -133,7 +133,14 @@ def _make_plan(workspace_id: str) -> Plan:
             feature_id="feature-api",
             sequence=1,
             title="Implement durable supervisor",
+            expected_artifacts=("docs/sprint.md",),
         ),
+        metadata={
+            "iteration_index": 1,
+            "iteration_phase": "implement",
+            "iteration_loop": "scrum_feedback_loop_v1",
+            "write_set": ["src/runtime/supervisor.py"],
+        },
     )
     return plan
 
@@ -205,6 +212,12 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert response.outbox[0].actions["retry_outbox"].enabled is False
     assert response.events[0].event_type == "verification_completed"
     assert response.events[0].payload["summary"] == "verified"
+    assert response.iteration is not None
+    assert response.iteration.current_iteration == 1
+    assert response.iteration.active_phase == "implement"
+    assert response.iteration.task_count == 1
+    assert "docs/sprint.md" in response.iteration.deliverables
+    assert "src/runtime/supervisor.py" in response.iteration.deliverables
     task_node = next(node for node in response.plan.nodes if node.id == "task-api")
     assert task_node.feature_checkpoint is not None
     assert task_node.feature_checkpoint["feature_id"] == "feature-api"

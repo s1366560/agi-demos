@@ -56,6 +56,15 @@ _FILE_PATH_RE = re.compile(
         )
     )
 )
+_ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
+_SCRUM_ARTIFACT_BY_PHASE = {
+    "research": "product_discovery",
+    "plan": "sprint_backlog",
+    "implement": "increment",
+    "test": "verification",
+    "deploy": "release_candidate",
+    "review": "feedback",
+}
 
 
 class LLMGoalPlanner(GoalPlannerPort):
@@ -344,6 +353,15 @@ def _planner_node_metadata(
     sequence: int | None = None,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {"acceptance_source": "planner_structural_v1"}
+    phase = _iteration_phase_for_sequence(sequence)
+    metadata["iteration_index"] = 1
+    metadata["iteration_phase"] = phase
+    metadata["iteration_loop"] = "scrum_feedback_loop_v1"
+    metadata["scrum_artifact"] = _SCRUM_ARTIFACT_BY_PHASE[phase]
+    metadata["next_iteration_policy"] = (
+        "After review feedback is recorded, create a new bounded sprint plan instead of "
+        "expanding the current plan indefinitely."
+    )
     if node_id is not None:
         feature_id = _feature_id(node_id=node_id, sequence=sequence or 0)
         metadata["feature_id"] = feature_id
@@ -356,6 +374,18 @@ def _planner_node_metadata(
     if commands:
         metadata["verification_commands"] = commands
     return metadata
+
+
+def _iteration_phase_for_sequence(sequence: int | None) -> str:
+    """Map planner output order to the current sprint lifecycle phase.
+
+    The phase is a structural planning contract, not text classification: the
+    decomposer is instructed to emit current-sprint tasks in this order.
+    """
+
+    if sequence is None or sequence <= 0:
+        return "plan"
+    return _ITERATION_PHASES[(sequence - 1) % len(_ITERATION_PHASES)]
 
 
 def _feature_checkpoint_for_task(
