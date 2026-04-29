@@ -1107,6 +1107,8 @@ class ReActAgent:
         conversation_context: list[dict[str, str]],
         matched_skill: Skill | None,
         success: bool,
+        execution_time_ms: int = 0,
+        tool_call_count: int = 0,
         llm_client_override: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Emit a runtime hook after turn completion side effects finish."""
@@ -1122,6 +1124,8 @@ class ReActAgent:
                 "memory_runtime": self._memory_runtime,
                 "matched_skill_name": matched_skill.name if matched_skill else None,
                 "success": success,
+                "execution_time_ms": execution_time_ms,
+                "tool_call_count": tool_call_count,
                 "llm_client_override": llm_client_override,
             },
         )
@@ -2638,6 +2642,8 @@ class ReActAgent:
         conversation_context: list[dict[str, str]],
         matched_skill: Skill | None,
         success: bool,
+        execution_time_ms: int = 0,
+        tool_call_count: int = 0,
         llm_client_override: Any | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Post-process: memory capture, conversation indexing, final complete event."""
@@ -2650,6 +2656,8 @@ class ReActAgent:
             conversation_context=conversation_context,
             matched_skill=matched_skill,
             success=success,
+            execution_time_ms=execution_time_ms,
+            tool_call_count=tool_call_count,
             llm_client_override=llm_client_override,
         )
         for event in hook_events:
@@ -3447,6 +3455,14 @@ class ReActAgent:
                 self._stream_final_content = hb_reply.cleaned_text
 
         # Phase 14: Post-processing
+        # Calculate execution time before post-process (post-process is
+        # lightweight — just hook delivery — so this is accurate enough).
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        # Count tool calls from conversation context for skill evolution capture.
+        tool_call_count = sum(
+            1 for msg in conversation_context
+            if msg.get("role") in ("tool", "function")
+        )
         async for event in self._stream_post_process(
             processed_user_message=processed_user_message,
             final_content=self._stream_final_content,
@@ -3456,6 +3472,8 @@ class ReActAgent:
             conversation_context=conversation_context,
             matched_skill=matched_skill,
             success=self._stream_success,
+            execution_time_ms=execution_time_ms,
+            tool_call_count=tool_call_count,
             llm_client_override=config.llm_client if normalized_model_override else None,
         ):
             yield event

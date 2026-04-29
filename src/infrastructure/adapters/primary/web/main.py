@@ -145,7 +145,7 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915
+async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915, C901, PLR0912
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
@@ -220,6 +220,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915
     except Exception:
         logger.exception("Failed to start WorkspaceSupervisor -- WTP fan-in disabled")
 
+    # Start Skill Evolution Plugin scheduler (periodic pipeline for SKILL.md improvement)
+    try:
+        plugin = container.skill_evolution_plugin()
+        if plugin is not None:
+            await plugin.on_enable()
+            logger.info("Skill evolution plugin scheduler started")
+        else:
+            logger.info(
+                "Skill evolution plugin not started "
+                "(disabled or missing dependencies)"
+            )
+    except Exception:
+        logger.exception("Failed to start skill evolution plugin")
+
     # Start attempt recovery service (restart-safe orphaned-attempt watchdog)
     await initialize_attempt_recovery()
 
@@ -254,6 +268,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915
         await stop_scheduler()
     except Exception:
         logger.exception("Error stopping cron scheduler")
+
+    # Stop Skill Evolution Plugin scheduler
+    try:
+        plugin = app.state.container.skill_evolution_plugin()
+        if plugin is not None:
+            await plugin.on_disable()
+            logger.info("Skill evolution plugin scheduler stopped")
+    except Exception:
+        logger.exception("Error stopping skill evolution plugin")
 
     await stop_health_checker()
 

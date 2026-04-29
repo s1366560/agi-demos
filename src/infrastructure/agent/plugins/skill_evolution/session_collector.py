@@ -129,6 +129,7 @@ class SessionCollector:
             matched_skill_name=matched_skill_name,
             conversation_context=list(payload.get("conversation_context", [])),
             success=bool(payload.get("success", False)),
+            execution_time_ms=int(payload.get("execution_time_ms", 0)),
         )
 
         if session is None:
