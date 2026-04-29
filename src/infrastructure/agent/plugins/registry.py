@@ -1386,6 +1386,35 @@ def _register_builtin_hooks() -> None:
         and not any(entry.plugin_name == "memory-runtime" for entry in hook_catalog)
     ):
         register_builtin_memory_plugin(_global_plugin_registry)
+    if not any(entry.plugin_name == "skill-evolution" for entry in hook_catalog):
+        _register_skill_evolution_hook(_global_plugin_registry)
+
+
+def _register_skill_evolution_hook(registry: AgentPluginRegistry) -> None:
+    """Register the skill evolution after_turn_complete hook.
+
+    This only registers the hook; the full plugin (with scheduler,
+    LLM client, and skill service) is initialized later via the DI
+    container when those dependencies are available.
+    """
+    from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
+    from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+        _after_turn_complete,
+    )
+
+    api = PluginRuntimeApi("skill-evolution", registry=registry)
+    api.register_hook(
+        "after_turn_complete",
+        _after_turn_complete,
+        hook_family="mutating",
+        priority=30,
+        display_name="Skill evolution capture",
+        description=(
+            "Captures skill-execution data after each turn for "
+            "periodic evolution analysis and SKILL.md improvement."
+        ),
+        overwrite=True,
+    )
 
 
 def get_plugin_registry() -> AgentPluginRegistry:

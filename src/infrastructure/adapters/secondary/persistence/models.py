@@ -2459,6 +2459,12 @@ from src.infrastructure.adapters.secondary.persistence.channel_models import (  
     ChannelConfigModel as ChannelConfigModel,
 )
 
+# Register skill evolution plugin models on Base.metadata.
+from src.infrastructure.agent.plugins.skill_evolution.models import (  # noqa: E402
+    SkillEvolutionJob as SkillEvolutionJob,
+    SkillEvolutionSession as SkillEvolutionSession,
+)
+
 
 class TenantEventLogModel(Base):
     __tablename__ = "tenant_event_logs"

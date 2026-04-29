@@ -608,6 +608,52 @@ class DIContainer:
     def skill_service(self) -> SkillService:
         return self._agent.skill_service()
 
+    def skill_evolution_plugin(self) -> Any:
+        """Get or initialize the skill evolution plugin (cached singleton).
+
+        Wires the plugin with its heavy dependencies (skill service,
+        LLM provider manager, DB session factory) on first access.
+        The hook registration happens separately in the builtin hooks
+        init so that data capture works even before full init.
+        """
+        if self._session_factory is None:
+            return None
+
+        from src.application.services.llm_provider_manager import (
+            get_llm_provider_manager,
+        )
+        from src.infrastructure.agent.plugins.registry import (
+            get_plugin_registry,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.config import (
+            SkillEvolutionConfig,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+            register_builtin_skill_evolution_plugin,
+        )
+
+        config = SkillEvolutionConfig.from_env()
+        if not config.enabled:
+            return None
+
+        try:
+            registry = get_plugin_registry()
+            llm_provider_manager = get_llm_provider_manager()
+            return register_builtin_skill_evolution_plugin(
+                registry=registry,
+                config=config,
+                skill_service=self.skill_service(),
+                llm_provider_manager=llm_provider_manager,
+                session_factory=self._session_factory,
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to initialize skill evolution plugin"
+            )
+            return None
+
     def workspace_manager(self) -> Any:
         return self._agent.workspace_manager()
 
