@@ -294,10 +294,12 @@ async def test_stale_plan_node_recovery_enqueues_handoff_resume(
     assert events[0].event_type == "auto_stale_node_recovery_queued"
 
 
-def test_stale_plan_node_snapshot_recovery_uses_longer_running_grace() -> None:
+def test_stale_plan_node_snapshot_recovery_uses_live_worker_grace() -> None:
     plan = _make_plan("workspace-plan-api-stale-grace")
     task_node_id = PlanNodeId(value="task-api")
-    updated_at = datetime.now(UTC) - timedelta(seconds=300)
+    updated_at = datetime.now(UTC) - timedelta(
+        seconds=workspace_plans._SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS + 1
+    )
 
     plan.nodes[task_node_id] = replace(
         plan.nodes[task_node_id],
@@ -314,6 +316,63 @@ def test_stale_plan_node_snapshot_recovery_uses_longer_running_grace() -> None:
     )
 
     assert [node.id for node in workspace_plans._stale_running_nodes(plan)] == ["task-api"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_does_not_recover_running_node_when_liveness_is_unavailable(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-liveness-unavailable"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            Conversation(
+                id="conversation-stale",
+                project_id="plan-api-project",
+                tenant_id="plan-api-tenant",
+                user_id="plan-api-user",
+                title="Worker",
+                status="active",
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-stale",
+                workspace_task_id="workspace-task-api",
+                root_goal_task_id="root-api",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="running",
+                conversation_id="conversation-stale",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        updated_at=datetime.now(UTC)
+        - timedelta(seconds=workspace_plans._SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS + 1),
+        workspace_task_id="workspace-task-api",
+        current_attempt_id="attempt-stale",
+    )
+    await db_session.flush()
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+        AsyncMock(side_effect=RuntimeError("redis unavailable")),
+    )
+
+    stale_nodes = workspace_plans._stale_running_nodes(plan)
+
+    assert [node.id for node in stale_nodes] == ["task-api"]
+    assert (
+        await workspace_plans._nodes_without_live_worker(
+            session=db_session,
+            nodes=stale_nodes,
+        )
+        == []
+    )
 
 
 @pytest.mark.asyncio
@@ -393,6 +452,161 @@ async def test_snapshot_recovery_skips_stale_node_with_live_worker(
         )
         == []
     )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_enqueues_tick_for_active_node_with_terminal_attempt(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-terminal-attempt"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-api",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-accepted",
+                workspace_task_id="workspace-task-api",
+                root_goal_task_id="root-api",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-api",
+        current_attempt_id="attempt-accepted",
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
+    assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(
+        plan.id,
+        limit=5,
+    )
+    assert events[0].event_type == "auto_terminal_attempt_reconcile_queued"
+
+    duplicate = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert duplicate is False
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_enqueues_tick_for_blocked_node_with_accepted_attempt(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-blocked-terminal-attempt"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-blocked-terminal",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-blocked-terminal",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-accepted-blocked-terminal",
+                workspace_task_id="workspace-task-blocked-terminal",
+                root_goal_task_id="root-api-blocked-terminal",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-blocked-terminal",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.BLOCKED,
+        execution=TaskExecution.IDLE,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-blocked-terminal",
+        current_attempt_id="attempt-accepted-blocked-terminal",
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
+    assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
 
 
 @pytest.mark.asyncio

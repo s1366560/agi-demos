@@ -13,9 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.domain.model.workspace_plan import (
+    Capability,
     FeatureCheckpoint,
     PlanNode,
     PlanNodeId,
+    PlanNodeKind,
     TaskExecution,
     TaskIntent,
 )
@@ -769,6 +771,128 @@ async def test_supervisor_tick_releases_node_when_current_attempt_is_missing(
     assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
     assert retried_leaf.metadata["terminal_attempt_retry_reason"] == "missing_attempt"
     assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch_failure(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    accepted_leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="accepted-node-task",
+            workspace_id="workspace-1",
+            title="Accepted projection",
+            description="",
+            created_by="worker-user-1",
+            status="done",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: accepted_leaf.id,
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="accepted-terminal-attempt",
+            workspace_task_id="accepted-node-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="accepted",
+            conversation_id="accepted-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="accepted by durable verifier",
+        )
+    )
+    plan.replace_node(
+        replace(
+            accepted_leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            current_attempt_id="accepted-terminal-attempt",
+            workspace_task_id="accepted-node-task",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="next-node",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Next ready task",
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            recommended_capabilities=(Capability(name="codegen"),),
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+        max_attempts=1,
+    )
+    await db_session.commit()
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return [WorkspaceAgent(agent_id="agent-1", display_name="Agent One")]
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        _node: PlanNode,
+    ) -> str:
+        raise PermissionError("User must be a workspace member")
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.nodes[accepted_leaf.node_id]
+    assert reconciled_leaf.intent is TaskIntent.DONE
+    assert reconciled_leaf.execution is TaskExecution.IDLE
+    assert reconciled_leaf.metadata["terminal_attempt_status"] == "accepted"
+    assert reconciled_leaf.metadata["last_verification_summary"] == (
+        "accepted by durable verifier"
+    )
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == (
+        "accepted-terminal-attempt"
+    )
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        "workspace-1",
+        limit=5,
+    )
+    assert outbox[0].status == "dead_letter"
+    assert "User must be a workspace member" in str(outbox[0].last_error)
 
 
 @pytest.mark.asyncio

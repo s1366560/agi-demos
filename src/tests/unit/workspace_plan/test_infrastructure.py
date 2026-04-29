@@ -33,6 +33,7 @@ from src.domain.ports.services.iteration_review_port import (
 )
 from src.domain.ports.services.task_allocator_port import WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.infrastructure.agent.workspace_plan import factory as workspace_plan_factory
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
 from src.infrastructure.agent.workspace_plan.orchestrator import (
@@ -770,6 +771,28 @@ class TestVerifier:
             "test_run:uv run pytest src/tests/unit/example.py",
         }
 
+    async def test_review_phase_feature_artifacts_do_not_require_git_evidence(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={"iteration_phase": "review"},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-review",
+                sequence=1,
+                title="Review evidence",
+                expected_artifacts=("docs/E2E-ACCEPTANCE-REPORT.md",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={"last_worker_report_type": "completed"},
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert "missing feature checkpoint evidence" not in rep.summary()
+
 
 # ---------------------------------------------------------------------------
 # M6 progress projector
@@ -934,7 +957,7 @@ def _supervisor_for_iteration_review(
         return None
 
     async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
-        return VerificationContext(workspace_id=wid, node=node)
+        return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
 
     async def event_sink(
         _wid: str,
@@ -1222,6 +1245,67 @@ class TestSupervisorTick:
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_count"] == 1
 
+    async def test_sql_event_sink_schedules_delayed_retry_tick(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        appended_events: list[dict[str, Any]] = []
+        enqueued_outbox: list[dict[str, Any]] = []
+
+        class _FakeEventRepo:
+            def __init__(self, db: object) -> None:
+                self.db = db
+
+            async def append(self, **kwargs: Any) -> object:
+                appended_events.append(kwargs)
+                return object()
+
+        class _FakeOutboxRepo:
+            def __init__(self, db: object) -> None:
+                self.db = db
+
+            async def enqueue(self, **kwargs: Any) -> object:
+                enqueued_outbox.append(kwargs)
+                return object()
+
+        monkeypatch.setattr(
+            workspace_plan_factory,
+            "SqlWorkspacePlanEventRepository",
+            _FakeEventRepo,
+        )
+        monkeypatch.setattr(
+            workspace_plan_factory,
+            "SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepo,
+        )
+
+        sink = workspace_plan_factory._make_sql_plan_event_sink(object())
+        node = PlanNode(
+            id="a",
+            plan_id="plan-1",
+            parent_id=PlanNodeId("goal-1"),
+            kind=PlanNodeKind.TASK,
+            title="task a",
+        )
+
+        await sink(
+            "ws-1",
+            node,
+            "verification_retry_scheduled",
+            {
+                "attempt_id": "attempt-1",
+                "retry_not_before": "2026-04-29T06:46:46Z",
+            },
+        )
+
+        assert appended_events
+        assert len(enqueued_outbox) == 1
+        retry_job = enqueued_outbox[0]
+        assert retry_job["event_type"] == "supervisor_tick"
+        assert retry_job["plan_id"] == "plan-1"
+        assert retry_job["payload"]["retry_node_id"] == "a"
+        assert retry_job["next_attempt_at"].isoformat() == "2026-04-29T06:46:46+00:00"
+
     async def test_completed_iteration_accepts_complete_goal_verdict(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -1256,6 +1340,95 @@ class TestSupervisorTick:
             "iteration_loop_completed",
         ]
         assert reloaded.goal_node.metadata["iteration_loop"]["loop_status"] == "completed"
+
+    async def test_iteration_review_context_uses_latest_passed_verification_summary(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={"iteration_index": 1, "iteration_phase": "implement"},
+            )
+        )
+        plan.replace_node(
+            replace(
+                b,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-current",
+                metadata={
+                    "iteration_index": 1,
+                    "iteration_phase": "review",
+                    "last_verification_summary": "verification failed: stale attempt",
+                },
+            )
+        )
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="complete_goal",
+                confidence=0.9,
+                summary="Latest accepted attempt satisfies the goal.",
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        accepted = reloaded.nodes[PlanNodeId("b")]
+        assert accepted.metadata["last_verification_summary"] == "verified (0 criteria passed)"
+        assert accepted.metadata["last_verification_attempt_id"] == "attempt-current"
+        completed = {
+            str(item["id"]): item for item in reviewer.contexts[0].completed_tasks
+        }
+        assert completed["b"]["verification_summary"] == "verified (0 criteria passed)"
+        assert "stale attempt" not in completed["b"]["verification_summary"]
+
+    async def test_iteration_review_context_suppresses_superseded_terminal_failure_summary(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                b,
+                metadata={
+                    **dict(b.metadata or {}),
+                    "terminal_attempt_status": "accepted",
+                    "last_verification_summary": "verification failed: superseded attempt",
+                },
+            )
+        )
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="complete_goal",
+                confidence=0.9,
+                summary="Terminal accepted attempt satisfies the goal.",
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        completed = {
+            str(item["id"]): item for item in reviewer.contexts[0].completed_tasks
+        }
+        assert completed["b"]["verification_summary"] == "accepted terminal attempt"
+        assert reviewer.contexts[0].feedback_items == ()
 
     async def test_completed_iteration_plans_bounded_next_sprint(
         self,
@@ -1321,6 +1494,47 @@ class TestSupervisorTick:
             == 6
         )
         assert len(reviewer.contexts) == 1
+
+    async def test_review_phase_next_sprint_artifacts_do_not_force_change_evidence(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="Need one evidence collection follow-up.",
+                next_sprint_goal="Collect acceptance evidence.",
+                next_tasks=(
+                    IterationNextTask(
+                        id="evidence",
+                        description="Collect final screenshots and summarize acceptance evidence.",
+                        phase="review",
+                        expected_artifacts=("docs/E2E-ACCEPTANCE-REPORT.md",),
+                    ),
+                ),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        evidence_node = next(
+            node
+            for node in reloaded.nodes.values()
+            if dict(node.metadata or {}).get("iteration_index") == 2
+        )
+        assert evidence_node.feature_checkpoint is not None
+        assert evidence_node.feature_checkpoint.expected_artifacts == ()
+        assert evidence_node.metadata["expected_artifacts"] == [
+            "docs/E2E-ACCEPTANCE-REPORT.md"
+        ]
 
     async def test_completed_iteration_suspends_at_max_iterations(
         self,

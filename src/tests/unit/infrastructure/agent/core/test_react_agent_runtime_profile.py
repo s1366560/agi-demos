@@ -52,6 +52,27 @@ class TestReActAgentRuntimeProfile:
 
         assert profile.effective_max_steps == 10
 
+    def test_workspace_worker_uses_tenant_max_steps_over_explicit_agent_iterations(self) -> None:
+        agent = ReActAgent(model="test-model", tools={})
+        tenant_config = TenantAgentConfig.create_default("tenant-1")
+        tenant_config_data = tenant_config.to_dict() | {"max_work_plan_steps": 4999}
+        selected_agent = _make_agent(
+            max_iterations=80,
+            metadata={
+                "created_by": "workspace_plan_team_setup",
+                "max_iterations_explicit": True,
+            },
+        )
+
+        profile = agent._build_runtime_profile(
+            tenant_id="tenant-1",
+            tenant_agent_config_data=tenant_config_data,
+            selected_agent=selected_agent,
+            is_workspace_worker_runtime=True,
+        )
+
+        assert profile.effective_max_steps == 4999
+
     def test_workspace_worker_extends_restricted_agent_tool_allowlist(self) -> None:
         agent = ReActAgent(model="test-model", tools={})
         tenant_config = TenantAgentConfig.create_default("tenant-1")

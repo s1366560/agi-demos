@@ -1676,6 +1676,7 @@ class ReActAgent:
         tenant_id: str,
         tenant_agent_config_data: dict[str, Any] | None,
         selected_agent: Agent | None,
+        is_workspace_worker_runtime: bool = False,
     ) -> AgentRuntimeProfile:
         """Build the request-scoped runtime profile."""
         tenant_agent_config = self._load_tenant_agent_config(tenant_id, tenant_agent_config_data)
@@ -1702,7 +1703,9 @@ class ReActAgent:
             else self.max_tokens
         )
         effective_max_steps = (
-            selected_agent.max_iterations
+            tenant_agent_config.max_work_plan_steps
+            if is_workspace_worker_runtime
+            else selected_agent.max_iterations
             if (
                 selected_agent is not None
                 and not is_builtin_sisyphus
@@ -2944,6 +2947,7 @@ class ReActAgent:
             tenant_id=tenant_id,
             tenant_agent_config_data=tenant_agent_config_data,
             selected_agent=selected_agent,
+            is_workspace_worker_runtime=has_workspace_binding,
         )
         if workspace_replan_turn:
             runtime_profile = self._with_workspace_leader_replan_tool_allowlist(runtime_profile)

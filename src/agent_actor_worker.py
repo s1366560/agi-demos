@@ -17,10 +17,14 @@ logger = logging.getLogger("src.agent_actor_worker")
 
 
 async def _reset_ray_init_failed() -> None:
-    """Reset the module-level _ray_init_failed flag so retries can re-attempt."""
+    """Reset Ray availability flags so retries start from a clean client state."""
+    import ray
+
     import src.infrastructure.adapters.secondary.ray as ray_pkg
 
     ray_pkg._ray_init_failed = False
+    with contextlib.suppress(Exception):
+        ray.shutdown()
 
 
 async def _cleanup_stale_actors() -> None:

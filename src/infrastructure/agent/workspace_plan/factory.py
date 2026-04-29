@@ -33,6 +33,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackb
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
     SqlWorkspacePlanEventRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+    SqlWorkspacePlanOutboxRepository,
+)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     LAST_LEADER_ADJUDICATION_STATUS,
@@ -98,6 +101,24 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
         )
         if event_type == "verification_completed":
             await _project_verification_to_workspace_task(db, node, payload)
+        if event_type == "verification_retry_scheduled":
+            await SqlWorkspacePlanOutboxRepository(db).enqueue(
+                plan_id=node.plan_id,
+                workspace_id=workspace_id,
+                event_type="supervisor_tick",
+                payload={
+                    "workspace_id": workspace_id,
+                    "retry_node_id": node.id,
+                    "retry_attempt_id": _payload_string(payload, "attempt_id"),
+                    "retry_reason": "verification_retry_scheduled",
+                },
+                metadata={
+                    "source_event_type": event_type,
+                    "node_id": node.id,
+                    "attempt_id": _payload_string(payload, "attempt_id"),
+                },
+                next_attempt_at=_payload_datetime(payload, "retry_not_before"),
+            )
 
     return _sink
 
@@ -264,6 +285,21 @@ def _payload_string(payload: dict[str, Any], key: str) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _payload_datetime(payload: dict[str, Any], key: str) -> datetime | None:
+    value = _payload_string(payload, key)
+    if value is None:
+        return None
+    if value.endswith("Z"):
+        value = value.removesuffix("Z") + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _verification_payload_evidence_refs(payload: dict[str, Any]) -> list[str]:

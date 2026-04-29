@@ -9,12 +9,22 @@ from typing import Any
 import ray
 
 from src.configuration.ray_config import get_ray_settings
-from src.infrastructure.adapters.secondary.ray import _ray_init_failed
+from src.infrastructure.adapters.secondary import ray as ray_pkg
 
 logger = logging.getLogger(__name__)
 
 _ray_init_lock = asyncio.Lock()
 _ray_available = False
+
+
+def _module_init_failed() -> bool:
+    """Return the current package-level Ray init failure marker.
+
+    The agent-actor worker resets ``src.infrastructure.adapters.secondary.ray``
+    between retry attempts. Read the value dynamically so a transient startup
+    failure does not freeze this client module in an unavailable state.
+    """
+    return bool(getattr(ray_pkg, "_ray_init_failed", False))
 
 
 async def init_ray_if_needed() -> bool:
@@ -26,7 +36,7 @@ async def init_ray_if_needed() -> bool:
     global _ray_available
 
     # If module-level init already determined Ray is unreachable, skip
-    if _ray_init_failed:
+    if _module_init_failed():
         return False
 
     if ray.is_initialized():
@@ -41,10 +51,8 @@ async def init_ray_if_needed() -> bool:
         settings = get_ray_settings()
 
         # TCP pre-check to avoid hanging on ray.init()
-        from src.infrastructure.adapters.secondary.ray import _check_ray_reachable
-
         reachable = await asyncio.get_running_loop().run_in_executor(
-            None, _check_ray_reachable, settings.ray_address, 3
+            None, ray_pkg._check_ray_reachable, settings.ray_address, 3
         )
         if not reachable:
             _ray_available = False

@@ -17,6 +17,7 @@ from src.infrastructure.agent.orchestration.send_denied import (
     SendDeniedCode,
 )
 from src.infrastructure.agent.tools import workspace_wtp as wtp_tools
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 pytestmark = pytest.mark.unit
 
@@ -208,6 +209,30 @@ class TestProgress:
         assert payload["error"] == "send_denied"
         assert payload["code"] == SendDeniedCode.TARGET_A2A_DISABLED.value
 
+    async def test_system_actor_progress_uses_local_fan_in(self, ctx, mock_orchestrator):
+        with patch.object(
+            wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()
+        ) as mock_publish:
+            result = await wtp_tools.workspace_report_progress_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="Durable-plan worker progress",
+            )
+
+        assert result.is_error is False
+        payload = json.loads(result.output)
+        assert payload["ok"] is True
+        assert payload["notification_status"] == "local_fan_in"
+        assert payload["message_id"].startswith("local:")
+        mock_orchestrator.send_message.assert_not_awaited()
+
+        published = mock_publish.await_args.args[0]
+        assert published.extra_metadata["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        assert published.extra_metadata["worker_agent_id"] == "worker-agent-id"
+        assert published.extra_metadata["workspace_agent_binding_id"] == "binding-1"
+
 
 class TestComplete:
     async def test_sends_envelope_and_applies_report(self, ctx, mock_orchestrator):
@@ -286,6 +311,31 @@ class TestComplete:
         assert payload["error"] == "send_denied"
         assert payload["notification_status"] == "failed"
         assert payload["applied_report"] == {"applied": True, "task_status": "in_review"}
+
+    async def test_system_actor_completion_applies_report_without_a2a(
+        self, ctx, mock_orchestrator
+    ):
+        with (
+            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
+        ):
+            mock_apply.return_value = {"applied": True, "task_status": "in_review"}
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="All done",
+                verifications=["test_run:unit"],
+            )
+
+        assert result.is_error is False
+        payload = json.loads(result.output)
+        assert payload["ok"] is True
+        assert payload["notification_status"] == "local_fan_in"
+        assert payload["applied_report"] == {"applied": True, "task_status": "in_review"}
+        mock_orchestrator.send_message.assert_not_awaited()
+        assert mock_apply.await_args.kwargs["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 
 class TestBlocked:

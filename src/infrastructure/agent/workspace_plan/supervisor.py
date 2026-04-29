@@ -87,6 +87,7 @@ _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS = 8
 _ITERATION_LOOP_DEFAULT_MAX_SUBTASKS = 6
 _ITERATION_REVIEW_MIN_CONFIDENCE = 0.6
 _ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
+_CHANGE_EVIDENCE_PHASES = {"implement", "test", "deploy"}
 _SCRUM_ARTIFACT_BY_PHASE = {
     "research": "product_discovery",
     "plan": "sprint_backlog",
@@ -791,7 +792,7 @@ def _completed_task_payload(node: PlanNode) -> dict[str, object]:
         payload["evidence_refs"] = evidence_refs
     if node.feature_checkpoint is not None and node.feature_checkpoint.expected_artifacts:
         payload["expected_artifacts"] = list(node.feature_checkpoint.expected_artifacts)
-    summary = dict(node.metadata or {}).get("last_verification_summary")
+    summary = _node_verification_summary(node)
     if isinstance(summary, str) and summary:
         payload["verification_summary"] = summary
     return payload
@@ -812,11 +813,29 @@ def _iteration_feedback_items(nodes: list[PlanNode]) -> list[str]:
     values: list[str] = []
     for node in nodes:
         metadata = dict(node.metadata or {})
+        if _node_has_accepted_terminal_attempt(metadata) and (
+            metadata.get("last_verification_passed") is not True
+        ):
+            continue
         for key in ("last_verification_summary", "retry_last_reason"):
             value = metadata.get(key)
             if isinstance(value, str) and value:
                 values.append(value)
     return list(dict.fromkeys(values))[:8]
+
+
+def _node_verification_summary(node: PlanNode) -> str:
+    metadata = dict(node.metadata or {})
+    summary = metadata.get("last_verification_summary")
+    if metadata.get("last_verification_passed") is True:
+        return summary if isinstance(summary, str) else "verified"
+    if _node_has_accepted_terminal_attempt(metadata):
+        return "accepted terminal attempt"
+    return summary if isinstance(summary, str) else ""
+
+
+def _node_has_accepted_terminal_attempt(metadata: dict[str, Any]) -> bool:
+    return str(metadata.get("terminal_attempt_status") or "").lower() == "accepted"
 
 
 def _node_evidence_refs(node: PlanNode) -> list[str]:
@@ -938,9 +957,14 @@ def _add_next_iteration_node(
             "scrum_artifact": _SCRUM_ARTIFACT_BY_PHASE[phase],
         }
     )
+    write_set = _infer_write_set(task.description)
+    expected_artifacts = _feature_checkpoint_expected_artifacts(
+        task,
+        phase=phase,
+        write_set=write_set,
+    )
     if task.expected_artifacts:
         metadata["expected_artifacts"] = list(task.expected_artifacts)
-    write_set = _infer_write_set(task.description)
     if write_set:
         metadata["write_set"] = list(write_set)
     plan.add_node(
@@ -962,11 +986,24 @@ def _add_next_iteration_node(
                 feature_id=f"iteration-{next_iteration}-{sequence}-{node_id.value}",
                 sequence=sequence,
                 title=task.description[:120],
-                expected_artifacts=task.expected_artifacts,
+                expected_artifacts=expected_artifacts,
             ),
             metadata=metadata,
         )
     )
+
+
+def _feature_checkpoint_expected_artifacts(
+    task: IterationNextTask,
+    *,
+    phase: str,
+    write_set: tuple[str, ...],
+) -> tuple[str, ...]:
+    if write_set:
+        return write_set
+    if phase in _CHANGE_EVIDENCE_PHASES:
+        return task.expected_artifacts
+    return ()
 
 
 def _pid(value: str) -> PlanNodeId:
@@ -1072,6 +1109,13 @@ def _node_with_verification_evidence(node: PlanNode, report: VerificationReport)
         dict.fromkeys(ref.removeprefix("test_run:") for ref in refs if ref.startswith("test_run:"))
     )
     metadata = dict(node.metadata)
+    metadata["last_verification_summary"] = report.summary()
+    metadata["last_verification_passed"] = report.passed
+    metadata["last_verification_hard_fail"] = report.hard_fail
+    metadata["last_verification_ran_at"] = report.ran_at.isoformat().replace("+00:00", "Z")
+    if report.attempt_id:
+        metadata["last_verification_attempt_id"] = report.attempt_id
+    metadata["verification_evidence_refs"] = refs
     if commit_ref:
         metadata["verified_commit_ref"] = commit_ref
     if git_diff_summary:

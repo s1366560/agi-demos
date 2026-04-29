@@ -53,6 +53,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     require_workspace_session_role,
     runtime_context_string,
 )
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,44 @@ def _deny(error: str, **extra: Any) -> ToolResult:
     return ToolResult(output=json.dumps(payload), is_error=True)
 
 
+def _enrich_envelope_for_supervisor(
+    ctx: ToolContext,
+    envelope: WtpEnvelope,
+    *,
+    to_agent_id: str,
+    worker_binding_id: str | None,
+) -> WtpEnvelope:
+    worker_agent_id = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
+    enriched_metadata = dict(envelope.extra_metadata)
+    enriched_metadata.setdefault("leader_agent_id", to_agent_id)
+    enriched_metadata.setdefault("worker_agent_id", worker_agent_id)
+    enriched_metadata.setdefault("worker_conversation_id", ctx.session_id or "")
+    if worker_binding_id:
+        enriched_metadata.setdefault("workspace_agent_binding_id", worker_binding_id)
+    actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
+    if actor_user_id:
+        enriched_metadata.setdefault("actor_user_id", actor_user_id)
+    return WtpEnvelope(
+        verb=envelope.verb,
+        workspace_id=envelope.workspace_id,
+        task_id=envelope.task_id,
+        attempt_id=envelope.attempt_id,
+        payload=envelope.payload,
+        correlation_id=envelope.correlation_id,
+        root_goal_task_id=envelope.root_goal_task_id,
+        parent_message_id=envelope.parent_message_id,
+        extra_metadata=enriched_metadata,
+    )
+
+
+async def _publish_envelope_for_supervisor(envelope: WtpEnvelope) -> None:
+    from src.infrastructure.agent.workspace.workspace_supervisor import (
+        publish_envelope_default,
+    )
+
+    await publish_envelope_default(envelope)
+
+
 async def _send_envelope(
     ctx: ToolContext,
     envelope: WtpEnvelope,
@@ -104,9 +143,6 @@ async def _send_envelope(
     to_agent_id: str,
 ) -> ToolResult:
     """Shared send path — delivers the envelope and emits the UI event."""
-    if _orchestrator is None:
-        return _deny("workspace WTP not configured (multi-agent disabled?)")
-
     sender_agent_ref = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _runtime_string(ctx, "selected_agent_name") or ctx.agent_name
     metadata = envelope.to_metadata()
@@ -116,6 +152,46 @@ async def _send_envelope(
             **metadata,
             "workspace_agent_binding_id": worker_binding_id,
         }
+
+    enriched_envelope = envelope
+    try:
+        enriched_envelope = _enrich_envelope_for_supervisor(
+            ctx,
+            envelope,
+            to_agent_id=to_agent_id,
+            worker_binding_id=worker_binding_id,
+        )
+    except Exception:
+        logger.debug("workspace_wtp: envelope enrichment failed; publishing raw")
+
+    if to_agent_id == WORKSPACE_PLAN_SYSTEM_ACTOR_ID:
+        await _publish_envelope_for_supervisor(enriched_envelope)
+        await ctx.emit(
+            AgentMessageSentEvent(
+                from_agent_id=sender_agent_ref,
+                to_agent_id=to_agent_id,
+                from_agent_name=sender_agent_name,
+                to_agent_name=to_agent_id,
+                message_preview=f"[{envelope.verb.value}] {envelope.to_content()[:180]}",
+            ).to_event_dict()
+        )
+        return ToolResult(
+            output=json.dumps(
+                {
+                    "ok": True,
+                    "verb": envelope.verb.value,
+                    "message_id": f"local:{envelope.correlation_id}",
+                    "task_id": envelope.task_id,
+                    "attempt_id": envelope.attempt_id,
+                    "correlation_id": envelope.correlation_id,
+                    "notification_status": "local_fan_in",
+                },
+                indent=2,
+            ),
+        )
+
+    if _orchestrator is None:
+        return _deny("workspace WTP not configured (multi-agent disabled?)")
 
     try:
         result = await _orchestrator.send_message(
@@ -149,36 +225,7 @@ async def _send_envelope(
     # Fan-in copy for the WorkspaceSupervisor (Phase 2). Failures are
     # swallowed inside publish_envelope_default — the A2A delivery has
     # already succeeded and we refuse to surface a second error.
-    from src.infrastructure.agent.workspace.workspace_supervisor import (
-        publish_envelope_default,
-    )
-
-    worker_agent_id = _runtime_string(ctx, "selected_agent_id") or ctx.agent_name
-    enriched_envelope = envelope
-    try:
-        enriched_metadata = dict(envelope.extra_metadata)
-        enriched_metadata.setdefault("leader_agent_id", to_agent_id)
-        enriched_metadata.setdefault("worker_agent_id", worker_agent_id)
-        enriched_metadata.setdefault("worker_conversation_id", ctx.session_id or "")
-        if worker_binding_id:
-            enriched_metadata.setdefault("workspace_agent_binding_id", worker_binding_id)
-        actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
-        if actor_user_id:
-            enriched_metadata.setdefault("actor_user_id", actor_user_id)
-        enriched_envelope = WtpEnvelope(
-            verb=envelope.verb,
-            workspace_id=envelope.workspace_id,
-            task_id=envelope.task_id,
-            attempt_id=envelope.attempt_id,
-            payload=envelope.payload,
-            correlation_id=envelope.correlation_id,
-            root_goal_task_id=envelope.root_goal_task_id,
-            parent_message_id=envelope.parent_message_id,
-            extra_metadata=enriched_metadata,
-        )
-    except Exception:
-        logger.debug("workspace_wtp: envelope enrichment failed; publishing raw")
-    await publish_envelope_default(enriched_envelope)
+    await _publish_envelope_for_supervisor(enriched_envelope)
 
     await ctx.emit(
         AgentMessageSentEvent(

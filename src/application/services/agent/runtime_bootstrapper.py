@@ -413,6 +413,7 @@ class AgentRuntimeBootstrapper:
             stdout=DEVNULL,
             stderr=None,
             env=os.environ.copy(),
+            start_new_session=True,
         )
         monitor = asyncio.create_task(
             self._monitor_local_subprocess_chat(

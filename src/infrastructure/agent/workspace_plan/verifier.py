@@ -36,6 +36,8 @@ from src.domain.ports.services.verifier_port import (
 
 logger = logging.getLogger(__name__)
 
+_CHANGE_EVIDENCE_PHASES = {"implement", "test", "deploy"}
+
 _TRANSIENT_INFRA_FAILURE_MARKERS = (
     "Executor shutdown has been called",
     "SystemExit: 15",
@@ -581,7 +583,9 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
 def _required_change_refs(ctx: VerificationContext) -> set[str]:
     refs: set[str] = set()
     feature = ctx.node.feature_checkpoint
-    if feature is not None:
+    raw_phase = ctx.node.metadata.get("iteration_phase")
+    phase = raw_phase.strip().lower() if isinstance(raw_phase, str) else None
+    if feature is not None and (phase is None or phase in _CHANGE_EVIDENCE_PHASES):
         refs.update(str(item) for item in feature.expected_artifacts if item)
     raw_write_set = ctx.node.metadata.get("write_set")
     if isinstance(raw_write_set, list):

@@ -233,11 +233,13 @@ def make_supervisor_tick_handler(
             _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
         )
         if item.plan_id:
-            await _reconcile_plan_nodes_with_terminal_attempts(
+            reconciled_terminal_attempt = await _reconcile_plan_nodes_with_terminal_attempts(
                 session=session,
                 plan_id=item.plan_id,
                 workspace_id=workspace_id,
             )
+            if reconciled_terminal_attempt:
+                await session.commit()
         resolved_agent_pool = agent_pool
         if resolved_agent_pool is None:
             await _ensure_leader_execution_team(
@@ -324,13 +326,13 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     session: AsyncSession,
     plan_id: str,
     workspace_id: str,
-) -> None:
+) -> bool:
     """Release V2 plan nodes that still point at terminal or missing attempts."""
 
     repo = SqlPlanRepository(session)
     plan = await repo.get(plan_id)
     if plan is None or plan.workspace_id != workspace_id:
-        return
+        return False
 
     now = datetime.now(UTC)
     changed = False
@@ -363,6 +365,11 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             continue
         status = str(attempt.status or "")
         if status == "accepted":
+            summary = str(
+                attempt.leader_feedback
+                or attempt.candidate_summary
+                or "accepted terminal attempt"
+            )
             plan.replace_node(
                 replace(
                     node,
@@ -372,6 +379,11 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                         **dict(node.metadata or {}),
                         "terminal_attempt_status": status,
                         "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
+                        "last_verification_summary": summary,
+                        "last_verification_passed": True,
+                        "last_verification_hard_fail": False,
+                        "last_verification_attempt_id": attempt.id,
+                        "last_verification_ran_at": now.isoformat().replace("+00:00", "Z"),
                     },
                     updated_at=now,
                 )
@@ -390,6 +402,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
 
     if changed:
         await repo.save(plan)
+    return changed
 
 
 async def _load_plan_attempt(

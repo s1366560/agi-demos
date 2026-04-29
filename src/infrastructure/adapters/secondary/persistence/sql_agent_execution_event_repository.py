@@ -15,8 +15,9 @@ Migration Benefits:
 """
 
 import logging
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import override
+from typing import cast, override
 
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -36,6 +37,26 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 logger = logging.getLogger(__name__)
 
 _MESSAGE_EVENT_TYPES = ("user_message", "assistant_message")
+type JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+
+
+def _sanitize_json_for_postgres(value: object) -> JsonValue:
+    """Remove NUL bytes from JSON payloads before PostgreSQL JSON storage."""
+    if isinstance(value, str):
+        return value.replace("\x00", "[NUL]")
+    if isinstance(value, list):
+        return [_sanitize_json_for_postgres(item) for item in value]
+    if isinstance(value, Mapping):
+        return {
+            str(key): _sanitize_json_for_postgres(item)
+            for key, item in value.items()
+        }
+    return cast(JsonValue, value)
+
+
+def _sanitize_event_data_for_postgres(value: object) -> dict[str, JsonValue]:
+    sanitized = _sanitize_json_for_postgres(value)
+    return sanitized if isinstance(sanitized, dict) else {}
 
 
 async def apply_conversation_event_projection_delta(
@@ -94,6 +115,7 @@ class SqlAgentExecutionEventRepository(
     @override
     async def save(self, domain_entity: AgentExecutionEvent) -> AgentExecutionEvent:
         """Save an agent execution event with idempotency guarantee."""
+        event_data = _sanitize_event_data_for_postgres(domain_entity.event_data)
         stmt = (
             insert(DBAgentExecutionEvent)
             .values(
@@ -101,7 +123,7 @@ class SqlAgentExecutionEventRepository(
                 conversation_id=domain_entity.conversation_id,
                 message_id=domain_entity.message_id,
                 event_type=str(domain_entity.event_type),
-                event_data=domain_entity.event_data,
+                event_data=event_data,
                 event_time_us=domain_entity.event_time_us,
                 event_counter=domain_entity.event_counter,
                 created_at=domain_entity.created_at,
@@ -145,7 +167,7 @@ class SqlAgentExecutionEventRepository(
                 "conversation_id": event.conversation_id,
                 "message_id": event.message_id,
                 "event_type": str(event.event_type),
-                "event_data": event.event_data,
+                "event_data": _sanitize_event_data_for_postgres(event.event_data),
                 "event_time_us": event.event_time_us,
                 "event_counter": event.event_counter,
                 "created_at": event.created_at,
@@ -421,7 +443,7 @@ class SqlAgentExecutionEventRepository(
             conversation_id=db_model.conversation_id,
             message_id=db_model.message_id or "",
             event_type=db_model.event_type,
-            event_data=db_model.event_data or {},
+            event_data=_sanitize_event_data_for_postgres(db_model.event_data or {}),
             event_time_us=db_model.event_time_us,
             event_counter=db_model.event_counter,
             created_at=db_model.created_at,
@@ -435,7 +457,7 @@ class SqlAgentExecutionEventRepository(
             conversation_id=domain_entity.conversation_id,
             message_id=domain_entity.message_id,
             event_type=str(domain_entity.event_type),
-            event_data=domain_entity.event_data,
+            event_data=_sanitize_event_data_for_postgres(domain_entity.event_data),
             event_time_us=domain_entity.event_time_us,
             event_counter=domain_entity.event_counter,
             created_at=domain_entity.created_at,
@@ -453,4 +475,4 @@ class SqlAgentExecutionEventRepository(
             domain_entity: Domain entity with new values
         """
         db_model.event_type = str(domain_entity.event_type)
-        db_model.event_data = domain_entity.event_data
+        db_model.event_data = _sanitize_event_data_for_postgres(domain_entity.event_data)

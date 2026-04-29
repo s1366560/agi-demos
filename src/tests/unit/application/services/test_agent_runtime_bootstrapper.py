@@ -8,6 +8,7 @@ import pytest
 
 from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
 
 
 @pytest.fixture(autouse=True)
@@ -217,6 +218,44 @@ async def test_start_chat_actor_local_workspace_worker_uses_subprocess(
     register_local_mock.assert_awaited_once_with("tenant-1", "proj-1")
     subprocess_mock.assert_awaited_once()
     local_run_mock.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_path):
+    """Detached process sessions keep workspace workers alive across dev reloads."""
+    request_path = tmp_path / "request.json"
+    process = SimpleNamespace(wait=AsyncMock(return_value=0))
+    created_tasks = []
+
+    def _capture_task(coro, **kwargs):
+        created_tasks.append((coro, kwargs))
+        coro.close()
+        return _FakeTask(done=True)
+
+    config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+    )
+
+    with (
+        patch.object(
+            bootstrapper,
+            "_write_local_subprocess_request",
+            return_value=request_path,
+        ),
+        patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as subprocess_mock,
+        patch("asyncio.create_task", side_effect=_capture_task),
+    ):
+        subprocess_mock.return_value = process
+        await bootstrapper._start_local_subprocess_chat("conv-1", config, request)
+
+    subprocess_mock.assert_awaited_once()
+    assert subprocess_mock.await_args.kwargs["start_new_session"] is True
+    assert created_tasks
 
 
 @pytest.mark.unit

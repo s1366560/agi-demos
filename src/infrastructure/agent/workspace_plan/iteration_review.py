@@ -85,7 +85,9 @@ def _system_prompt(max_next_tasks: int) -> str:
         "is required. Do not create a full future backlog. If continuing, return at "
         f"most {max_next_tasks} next_tasks for only the next sprint. Use phases in this "
         "order when useful: research, plan, implement, test, deploy, review. If evidence "
-        "is ambiguous or confidence is low, choose needs_human_review."
+        "is ambiguous or confidence is low, choose needs_human_review. In summary and "
+        "next_sprint_goal text, refer only to the provided iteration_index; do not invent "
+        "or increment iteration numbers."
     )
 
 
