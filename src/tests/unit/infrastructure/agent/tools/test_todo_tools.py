@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskPriority,
@@ -460,6 +461,45 @@ class TestTodoWriteTool:
         assert any(event["type"] == "task_list_updated" for event in pending)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("action", ["add", "replace"])
+    async def test_worker_scope_rejects_structural_workspace_task_writes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        action: str,
+    ) -> None:
+        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+        def _fail_session_factory() -> Any:
+            raise AssertionError("worker structural write should not open workspace task storage")
+
+        monkeypatch.setattr(todo_tools_module, "_todowrite_session_factory", _fail_session_factory)
+
+        ctx = _make_ctx(
+            conversation_id="conv-worker",
+            user_id="user-1",
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+                "workspace_task_id": "task-1",
+                "attempt_id": "attempt-1",
+                "workspace_session_role": "worker",
+                "selected_agent_id": "worker-agent-1",
+            },
+        )
+        result = await todowrite_tool.execute(
+            ctx,
+            action=action,
+            todos=[{"content": "Split this into more global work"}],
+        )
+        payload = json.loads(result.output)
+
+        assert result.is_error is False
+        assert payload["success"] is False
+        assert payload["workspace_scope"] == "worker"
+        assert "cannot create, replace, or dispatch global workspace tasks" in payload["message"]
+
+    @pytest.mark.asyncio
     async def test_add_skips_terminal_workspace_todos_when_workspace_authority_active(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -760,13 +800,46 @@ class TestTodoWriteTool:
     ) -> None:
         import src.infrastructure.agent.tools.todo_tools as todo_tools_module
 
-        assign_calls: list[dict[str, Any]] = []
         started: list[dict[str, Any]] = []
+        assigned: list[dict[str, Any]] = []
 
-        async def _fake_assign(**kwargs: Any) -> None:
-            assign_calls.append(kwargs)
+        class _FakeWorkspaceAgentRepository:
+            def __init__(self, session: Any) -> None:
+                _ = session
+
+            async def find_by_workspace(
+                self,
+                workspace_id: str,
+                active_only: bool = False,
+            ) -> list[WorkspaceAgent]:
+                assert workspace_id == "ws-1"
+                assert active_only is True
+                return [
+                    WorkspaceAgent(
+                        id="binding-worker-1",
+                        workspace_id="ws-1",
+                        agent_id="worker-agent-1",
+                        display_name="Worker 1",
+                        is_active=True,
+                    )
+                ]
 
         class _FakeCommandService:
+            async def assign_task_to_agent(self, **kwargs: Any) -> WorkspaceTask:
+                assigned.append(kwargs)
+                return WorkspaceTask(
+                    id=kwargs["task_id"],
+                    workspace_id=kwargs["workspace_id"],
+                    title="Assigned task",
+                    created_by=kwargs["actor_user_id"],
+                    status=WorkspaceTaskStatus.DISPATCHED,
+                    priority=WorkspaceTaskPriority.P1,
+                    metadata={
+                        "task_role": "execution_task",
+                        "root_goal_task_id": "root-1",
+                    },
+                )
+
             async def start_task(self, **kwargs: Any) -> WorkspaceTask:
                 started.append(kwargs)
                 return WorkspaceTask(
@@ -783,9 +856,9 @@ class TestTodoWriteTool:
                 )
 
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime."
-            "_assign_execution_tasks_to_workers",
-            _fake_assign,
+            "src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository."
+            "SqlWorkspaceAgentRepository",
+            _FakeWorkspaceAgentRepository,
         )
 
         result = await todo_tools_module._dispatch_created_workspace_tasks(
@@ -824,9 +897,11 @@ class TestTodoWriteTool:
         )
 
         assert result["dispatched"] is True
+        assert result["assigned_count"] == 1
         assert result["started_count"] == 1
         assert result["start_failed_count"] == 0
-        assert len(assign_calls) == 1
+        assert [call["task_id"] for call in assigned] == ["wt-todo"]
+        assert assigned[0]["workspace_agent_id"] == "binding-worker-1"
         assert [call["task_id"] for call in started] == ["wt-todo"]
         assert started[0]["authority"].role == "leader"
         assert started[0]["actor_agent_id"] == "leader-agent-1"

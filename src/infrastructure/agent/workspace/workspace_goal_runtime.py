@@ -20,6 +20,7 @@ from src.application.schemas.workspace_agent_autonomy import (
 )
 from src.application.services.workspace_agent_autonomy import (
     is_goal_root_task,
+    select_root_progress_child_tasks,
     synthesize_goal_evidence_from_children,
     validate_autonomy_metadata,
 )
@@ -92,6 +93,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
+from src.infrastructure.agent.workspace_plan.system_actor import persisted_attempt_leader_agent_id
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -100,6 +102,14 @@ _WORKSPACE_TASK_ID_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _WORKER_TERMINAL_REPORT_TYPES = frozenset({"completed", "failed", "blocked", "needs_replan"})
+_ATTEMPT_TERMINAL_STATUSES = frozenset(
+    {
+        WorkspaceTaskSessionAttemptStatus.ACCEPTED.value,
+        WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+        WorkspaceTaskSessionAttemptStatus.BLOCKED.value,
+        WorkspaceTaskSessionAttemptStatus.CANCELLED.value,
+    }
+)
 
 
 def should_activate_workspace_authority(
@@ -347,7 +357,9 @@ async def _ensure_root_goal_evidence(
     if not isinstance(root_task_id, str) or not isinstance(workspace_id, str):
         return
 
-    child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
+    child_tasks = select_root_progress_child_tasks(
+        await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
+    )
     synthesized = synthesize_goal_evidence_from_children(
         root_task=root_task,
         child_tasks=child_tasks,
@@ -468,8 +480,11 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     except Exception:
         logger.warning("auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True)
         return None
+    scoped_children = select_root_progress_child_tasks(children)
     execution_children = [
-        c for c in children if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
+        c
+        for c in scoped_children
+        if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
     ]
     if not execution_children:
         return None
@@ -893,7 +908,7 @@ async def _ensure_execution_attempt(
         root_goal_task_id=str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
         workspace_id=task.workspace_id,
         worker_agent_id=task.assignee_agent_id,
-        leader_agent_id=leader_agent_id,
+        leader_agent_id=persisted_attempt_leader_agent_id(leader_agent_id),
     )
     return await attempt_service.mark_running(attempt.id)
 
@@ -958,6 +973,28 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
                 raise ValueError("Worker report requires an attempt-bound worker_agent_id")
             if task.assignee_agent_id != effective_worker_agent_id:
                 raise ValueError("Worker report does not match the task assignee")
+            attempt_status_value = getattr(
+                getattr(resolved_attempt, "status", None),
+                "value",
+                getattr(resolved_attempt, "status", None),
+            )
+            if (
+                report_type in _WORKER_TERMINAL_REPORT_TYPES
+                and attempt_status_value in _ATTEMPT_TERMINAL_STATUSES
+            ):
+                logger.info(
+                    "workspace_goal_runtime.worker_report ignored terminal report "
+                    "for terminal attempt",
+                    extra={
+                        "workspace_id": workspace_id,
+                        "task_id": task_id,
+                        "attempt_id": resolved_attempt.id,
+                        "attempt_status": attempt_status_value,
+                        "report_type": report_type,
+                        "report_id": report_id,
+                    },
+                )
+                return task
 
             metadata = dict(task.metadata)
             v2_plan_linked = (
@@ -1260,7 +1297,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                         root_goal_task_id=str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
                         workspace_id=workspace_id,
                         worker_agent_id=task.assignee_agent_id,
-                        leader_agent_id=leader_agent_id,
+                        leader_agent_id=persisted_attempt_leader_agent_id(leader_agent_id),
                     )
                     metadata["last_attempt_status"] = rejected_attempt.status.value
                     metadata["last_attempt_id"] = rejected_attempt.id

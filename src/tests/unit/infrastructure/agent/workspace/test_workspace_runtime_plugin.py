@@ -33,6 +33,28 @@ async def test_workspace_runtime_plugin_adds_guidance_for_workspace_context() ->
 
 
 @pytest.mark.unit
+async def test_workspace_runtime_plugin_tells_workers_not_to_extend_global_task_tree() -> None:
+    registry = AgentPluginRegistry()
+    register_builtin_workspace_plugin(registry)
+
+    result = await registry.apply_hook(
+        "on_session_start",
+        payload={
+            "runtime_context": {
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "workspace_session_role": "worker",
+            },
+            "session_instructions": [],
+        },
+    )
+
+    instructions = result.payload["session_instructions"]
+    assert any("todowrite add/replace" in item for item in instructions)
+    assert any("workspace_report_progress/complete/blocked" in item for item in instructions)
+
+
+@pytest.mark.unit
 async def test_workspace_runtime_plugin_ignores_non_workspace_context() -> None:
     registry = AgentPluginRegistry()
     register_builtin_workspace_plugin(registry)

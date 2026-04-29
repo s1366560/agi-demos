@@ -35,6 +35,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     REPLAN_ATTEMPT_COUNT,
     TASK_ROLE,
     WORKSPACE_HARNESS,
+    WORKSPACE_PLAN_ID,
 )
 
 _PROTECTED_ROOT_METADATA_KEYS = {
@@ -679,6 +680,22 @@ def _has_software_test_evidence(
     return False
 
 
+def select_root_progress_child_tasks(child_tasks: list[WorkspaceTask]) -> list[WorkspaceTask]:
+    """Choose the child-task set that should drive root goal progress.
+
+    V2 durable plans project nodes into workspace tasks with ``workspace_plan_id``.
+    Once those canonical plan tasks exist, older recovery/helper tasks under the
+    same root should not keep the root blocked or trigger a fresh plan.
+    """
+    plan_projected = [
+        task
+        for task in child_tasks
+        if isinstance(task.metadata.get(WORKSPACE_PLAN_ID), str)
+        and bool(task.metadata.get(WORKSPACE_PLAN_ID))
+    ]
+    return plan_projected or child_tasks
+
+
 async def reconcile_root_goal_progress(
     *,
     task_repo: Any,  # noqa: ANN401
@@ -693,7 +710,8 @@ async def reconcile_root_goal_progress(
     ):
         return None
 
-    child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
+    raw_child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
+    child_tasks = select_root_progress_child_tasks(raw_child_tasks)
     active_child_task_ids = [
         task.id
         for task in child_tasks

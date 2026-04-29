@@ -193,3 +193,38 @@ async def test_try_start_bridge_task_keeps_compatible_message_bridge() -> None:
     assert started is False
     assert existing_task.cancelled is False
     assert "session-new" not in manager.bridge_tasks
+
+
+@pytest.mark.unit
+def test_remove_conversation_subscriptions_is_idempotent_for_multiple_conversations() -> None:
+    manager = ConnectionManager()
+    manager.subscriptions["session-1"] = {"conv-1", "conv-2"}
+    manager.conversation_subscribers["conv-1"] = {"session-1", "session-2"}
+    manager.conversation_subscribers["conv-2"] = {"session-1"}
+
+    manager._remove_conversation_subscriptions("session-1")
+    manager._remove_conversation_subscriptions("session-1")
+
+    assert "session-1" not in manager.subscriptions
+    assert manager.conversation_subscribers["conv-1"] == {"session-2"}
+    assert "conv-2" not in manager.conversation_subscribers
+
+
+@pytest.mark.unit
+def test_remove_project_subscriptions_is_idempotent_for_multiple_projects() -> None:
+    manager = ConnectionManager()
+    manager.session_project_subscriptions["session-1"] = {
+        ("tenant-1", "project-1"),
+        ("tenant-1", "project-2"),
+    }
+    manager.project_subscriptions["tenant-1"] = {
+        "project-1": {"session-1", "session-2"},
+        "project-2": {"session-1"},
+    }
+
+    manager._remove_project_subscriptions("session-1")
+    manager._remove_project_subscriptions("session-1")
+
+    assert "session-1" not in manager.session_project_subscriptions
+    assert manager.project_subscriptions["tenant-1"]["project-1"] == {"session-2"}
+    assert "project-2" not in manager.project_subscriptions["tenant-1"]

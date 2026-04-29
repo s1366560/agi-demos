@@ -8,6 +8,10 @@ from typing import Any, ClassVar
 from src.domain.model.agent.skill.skill import TriggerPattern
 from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, PluginSkillBuildContext
 from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_SESSION_ROLE_KEY,
+)
 
 PLUGIN_NAME = "workspace-runtime"
 WORKSPACE_TASK_HARNESS_SKILL_NAME = "workspace-task-harness"
@@ -26,6 +30,11 @@ _RESPONSE_INSTRUCTION = (
 _TOOL_FOLLOWUP_INSTRUCTION = (
     "After this workspace tool result, either continue with the next concrete tool call or "
     "close the attempt using workspace_report_complete/workspace_report_blocked."
+)
+_WORKER_TASK_TREE_INSTRUCTION = (
+    "This is a workspace worker session. Do not use todowrite add/replace to split or "
+    "dispatch global workspace tasks; keep any private checklist in your reasoning and use "
+    "workspace_report_progress/complete/blocked for the bound task."
 )
 _WORKSPACE_TASK_HARNESS_FULL_CONTENT = """# Workspace Task Harness
 
@@ -129,7 +138,18 @@ def _append_instruction(
 def _on_session_start(payload: Mapping[str, Any]) -> dict[str, Any]:
     if not _is_workspace_runtime(payload):
         return dict(payload)
-    return _append_instruction(payload, "session_instructions", _SESSION_INSTRUCTION)
+    updated = _append_instruction(payload, "session_instructions", _SESSION_INSTRUCTION)
+    runtime_context = payload.get("runtime_context")
+    if (
+        isinstance(runtime_context, Mapping)
+        and runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_WORKER
+    ):
+        updated = _append_instruction(
+            updated,
+            "session_instructions",
+            _WORKER_TASK_TREE_INSTRUCTION,
+        )
+    return updated
 
 
 def _before_response(payload: Mapping[str, Any]) -> dict[str, Any]:

@@ -81,9 +81,14 @@ class TestWorkerLaunchHeartbeat:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         publish = AsyncMock(return_value="1-0")
+        redis = AsyncMock()
         monkeypatch.setattr(
             "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
             publish,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+            AsyncMock(return_value=redis),
         )
 
         await wl._publish_worker_launch_heartbeat(
@@ -109,6 +114,10 @@ class TestWorkerLaunchHeartbeat:
         assert envelope.extra_metadata["leader_agent_id"] == "leader-1"
         assert envelope.extra_metadata["actor_user_id"] == "user-1"
         assert envelope.extra_metadata["source"] == "workspace_worker_launch"
+        redis.expire.assert_awaited_once_with(
+            "workspace:worker_launch:cooldown:conv-1",
+            wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
+        )
 
     @pytest.mark.asyncio
     async def test_publish_worker_launch_heartbeat_skips_without_attempt_id(
@@ -260,6 +269,9 @@ class TestBuildBrief:
         assert "## Task title" in brief
         assert "Build report" in brief
         assert "Render quarterly stats" in brief
+        assert "## Completion gate" in brief
+        assert "preflight:read-progress" in brief
+        assert "preflight:git-status" in brief
 
     def test_omits_attempt_when_none(self) -> None:
         task = _make_task()
@@ -294,9 +306,20 @@ class TestBuildBrief:
         assert system_context["workspace_binding"]["attempt_id"] == "att-2"
         assert system_context["additional_instructions"] == "Be brief."
         assert "native tool-call" in system_context["tool_protocol"]["instruction"]
+        reporting = system_context["reporting"]
+        assert reporting["completion_contract"]["required_verification_refs"] == [
+            "preflight:read-progress",
+            "preflight:git-status",
+        ]
+        assert "workspace_report_complete" in reporting["completion_contract"]["example"]
+        assert "preflight:read-progress" in " ".join(reporting["instructions"])
         assert (
             system_context["artifact_write_policy"]["max_single_write_chars"]
             == wl.WORKER_MAX_SINGLE_WRITE_CHARS
+        )
+        assert (
+            system_context["artifact_write_policy"]["max_single_bash_command_chars"]
+            == wl.WORKER_MAX_SINGLE_BASH_COMMAND_CHARS
         )
         assert "smaller chunks" in " ".join(
             system_context["artifact_write_policy"]["instructions"]

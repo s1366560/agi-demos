@@ -4,10 +4,12 @@ import pytest
 
 from src.tools.file_tools import (
     batch_read,
+    create_write_tool,
     get_path_error_result,
     glob_files,
     grep_files,
     read_file,
+    write_file,
 )
 from src.tools.registry import get_tool_registry
 
@@ -152,6 +154,63 @@ class TestReadTool:
         assert "第一行" not in text
         assert result["metadata"]["offset"] == 1
         assert result["metadata"]["offset_unit"] == "lines"
+
+
+class TestWriteTool:
+    """Regression coverage for durable and chunk-friendly writes."""
+
+    @pytest.mark.asyncio
+    async def test_write_file_overwrites_atomically_and_cleans_temp_file(self, tmp_path):
+        """Overwrite writes through a same-directory temp file and leaves no temp artifact."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        target = workspace / "large.md"
+        target.write_text("old", encoding="utf-8")
+        content = "x" * 7000
+
+        result = await write_file(
+            file_path="large.md",
+            content=content,
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        assert target.read_text(encoding="utf-8") == content
+        assert result["metadata"]["bytes_written"] == len(content.encode("utf-8"))
+        assert result["metadata"]["mode"] == "overwrite"
+        assert list(workspace.glob(".large.md.tmp-*")) == []
+
+    @pytest.mark.asyncio
+    async def test_write_file_append_mode_adds_follow_up_chunk(self, tmp_path):
+        """Append mode should let agents build files across multiple write calls."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        first = await write_file(
+            file_path="notes.md",
+            content="first\n",
+            _workspace_dir=str(workspace),
+        )
+        second = await write_file(
+            path="notes.md",
+            content="second\n",
+            mode="append",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not first.get("isError")
+        assert not second.get("isError")
+        assert (workspace / "notes.md").read_text(encoding="utf-8") == "first\nsecond\n"
+        assert second["metadata"]["mode"] == "append"
+
+    def test_write_tool_schema_exposes_append_mode(self):
+        """Tool schema should tell agents how to chunk large generated files."""
+        tool = create_write_tool()
+        properties = tool.input_schema["properties"]
+
+        assert properties["mode"]["enum"] == ["overwrite", "append"]
+        assert "append" in properties
+        assert "path" in properties
 
 
 class TestGlobTool:

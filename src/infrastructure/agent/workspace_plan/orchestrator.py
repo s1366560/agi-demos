@@ -153,6 +153,17 @@ class WorkspaceOrchestrator:
         node = plan.nodes.get(nid)
         if node is None:
             return
+        if attempt_id and node.current_attempt_id and node.current_attempt_id != attempt_id:
+            logger.info(
+                "workspace_plan.worker_report.stale_attempt_ignored",
+                extra={
+                    "workspace_id": workspace_id,
+                    "node_id": node_id,
+                    "reported_attempt_id": attempt_id,
+                    "current_attempt_id": node.current_attempt_id,
+                },
+            )
+            return
         try:
             new_exec = transition_execution(node.execution, TaskExecution.REPORTED)
         except Exception:

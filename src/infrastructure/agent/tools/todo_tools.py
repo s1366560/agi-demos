@@ -27,6 +27,11 @@ from src.domain.model.workspace.workspace_task import (
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_LEADER,
+    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_SESSION_ROLE_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +44,28 @@ def _workspace_authority_markers(ctx: ToolContext) -> tuple[str, str] | None:
     root_goal_task_id = runtime_context.get("root_goal_task_id")
     if isinstance(workspace_id, str) and isinstance(root_goal_task_id, str):
         return workspace_id, root_goal_task_id
+    return None
+
+
+def _workspace_structural_write_blocked_reason(
+    ctx: ToolContext,
+    *,
+    action: str,
+) -> str | None:
+    if action not in {"add", "replace"}:
+        return None
+    runtime_context = ctx.runtime_context or {}
+    role = runtime_context.get(WORKSPACE_SESSION_ROLE_KEY)
+    if role == WORKSPACE_ROLE_LEADER:
+        return None
+    has_bound_attempt = bool(runtime_context.get("workspace_task_id")) and bool(
+        runtime_context.get("attempt_id")
+    )
+    if role == WORKSPACE_ROLE_WORKER or has_bound_attempt:
+        return (
+            "workspace workers cannot create, replace, or dispatch global workspace tasks; "
+            "use workspace_report_progress/complete/blocked for the bound task instead"
+        )
     return None
 
 
@@ -729,15 +756,19 @@ async def _dispatch_created_workspace_tasks(
     from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
         SqlWorkspaceAgentRepository,
     )
-    from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-        _assign_execution_tasks_to_workers,
+    from src.infrastructure.agent.workspace.dispatcher import (
+        assign_execution_tasks_round_robin,
     )
 
-    await _assign_execution_tasks_to_workers(
+    active_bindings = await SqlWorkspaceAgentRepository(session).find_by_workspace(
+        workspace_id,
+        active_only=True,
+    )
+    assigned_count = await assign_execution_tasks_round_robin(
         workspace_id=workspace_id,
         actor_user_id=actor_user_id,
         created_tasks=created_tasks,
-        workspace_agent_repo=SqlWorkspaceAgentRepository(session),
+        active_bindings=active_bindings,
         command_service=command_service,
         leader_agent_id=leader_agent_id,
         reason=reason,
@@ -771,6 +802,7 @@ async def _dispatch_created_workspace_tasks(
             )
     return {
         "dispatched": True,
+        "assigned_count": assigned_count,
         "started_count": started_count,
         "start_failed_count": start_failed_count,
     }
@@ -855,6 +887,24 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
     todos_list = todos or []
     result: dict[str, Any] = {}
     workspace_markers = _workspace_authority_markers(ctx)
+    structural_write_blocked_reason = (
+        _workspace_structural_write_blocked_reason(ctx, action=action)
+        if workspace_markers is not None
+        else None
+    )
+    if structural_write_blocked_reason is not None:
+        return ToolResult(
+            output=json.dumps(
+                {
+                    "success": False,
+                    "action": action,
+                    "workspace_scope": "worker",
+                    "blocked_reason": structural_write_blocked_reason,
+                    "message": structural_write_blocked_reason,
+                },
+                indent=2,
+            )
+        )
 
     async with _todowrite_session_factory() as session:
         if workspace_markers is None:

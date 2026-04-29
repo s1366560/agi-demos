@@ -426,7 +426,16 @@ function DiagnosticsList({
       ) : (
         <div className="mt-3 space-y-2">
           {rows.slice(0, 5).map((row, index) => {
-            const rowKey = stringValue(row.id) || stringValue(row.task_id) || String(index);
+            const rowKey = [
+              stringValue(row.type),
+              stringValue(row.id),
+              stringValue(row.task_id),
+              stringValue(row.attempt_id),
+              stringValue(row.tool_execution_id),
+              String(index),
+            ]
+              .filter(Boolean)
+              .join(':');
             return <DiagnosticsRow key={`${kind}-${rowKey}`} row={row} />;
           })}
         </div>

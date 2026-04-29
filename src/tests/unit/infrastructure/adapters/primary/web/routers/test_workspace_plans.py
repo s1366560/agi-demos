@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import Request
@@ -23,11 +25,13 @@ from src.domain.model.workspace_plan import (
 from src.domain.ports.services.blackboard_port import BlackboardEntry
 from src.infrastructure.adapters.primary.web.routers import workspace_plans
 from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation,
     Project as DBProject,
     Tenant as DBTenant,
     User,
     WorkspaceModel,
     WorkspaceTaskModel,
+    WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackboard import (
@@ -247,6 +251,107 @@ async def test_stale_plan_node_recovery_enqueues_handoff_resume(
         limit=5,
     )
     assert events[0].event_type == "auto_stale_node_recovery_queued"
+
+
+def test_stale_plan_node_snapshot_recovery_uses_longer_running_grace() -> None:
+    plan = _make_plan("workspace-plan-api-stale-grace")
+    task_node_id = PlanNodeId(value="task-api")
+    updated_at = datetime.now(UTC) - timedelta(seconds=300)
+
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        updated_at=updated_at,
+    )
+
+    assert workspace_plans._stale_running_nodes(plan) == []
+
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.DISPATCHED,
+        updated_at=updated_at,
+    )
+
+    assert [node.id for node in workspace_plans._stale_running_nodes(plan)] == ["task-api"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_skips_stale_node_with_live_worker(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-live-worker"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-api",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            Conversation(
+                id="conversation-live",
+                project_id="plan-api-project",
+                tenant_id="plan-api-tenant",
+                user_id="plan-api-user",
+                title="Worker",
+                status="active",
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-live",
+                workspace_task_id="workspace-task-api",
+                root_goal_task_id="root-api",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="running",
+                conversation_id="conversation-live",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        updated_at=datetime.now(UTC)
+        - timedelta(seconds=workspace_plans._SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS + 1),
+        workspace_task_id="workspace-task-api",
+        current_attempt_id="attempt-live",
+    )
+    await db_session.flush()
+
+    class _Redis:
+        async def exists(self, key: str) -> int:
+            return 1 if key == "agent:running:conversation-live" else 0
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+        AsyncMock(return_value=_Redis()),
+    )
+
+    stale_nodes = workspace_plans._stale_running_nodes(plan)
+
+    assert [node.id for node in stale_nodes] == ["task-api"]
+    assert (
+        await workspace_plans._nodes_without_live_worker(
+            session=db_session,
+            nodes=stale_nodes,
+        )
+        == []
+    )
 
 
 @pytest.mark.asyncio

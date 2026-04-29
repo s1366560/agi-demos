@@ -18,10 +18,16 @@ import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_autonomy_profiles import resolve_workspace_type
+from src.domain.model.workspace_plan.plan import PlanStatus
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlanModel,
+    WorkspaceTaskModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
@@ -32,6 +38,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
     SqlWorkspaceTaskRepository,
 )
 from src.infrastructure.agent.subagent.task_decomposer import TaskDecomposer
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    ROOT_GOAL_TASK_ID,
+    WORKSPACE_PLAN_ID,
+)
 from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
 from src.infrastructure.agent.workspace_plan.outbox_handlers import SUPERVISOR_TICK_EVENT
 
@@ -108,6 +118,19 @@ async def kickoff_v2_plan(
             return True
 
         async with async_session_factory() as db:
+            if await _completed_plan_exists_for_root_task(
+                db,
+                workspace_id=workspace_id,
+                root_task_id=root_task_id,
+            ):
+                logger.info(
+                    "v2_bridge: skipping duplicate kickoff for completed root plan",
+                    extra={
+                        "workspace_id": workspace_id,
+                        "root_task_id": root_task_id,
+                    },
+                )
+                return True
             decomposer = await _build_workspace_task_decomposer(
                 db,
                 workspace_id,
@@ -142,6 +165,51 @@ async def kickoff_v2_plan(
             exc_info=True,
         )
         return False
+
+
+async def _completed_plan_exists_for_root_task(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    root_task_id: str | None,
+) -> bool:
+    if not root_task_id:
+        return False
+
+    active_stmt = (
+        select(PlanModel.id)
+        .where(PlanModel.workspace_id == workspace_id)
+        .where(PlanModel.status.in_((PlanStatus.ACTIVE.value, PlanStatus.DRAFT.value)))
+        .limit(1)
+    )
+    if (await db.execute(active_stmt)).scalar_one_or_none() is not None:
+        return False
+
+    task_stmt = (
+        select(WorkspaceTaskModel.metadata_json)
+        .where(WorkspaceTaskModel.workspace_id == workspace_id)
+        .where(WorkspaceTaskModel.metadata_json[ROOT_GOAL_TASK_ID].as_string() == root_task_id)
+        .where(WorkspaceTaskModel.metadata_json[WORKSPACE_PLAN_ID].as_string().is_not(None))
+    )
+    metadata_rows = (await db.execute(task_stmt)).scalars().all()
+    plan_ids = {
+        plan_id
+        for metadata in metadata_rows
+        if isinstance(metadata, dict)
+        for plan_id in (metadata.get(WORKSPACE_PLAN_ID),)
+        if isinstance(plan_id, str) and plan_id
+    }
+    if not plan_ids:
+        return False
+
+    completed_stmt = (
+        select(PlanModel.id)
+        .where(PlanModel.workspace_id == workspace_id)
+        .where(PlanModel.id.in_(plan_ids))
+        .where(PlanModel.status == PlanStatus.COMPLETED.value)
+        .limit(1)
+    )
+    return (await db.execute(completed_stmt)).scalar_one_or_none() is not None
 
 
 async def _build_workspace_task_decomposer(

@@ -36,10 +36,12 @@ class MockSandboxAdapter:
         self.fail_count = fail_count
         self.call_count = 0
         self.error_message = error_message
+        self.last_kwargs = None
 
     async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
         """Mock call_tool method with optional failure simulation."""
         self.call_count += 1
+        self.last_kwargs = kwargs
 
         if self.call_count <= self.fail_count:
             # Simulate connection error (retryable)
@@ -299,6 +301,7 @@ class TestSandboxMCPToolParameters:
         content_schema = tool.parameters["properties"]["content"]
         assert content_schema["maxLength"] == WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS
         assert "HARD LIMIT" in content_schema["description"]
+        assert str(WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS) in content_schema["description"]
 
     def test_bash_tool_schema_includes_workspace_harness_command_limit(self):
         """Bash tool schema should discourage giant heredoc commands."""
@@ -352,6 +355,65 @@ class TestSandboxMCPToolExecute:
         result = await tool.execute(ctx, path="/tmp/test")
 
         assert "Mock result from file_read" in result.output
+
+    async def test_write_tool_allows_content_above_legacy_harness_limit(self):
+        """Write should allow reasonably large files without forced skeleton/chunk retries."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        content = "x" * (WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS + 1)
+        result = await tool.execute(_make_ctx(), file_path="/workspace/large.md", content=content)
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+        assert adapter.last_kwargs["content"] == content
+
+    async def test_write_tool_normalizes_path_alias_and_append_flag(self):
+        """Common write argument variants should reach the sandbox in canonical form."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                        "append": {"type": "boolean"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(), path="/workspace/notes.md", content="chunk", append=True
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["file_path"] == "/workspace/notes.md"
+        assert adapter.last_kwargs["mode"] == "append"
 
     async def test_write_tool_rejects_content_over_workspace_harness_limit(self):
         """Oversized parsed write calls should fail before reaching the sandbox."""

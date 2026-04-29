@@ -269,6 +269,23 @@ def _build_terminal_tool_result(
     else:
         enriched = parsed_output if isinstance(parsed_output, dict) else {"output": parsed_output}
     enriched["applied_report"] = apply_result
+
+    # Terminal WTP tools have two side effects: write the authoritative attempt
+    # report, then notify the leader. The attempt write is the durable contract;
+    # a leader-notification policy denial should be visible, but it should not
+    # make the worker retry an already-applied terminal report.
+    if send_result.is_error and apply_result.get("applied") is True:
+        notification_error = enriched.get("error")
+        enriched["ok"] = True
+        enriched["notification_status"] = "failed"
+        if notification_error:
+            enriched["notification_error"] = notification_error
+        enriched["message"] = (
+            "Terminal workspace report was applied; leader notification failed "
+            "and will be reconciled from durable attempt state."
+        )
+        return ToolResult(output=json.dumps(enriched, indent=2), is_error=False)
+
     return ToolResult(
         output=json.dumps(enriched, indent=2),
         is_error=send_result.is_error,

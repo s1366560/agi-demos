@@ -111,9 +111,10 @@ class ConnectionManager:
 
     def _remove_project_subscriptions(self, session_id: str) -> None:
         """Remove lifecycle state subscriptions for a session."""
-        if session_id not in self.session_project_subscriptions:
+        subscriptions = self.session_project_subscriptions.pop(session_id, set())
+        if not subscriptions:
             return
-        for tenant_id, project_id in self.session_project_subscriptions[session_id]:
+        for tenant_id, project_id in subscriptions:
             tenant_subs = self.project_subscriptions.get(tenant_id, {})
             if project_id in tenant_subs:
                 tenant_subs[project_id].discard(session_id)
@@ -121,18 +122,17 @@ class ConnectionManager:
                     del tenant_subs[project_id]
                 if not tenant_subs:
                     self.project_subscriptions.pop(tenant_id, None)
-                del self.session_project_subscriptions[session_id]
 
     def _remove_conversation_subscriptions(self, session_id: str) -> None:
         """Remove conversation subscriptions for a session."""
-        if session_id not in self.subscriptions:
+        subscriptions = self.subscriptions.pop(session_id, set())
+        if not subscriptions:
             return
-        for conv_id in self.subscriptions[session_id]:
+        for conv_id in subscriptions:
             if conv_id in self.conversation_subscribers:
                 self.conversation_subscribers[conv_id].discard(session_id)
                 if not self.conversation_subscribers[conv_id]:
                     del self.conversation_subscribers[conv_id]
-                del self.subscriptions[session_id]
 
     def _remove_user_session(self, user_id: str | None, session_id: str) -> None:
         """Remove session from user's session set."""

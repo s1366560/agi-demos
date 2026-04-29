@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.workspace_plan import PlanNode, TaskExecution, TaskIntent
+from src.domain.model.workspace_plan import PlanNode, PlanStatus, TaskExecution, TaskIntent
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.infrastructure.adapters.primary.web.routers import workspace_plans
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -23,6 +24,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User as DBUser,
     WorkspaceModel,
     WorkspacePlanOutboxModel,
+    WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
@@ -272,6 +274,68 @@ async def test_kickoff_creates_durable_plan_and_outbox(
         "leader_agent_id": None,
     }
     assert outbox_items[0].metadata_json == {"source": "v2_bridge"}
+
+
+async def test_kickoff_skips_duplicate_plan_for_completed_root(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace(db_session)
+
+    with _patch_session_factory(db_session):
+        started = await kickoff_v2_plan(
+            workspace_id="ws-abc",
+            title="Build a CRUD blog",
+            description="Ship the first vertical slice",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    assert started is True
+    repo = SqlPlanRepository(db_session)
+    plan = await repo.get_by_workspace("ws-abc")
+    assert plan is not None
+    await repo.save(replace(plan, status=PlanStatus.COMPLETED))
+    db_session.add(
+        WorkspaceTaskModel(
+            id="plan-child-task-1",
+            workspace_id="ws-abc",
+            title="Projected plan child",
+            created_by="bridge-user-1",
+            status="done",
+            priority=0,
+            metadata_json={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-bridge-1",
+                "workspace_plan_id": plan.id,
+                "workspace_plan_node_id": "node-1",
+            },
+        )
+    )
+    await db_session.execute(delete(WorkspacePlanOutboxModel))
+    await db_session.flush()
+
+    with (
+        _patch_session_factory(db_session),
+        patch.object(
+            v2_bridge,
+            "_build_workspace_task_decomposer",
+            new=AsyncMock(return_value=_FakeDecomposer()),
+        ) as decomposer_builder,
+    ):
+        duplicate_started = await kickoff_v2_plan(
+            workspace_id="ws-abc",
+            title="Build a CRUD blog",
+            description="Ship the first vertical slice",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    assert duplicate_started is True
+    decomposer_builder.assert_not_awaited()
+    plans = (
+        await db_session.execute(select(WorkspacePlanOutboxModel).order_by(WorkspacePlanOutboxModel.id))
+    ).scalars().all()
+    assert plans == []
 
 
 async def test_kickoff_uses_workspace_decomposer_to_create_dag(

@@ -632,8 +632,16 @@ def _structured_verification_evidence(ctx: VerificationContext) -> set[str]:
 
 
 def _has_structured_verification_ref(evidence: set[str], expected_ref: str) -> bool:
-    detail_prefix = f"{expected_ref}:"
-    return any(value == expected_ref or value.startswith(detail_prefix) for value in evidence)
+    return any(
+        value == expected_ref
+        or (
+            value.startswith(expected_ref)
+            and len(value) > len(expected_ref)
+            and not value[len(expected_ref)].isalnum()
+            and value[len(expected_ref)] not in {"_", "-"}
+        )
+        for value in evidence
+    )
 
 
 def _artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:

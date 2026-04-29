@@ -647,6 +647,56 @@ class TestVerifier:
         assert rep.passed
         assert any(result.message == "preflight evidence recorded" for result in rep.results)
 
+    async def test_verifier_accepts_preflight_evidence_with_human_summary_separator(
+        self,
+    ) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                    {"check_id": "git-status", "kind": "git_status", "required": True},
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "last_worker_report_verifications": [
+                    "preflight:read-progress - progress file inspected",
+                    "preflight:git-status - clean worktree",
+                ],
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(result.message == "preflight evidence recorded" for result in rep.results)
+
+    async def test_verifier_rejects_preflight_evidence_prefix_collision(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "last_worker_report_verifications": ["preflight:read-progressive"],
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert "missing preflight evidence: read-progress" in rep.summary()
+
     async def test_verifier_rejects_missing_feature_checkpoint_evidence(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
@@ -1141,6 +1191,80 @@ class TestOrchestrator:
         assert plan.workspace_id == "ws"
         assert sup.started == []
         assert report.workspace_id == "ws"
+
+    async def test_mark_worker_reported_ignores_stale_attempt_id(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        node = plan.nodes[PlanNodeId("a")]
+        from dataclasses import replace
+
+        plan.replace_node(
+            replace(
+                node,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.RUNNING,
+                current_attempt_id="attempt-current",
+            )
+        )
+        await repo.save(plan)
+        orch = WorkspaceOrchestrator(
+            planner=LLMGoalPlanner(decomposer=None),
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            supervisor=_NoopSupervisor(),
+            plan_repo=repo,
+            config=OrchestratorConfig(),
+        )
+
+        await orch.mark_worker_reported(
+            workspace_id="ws-1",
+            node_id="a",
+            attempt_id="attempt-stale",
+        )
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        unchanged = reloaded.nodes[PlanNodeId("a")]
+        assert unchanged.execution is TaskExecution.RUNNING
+        assert unchanged.current_attempt_id == "attempt-current"
+
+    async def test_mark_worker_reported_accepts_current_attempt_id(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        node = plan.nodes[PlanNodeId("a")]
+        from dataclasses import replace
+
+        plan.replace_node(
+            replace(
+                node,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.RUNNING,
+                current_attempt_id="attempt-current",
+            )
+        )
+        await repo.save(plan)
+        orch = WorkspaceOrchestrator(
+            planner=LLMGoalPlanner(decomposer=None),
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            supervisor=_NoopSupervisor(),
+            plan_repo=repo,
+            config=OrchestratorConfig(),
+        )
+
+        await orch.mark_worker_reported(
+            workspace_id="ws-1",
+            node_id="a",
+            attempt_id="attempt-current",
+        )
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        reported = reloaded.nodes[PlanNodeId("a")]
+        assert reported.execution is TaskExecution.REPORTED
+        assert reported.current_attempt_id == "attempt-current"
 
 
 class _NoopSupervisor:

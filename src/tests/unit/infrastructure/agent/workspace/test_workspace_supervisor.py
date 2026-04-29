@@ -329,6 +329,7 @@ class TestWatchdog:
             "apply_workspace_worker_report",
             new=AsyncMock(return_value=None),
         ) as apply_mock:
+            supervisor._attempt_is_still_running = AsyncMock(return_value=True)  # type: ignore[method-assign]
             await supervisor._watchdog_tick()
         apply_mock.assert_awaited_once()
         kwargs = apply_mock.await_args.kwargs
@@ -336,6 +337,33 @@ class TestWatchdog:
         assert "stale_no_heartbeat" in kwargs["summary"]
         assert kwargs["report_id"] == "watchdog:attempt-stale"
         assert "attempt-stale" not in supervisor.get_liveness_snapshot()
+
+    async def test_watchdog_skips_stale_attempt_already_terminal(self) -> None:
+        supervisor = WorkspaceSupervisor(
+            None, stale_seconds=1, watchdog_interval_seconds=1
+        )
+        supervisor._liveness["attempt-done"] = {
+            "last_seen_monotonic": 0.0,
+            "workspace_id": "ws-1",
+            "task_id": "task-done",
+            "root_goal_task_id": "root-1",
+            "leader_agent_id": "leader",
+            "worker_agent_id": "worker",
+            "actor_user_id": "user-1",
+            "worker_conversation_id": "conv-1",
+            "last_verb": "task.heartbeat",
+        }
+        supervisor._attempt_is_still_running = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_goal_runtime."
+            "apply_workspace_worker_report",
+            new=AsyncMock(return_value=None),
+        ) as apply_mock:
+            await supervisor._watchdog_tick()
+
+        apply_mock.assert_not_awaited()
+        assert "attempt-done" not in supervisor.get_liveness_snapshot()
+        assert "attempt-done" in supervisor._terminal_attempts
 
     async def test_watchdog_disabled_when_stale_seconds_zero(self) -> None:
         supervisor = WorkspaceSupervisor(None, stale_seconds=0)

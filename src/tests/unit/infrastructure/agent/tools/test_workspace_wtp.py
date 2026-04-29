@@ -251,6 +251,42 @@ class TestComplete:
         assert apply_kwargs["attempt_id"] == "attempt-1"
         assert apply_kwargs["leader_agent_id"] == "leader-agent-id"
 
+    async def test_send_denied_is_warning_when_terminal_report_is_applied(
+        self, ctx, mock_orchestrator
+    ):
+        mock_orchestrator.send_message.return_value = SendDenied(
+            ok=False,
+            code=SendDeniedCode.TARGET_A2A_DISABLED,
+            message="target disabled",
+            from_agent_ref="worker-agent-id",
+            to_agent_ref="leader-agent-id",
+            resolved_from_agent_id="worker-agent-id",
+            resolved_to_agent_id="leader-agent-id",
+            sender_session_id="s",
+            target_session_id=None,
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            allowlist=["builtin:sisyphus"],
+        )
+
+        with patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply:
+            mock_apply.return_value = {"applied": True, "task_status": "in_review"}
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id="leader-agent-id",
+                summary="All done",
+                verifications=["preflight:read-progress", "preflight:git-status"],
+            )
+
+        assert result.is_error is False
+        payload = json.loads(result.output)
+        assert payload["ok"] is True
+        assert payload["error"] == "send_denied"
+        assert payload["notification_status"] == "failed"
+        assert payload["applied_report"] == {"applied": True, "task_status": "in_review"}
+
 
 class TestBlocked:
     async def test_sends_envelope_and_applies_report(self, ctx, mock_orchestrator):

@@ -10,6 +10,7 @@ from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecord
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    _ensure_execution_attempt,
     _launch_workspace_retry_attempt,
     adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
@@ -60,6 +61,31 @@ def _attempt(
 
 @pytest.mark.unit
 class TestWorkspaceGoalRuntime:
+    async def test_ensure_execution_attempt_does_not_persist_system_actor_marker(
+        self,
+    ) -> None:
+        task = MagicMock()
+        task.id = "task-1"
+        task.workspace_id = "ws-1"
+        task.assignee_agent_id = "worker-agent"
+        task.metadata = {"root_goal_task_id": "root-1"}
+        pending_attempt = _attempt(attempt_id="attempt-1", status="pending")
+        running_attempt = _attempt(attempt_id="attempt-1", status="running")
+        attempt_service = MagicMock()
+        attempt_service.get_active_attempt = AsyncMock(return_value=None)
+        attempt_service.create_attempt = AsyncMock(return_value=pending_attempt)
+        attempt_service.mark_running = AsyncMock(return_value=running_attempt)
+
+        result = await _ensure_execution_attempt(
+            attempt_service=attempt_service,
+            task=task,
+            leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+        )
+
+        assert result is running_attempt
+        attempt_service.create_attempt.assert_awaited_once()
+        assert attempt_service.create_attempt.await_args.kwargs["leader_agent_id"] is None
+
     async def test_no_workspace_noop(self) -> None:
         session = AsyncMock()
 
@@ -694,6 +720,84 @@ class TestWorkspaceGoalRuntime:
             assert update_mock.await_count == 1
             attempt_service.record_candidate_output.assert_awaited_once()
 
+    async def test_apply_worker_report_ignores_late_terminal_report_for_terminal_attempt(
+        self,
+    ) -> None:
+        task = MagicMock()
+        task.id = "child-terminal-1"
+        task.workspace_id = "ws-1"
+        task.assignee_agent_id = "worker-a"
+        task.status = MagicMock(value="done")
+        task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "derived_from_internal_plan_step": "late-terminal",
+            "last_worker_report_type": "completed",
+        }
+
+        session = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session_factory():
+            yield session
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+                fake_session_factory,
+            ),
+            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
+            ) as task_service_cls,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime._build_attempt_service"
+            ) as attempt_service_builder,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
+                new=AsyncMock(return_value=task),
+            ) as update_mock,
+        ):
+            task_service = task_service_cls.return_value
+            task_service.get_task = AsyncMock(return_value=task)
+            attempt_service = MagicMock()
+            accepted_attempt = _attempt(status="accepted")
+            accepted_attempt.workspace_task_id = "child-terminal-1"
+            accepted_attempt.worker_agent_id = "worker-a"
+            attempt_service.get_attempt = AsyncMock(return_value=accepted_attempt)
+            attempt_service.record_candidate_output = AsyncMock()
+            attempt_service_builder.return_value = attempt_service
+
+            result = await apply_workspace_worker_report(
+                workspace_id="ws-1",
+                root_goal_task_id="root-1",
+                task_id="child-terminal-1",
+                attempt_id="attempt-1",
+                actor_user_id="u-1",
+                worker_agent_id="worker-a",
+                report_type="blocked",
+                summary="Goal not achieved after 3 no-progress turns",
+                artifacts=["artifact:late"],
+                leader_agent_id="leader-agent",
+                report_id="late-blocked",
+            )
+
+        assert result is task
+        update_mock.assert_not_awaited()
+        attempt_service.record_candidate_output.assert_not_awaited()
+        session.commit.assert_not_awaited()
+
     @pytest.mark.parametrize(
         ("status", "updated_status_value", "expected_method", "expected_reason"),
         [
@@ -1320,5 +1424,71 @@ class TestWorkspaceGoalRuntime:
         assert (
             "child_report_not_completed:child-accepted:blocked"
             not in saved_root.metadata["goal_evidence"]["verifications"]
+        )
+        command_service.complete_task.assert_awaited_once()
+
+    async def test_auto_complete_ignores_legacy_blocked_children_when_plan_children_done(
+        self,
+    ) -> None:
+        root_task = MagicMock()
+        root_task.id = "root-plan"
+        root_task.workspace_id = "ws-1"
+        root_task.title = "Ship plan work"
+        root_task.status = MagicMock(value="in_progress")
+        root_task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+
+        plan_child = MagicMock()
+        plan_child.id = "plan-child"
+        plan_child.title = "Plan child"
+        plan_child.status = WorkspaceTaskStatus.DONE
+        plan_child.completed_at = datetime.fromisoformat("2026-04-16T03:40:00+00:00")
+        plan_child.updated_at = plan_child.completed_at
+        plan_child.created_at = plan_child.completed_at
+        plan_child.metadata = {
+            "task_role": "execution_task",
+            "workspace_plan_id": "plan-1",
+            "workspace_plan_node_id": "node-1",
+            "evidence_refs": ["artifact:file-1"],
+            "execution_verifications": ["pytest:passed"],
+        }
+
+        legacy_child = MagicMock()
+        legacy_child.id = "legacy-child"
+        legacy_child.title = "Legacy blocked child"
+        legacy_child.status = WorkspaceTaskStatus.BLOCKED
+        legacy_child.completed_at = None
+        legacy_child.updated_at = datetime.fromisoformat("2026-04-16T03:40:00+00:00")
+        legacy_child.created_at = legacy_child.updated_at
+        legacy_child.metadata = {"task_role": "execution_task"}
+
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[plan_child, legacy_child])
+        task_repo.find_by_id = AsyncMock(return_value=root_task)
+        task_repo.save = AsyncMock(side_effect=lambda task: task)
+        command_service = MagicMock()
+        command_service.complete_task = AsyncMock(return_value=MagicMock(id="root-plan"))
+
+        result = await auto_complete_ready_root(
+            workspace_id="ws-1",
+            actor_user_id="user-1",
+            root_task=root_task,
+            task_repo=task_repo,
+            command_service=command_service,
+            leader_agent_id="leader-1",
+        )
+
+        assert result is not None
+        saved_root = task_repo.save.await_args.args[0]
+        assert "child_report_not_completed:legacy-child" not in (
+            saved_root.metadata["goal_evidence"]["verifications"]
         )
         command_service.complete_task.assert_awaited_once()

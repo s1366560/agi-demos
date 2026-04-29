@@ -23,7 +23,7 @@ from src.infrastructure.agent.tools.mcp_errors import (
 
 logger = logging.getLogger(__name__)
 
-WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS = 6_000
+WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS = 6_000
 
 
@@ -77,8 +77,10 @@ def _apply_workspace_harness_limits(
         content_schema["description"] = _append_limit_hint(
             content_schema.get("description"),
             (
-                "HARD LIMIT: at most 6000 characters per call. "
-                "For longer files, create a skeleton first and append/edit small sections."
+                "HARD LIMIT: at most "
+                f"{WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS} characters per call. "
+                "Prefer one complete file write when the file fits; for longer files, "
+                "write the first chunk then use mode='append' or focused edits."
             ),
         )
         properties["content"] = content_schema
@@ -99,6 +101,22 @@ def _apply_workspace_harness_limits(
     return limited
 
 
+def _normalize_workspace_harness_kwargs(tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Normalize common agent argument variants before MCP execution."""
+    if tool_name != "write":
+        return kwargs
+
+    normalized = dict(kwargs)
+    path = normalized.get("path")
+    if "file_path" not in normalized and isinstance(path, str) and path:
+        normalized["file_path"] = path
+
+    if normalized.get("append") is True and not normalized.get("mode"):
+        normalized["mode"] = "append"
+
+    return normalized
+
+
 def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) -> str | None:
     if tool_name == "write":
         content = kwargs.get("content")
@@ -106,7 +124,8 @@ def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) ->
             return (
                 "write.content exceeds the workspace harness hard limit "
                 f"({len(content)} > {WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS} characters). "
-                "Retry by writing a short skeleton, then append or edit sections under 6000 chars."
+                "Retry by splitting content into chunks under the limit; use write "
+                "mode='append' for follow-up chunks when creating a long file."
             )
     if tool_name == "bash":
         command = kwargs.get("command")
@@ -309,14 +328,15 @@ def create_sandbox_mcp_tool(
         """Execute the sandbox MCP tool with retry logic."""
         _ = ctx  # Context available but not used by MCP tool calls
         try:
-            if argument_error := _workspace_harness_argument_error(tool_name, kwargs):
+            normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
+            if argument_error := _workspace_harness_argument_error(tool_name, normalized_kwargs):
                 return ToolResult(output=argument_error, is_error=True)
             output, raw_result = await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,
                 sandbox_port=sandbox_port,
                 retry_config=cfg,
-                kwargs=kwargs,
+                kwargs=normalized_kwargs,
             )
             metadata = raw_result if raw_result else {}
             return ToolResult(output=output, metadata=metadata)

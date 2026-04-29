@@ -102,6 +102,7 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
 from src.infrastructure.agent.workspace_plan.system_actor import (
     LEGACY_SISYPHUS_AGENT_ID,
     WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+    persisted_attempt_leader_agent_id,
 )
 
 SUPERVISOR_TICK_EVENT = "supervisor_tick"
@@ -194,6 +195,17 @@ def _build_dispatch_execution_state(*, actor_id: str) -> dict[str, str]:
         "updated_by_actor_id": actor_id,
         "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
+
+
+def _persisted_attempt_leader_agent_id(leader_agent_id: str | None) -> str | None:
+    """Return the agent-definition-backed leader id persisted on attempts.
+
+    ``workspace-plan:system`` is a durable-plan actor marker, not an
+    ``agent_definitions`` row. Keep using it for authority metadata and events,
+    but do not put it into ``workspace_task_session_attempts.leader_agent_id``,
+    which intentionally has an agent-definition foreign key.
+    """
+    return persisted_attempt_leader_agent_id(leader_agent_id)
 
 
 def make_supervisor_tick_handler(
@@ -702,7 +714,7 @@ def _make_sql_dispatcher(
                 root_goal_task_id=root_task_id,
                 workspace_id=workspace_id,
                 worker_agent_id=existing_task.assignee_agent_id,
-                leader_agent_id=leader_agent_id,
+                leader_agent_id=_persisted_attempt_leader_agent_id(leader_agent_id),
             )
             attempt = await attempt_service.mark_running(attempt.id)
             should_schedule = True
@@ -1013,7 +1025,7 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
                 root_goal_task_id=root_task_id,
                 workspace_id=workspace_id,
                 worker_agent_id=worker_agent_id,
-                leader_agent_id=leader_agent_id,
+                leader_agent_id=_persisted_attempt_leader_agent_id(leader_agent_id),
             )
             attempt = await attempt_service.mark_running(attempt.id)
             should_schedule = True

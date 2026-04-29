@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
+    WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackboard import (
@@ -51,7 +52,8 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["workspace-plans"])
 logger = logging.getLogger(__name__)
-_SNAPSHOT_RECOVERY_STALE_SECONDS = 180
+_SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS = 180
+_SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS = 900
 
 
 class WorkspacePlanActionCapabilityResponse(BaseModel):
@@ -660,17 +662,110 @@ async def _ensure_plan_outbox_worker_running(request: Request) -> None:
 
 def _stale_running_nodes(plan: Plan) -> list[PlanNode]:
     now = datetime.now(UTC)
-    threshold = timedelta(seconds=_SNAPSHOT_RECOVERY_STALE_SECONDS)
     stale_nodes: list[PlanNode] = []
     for node in plan.nodes.values():
         if node.execution not in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}:
             continue
+        threshold_seconds = (
+            _SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS
+            if node.execution is TaskExecution.DISPATCHED
+            else _SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS
+        )
+        threshold = timedelta(seconds=threshold_seconds)
         last_update = node.updated_at or node.created_at
         if last_update.tzinfo is None:
             last_update = last_update.replace(tzinfo=UTC)
         if now - last_update > threshold:
             stale_nodes.append(node)
     return stale_nodes
+
+
+async def _nodes_without_live_worker(
+    *,
+    session: AsyncSession,
+    nodes: list[PlanNode],
+) -> list[PlanNode]:
+    """Return stale nodes that do not still have an active worker process.
+
+    Plan node timestamps are updated by adjudication state transitions, not by
+    the worker heartbeat loop. A long-running but healthy worker can therefore
+    look stale from the plan row alone. Redis running/cooldown keys are the
+    runtime-owned liveness signal for launched workers.
+    """
+
+    attempt_ids = [
+        node.current_attempt_id
+        for node in nodes
+        if node.execution is TaskExecution.RUNNING and node.current_attempt_id
+    ]
+    if not attempt_ids:
+        return nodes
+
+    result = await session.execute(
+        refresh_select_statement(
+            select(
+                WorkspaceTaskSessionAttemptModel.id,
+                WorkspaceTaskSessionAttemptModel.conversation_id,
+            ).where(WorkspaceTaskSessionAttemptModel.id.in_(attempt_ids))
+        )
+    )
+    conversation_by_attempt = {
+        attempt_id: conversation_id
+        for attempt_id, conversation_id in result.all()
+        if isinstance(conversation_id, str) and conversation_id
+    }
+    if not conversation_by_attempt:
+        return nodes
+
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+        redis_client = await get_redis_client()
+    except Exception:
+        logger.debug(
+            "workspace_plan.snapshot_liveness_lookup_failed",
+            exc_info=True,
+            extra={"event": "workspace_plan.snapshot_liveness_lookup_failed"},
+        )
+        return nodes
+
+    live_attempt_ids: set[str] = set()
+    for attempt_id, conversation_id in conversation_by_attempt.items():
+        try:
+            running_exists = await redis_client.exists(f"agent:running:{conversation_id}")
+            cooldown_exists = await redis_client.exists(
+                f"workspace:worker_launch:cooldown:{conversation_id}"
+            )
+        except Exception:
+            logger.debug(
+                "workspace_plan.snapshot_liveness_key_check_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_plan.snapshot_liveness_key_check_failed",
+                    "attempt_id": attempt_id,
+                    "conversation_id": conversation_id,
+                },
+            )
+            continue
+        if bool(running_exists) or bool(cooldown_exists):
+            live_attempt_ids.add(attempt_id)
+
+    if not live_attempt_ids:
+        return nodes
+
+    filtered = [
+        node for node in nodes if not node.current_attempt_id or node.current_attempt_id not in live_attempt_ids
+    ]
+    suppressed = len(nodes) - len(filtered)
+    if suppressed:
+        logger.info(
+            "workspace_plan.snapshot_stale_node_recovery_suppressed_live_worker",
+            extra={
+                "event": "workspace_plan.snapshot_stale_node_recovery_suppressed_live_worker",
+                "suppressed": suppressed,
+            },
+        )
+    return filtered
 
 
 async def _has_pending_node_recovery_job(
@@ -777,7 +872,10 @@ async def _recover_stale_attempts_for_snapshot(
 ) -> bool:
     """Best-effort targeted recovery for stale plan nodes observed by the UI."""
 
-    stale_nodes = _stale_running_nodes(plan)
+    stale_nodes = await _nodes_without_live_worker(
+        session=session,
+        nodes=_stale_running_nodes(plan),
+    )
     if not stale_nodes:
         return False
     try:

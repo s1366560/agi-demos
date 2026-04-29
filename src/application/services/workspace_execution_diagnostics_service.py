@@ -144,6 +144,8 @@ class WorkspaceExecutionDiagnosticsService:
             limit=task_limit,
             offset=0,
         )
+        active_plan = await self._get_active_plan(workspace.id)
+        active_plan_task_ids = self._active_plan_task_ids(active_plan)
 
         task_status_counts = Counter(task.status.value for task in tasks)
         attempt_status_counts: Counter[str] = Counter()
@@ -172,14 +174,17 @@ class WorkspaceExecutionDiagnosticsService:
 
             task_row = self._task_row(task, latest_attempt, tool_records)
             task_rows.append(task_row)
-            blockers.extend(self._blocking_rows(task, latest_attempt, tool_records))
-            pending_adjudications.extend(self._pending_adjudication_rows(task, latest_attempt))
-            gap = self._evidence_gap_row(task, latest_attempt, tool_records)
-            if gap is not None:
-                evidence_gaps.append(gap)
+            if self._is_current_execution_task(task, active_plan_task_ids):
+                blockers.extend(self._blocking_rows(task, latest_attempt, tool_records))
+                pending_adjudications.extend(
+                    self._pending_adjudication_rows(task, latest_attempt)
+                )
+                gap = self._evidence_gap_row(task, latest_attempt, tool_records)
+                if gap is not None:
+                    evidence_gaps.append(gap)
 
         blockers.extend(await self._outbox_blocker_rows(workspace.id))
-        blockers.extend(await self._plan_blocker_rows(workspace.id))
+        blockers.extend(await self._plan_blocker_rows(workspace.id, active_plan=active_plan))
         recent_tool_failures.sort(
             key=lambda item: str(item.get("completed_at") or ""), reverse=True
         )
@@ -279,20 +284,33 @@ class WorkspaceExecutionDiagnosticsService:
                     or latest_attempt.candidate_summary,
                 }
             )
-        for record in tool_records:
-            if record.status.value == "failed":
-                rows.append(
-                    {
-                        "type": "tool_failed",
-                        "task_id": task.id,
-                        "title": task.title,
-                        "attempt_id": latest_attempt.id if latest_attempt else None,
-                        "tool_execution_id": record.id,
-                        "tool_name": record.tool_name,
-                        "reason": record.error,
-                    }
-                )
+        if self._should_report_tool_failures_as_blockers(task, latest_attempt):
+            for record in tool_records:
+                if record.status.value == "failed":
+                    rows.append(
+                        {
+                            "type": "tool_failed",
+                            "task_id": task.id,
+                            "title": task.title,
+                            "attempt_id": latest_attempt.id if latest_attempt else None,
+                            "tool_execution_id": record.id,
+                            "tool_name": record.tool_name,
+                            "reason": record.error,
+                        }
+                    )
         return rows
+
+    def _should_report_tool_failures_as_blockers(
+        self,
+        task: WorkspaceTask,
+        latest_attempt: WorkspaceTaskSessionAttempt | None,
+    ) -> bool:
+        if task.status is WorkspaceTaskStatus.BLOCKED:
+            return True
+        return (
+            latest_attempt is not None
+            and latest_attempt.status in self._BLOCKING_ATTEMPT_STATUSES
+        )
 
     def _pending_adjudication_rows(
         self,
@@ -348,10 +366,42 @@ class WorkspaceExecutionDiagnosticsService:
             if record.status.value == "failed"
         ]
 
-    async def _plan_blocker_rows(self, workspace_id: str) -> list[dict[str, Any]]:
+    async def _get_active_plan(self, workspace_id: str) -> Plan | None:
         if self._workspace_plan_repo is None:
-            return []
-        plan = await self._workspace_plan_repo.get_by_workspace(workspace_id)
+            return None
+        return await self._workspace_plan_repo.get_by_workspace(workspace_id)
+
+    def _active_plan_task_ids(self, plan: Plan | None) -> set[str] | None:
+        if plan is None:
+            return None
+        task_ids = {
+            task_id
+            for node in plan.nodes.values()
+            if isinstance(task_id := getattr(node, "workspace_task_id", None), str)
+            and task_id
+        }
+        return task_ids or None
+
+    def _is_current_execution_task(
+        self,
+        task: WorkspaceTask,
+        active_plan_task_ids: set[str] | None,
+    ) -> bool:
+        if active_plan_task_ids is None:
+            return True
+        if task.id in active_plan_task_ids:
+            return True
+        return task.metadata.get("task_role") == "goal_root"
+
+    async def _plan_blocker_rows(
+        self,
+        workspace_id: str,
+        *,
+        active_plan: Plan | None = None,
+    ) -> list[dict[str, Any]]:
+        plan = active_plan
+        if plan is None:
+            plan = await self._get_active_plan(workspace_id)
         if plan is None:
             return []
 
@@ -420,12 +470,62 @@ class WorkspaceExecutionDiagnosticsService:
             limit=50,
         )
         now = datetime.now(UTC)
+        completed_items = [item for item in items if getattr(item, "status", None) == "completed"]
         rows: list[dict[str, Any]] = []
         for item in items:
             row = self._outbox_blocker_row(item, now)
             if row is not None:
+                if self._outbox_blocker_superseded(item, completed_items):
+                    continue
                 rows.append(row)
         return rows
+
+    def _outbox_blocker_superseded(
+        self,
+        item: object,
+        completed_items: list[object],
+    ) -> bool:
+        item_context = self._outbox_context(item)
+        if not item_context:
+            return False
+        item_time = self._outbox_activity_time(item)
+        item_plan_id = getattr(item, "plan_id", None)
+        item_event_type = getattr(item, "event_type", None)
+        for completed in completed_items:
+            if completed is item:
+                continue
+            if getattr(completed, "plan_id", None) != item_plan_id:
+                continue
+            if getattr(completed, "event_type", None) != item_event_type:
+                continue
+            completed_time = self._outbox_activity_time(completed)
+            if (
+                item_time is not None
+                and completed_time is not None
+                and completed_time <= item_time
+            ):
+                continue
+            completed_context = self._outbox_context(completed)
+            if any(completed_context.get(key) == value for key, value in item_context.items()):
+                return True
+        return False
+
+    def _outbox_context(self, item: object) -> dict[str, str]:
+        payload = self._mapping(getattr(item, "payload_json", None))
+        metadata = self._mapping(getattr(item, "metadata_json", None))
+        context: dict[str, str] = {}
+        for key in ("node_id", "task_id", "attempt_id", "root_goal_task_id"):
+            value = payload.get(key) or metadata.get(key)
+            if isinstance(value, str) and value:
+                context[key] = value
+        return context
+
+    def _outbox_activity_time(self, item: object) -> datetime | None:
+        return (
+            self._as_aware(getattr(item, "processed_at", None))
+            or self._as_aware(getattr(item, "updated_at", None))
+            or self._as_aware(getattr(item, "created_at", None))
+        )
 
     def _outbox_blocker_row(
         self,

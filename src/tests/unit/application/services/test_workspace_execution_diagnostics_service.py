@@ -113,6 +113,7 @@ class _OutboxItem:
     lease_owner: str | None = None
     lease_expires_at: datetime | None = None
     next_attempt_at: datetime | None = None
+    processed_at: datetime | None = None
     created_at: datetime | None = None
     last_error: str | None = None
 
@@ -283,6 +284,37 @@ def _plan_with_stale_dispatch(*, age_seconds: int = 180) -> Plan:
     return plan
 
 
+def _plan_with_current_task(task_id: str) -> Plan:
+    plan = Plan(
+        id="plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("goal-1"),
+        status=PlanStatus.ACTIVE,
+    )
+    goal = PlanNode(
+        id="goal-1",
+        plan_id="plan-1",
+        parent_id=None,
+        kind=PlanNodeKind.GOAL,
+        title="Root goal",
+        intent=TaskIntent.IN_PROGRESS,
+    )
+    plan.add_node(goal)
+    plan.add_node(
+        PlanNode(
+            id="node-current",
+            plan_id="plan-1",
+            parent_id=goal.node_id,
+            kind=PlanNodeKind.TASK,
+            title="Current task",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            workspace_task_id=task_id,
+        )
+    )
+    return plan
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_get_diagnostics_collects_structural_execution_signals() -> None:
@@ -443,6 +475,155 @@ async def test_done_task_latest_blocked_attempt_is_not_reported_as_blocker() -> 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_accepted_task_tool_failure_stays_recent_failure_not_blocker() -> None:
+    done_task = _task(
+        "task-done",
+        "Recovered task",
+        WorkspaceTaskStatus.DONE,
+    )
+    attempts = {
+        "task-done": [
+            _attempt(
+                "attempt-accepted",
+                "task-done",
+                WorkspaceTaskSessionAttemptStatus.ACCEPTED,
+                conversation_id="conversation-1",
+                verifications=["pytest"],
+            )
+        ]
+    }
+    records = {
+        "conversation-1": [
+            _tool_record(
+                "tool-failed",
+                ToolExecutionStatus.FAILED,
+                error="transient write failure",
+                started_offset_seconds=1,
+            ),
+            _tool_record(
+                "tool-success",
+                ToolExecutionStatus.SUCCESS,
+                started_offset_seconds=2,
+            ),
+        ]
+    }
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[done_task],
+        attempts_by_task=attempts,
+        records_by_conversation=records,
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    assert diagnostics.blockers == []
+    assert diagnostics.recent_tool_failures[0]["id"] == "tool-failed"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_running_task_tool_failure_stays_recent_failure_not_blocker() -> None:
+    running_task = _task(
+        "task-running",
+        "Running task",
+        WorkspaceTaskStatus.IN_PROGRESS,
+    )
+    attempts = {
+        "task-running": [
+            _attempt(
+                "attempt-running",
+                "task-running",
+                WorkspaceTaskSessionAttemptStatus.RUNNING,
+                conversation_id="conversation-1",
+            )
+        ]
+    }
+    records = {
+        "conversation-1": [
+            _tool_record(
+                "tool-failed",
+                ToolExecutionStatus.FAILED,
+                error="worker recovered on retry",
+            )
+        ]
+    }
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[running_task],
+        attempts_by_task=attempts,
+        records_by_conversation=records,
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    assert diagnostics.blockers == []
+    assert diagnostics.recent_tool_failures[0]["id"] == "tool-failed"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_active_plan_filters_historical_task_blockers() -> None:
+    historical_task = _task(
+        "task-old",
+        "Historical blocker",
+        WorkspaceTaskStatus.BLOCKED,
+        metadata={"task_role": "execution_task"},
+        blocker_reason="stale_no_heartbeat",
+    )
+    current_task = _task(
+        "task-current",
+        "Current task",
+        WorkspaceTaskStatus.IN_PROGRESS,
+        metadata={"task_role": "execution_task"},
+    )
+    attempts = {
+        "task-old": [
+            _attempt(
+                "attempt-old",
+                "task-old",
+                WorkspaceTaskSessionAttemptStatus.BLOCKED,
+                summary="stale_no_heartbeat",
+            )
+        ],
+        "task-current": [
+            _attempt(
+                "attempt-current",
+                "task-current",
+                WorkspaceTaskSessionAttemptStatus.RUNNING,
+                conversation_id="conversation-1",
+            )
+        ],
+    }
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[historical_task, current_task],
+        attempts_by_task=attempts,
+        plan=_plan_with_current_task("task-current"),
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    assert diagnostics.task_status_counts == {"blocked": 1, "in_progress": 1}
+    assert diagnostics.blockers == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_diagnostics_reports_outbox_blockers() -> None:
     expired_at = datetime.now(UTC) - timedelta(seconds=5)
     retry_at = datetime.now(UTC) + timedelta(minutes=2)
@@ -515,6 +696,64 @@ async def test_get_diagnostics_reports_outbox_blockers() -> None:
     assert outbox_blockers[1]["outbox_id"] == "outbox-dead"
     assert outbox_blockers[1]["last_error"] == "handler failed"
     assert outbox_blockers[2]["outbox_id"] == "outbox-pending"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_diagnostics_suppresses_outbox_blocker_after_later_success() -> None:
+    now = datetime.now(UTC)
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[],
+        outbox_items=[
+            _OutboxItem(
+                id="outbox-old-dead",
+                workspace_id="workspace-1",
+                plan_id="plan-1",
+                event_type="supervisor_tick",
+                status="dead_letter",
+                payload_json={"node_id": "node-1"},
+                created_at=now - timedelta(minutes=3),
+                processed_at=now - timedelta(minutes=3),
+                last_error="old failure",
+            ),
+            _OutboxItem(
+                id="outbox-new-success",
+                workspace_id="workspace-1",
+                plan_id="plan-1",
+                event_type="supervisor_tick",
+                status="completed",
+                payload_json={"node_id": "node-1"},
+                created_at=now - timedelta(minutes=1),
+                processed_at=now - timedelta(minutes=1),
+            ),
+            _OutboxItem(
+                id="outbox-current-dead",
+                workspace_id="workspace-1",
+                plan_id="plan-1",
+                event_type="supervisor_tick",
+                status="dead_letter",
+                payload_json={"node_id": "node-2"},
+                created_at=now - timedelta(minutes=2),
+                processed_at=now - timedelta(minutes=2),
+                last_error="current failure",
+            ),
+        ],
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    outbox_blockers = [
+        blocker
+        for blocker in diagnostics.blockers
+        if str(blocker.get("type")).startswith("outbox_")
+    ]
+    assert [blocker["outbox_id"] for blocker in outbox_blockers] == ["outbox-current-dead"]
 
 
 @pytest.mark.unit

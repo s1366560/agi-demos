@@ -4,6 +4,7 @@ Implements read, write, edit, glob, and grep operations.
 """
 
 import asyncio
+import contextlib
 import difflib
 import fnmatch
 import logging
@@ -576,36 +577,76 @@ def create_batch_read_tool() -> MCPTool:
 
 
 async def write_file(
-    file_path: str,
-    content: str,
+    file_path: str | None = None,
+    content: str | None = None,
+    mode: str = "overwrite",
+    append: bool = False,
     _workspace_dir: str = "/workspace",
+    path: str | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    Write content to a file (creates or overwrites).
+    Write content to a file.
 
     Args:
         file_path: Path to the file
         content: Content to write
+        mode: Write mode, either "overwrite" or "append"
+        append: Backward-compatible alias for mode="append"
         _workspace_dir: Workspace directory
 
     Returns:
         Result dict
     """
+    requested_path = file_path or path
+    if not requested_path:
+        return _error_result(
+            "Missing required file path",
+            code="missing_file_path",
+            hint="Pass file_path with the workspace-relative or absolute target path.",
+        )
+    if content is None:
+        return _error_result(
+            "Missing required content",
+            code="missing_content",
+            metadata={"requested_path": requested_path},
+        )
+
+    write_mode = "append" if append else str(mode or "overwrite").strip().lower()
+    if write_mode not in {"overwrite", "append"}:
+        return _error_result(
+            f"Unsupported write mode: {mode}",
+            code="invalid_write_mode",
+            hint="Use mode='overwrite' for full replacement or mode='append' for chunked writes.",
+            metadata={"requested_path": requested_path, "mode": mode},
+        )
+
     try:
-        resolved = _resolve_path(file_path, _workspace_dir)
+        resolved = _resolve_path(requested_path, _workspace_dir)
         path_metadata = _path_metadata(resolved, _workspace_dir)
+        encoded_size = len(content.encode("utf-8"))
 
         # Create parent directories
         resolved.parent.mkdir(parents=True, exist_ok=True)
 
-        async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
-            await f.write(content)
+        if write_mode == "append":
+            async with aiofiles.open(resolved, "a", encoding="utf-8") as f:
+                await f.write(content)
+        else:
+            temp_path = resolved.with_name(f".{resolved.name}.tmp-{os.getpid()}-{time.time_ns()}")
+            try:
+                async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
+                    await f.write(content)
+                os.replace(temp_path, resolved)
+            finally:
+                with contextlib.suppress(FileNotFoundError):
+                    temp_path.unlink()
 
         return _success_result(
-            f"Successfully wrote to {file_path}",
+            f"Successfully wrote to {requested_path}",
             metadata={
-                "bytes_written": len(content.encode("utf-8")),
+                "bytes_written": encoded_size,
+                "mode": write_mode,
                 **path_metadata,
             },
         )
@@ -615,14 +656,14 @@ async def write_file(
             str(exc),
             code="path_outside_workspace",
             hint="Write operations are limited to files inside the workspace.",
-            metadata={"requested_path": file_path},
+            metadata={"requested_path": requested_path},
         )
     except Exception as e:
         logger.error(f"Error writing file: {e}")
         return _error_result(
             str(e),
             code="write_failed",
-            metadata={"requested_path": file_path},
+            metadata={"requested_path": requested_path},
         )
 
 
@@ -630,7 +671,10 @@ def create_write_tool() -> MCPTool:
     """Create the write file tool."""
     return MCPTool(
         name="write",
-        description="Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
+        description=(
+            "Write content to a file. Creates the file if it doesn't exist. "
+            "Defaults to atomic overwrite; use mode='append' for chunked large files."
+        ),
         input_schema={
             "type": "object",
             "properties": {
@@ -638,9 +682,27 @@ def create_write_tool() -> MCPTool:
                     "type": "string",
                     "description": "Path to the file to write",
                 },
+                "path": {
+                    "type": "string",
+                    "description": "Alias for file_path, accepted for compatibility",
+                },
                 "content": {
                     "type": "string",
                     "description": "Content to write to the file",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["overwrite", "append"],
+                    "description": (
+                        "Write mode. Use overwrite for full replacement or append "
+                        "to add a chunk to the end of the file."
+                    ),
+                    "default": "overwrite",
+                },
+                "append": {
+                    "type": "boolean",
+                    "description": "Compatibility alias for mode='append'",
+                    "default": False,
                 },
             },
             "required": ["file_path", "content"],

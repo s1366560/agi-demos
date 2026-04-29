@@ -59,7 +59,12 @@ WORKER_LAUNCH_COOLDOWN_SECONDS = 300
 WORKER_LAUNCH_HEARTBEAT_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45")
 )
-WORKER_MAX_SINGLE_WRITE_CHARS = 6000
+WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
+WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
+WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
+    "preflight:read-progress",
+    "preflight:git-status",
+)
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
 _NATIVE_TOOL_PROTOCOL_GUARD = (
@@ -178,29 +183,43 @@ def _build_worker_system_context(
                 "attempt_id": binding.get("attempt_id", ""),
                 "leader_agent_id": binding.get("leader_agent_id", ""),
             },
+            "completion_contract": {
+                "required_verification_refs": list(WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS),
+                "tool": "workspace_report_complete",
+                "argument": "verifications",
+                "example": (
+                    "workspace_report_complete("
+                    "verifications=['preflight:read-progress', 'preflight:git-status', ...])"
+                ),
+                "rule": (
+                    "Do not report completed unless every required_verification_ref is "
+                    "present verbatim in the verifications argument."
+                ),
+            },
             "instructions": [
                 "Execute the assigned workspace task autonomously.",
                 "Call workspace_report_progress periodically during long-running work.",
                 "Call workspace_report_complete once when finished successfully.",
                 (
-                    "When reporting completion, include a verifications list with every "
-                    "required preflight ref such as preflight:read-progress and "
-                    "preflight:git-status."
+                    "The completion report MUST include these exact verification refs: "
+                    f"{', '.join(WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS)}."
                 ),
                 "Call workspace_report_blocked if a hard blocker cannot be recovered.",
             ],
         },
         "artifact_write_policy": {
             "max_single_write_chars": WORKER_MAX_SINGLE_WRITE_CHARS,
+            "max_single_bash_command_chars": WORKER_MAX_SINGLE_BASH_COMMAND_CHARS,
             "instructions": [
-                "Do not write large documents or code files in one oversized tool call.",
+                "Prefer one complete write call when the document or code file fits under max_single_write_chars.",
                 (
-                    "For long generated files, write a small skeleton first, then append "
-                    "or edit sections in chunks under max_single_write_chars."
+                    "For longer generated files, write the first chunk, then append or edit "
+                    "sections in chunks under max_single_write_chars."
                 ),
                 (
                     "Do not use a giant heredoc or shell command with generated content "
-                    "larger than max_single_write_chars; split the content first."
+                    "larger than max_single_bash_command_chars; use write mode='append' "
+                    "instead of shell heredocs for file content."
                 ),
                 (
                     "If a write/edit tool reports truncated arguments or incomplete JSON, "
@@ -347,9 +366,17 @@ def _build_worker_brief(
         sections.append(f"## Task description\n{description}")
     sections.append(
         "## Artifact write discipline\n"
-        f"Keep any single write/edit/bash payload under {WORKER_MAX_SINGLE_WRITE_CHARS} "
-        "characters. For long docs or generated code, write a skeleton first and append "
-        "small sections; do not send one giant heredoc."
+        f"Keep any single write/edit payload under {WORKER_MAX_SINGLE_WRITE_CHARS} "
+        f"characters and any bash command under {WORKER_MAX_SINGLE_BASH_COMMAND_CHARS} "
+        "characters. For longer docs or generated code, write the first chunk and append "
+        "small sections with write mode='append'; do not send one giant heredoc."
+    )
+    sections.append(
+        "## Completion gate\n"
+        "Before calling workspace_report_complete, include these exact verification refs in "
+        "the verifications argument: "
+        f"{', '.join(WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS)}. "
+        "Add the concrete test/build/browser evidence refs after them."
     )
 
     return "\n\n".join(sections)
@@ -370,6 +397,28 @@ async def _is_on_cooldown(conversation_id: str) -> bool:
     except Exception:
         return False
     return not claimed
+
+
+async def _refresh_launch_cooldown(conversation_id: str | None) -> None:
+    """Keep the duplicate-launch guard alive while a worker stream is active."""
+
+    if not conversation_id:
+        return
+    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+    try:
+        redis = await get_redis_client()
+        key = f"workspace:worker_launch:cooldown:{conversation_id}"
+        await redis.expire(key, WORKER_LAUNCH_COOLDOWN_SECONDS)
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.cooldown_refresh_failed",
+            extra={
+                "event": "workspace_worker_launch.cooldown_refresh_failed",
+                "conversation_id": conversation_id,
+            },
+            exc_info=True,
+        )
 
 
 async def _publish_worker_launch_heartbeat(
@@ -412,6 +461,7 @@ async def _publish_worker_launch_heartbeat(
             extra_metadata=metadata,
         )
         await publish_envelope_default(envelope)
+        await _refresh_launch_cooldown(conversation_id)
     except Exception:
         logger.debug(
             "workspace_worker_launch.heartbeat_publish_failed",

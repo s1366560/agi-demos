@@ -436,6 +436,15 @@ class WorkspaceSupervisor:
             apply_workspace_worker_report,
         )
 
+        if not await self._attempt_is_still_running(attempt_id):
+            self._terminal_attempts.add(attempt_id)
+            logger.info(
+                "workspace_supervisor.watchdog skipped terminal attempt=%s task=%s",
+                attempt_id,
+                info.get("task_id"),
+            )
+            return
+
         summary = f"stale_no_heartbeat (last_verb={info.get('last_verb')})"
         try:
             await apply_workspace_worker_report(
@@ -469,6 +478,39 @@ class WorkspaceSupervisor:
                 attempt_id,
                 info.get("task_id"),
             )
+
+    async def _attempt_is_still_running(self, attempt_id: str) -> bool:
+        """Return whether durable state still considers this attempt running."""
+        if not attempt_id:
+            return False
+        try:
+            from sqlalchemy import select
+
+            from src.domain.model.workspace.workspace_task_session_attempt import (
+                WorkspaceTaskSessionAttemptStatus,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.models import (
+                WorkspaceTaskSessionAttemptModel,
+            )
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(WorkspaceTaskSessionAttemptModel.status).where(
+                        WorkspaceTaskSessionAttemptModel.id == attempt_id
+                    )
+                )
+                status = result.scalar_one_or_none()
+            return status == WorkspaceTaskSessionAttemptStatus.RUNNING.value
+        except Exception:
+            logger.warning(
+                "workspace_supervisor.watchdog attempt status lookup failed",
+                exc_info=True,
+                extra={"attempt_id": attempt_id},
+            )
+            return True
 
     async def _apply_terminal(self, envelope: WtpEnvelope) -> None:
         """Invoke :func:`apply_workspace_worker_report` for terminal verbs."""

@@ -62,6 +62,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
     _node_allowed_sandbox_commands,
+    _persisted_attempt_leader_agent_id,
     _WorkspaceSandboxCommandRunner,
     make_handoff_resume_handler,
     make_supervisor_tick_handler,
@@ -71,6 +72,7 @@ from src.infrastructure.agent.workspace_plan.outbox_worker import (
     WorkspacePlanOutboxWorker,
     WorkspacePlanSessionFactory,
 )
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 
 async def _seed_plan(db_session: AsyncSession, workspace_id: str, plan_id: str) -> None:
@@ -263,6 +265,12 @@ def test_node_allowed_sandbox_commands_collects_checkpoint_and_preflight_command
         "npm test -- checkout",
         "uv run pytest src/tests/unit/example.py",
     }
+
+
+def test_persisted_attempt_leader_agent_id_skips_system_actor_marker() -> None:
+    assert _persisted_attempt_leader_agent_id(WORKSPACE_PLAN_SYSTEM_ACTOR_ID) is None
+    assert _persisted_attempt_leader_agent_id(BUILTIN_SISYPHUS_ID) == BUILTIN_SISYPHUS_ID
+    assert _persisted_attempt_leader_agent_id(None) is None
 
 
 @pytest.mark.asyncio
@@ -983,6 +991,81 @@ async def test_supervisor_tick_handler_leader_builds_team_when_only_leader_is_bo
         "workspace-workspace1-builder",
         "workspace-workspace1-verifier",
     }
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_handler_uses_system_actor_without_attempt_leader_fk(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan with system actor",
+        start_supervisor=False,
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+        },
+    )
+    await db_session.commit()
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded_item = await repo.get_by_id(item.id)
+    assert loaded_item is not None
+    assert loaded_item.status == "completed", loaded_item.last_error
+
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    leaf = loaded.leaf_tasks()[0]
+    assert leaf.intent is TaskIntent.IN_PROGRESS
+    assert leaf.execution is TaskExecution.DISPATCHED
+    assert leaf.workspace_task_id is not None
+    assert leaf.current_attempt_id is not None
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, leaf.current_attempt_id)
+    assert attempt is not None
+    assert attempt.leader_agent_id is None
+
+    task_row = await db_session.get(WorkspaceTaskModel, leaf.workspace_task_id)
+    assert task_row is not None
+    assert task_row.metadata_json[EXECUTION_STATE]["updated_by_actor_id"] == (
+        WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+    )
+
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(launch_jobs) == 1
+    assert launch_jobs[0].payload_json["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 
 @pytest.mark.asyncio

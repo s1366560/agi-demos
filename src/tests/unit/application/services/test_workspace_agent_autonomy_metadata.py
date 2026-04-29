@@ -579,6 +579,69 @@ async def test_reconcile_done_root_clears_ready_for_completion_summary() -> None
 
 
 @pytest.mark.unit
+async def test_reconcile_root_progress_prefers_durable_plan_children_over_legacy_noise() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    plan_child = _child_task(
+        task_id="plan-child-done",
+        metadata={
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "workspace_plan_id": "plan-1",
+            "workspace_plan_node_id": "node-1",
+            "lineage_source": "agent",
+        },
+    )
+    legacy_child = _child_task(
+        task_id="legacy-child-blocked",
+        metadata={"task_role": "execution_task", "root_goal_task_id": "root-1"},
+    )
+    legacy_child.status = WorkspaceTaskStatus.BLOCKED
+    legacy_child.blocker_reason = "stale_no_heartbeat"
+
+    class Repo:
+        async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+            return root if task_id == root.id else None
+
+        async def find_by_root_goal_task_id(
+            self,
+            workspace_id: str,
+            root_goal_task_id: str,
+        ) -> list[WorkspaceTask]:
+            assert workspace_id == "ws-1"
+            assert root_goal_task_id == "root-1"
+            return [plan_child, legacy_child]
+
+        async def save(self, task: WorkspaceTask) -> WorkspaceTask:
+            return task
+
+    reconciled = await reconcile_root_goal_progress(
+        task_repo=Repo(),
+        workspace_id="ws-1",
+        root_goal_task_id="root-1",
+    )
+
+    assert reconciled is not None
+    assert reconciled.metadata["goal_progress_summary"] == (
+        "1/1 child tasks done; 0 in progress; 0 blocked; 0/1 assigned"
+    )
+    assert reconciled.metadata["active_child_task_ids"] == []
+    assert reconciled.metadata["blocked_child_task_ids"] == []
+    assert reconciled.metadata["remediation_status"] == "ready_for_completion"
+    assert reconciled.metadata["goal_health"] == "achieved"
+
+
+@pytest.mark.unit
 def test_workspace_type_metadata_can_drive_completion_policy_when_root_has_no_type() -> None:
     root = _root_task(
         {

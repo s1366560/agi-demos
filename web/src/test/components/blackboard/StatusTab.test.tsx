@@ -113,6 +113,7 @@ describe('StatusTab', () => {
   });
 
   it('renders execution diagnostics signals from the blackboard API', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.mocked(workspaceBlackboardService.getExecutionDiagnostics).mockResolvedValueOnce({
       workspace_id: 'ws-1',
       generated_at: '2026-04-27T00:00:00Z',
@@ -122,8 +123,15 @@ describe('StatusTab', () => {
       tasks: [],
       blockers: [
         {
+          type: 'task_blocked',
+          task_id: 'task-1',
+          title: 'Implement worker tracking',
+          reason: 'Task is blocked',
+        },
+        {
           type: 'attempt_blocked',
           task_id: 'task-1',
+          attempt_id: 'attempt-1',
           title: 'Implement worker tracking',
           reason: 'Worker reported a blocking dependency',
         },
@@ -172,10 +180,14 @@ describe('StatusTab', () => {
         'ws-1'
       );
     });
-    expect(await screen.findByText('Implement worker tracking')).toBeInTheDocument();
+    expect(await screen.findAllByText('Implement worker tracking')).toHaveLength(2);
     expect(screen.getByText('Verify deployment plan')).toBeInTheDocument();
     expect(screen.getByText('bash')).toBeInTheDocument();
     expect(screen.getByText('command failed')).toBeInTheDocument();
+    expect(consoleError.mock.calls.some((call) => call.join(' ').includes('same key'))).toBe(
+      false
+    );
+    consoleError.mockRestore();
   });
 
   it('renders durable plan snapshot state', async () => {
