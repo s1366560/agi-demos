@@ -1298,12 +1298,13 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
             return auto_outcome
 
     if remediation_status != "ready_for_completion":
+        durable_plan_started = False
         try:
             from src.infrastructure.agent.workspace.goal_runtime import (
                 kickoff_v2_plan,
             )
 
-            await kickoff_v2_plan(
+            durable_plan_started = await kickoff_v2_plan(
                 workspace_id=workspace_id,
                 title=title,
                 description=description,
@@ -1317,6 +1318,13 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
                 exc_info=True,
                 extra={"workspace_id": workspace_id, "root_task_id": root_task.id},
             )
+        if _durable_plan_can_suppress_leader_message(remediation_status) and durable_plan_started:
+            await _mark_cooldown(workspace_id, root_task.id)
+            return {
+                "triggered": False,
+                "root_task_id": root_task.id,
+                "reason": "durable_plan_started",
+            }
 
     if (
         _durable_plan_can_suppress_leader_message(remediation_status)

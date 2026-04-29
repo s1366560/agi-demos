@@ -287,6 +287,88 @@ class TestTaskDecomposer:
         assert "Dependent phases are valid sub-tasks" in system_prompt
         assert "depends_on" in system_prompt
 
+    async def test_prompt_prefers_feature_sized_software_boundaries(self, mock_llm_client):
+        mock_llm_client.generate.return_value = {
+            "content": "",
+            "tool_calls": [],
+        }
+        decomposer = TaskDecomposer(llm_client=mock_llm_client)
+        await decomposer.decompose("Clone a product site and ship docs, backend, and frontend")
+
+        messages = mock_llm_client.generate.await_args.kwargs["messages"]
+        system_prompt = messages[0]["content"]
+        assert "feature-sized, independently verifiable work items" in system_prompt
+        assert "do not collapse discovery, architecture, backend, frontend" in system_prompt
+        assert "concrete outcome and evidence" in system_prompt
+
+    async def test_default_max_subtasks_supports_full_product_delivery_dag(self, mock_llm_client):
+        mock_llm_client.generate.return_value = {
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "decompose_task",
+                        "arguments": json.dumps(
+                            {
+                                "subtasks": [
+                                    {"id": f"t{i}", "description": f"Delivery task {i}"}
+                                    for i in range(1, 7)
+                                ],
+                                "reasoning": "Product delivery needs six verifiable boundaries",
+                            }
+                        ),
+                    }
+                }
+            ],
+        }
+
+        decomposer = TaskDecomposer(llm_client=mock_llm_client)
+        result = await decomposer.decompose("Ship a complete app with docs and tests")
+
+        assert result.is_decomposed is True
+        assert len(result.subtasks) == 6
+
+    async def test_min_subtasks_repairs_coarse_software_delivery_split(self, mock_llm_client):
+        def response_with_tasks(count: int) -> dict[str, object]:
+            return {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "decompose_task",
+                            "arguments": json.dumps(
+                                {
+                                    "subtasks": [
+                                        {"id": f"t{i}", "description": f"Delivery slice {i}"}
+                                        for i in range(1, count + 1)
+                                    ],
+                                    "reasoning": f"Produced {count} delivery slices",
+                                }
+                            ),
+                        }
+                    }
+                ],
+            }
+
+        mock_llm_client.generate.side_effect = [
+            response_with_tasks(4),
+            response_with_tasks(6),
+        ]
+
+        decomposer = TaskDecomposer(
+            llm_client=mock_llm_client,
+            max_subtasks=8,
+            min_subtasks=6,
+        )
+        result = await decomposer.decompose("Ship a complete app with docs, UI, API, and E2E")
+
+        assert len(result.subtasks) == 6
+        assert mock_llm_client.generate.await_count == 2
+        repair_message = mock_llm_client.generate.await_args_list[1].kwargs["messages"][1][
+            "content"
+        ]
+        assert "expects at least 6" in repair_message
+
     async def test_decompose_forces_tool_call_choice(self, mock_llm_client):
         mock_llm_client.generate.return_value = {
             "content": "",

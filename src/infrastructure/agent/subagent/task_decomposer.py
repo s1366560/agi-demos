@@ -121,7 +121,10 @@ Rules:
 - You must call decompose_task exactly once
 - Decompose when the task has separable phases, deliverables, or verification steps
 - If the request explicitly asks for a DAG, multiple child tasks, or named phases, preserve those handoff points as sub-tasks
-- Software delivery tasks usually split into requirements/API contract, implementation, tests, and documentation/review when those deliverables are in scope
+- Software delivery tasks usually split into feature-sized, independently verifiable work items
+- For end-to-end product/software goals, prefer 6-8 subtasks when max_subtasks allows it; do not collapse discovery, architecture, backend, frontend, integration, documentation, and verification into one coarse implementation task
+- Return at least {min_subtasks} sub-task(s) unless the original request explicitly asks for fewer or the task truly has fewer separable handoff points
+- Each sub-task description should name the concrete outcome and evidence expected from that worker
 - Dependent phases are valid sub-tasks; represent prerequisites with depends_on
 - Keep it simple: {max_subtasks} sub-tasks maximum
 - If the request explicitly asks for four phases and max_subtasks allows it, return four sub-tasks
@@ -133,11 +136,12 @@ Available agents: {agents}
 """
 
 
-_DECOMPOSITION_REPAIR_PROMPT = """The previous decomposition produced a single sub-task.
+_DECOMPOSITION_REPAIR_PROMPT = """The previous decomposition produced {actual_count} sub-task(s), but this context expects at least {min_subtasks} when the original task has enough separable handoff points.
 
 Re-evaluate the original task and call decompose_task exactly once:
 - If the original task explicitly asks for a DAG, multiple child tasks, named phases, or separable deliverables, return a multi-node DAG up to the maximum.
-- If the original task truly has no separable handoff points, return one sub-task.
+- For software/product delivery, split discovery, architecture, backend, frontend, integration, documentation, and verification into distinct feature-sized work items when applicable.
+- If the original task truly has fewer separable handoff points than the requested minimum, keep the smaller valid decomposition and explain why.
 - Preserve prerequisite relationships with depends_on.
 
 Original task:
@@ -164,7 +168,8 @@ class TaskDecomposer:
         self,
         llm_client: LLMClient,
         available_agent_names: list[str] | None = None,
-        max_subtasks: int = 4,
+        max_subtasks: int = 8,
+        min_subtasks: int = 1,
     ) -> None:
         """Initialize TaskDecomposer.
 
@@ -172,11 +177,13 @@ class TaskDecomposer:
             llm_client: LLM client with generate() method.
             available_agent_names: Names of available SubAgents.
             max_subtasks: Maximum number of sub-tasks to produce.
+            min_subtasks: Minimum number to request before retrying a coarse result.
         """
         super().__init__()
         self._llm_client = llm_client
         self._agent_names = available_agent_names or []
-        self._max_subtasks = max_subtasks
+        self._max_subtasks = max(1, max_subtasks)
+        self._min_subtasks = max(1, min(min_subtasks, self._max_subtasks))
 
     def update_agents(self, agent_names: list[str]) -> None:
         """Update the list of available agent names."""
@@ -206,6 +213,7 @@ class TaskDecomposer:
         system_prompt = _DECOMPOSITION_SYSTEM_PROMPT.format(
             agents=", ".join(self._agent_names) if self._agent_names else "auto-detect",
             max_subtasks=self._max_subtasks,
+            min_subtasks=self._min_subtasks,
         )
 
         messages = [{"role": "system", "content": system_prompt}]
@@ -222,10 +230,14 @@ class TaskDecomposer:
         try:
             response = await self._generate_decomposition(messages=messages, tools=tools)
             result = self._parse_response(response, query)
+            repair_min_subtasks = self._min_subtasks
             if len(result.subtasks) <= 1 and self._max_subtasks > 1:
-                repaired = await self._repair_single_task_decomposition(
+                repair_min_subtasks = max(repair_min_subtasks, 2)
+            if len(result.subtasks) < repair_min_subtasks and self._max_subtasks > 1:
+                repaired = await self._repair_coarse_decomposition(
                     query=query,
                     initial_result=result,
+                    requested_min_subtasks=repair_min_subtasks,
                     tools=tools,
                     system_prompt=system_prompt,
                 )
@@ -255,9 +267,12 @@ class TaskDecomposer:
                 tool_choice={"type": "function", "function": {"name": "decompose_task"}},
             )
         except Exception as forced_exc:
+            debug_message = (
+                "[TaskDecomposer] Forced tool-choice decomposition failed; "
+                + "retrying without tool_choice: %s"
+            )
             logger.debug(
-                "[TaskDecomposer] Forced tool-choice decomposition failed; retrying without "
-                "tool_choice: %s",
+                debug_message,
                 forced_exc,
             )
             return await self._llm_client.generate(
@@ -267,11 +282,12 @@ class TaskDecomposer:
                 max_tokens=1024,
             )
 
-    async def _repair_single_task_decomposition(
+    async def _repair_coarse_decomposition(
         self,
         *,
         query: str,
         initial_result: DecompositionResult,
+        requested_min_subtasks: int,
         tools: list[dict[str, Any]],
         system_prompt: str,
     ) -> DecompositionResult:
@@ -293,6 +309,8 @@ class TaskDecomposer:
             {
                 "role": "user",
                 "content": _DECOMPOSITION_REPAIR_PROMPT.format(
+                    actual_count=len(initial_result.subtasks),
+                    min_subtasks=requested_min_subtasks,
                     query=query,
                     reasoning=initial_result.reasoning or "none",
                     subtasks_json=subtasks_json,
@@ -302,10 +320,10 @@ class TaskDecomposer:
         try:
             response = await self._generate_decomposition(messages=messages, tools=tools)
         except Exception as exc:
-            logger.debug("[TaskDecomposer] Single-task repair failed: %s", exc)
+            logger.debug("[TaskDecomposer] Coarse decomposition repair failed: %s", exc)
             return initial_result
         repaired = self._parse_response(response, query)
-        if len(repaired.subtasks) <= 1:
+        if len(repaired.subtasks) <= len(initial_result.subtasks):
             return initial_result
         return repaired
 

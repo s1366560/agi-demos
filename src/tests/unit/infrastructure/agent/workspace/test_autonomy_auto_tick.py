@@ -264,6 +264,16 @@ class TestWorkerReportHook:
         assert gate_idx < lookup_idx < message_idx
         assert '"reason": "durable_plan_active"' in source
 
+    def test_durable_plan_kickoff_suppresses_initial_leader_message(self) -> None:
+        """A successful V2 kickoff owns the initial decomposition; Sisyphus must not split again."""
+        import inspect
+
+        source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
+        kickoff_idx = source.index("durable_plan_started = await kickoff_v2_plan")
+        suppress_idx = source.index('"reason": "durable_plan_started"')
+        message_idx = source.index("message_service.send_message")
+        assert kickoff_idx < suppress_idx < message_idx
+
     def test_durable_plan_gate_does_not_suppress_remediation(self) -> None:
         assert wlb._durable_plan_can_suppress_leader_message("none") is True
         assert wlb._durable_plan_can_suppress_leader_message("replan_required") is False

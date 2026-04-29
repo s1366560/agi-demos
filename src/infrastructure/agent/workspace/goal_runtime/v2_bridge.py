@@ -14,16 +14,22 @@ Kickoff is non-blocking:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+import os
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.workspace_autonomy_profiles import resolve_workspace_type
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
     SqlWorkspaceRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+    SqlWorkspaceTaskRepository,
 )
 from src.infrastructure.agent.subagent.task_decomposer import TaskDecomposer
 from src.infrastructure.agent.workspace_plan import build_sql_orchestrator
@@ -40,6 +46,9 @@ logger = logging.getLogger(__name__)
 
 # Test hook only. Production uses SQL-backed, request-scoped orchestrators.
 _orchestrator_singleton: WorkspaceOrchestrator | None = None
+_DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 8
+_DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS = 6
+_MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 
 
 class _WorkspacePlanTaskDecomposerAdapter:
@@ -82,7 +91,7 @@ async def kickoff_v2_plan(
     created_by: str = "",
     root_task_id: str | None = None,
     leader_agent_id: str | None = None,
-) -> None:
+) -> bool:
     """Fire-and-forget durable workspace plan kickoff.
 
     Never raises: any failure is logged and swallowed so the caller's task
@@ -96,10 +105,14 @@ async def kickoff_v2_plan(
                 description=description,
                 created_by=created_by,
             )
-            return
+            return True
 
         async with async_session_factory() as db:
-            decomposer = await _build_workspace_task_decomposer(db, workspace_id)
+            decomposer = await _build_workspace_task_decomposer(
+                db,
+                workspace_id,
+                root_task_id=root_task_id,
+            )
             orchestrator = build_sql_orchestrator(db, decomposer=decomposer)
             plan = await orchestrator.start_goal(
                 workspace_id=workspace_id,
@@ -121,23 +134,32 @@ async def kickoff_v2_plan(
                 metadata={"source": "v2_bridge"},
             )
             await db.commit()
+            return True
     except Exception:
         logger.warning(
             "v2_bridge: start_goal failed for workspace=%s",
             workspace_id,
             exc_info=True,
         )
+        return False
 
 
 async def _build_workspace_task_decomposer(
     db: AsyncSession,
     workspace_id: str,
+    *,
+    root_task_id: str | None = None,
 ) -> TaskDecomposerProtocol | None:
     """Build the same LLM-backed decomposer V2 needs to produce a real DAG."""
     try:
         workspace = await SqlWorkspaceRepository(db).find_by_id(workspace_id)
         if workspace is None:
             return None
+        root_metadata: Mapping[str, Any] | None = None
+        if root_task_id:
+            root_task = await SqlWorkspaceTaskRepository(db).find_by_id(root_task_id)
+            if root_task is not None and root_task.workspace_id == workspace_id:
+                root_metadata = root_task.metadata
 
         from src.domain.llm_providers.models import OperationType
         from src.infrastructure.llm.provider_factory import AIServiceFactory
@@ -148,8 +170,17 @@ async def _build_workspace_task_decomposer(
             operation_type=OperationType.LLM,
         )
         llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
+        max_subtasks = _workspace_decomposer_max_subtasks()
         return _WorkspacePlanTaskDecomposerAdapter(
-            TaskDecomposer(llm_client=llm_client, max_subtasks=4)
+            TaskDecomposer(
+                llm_client=llm_client,
+                max_subtasks=max_subtasks,
+                min_subtasks=_workspace_decomposer_min_subtasks(
+                    root_metadata=root_metadata,
+                    workspace_metadata=workspace.metadata,
+                    max_subtasks=max_subtasks,
+                ),
+            )
         )
     except Exception:
         logger.warning(
@@ -158,6 +189,36 @@ async def _build_workspace_task_decomposer(
             exc_info=True,
         )
         return None
+
+
+def _workspace_decomposer_max_subtasks() -> int:
+    raw_value = os.getenv("WORKSPACE_V2_MAX_SUBTASKS")
+    if raw_value is None:
+        return _DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return _DEFAULT_WORKSPACE_DECOMPOSER_MAX_SUBTASKS
+    return max(1, min(value, _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS))
+
+
+def _workspace_decomposer_min_subtasks(
+    *,
+    root_metadata: Mapping[str, Any] | None = None,
+    workspace_metadata: Mapping[str, Any] | None = None,
+    max_subtasks: int,
+) -> int:
+    if resolve_workspace_type(root_metadata, workspace_metadata) != "software_development":
+        return 1
+    raw_value = os.getenv("WORKSPACE_V2_SOFTWARE_MIN_SUBTASKS")
+    if raw_value is None:
+        value = _DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS
+    else:
+        try:
+            value = int(raw_value)
+        except ValueError:
+            value = _DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS
+    return max(1, min(value, max_subtasks))
 
 
 __all__ = [

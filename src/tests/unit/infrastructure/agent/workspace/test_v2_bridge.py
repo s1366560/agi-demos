@@ -47,6 +47,92 @@ def _reset_singleton() -> None:
     reset_orchestrator_singleton_for_testing()
 
 
+def test_workspace_decomposer_max_subtasks_defaults_to_v2_orchestrator_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WORKSPACE_V2_MAX_SUBTASKS", raising=False)
+
+    assert v2_bridge._workspace_decomposer_max_subtasks() == 8
+
+
+def test_workspace_decomposer_max_subtasks_reads_v2_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WORKSPACE_V2_MAX_SUBTASKS", "6")
+
+    assert v2_bridge._workspace_decomposer_max_subtasks() == 6
+
+
+def test_workspace_decomposer_max_subtasks_bounds_invalid_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WORKSPACE_V2_MAX_SUBTASKS", "not-an-int")
+    assert v2_bridge._workspace_decomposer_max_subtasks() == 8
+
+    monkeypatch.setenv("WORKSPACE_V2_MAX_SUBTASKS", "99")
+    assert v2_bridge._workspace_decomposer_max_subtasks() == 12
+
+
+def test_workspace_decomposer_min_subtasks_defaults_to_one_for_general(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WORKSPACE_V2_SOFTWARE_MIN_SUBTASKS", raising=False)
+
+    assert (
+        v2_bridge._workspace_decomposer_min_subtasks(
+            root_metadata={},
+            workspace_metadata={},
+            max_subtasks=8,
+        )
+        == 1
+    )
+
+
+def test_workspace_decomposer_min_subtasks_uses_software_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root_metadata = {"workspace_type": "software_development"}
+    monkeypatch.delenv("WORKSPACE_V2_SOFTWARE_MIN_SUBTASKS", raising=False)
+    assert (
+        v2_bridge._workspace_decomposer_min_subtasks(
+            root_metadata=root_metadata,
+            workspace_metadata={},
+            max_subtasks=8,
+        )
+        == 6
+    )
+
+    monkeypatch.setenv("WORKSPACE_V2_SOFTWARE_MIN_SUBTASKS", "4")
+    assert (
+        v2_bridge._workspace_decomposer_min_subtasks(
+            root_metadata=root_metadata,
+            workspace_metadata={},
+            max_subtasks=8,
+        )
+        == 4
+    )
+
+    monkeypatch.setenv("WORKSPACE_V2_SOFTWARE_MIN_SUBTASKS", "not-an-int")
+    assert (
+        v2_bridge._workspace_decomposer_min_subtasks(
+            root_metadata=root_metadata,
+            workspace_metadata={},
+            max_subtasks=8,
+        )
+        == 6
+    )
+
+    monkeypatch.setenv("WORKSPACE_V2_SOFTWARE_MIN_SUBTASKS", "99")
+    assert (
+        v2_bridge._workspace_decomposer_min_subtasks(
+            root_metadata=root_metadata,
+            workspace_metadata={},
+            max_subtasks=8,
+        )
+        == 8
+    )
+
+
 async def _seed_workspace(db_session: AsyncSession) -> None:
     db_session.add_all(
         [
@@ -138,13 +224,14 @@ async def test_kickoff_creates_plan_with_injected_orchestrator() -> None:
     orchestrator = build_default_orchestrator()
     set_orchestrator_singleton_for_testing(orchestrator)
 
-    await kickoff_v2_plan(
+    started = await kickoff_v2_plan(
         workspace_id="ws-abc",
         title="Build a CRUD blog",
         description="Ship the first vertical slice",
         created_by="user-42",
     )
 
+    assert started is True
     plan = await orchestrator._repo.get_by_workspace("ws-abc")
     assert plan is not None
     goal_node = plan.nodes[plan.goal_id]
@@ -157,7 +244,7 @@ async def test_kickoff_creates_durable_plan_and_outbox(
     await _seed_workspace(db_session)
 
     with _patch_session_factory(db_session):
-        await kickoff_v2_plan(
+        started = await kickoff_v2_plan(
             workspace_id="ws-abc",
             title="Build a CRUD blog",
             description="Ship the first vertical slice",
@@ -165,6 +252,7 @@ async def test_kickoff_creates_durable_plan_and_outbox(
             root_task_id="root-bridge-1",
         )
 
+    assert started is True
     plan = await SqlPlanRepository(db_session).get_by_workspace("ws-abc")
     assert plan is not None
     goal_node = plan.nodes[plan.goal_id]
@@ -199,7 +287,7 @@ async def test_kickoff_uses_workspace_decomposer_to_create_dag(
             new=AsyncMock(return_value=_FakeDecomposer()),
         ) as decomposer_builder,
     ):
-        await kickoff_v2_plan(
+        started = await kickoff_v2_plan(
             workspace_id="ws-abc",
             title="Build a typed feature flag utility",
             description="Plan API contract, implementation, tests, and review as a DAG.",
@@ -207,6 +295,7 @@ async def test_kickoff_uses_workspace_decomposer_to_create_dag(
             root_task_id="root-bridge-1",
         )
 
+    assert started is True
     decomposer_builder.assert_awaited_once()
     plan = await SqlPlanRepository(db_session).get_by_workspace("ws-abc")
     assert plan is not None
@@ -296,4 +385,6 @@ async def test_kickoff_swallows_orchestrator_failures() -> None:
     with (
         patch.object(v2_bridge, "build_sql_orchestrator", side_effect=RuntimeError("boom")),
     ):
-        await kickoff_v2_plan(workspace_id="ws-x", title="T", description="", created_by="")
+        started = await kickoff_v2_plan(workspace_id="ws-x", title="T", description="", created_by="")
+
+    assert started is False
