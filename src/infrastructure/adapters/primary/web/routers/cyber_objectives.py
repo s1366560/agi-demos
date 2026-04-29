@@ -22,17 +22,11 @@ from src.domain.model.workspace.cyber_objective import (
     CyberObjective,
     CyberObjectiveType,
 )
-from src.domain.model.workspace.workspace_message import MessageSenderType
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.utils import (
     get_container_with_db,
 )
-from src.infrastructure.adapters.primary.web.routers.workspace_chat import (
-    _fire_mention_routing,
-    get_message_service,
-)
 from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
-    ensure_workspace_leader_binding,
     schedule_autonomy_tick,
 )
 from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
@@ -40,7 +34,7 @@ from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
     _to_response as _task_to_response,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, WorkspaceMessageModel
+from src.infrastructure.adapters.secondary.persistence.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +81,6 @@ def _to_response(obj: CyberObjective) -> CyberObjectiveResponse:
     )
 
 
-def _format_agent_mention(display_name: str | None, agent_id: str) -> str:
-    handle = (display_name or "").strip() or agent_id
-    return f'@"{handle}"' if " " in handle else f"@{handle}"
-
-
 async def _ensure_objective_root_task(
     *,
     request: Request,
@@ -123,36 +112,17 @@ async def _ensure_objective_root_task(
             "Failed to publish auto-projected objective workspace task events",
             extra={"workspace_id": workspace_id, "objective_id": objective.id, "task_id": task.id},
         )
-    # Belt-and-suspenders: even though ``_auto_trigger_objective_execution``
-    # posts an @leader mention below, we also schedule an autonomy tick so the
-    # root gets picked up if mention routing fails silently.
-    for tick_workspace_id, tick_actor_user_id in command_service.consume_pending_autonomy_ticks():
-        try:
-            schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
-        except Exception:
-            logger.warning(
-                "schedule_autonomy_tick failed after objective root creation",
-                exc_info=True,
-                extra={"workspace_id": tick_workspace_id, "objective_id": objective.id},
-            )
+    _ = command_service.consume_pending_autonomy_ticks()
 
 
 async def _auto_trigger_objective_execution(
     *,
     request: Request,
     db: AsyncSession,
-    tenant_id: str,
-    project_id: str,
     workspace_id: str,
     current_user: User,
     objective: CyberObjective,
 ) -> None:
-    leader_binding, _ = await ensure_workspace_leader_binding(
-        request=request,
-        db=db,
-        workspace_id=workspace_id,
-    )
-
     await _ensure_objective_root_task(
         request=request,
         db=db,
@@ -160,44 +130,7 @@ async def _auto_trigger_objective_execution(
         current_user=current_user,
         objective=objective,
     )
-
-    mention = _format_agent_mention(leader_binding.display_name, leader_binding.agent_id)
-    content = (
-        f"{mention} 中央黑板新增目标：{objective.title}。"
-        "你的职责是作为 leader：(1) 使用 todowrite 将目标拆解为子任务；"
-        "(2) 子任务会自动分配给工作空间中的 worker agent，由独立会话执行，你不要亲自执行这些子任务；"
-        "(3) 拆解并分派完成后即可停止本轮工作。后续的 worker 报告会由系统汇总并触发你进一步调度。 "
-        "You are the leader. (1) Call todowrite to decompose this objective into child tasks. "
-        "(2) Child tasks are dispatched to workspace worker agents that run in their own sessions; "
-        "do NOT execute the child tasks yourself. "
-        "(3) After decomposition and dispatch, stop this turn. "
-        "Worker reports will be aggregated and you will be invoked again for further orchestration."
-    )
-    message_service = get_message_service(request, db)
-    message = await message_service.send_message(
-        workspace_id=workspace_id,
-        sender_id=current_user.id,
-        sender_type=MessageSenderType.HUMAN,
-        sender_name=current_user.email,
-        content=content,
-    )
-    message.metadata["conversation_scope"] = f"objective:{objective.id}"
-    if leader_binding.agent_id not in message.mentions:
-        message.mentions = [*message.mentions, leader_binding.agent_id]
-    message_row = await db.get(WorkspaceMessageModel, message.id)
-    if message_row is not None:
-        message_row.metadata_json = dict(message.metadata)
-        message_row.mentions_json = list(message.mentions)
-        await db.flush()
-    await db.commit()
-    _fire_mention_routing(
-        request=request,
-        workspace_id=workspace_id,
-        message=message,
-        tenant_id=tenant_id,
-        project_id=project_id,
-        user_id=current_user.id,
-    )
+    schedule_autonomy_tick(workspace_id, current_user.id)
 
 
 @router.post(
@@ -231,8 +164,6 @@ async def create_objective(
         await _auto_trigger_objective_execution(
             request=request,
             db=db,
-            tenant_id=tenant_id,
-            project_id=project_id,
             workspace_id=workspace_id,
             current_user=current_user,
             objective=saved,

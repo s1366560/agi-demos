@@ -308,7 +308,6 @@ class ReActAgent:
     # _init_background_services
     _background_executor: Any
     _template_registry: Any
-    _task_decomposer: Any
     _result_aggregator: Any
     # _init_tool_definitions
     tool_definitions: list[Any]
@@ -880,7 +879,6 @@ class ReActAgent:
         """Initialize background SubAgent services."""
         from ..subagent.background_executor import BackgroundExecutor
         from ..subagent.result_aggregator import ResultAggregator
-        from ..subagent.task_decomposer import TaskDecomposer
         from ..subagent.template_registry import TemplateRegistry
 
         self._background_executor = BackgroundExecutor(
@@ -889,15 +887,6 @@ class ReActAgent:
         )
         self._template_registry = TemplateRegistry()
 
-        agent_names = [sa.name for sa in self.subagents] if self.subagents else []
-        self._task_decomposer = (
-            TaskDecomposer(
-                llm_client=llm_client,
-                available_agent_names=agent_names,
-            )
-            if llm_client and self.subagents
-            else None
-        )
         self._result_aggregator = ResultAggregator(llm_client=llm_client)
 
     def _init_tool_definitions(
@@ -2937,7 +2926,6 @@ class ReActAgent:
                         tenant_id,
                         user_id,
                         leader_agent_id=selected_agent.id,
-                        task_decomposer=self._task_decomposer,
                         user_query=processed_user_message,
                     )
             else:

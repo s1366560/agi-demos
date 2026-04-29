@@ -9,38 +9,22 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from fastapi import Request
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_agent_autonomy import is_goal_root_task
 from src.application.services.workspace_task_service import WorkspaceTaskService
 from src.configuration.di_container import DIContainer
-from src.domain.model.workspace.workspace_agent import WorkspaceAgent
-from src.domain.model.workspace.workspace_message import MessageSenderType
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.infrastructure.adapters.primary.web.routers.agent.utils import get_container_with_db
-from src.infrastructure.adapters.primary.web.routers.workspace_chat import (
-    _fire_mention_routing,
-    get_message_service,
-)
 from src.infrastructure.adapters.primary.web.startup.container import get_app_container
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import (
-    AgentDefinitionModel,
-    User,
-    WorkspaceMessageModel,
-)
-from src.infrastructure.agent.sisyphus.builtin_agent import (
-    BUILTIN_AGENT_NAMESPACE,
-    BUILTIN_SISYPHUS_DISPLAY_NAME,
-    BUILTIN_SISYPHUS_ID,
-    build_builtin_sisyphus_agent,
-)
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -96,17 +80,6 @@ def _worker_session_heal_max_per_tick() -> int:
     return parsed if parsed > 0 else _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK
 
 
-def _durable_plan_can_suppress_leader_message(remediation_status: str) -> bool:
-    """Return whether an active durable plan should absorb this tick.
-
-    Existing V2-linked child tasks mean the durable plan is already driving
-    nominal progress, so the tick should not spam the leader. Remediation
-    statuses are different: they are explicit handoff signals from the child
-    task state machine and must reach the leader even when V2 children exist.
-    """
-    return remediation_status not in _REMEDIATION_STATUSES_NEEDING_PROGRESS
-
-
 def _resolve_container(request: Request | None, db: AsyncSession) -> DIContainer:
     """Build a DIContainer bound to ``db``.
 
@@ -127,130 +100,6 @@ def _resolve_container(request: Request | None, db: AsyncSession) -> DIContainer
         graph_service=app_container.graph_service,
         redis_client=app_container._redis_client,
     )
-
-
-def _format_agent_mention(display_name: str | None, agent_id: str) -> str:
-    handle = (display_name or "").strip() or agent_id
-    return f'@"{handle}"' if " " in handle else f"@{handle}"
-
-
-async def ensure_workspace_leader_binding(
-    *,
-    request: Request | None = None,
-    db: AsyncSession,
-    workspace_id: str,
-) -> tuple[WorkspaceAgent, bool]:
-    container = _resolve_container(request, db)
-    workspace_agent_repo = container.workspace_agent_repository()
-    existing_builtin_binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
-        workspace_id=workspace_id,
-        agent_id=BUILTIN_SISYPHUS_ID,
-    )
-    if existing_builtin_binding is not None and existing_builtin_binding.is_active:
-        return existing_builtin_binding, False
-
-    builtin_row = await db.get(AgentDefinitionModel, BUILTIN_SISYPHUS_ID)
-    if builtin_row is None:
-        builtin_agent = build_builtin_sisyphus_agent(tenant_id=BUILTIN_AGENT_NAMESPACE)
-        db.add(
-            AgentDefinitionModel(
-                id=builtin_agent.id,
-                tenant_id=BUILTIN_AGENT_NAMESPACE,
-                project_id=None,
-                name=builtin_agent.name,
-                display_name=builtin_agent.display_name,
-                system_prompt=builtin_agent.system_prompt,
-                trigger_description=builtin_agent.trigger.description,
-                trigger_examples=list(builtin_agent.trigger.examples),
-                trigger_keywords=list(builtin_agent.trigger.keywords),
-                model=builtin_agent.model.value,
-                persona_files=list(builtin_agent.persona_files),
-                allowed_tools=list(builtin_agent.allowed_tools),
-                allowed_skills=list(builtin_agent.allowed_skills),
-                allowed_mcp_servers=list(builtin_agent.allowed_mcp_servers),
-                max_tokens=builtin_agent.max_tokens,
-                temperature=builtin_agent.temperature,
-                max_iterations=builtin_agent.max_iterations,
-                workspace_dir=builtin_agent.workspace_dir,
-                workspace_config=builtin_agent.workspace_config.to_dict(),
-                can_spawn=builtin_agent.can_spawn,
-                max_spawn_depth=builtin_agent.max_spawn_depth,
-                agent_to_agent_enabled=builtin_agent.agent_to_agent_enabled,
-                agent_to_agent_allowlist=builtin_agent.agent_to_agent_allowlist,
-                discoverable=builtin_agent.discoverable,
-                source=builtin_agent.source.value,
-                enabled=builtin_agent.enabled,
-                max_retries=builtin_agent.max_retries,
-                fallback_models=list(builtin_agent.fallback_models),
-                total_invocations=builtin_agent.total_invocations,
-                avg_execution_time_ms=builtin_agent.avg_execution_time_ms,
-                success_rate=builtin_agent.success_rate,
-                metadata_json=builtin_agent.metadata,
-                session_policy=builtin_agent.session_policy.to_dict()
-                if builtin_agent.session_policy
-                else None,
-                delegate_config=builtin_agent.delegate_config.to_dict()
-                if builtin_agent.delegate_config
-                else None,
-                created_at=builtin_agent.created_at,
-                updated_at=builtin_agent.updated_at,
-            )
-        )
-        await db.flush()
-
-    if existing_builtin_binding is not None:
-        restored_binding = await workspace_agent_repo.save(
-            replace(
-                existing_builtin_binding,
-                display_name=existing_builtin_binding.display_name or BUILTIN_SISYPHUS_DISPLAY_NAME,
-                description=existing_builtin_binding.description
-                or "Auto-bound builtin workspace leader",
-                config={
-                    **existing_builtin_binding.config,
-                    "auto_bound_builtin": True,
-                    "workspace_role": "leader",
-                },
-                is_active=True,
-                label=existing_builtin_binding.label or "Leader",
-                status=existing_builtin_binding.status or "idle",
-                updated_at=datetime.now(UTC),
-            )
-        )
-        return restored_binding, False
-
-    new_binding = WorkspaceAgent(
-        id=WorkspaceAgent.generate_id(),
-        workspace_id=workspace_id,
-        agent_id=BUILTIN_SISYPHUS_ID,
-        display_name=BUILTIN_SISYPHUS_DISPLAY_NAME,
-        description="Auto-bound builtin workspace leader",
-        config={"auto_bound_builtin": True, "workspace_role": "leader"},
-        is_active=True,
-        label="Leader",
-        status="idle",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    try:
-        async with db.begin_nested():
-            binding = await workspace_agent_repo.save(new_binding)
-        return binding, True
-    except IntegrityError:
-        logger.info(
-            "workspace_leader_binding.race_lost",
-            extra={
-                "event": "workspace_leader_binding.race_lost",
-                "workspace_id": workspace_id,
-                "agent_id": BUILTIN_SISYPHUS_ID,
-            },
-        )
-        raced_binding = await workspace_agent_repo.find_by_workspace_and_agent_id(
-            workspace_id=workspace_id,
-            agent_id=BUILTIN_SISYPHUS_ID,
-        )
-        if raced_binding is not None:
-            return raced_binding, False
-        raise
 
 
 async def _is_on_cooldown(workspace_id: str, root_task_id: str) -> bool:
@@ -366,118 +215,12 @@ async def _select_root_task_needing_progress(
             return root_task, True
         if any(c.status in _PRE_EXECUTION_STATUSES for c in children):
             return root_task, True
-        # Detect children awaiting auto-adjudication (worker completed but
-        # report not yet adjudicated). This ensures the tick fires so the
-        # auto-adjudication step can close them out.
-        if any(
-            isinstance(c.metadata, dict) and c.metadata.get("pending_leader_adjudication") is True
-            for c in children
-        ):
-            return root_task, True
         if force:
             return root_task, True
     return None, False
 
 
-_SWEEPABLE_EXECUTION_ROLES = frozenset({"execution_task"})
-
-
-async def _sweep_orphan_execution_tasks(
-    *,
-    task_repo: Any,  # noqa: ANN401
-    workspace_agent_repo: Any,  # noqa: ANN401
-    command_service: Any,  # noqa: ANN401
-    workspace_id: str,
-    root_task_id: str,
-    leader_agent_id: str | None,
-    actor_user_id: str,
-) -> int:
-    """Dispatch any orphan execution tasks under the root that never got assigned.
-
-    Belt-and-suspenders safety net for P5a: if any code path creates an
-    execution task but forgets to route it (or the dispatch failed
-    transiently), the next autonomy tick self-heals by routing them round-robin
-    to active workspace agents. Returns the number of orphans dispatched.
-
-    An orphan is an unarchived task under ``root_task_id`` with
-    ``metadata.task_role == "execution_task"``, ``assignee_agent_id IS NULL``,
-    and status ``todo``.
-    """
-    from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-
-    if not leader_agent_id:
-        return 0
-
-    try:
-        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
-    except Exception:
-        logger.warning(
-            "autonomy_tick.orphan_sweep.list_failed",
-            exc_info=True,
-            extra={
-                "event": "autonomy_tick.orphan_sweep.list_failed",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task_id,
-            },
-        )
-        return 0
-
-    orphans: list[WorkspaceTask] = []
-    for child in children:
-        if child.assignee_agent_id:
-            continue
-        if getattr(child, "archived_at", None) is not None:
-            continue
-        if child.status != WorkspaceTaskStatus.TODO:
-            continue
-        metadata = child.metadata or {}
-        role = metadata.get("task_role") if isinstance(metadata, dict) else None
-        if role not in _SWEEPABLE_EXECUTION_ROLES:
-            continue
-        orphans.append(child)
-
-    if not orphans:
-        return 0
-
-    from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-        _assign_execution_tasks_to_workers,
-    )
-
-    try:
-        await _assign_execution_tasks_to_workers(
-            workspace_id=workspace_id,
-            actor_user_id=actor_user_id,
-            created_tasks=orphans,
-            workspace_agent_repo=workspace_agent_repo,
-            command_service=command_service,
-            leader_agent_id=leader_agent_id,
-            reason="autonomy_tick.orphan_sweep",
-        )
-    except Exception:
-        logger.warning(
-            "autonomy_tick.orphan_sweep.dispatch_failed",
-            exc_info=True,
-            extra={
-                "event": "autonomy_tick.orphan_sweep.dispatch_failed",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task_id,
-                "orphan_count": len(orphans),
-            },
-        )
-        return 0
-
-    logger.info(
-        "autonomy_tick.orphan_sweep.dispatched",
-        extra={
-            "event": "autonomy_tick.orphan_sweep.dispatched",
-            "workspace_id": workspace_id,
-            "root_task_id": root_task_id,
-            "orphan_count": len(orphans),
-            "orphan_ids": [t.id for t in orphans],
-            "leader_agent_id": leader_agent_id,
-        },
-    )
-    return len(orphans)
+_EXECUTION_TASK_ROLES = frozenset({"execution_task"})
 
 
 async def _heal_assigned_execution_tasks_without_sessions(
@@ -491,10 +234,8 @@ async def _heal_assigned_execution_tasks_without_sessions(
 ) -> int:
     """Launch a worker session for any assigned execution task missing one.
 
-    Recovers from the class of bug that left workspace ``2c11849d-…`` stuck:
-    every execution child had ``assignee_agent_id`` set yet
-    ``workspace_task_session_attempts`` was empty. The sweep above filters
-    to ``assignee IS NULL`` so it cannot self-heal already-assigned tasks.
+    Recovers from the class of bug where a V2-projected execution child has
+    ``assignee_agent_id`` set but no active ``workspace_task_session_attempt``.
 
     For each assigned ``execution_task`` under the root that is not DONE and
     has no active attempt, fire ``worker_launch.schedule_worker_session``.
@@ -538,7 +279,7 @@ async def _heal_assigned_execution_tasks_without_sessions(
             continue
         metadata = child.metadata or {}
         role = metadata.get("task_role") if isinstance(metadata, dict) else None
-        if role not in _SWEEPABLE_EXECUTION_ROLES:
+        if role not in _EXECUTION_TASK_ROLES:
             continue
 
         try:
@@ -590,141 +331,6 @@ async def _heal_assigned_execution_tasks_without_sessions(
             },
         )
     return healed
-
-
-async def _auto_adjudicate_pending_reports(
-    *,
-    task_repo: Any,  # noqa: ANN401
-    workspace_id: str,
-    root_task_id: str,
-    leader_agent_id: str | None,
-    actor_user_id: str,
-) -> int:
-    """Auto-adjudicate worker reports that are pending leader adjudication.
-
-    This is an **auto-accept policy** executed in the tick path (not the worker
-    launch path).  For each execution child with
-    ``pending_leader_adjudication=True``, the report type determines the
-    adjudication status:
-
-    - ``completed`` → DONE
-    - ``blocked`` / ``failed`` → BLOCKED
-    - anything else → skip (leave for manual review)
-
-    Returns the number of tasks adjudicated.  Each call to
-    :func:`adjudicate_workspace_worker_report` opens its own DB session and
-    commits independently.  Runs sequentially so the reconciliation inside
-    ``complete_task()`` sees the latest committed state.
-    """
-    from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-    from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-        adjudicate_workspace_worker_report,
-    )
-
-    try:
-        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
-    except Exception:
-        logger.warning(
-            "autonomy_tick.auto_adjudicate.list_failed",
-            exc_info=True,
-            extra={
-                "event": "autonomy_tick.auto_adjudicate.list_failed",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task_id,
-            },
-        )
-        return 0
-
-    _REPORT_TYPE_TO_STATUS: dict[str, WorkspaceTaskStatus] = {
-        "completed": WorkspaceTaskStatus.DONE,
-        "blocked": WorkspaceTaskStatus.BLOCKED,
-        "failed": WorkspaceTaskStatus.BLOCKED,
-        "needs_replan": WorkspaceTaskStatus.BLOCKED,
-    }
-
-    adjudicated = 0
-    for child in children:
-        metadata = child.metadata if isinstance(child.metadata, dict) else {}
-        if metadata.get("pending_leader_adjudication") is not True:
-            continue
-        report_type = metadata.get("last_worker_report_type")
-        target_status = _REPORT_TYPE_TO_STATUS.get(report_type or "")
-        if target_status is None:
-            continue
-        attempt_id = metadata.get("current_attempt_id")
-        if not isinstance(attempt_id, str) or not attempt_id:
-            attempt_id = None
-        try:
-            result = await adjudicate_workspace_worker_report(
-                workspace_id=workspace_id,
-                task_id=child.id,
-                attempt_id=attempt_id,
-                actor_user_id=actor_user_id,
-                status=target_status,
-                leader_agent_id=leader_agent_id,
-            )
-            if result is not None:
-                adjudicated += 1
-                logger.info(
-                    "autonomy_tick.auto_adjudicate.success",
-                    extra={
-                        "event": "autonomy_tick.auto_adjudicate.success",
-                        "workspace_id": workspace_id,
-                        "task_id": child.id,
-                        "report_type": report_type,
-                        "target_status": target_status.value,
-                    },
-                )
-        except Exception:
-            logger.warning(
-                "autonomy_tick.auto_adjudicate.failed",
-                exc_info=True,
-                extra={
-                    "event": "autonomy_tick.auto_adjudicate.failed",
-                    "workspace_id": workspace_id,
-                    "task_id": child.id,
-                    "report_type": report_type,
-                },
-            )
-    if adjudicated:
-        logger.info(
-            "autonomy_tick.auto_adjudicate.summary",
-            extra={
-                "event": "autonomy_tick.auto_adjudicate.summary",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task_id,
-                "adjudicated_count": adjudicated,
-            },
-        )
-    return adjudicated
-
-
-def _build_message_service(
-    request: Request | None, db: AsyncSession, container: DIContainer
-) -> Any:  # noqa: ANN401
-    """Build a WorkspaceMessageService usable with or without a live Request."""
-    if request is not None:
-        return get_message_service(request, db)
-
-    redis_client = container.redis_client
-
-    async def _publish_event(workspace_id: str, event_name: str, payload: dict[str, Any]) -> None:
-        from src.domain.events.types import AgentEventType
-        from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-            publish_workspace_event,
-        )
-
-        event_type = AgentEventType(event_name)
-        await publish_workspace_event(
-            redis_client,
-            workspace_id=workspace_id,
-            event_type=event_type,
-            payload=payload,
-        )
-
-    return container.workspace_message_service(
-        workspace_event_publisher=_publish_event if redis_client is not None else None,
-    )
 
 
 async def _reconcile_durable_plan_after_root_auto_complete(
@@ -923,24 +529,18 @@ async def _durable_plan_allows_root_auto_complete(
 
 async def _try_auto_complete_root(
     *,
-    request: Request | None,
     db: AsyncSession,
     container: DIContainer,
     task_service: WorkspaceTaskService,
     workspace_id: str,
     current_user: User,
     root_task: WorkspaceTask,
-    title: str,
-    conversation_scope: str,
-    leader_binding: WorkspaceAgent,
-    has_children: bool,
-    force: bool,
+    leader_agent_id: str | None,
 ) -> dict[str, Any] | None:
     """Close a ``ready_for_completion`` root task without human review.
 
-    Returns the trigger-outcome dict when auto-completion succeeded (caller
-    short-circuits and skips the mention flow), or ``None`` when auto-completion
-    is not applicable / failed (caller falls through to the existing mention).
+    Returns the trigger-outcome dict when auto-completion succeeded, or ``None``
+    when auto-completion is not applicable / failed.
     Never raises — any error is logged and reported as a miss.
     """
     from src.application.services.workspace_task_command_service import (
@@ -965,7 +565,7 @@ async def _try_auto_complete_root(
             root_task=root_task,
             task_repo=task_repo,  # pyright: ignore[reportArgumentType]
             command_service=command_service,
-            leader_agent_id=leader_binding.agent_id,
+            leader_agent_id=leader_agent_id,
         )
     except Exception:
         logger.warning(
@@ -1003,53 +603,6 @@ async def _try_auto_complete_root(
             },
         )
 
-    # Build a detailed completion report with child task summaries.
-    child_report_lines: list[str] = []
-    try:
-        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task.id)
-        for idx, child in enumerate(children, 1):
-            child_meta = child.metadata if isinstance(child.metadata, dict) else {}
-            child_summary = child_meta.get("last_worker_report_summary") or ""
-            child_status = getattr(child.status, "value", str(child.status))
-            line = f"  {idx}. [{child_status.upper()}] {child.title}"
-            if child_summary:
-                line += f"\n     Summary: {child_summary[:200]}"
-            child_report_lines.append(line)
-    except Exception:
-        pass
-    child_report = "\n".join(child_report_lines)
-    progress_summary = (root_task.metadata or {}).get("goal_progress_summary", "")
-
-    info_content = (
-        f"✅ 工作区目标「{title}」的所有子任务已完成，根任务已自动关闭并生成完成证据。\n"
-        f"All child tasks completed; the root goal has been auto-closed "
-        f"with synthesized evidence.\n\n"
-    )
-    if progress_summary:
-        info_content += f"📊 Progress: {progress_summary}\n\n"
-    if child_report:
-        info_content += f"📋 Task Report:\n{child_report}\n"
-    message_service = _build_message_service(request, db, container)
-    info_message = await message_service.send_message(
-        workspace_id=workspace_id,
-        sender_id=current_user.id,
-        sender_type=MessageSenderType.HUMAN,
-        sender_name=current_user.email,
-        content=info_content,
-    )
-    info_message.metadata["conversation_scope"] = conversation_scope
-    info_message.metadata["autonomy_trigger"] = {
-        "root_task_id": root_task.id,
-        "remediation_status": "ready_for_completion",
-        "has_children": has_children,
-        "force": force,
-        "auto_completed": True,
-    }
-    info_row = await db.get(WorkspaceMessageModel, info_message.id)
-    if info_row is not None:
-        info_row.metadata_json = dict(info_message.metadata)
-        info_row.mentions_json = list(info_message.mentions)
-        await db.flush()
     await db.commit()
     await _mark_cooldown(workspace_id, root_task.id)
     logger.info(
@@ -1069,40 +622,7 @@ async def _try_auto_complete_root(
     }
 
 
-def _build_autonomy_mention_content(mention: str, title: str, remediation_status: str) -> str:
-    if remediation_status == "ready_for_completion":
-        return (
-            f"{mention} 工作区目标「{title}」的所有子任务已完成。"
-            "请复核并关闭根任务，生成完成证据。 "
-            "Please verify the child tasks, produce goal evidence, and mark the root goal complete."
-        )
-    if remediation_status == "replan_required":
-        return (
-            f"{mention} 工作区目标「{title}」有子任务阻塞或失败，需要重新规划。"
-            "这是 leader replan 回合：先调用 todoread 读取 workspace task ledger；"
-            "然后只用 todowrite(add 或 replace) 创建更小的 execution_task、替换失败子任务或更新任务状态；"
-            "不要亲自使用 bash/read/write/edit/glob/web 等实现工具完成子任务；"
-            "拆分与分派完成后停止本轮，由 worker 会话继续执行。 "
-            "This is a leader replan turn: first call todoread, then use only "
-            "todowrite(add or replace) to create smaller workspace execution tasks, "
-            "replace failed tasks, or update task state. Do not use implementation tools "
-            "such as bash/read/write/edit/glob/web in this turn. Stop after decomposition "
-            "and dispatch so worker sessions can continue execution."
-        )
-    return (
-        f"{mention} 中央黑板已有目标：{title}。"
-        "你的职责是作为 leader：(1) 使用 todowrite 将目标拆解为子任务；"
-        "(2) 子任务会自动分配给工作空间中的 worker agent，由独立会话执行，你不要亲自执行这些子任务；"
-        "(3) 拆解并分派完成后即可停止本轮工作。后续的 worker 报告会由系统汇总并触发你进一步调度。 "
-        "You are the leader. (1) Call todowrite to decompose this objective into child tasks. "
-        "(2) Child tasks are dispatched to workspace worker agents that run in their own sessions; "
-        "do NOT execute the child tasks yourself. "
-        "(3) After decomposition and dispatch, stop this turn. "
-        "Worker reports will be aggregated and you will be invoked again for further orchestration."
-    )
-
-
-async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PLR0912, PLR0915
+async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PLR0912
     *,
     request: Request | None = None,
     db: AsyncSession,
@@ -1110,15 +630,15 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     current_user: User,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Post a leader mention to advance an existing workspace root goal.
+    """Advance an existing workspace root goal through the durable V2 plan.
 
     Returns a dict describing the outcome::
 
         {
             "triggered": bool,
             "root_task_id": str | None,
-            "reason": "triggered" | "cooling_down" | "no_open_root"
-                      | "no_root_needs_progress" | "workspace_not_found",
+            "reason": "durable_plan_started" | "durable_plan_active" | "cooling_down"
+                      | "no_open_root" | "no_root_needs_progress" | "workspace_not_found",
         }
 
     When ``force=True`` the per-root cooldown is bypassed. The cooldown TTL
@@ -1133,11 +653,7 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     if workspace is None:
         return {"triggered": False, "root_task_id": None, "reason": "workspace_not_found"}
 
-    leader_binding, _ = await ensure_workspace_leader_binding(
-        request=request,
-        db=db,
-        workspace_id=workspace_id,
-    )
+    leader_agent_id = WORKSPACE_PLAN_SYSTEM_ACTOR_ID
     task_service = WorkspaceTaskService(
         workspace_repo=container.workspace_repository(),
         workspace_member_repo=container.workspace_member_repository(),
@@ -1170,51 +686,16 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     if root_task is None:
         return {"triggered": False, "root_task_id": None, "reason": "no_root_needs_progress"}
 
-    # P5b safety net: dispatch any orphan execution_task children before we
-    # proceed. This self-heals cases where an earlier path created execution
-    # tasks but missed the dispatch slot (transient failure, future path that
-    # forgets _dispatch_created_workspace_tasks, etc). Best-effort; failures
-    # are logged and never break the tick.
-    sweep_command_service: Any = None
-    try:
-        from src.application.services.workspace_task_command_service import (
-            WorkspaceTaskCommandService,
-        )
-
-        sweep_command_service = WorkspaceTaskCommandService(task_service)
-        await _sweep_orphan_execution_tasks(
-            task_repo=task_repo,
-            workspace_agent_repo=container.workspace_agent_repository(),
-            command_service=sweep_command_service,
-            workspace_id=workspace_id,
-            root_task_id=root_task.id,
-            leader_agent_id=leader_binding.agent_id,
-            actor_user_id=current_user.id,
-        )
-    except Exception:
-        logger.warning(
-            "autonomy_tick.orphan_sweep.unexpected_failure",
-            exc_info=True,
-            extra={
-                "event": "autonomy_tick.orphan_sweep.unexpected_failure",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task.id,
-            },
-        )
-        sweep_command_service = None
-
-    # Self-heal pass: even if the orphan sweep did nothing, there may be tasks
-    # that are assigned but never got a worker session launched (the bug that
-    # stranded workspace 2c11849d-…). Directly launch worker sessions for
-    # those — ``schedule_worker_session`` is idempotent via cooldown and
-    # ``_ensure_execution_attempt`` re-uses active attempts.
+    # V2 owns decomposition, assignment, verification, and closeout. The tick no
+    # longer self-dispatches orphan V1 execution tasks or auto-adjudicates legacy
+    # worker reports; it only heals already-assigned V2 children missing a launch.
     try:
         await _heal_assigned_execution_tasks_without_sessions(
             db=db,
             task_repo=task_repo,
             workspace_id=workspace_id,
             root_task_id=root_task.id,
-            leader_agent_id=leader_binding.agent_id,
+            leader_agent_id=leader_agent_id,
             actor_user_id=current_user.id,
         )
     except Exception:
@@ -1228,44 +709,10 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
             },
         )
 
-    # Auto-adjudicate pending worker reports. This closes the loop for
-    # workers that completed but whose reports were never adjudicated.
-    # Runs in the tick path (not worker_launch) to keep authority separation.
-    try:
-        adjudicated_count = await _auto_adjudicate_pending_reports(
-            task_repo=task_repo,
-            workspace_id=workspace_id,
-            root_task_id=root_task.id,
-            leader_agent_id=leader_binding.agent_id,
-            actor_user_id=current_user.id,
-        )
-        if adjudicated_count > 0:
-            # Refresh root task to pick up reconciled metadata (e.g.
-            # remediation_status may now be "ready_for_completion").
-            refreshed = await task_repo.find_by_id(root_task.id)
-            if refreshed is not None:
-                root_task = refreshed
-    except Exception:
-        logger.warning(
-            "autonomy_tick.auto_adjudicate.unexpected_failure",
-            exc_info=True,
-            extra={
-                "event": "autonomy_tick.auto_adjudicate.unexpected_failure",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task.id,
-            },
-        )
-
     if not force and await _is_on_cooldown(workspace_id, root_task.id):
         return {"triggered": False, "root_task_id": root_task.id, "reason": "cooling_down"}
 
     objective_id = root_task.metadata.get("objective_id") if root_task.metadata else None
-    conversation_scope = (
-        f"objective:{objective_id}"
-        if isinstance(objective_id, str) and objective_id
-        else f"root:{root_task.id}"
-    )
-
     title = root_task.title
     description = root_task.description or ""
     if isinstance(objective_id, str) and objective_id:
@@ -1274,65 +721,63 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
             title = objective.title
             description = objective.description or description
 
-    mention = _format_agent_mention(leader_binding.display_name, leader_binding.agent_id)
     remediation_status = (
         (root_task.metadata or {}).get("remediation_status") or "none" if has_children else "none"
     )
 
     if has_children and _auto_complete_enabled():
         auto_outcome = await _try_auto_complete_root(
-            request=request,
             db=db,
             container=container,
             task_service=task_service,
             workspace_id=workspace_id,
             current_user=current_user,
             root_task=root_task,
-            title=title,
-            conversation_scope=conversation_scope,
-            leader_binding=leader_binding,
-            has_children=has_children,
-            force=force,
+            leader_agent_id=leader_agent_id,
         )
         if auto_outcome is not None:
             return auto_outcome
 
-    if remediation_status != "ready_for_completion":
-        durable_plan_started = False
-        try:
-            from src.infrastructure.agent.workspace.goal_runtime import (
-                kickoff_v2_plan,
-            )
+    if remediation_status == "ready_for_completion":
+        await _mark_cooldown(workspace_id, root_task.id)
+        return {
+            "triggered": False,
+            "root_task_id": root_task.id,
+            "reason": "root_auto_complete_pending",
+        }
 
-            durable_plan_started = await kickoff_v2_plan(
-                workspace_id=workspace_id,
-                title=title,
-                description=description,
-                created_by=current_user.id,
-                root_task_id=root_task.id,
-                leader_agent_id=leader_binding.agent_id,
-            )
-        except Exception:
-            logger.warning(
-                "workspace_v2.kickoff_failed",
-                exc_info=True,
-                extra={"workspace_id": workspace_id, "root_task_id": root_task.id},
-            )
-        if _durable_plan_can_suppress_leader_message(remediation_status) and durable_plan_started:
-            await _mark_cooldown(workspace_id, root_task.id)
-            return {
-                "triggered": False,
-                "root_task_id": root_task.id,
-                "reason": "durable_plan_started",
-            }
-
-    if (
-        _durable_plan_can_suppress_leader_message(remediation_status)
-        and await _root_has_workspace_plan_linked_children(
-            task_repo=task_repo,
-            workspace_id=workspace_id,
-            root_task_id=root_task.id,
+    durable_plan_started = False
+    try:
+        from src.infrastructure.agent.workspace.goal_runtime import (
+            kickoff_v2_plan,
         )
+
+        durable_plan_started = await kickoff_v2_plan(
+            workspace_id=workspace_id,
+            title=title,
+            description=description,
+            created_by=current_user.id,
+            root_task_id=root_task.id,
+            leader_agent_id=leader_agent_id,
+        )
+    except Exception:
+        logger.warning(
+            "workspace_v2.kickoff_failed",
+            exc_info=True,
+            extra={"workspace_id": workspace_id, "root_task_id": root_task.id},
+        )
+    if durable_plan_started:
+        await _mark_cooldown(workspace_id, root_task.id)
+        return {
+            "triggered": False,
+            "root_task_id": root_task.id,
+            "reason": "durable_plan_started",
+        }
+
+    if await _root_has_workspace_plan_linked_children(
+        task_repo=task_repo,
+        workspace_id=workspace_id,
+        root_task_id=root_task.id,
     ):
         await _mark_cooldown(workspace_id, root_task.id)
         return {
@@ -1341,64 +786,12 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
             "reason": "durable_plan_active",
         }
 
-    content = _build_autonomy_mention_content(mention, title, remediation_status)
-    message_service = _build_message_service(request, db, container)
-    message = await message_service.send_message(
-        workspace_id=workspace_id,
-        sender_id=current_user.id,
-        sender_type=MessageSenderType.HUMAN,
-        sender_name=current_user.email,
-        content=content,
-    )
-    message.metadata["conversation_scope"] = conversation_scope
-    message.metadata["autonomy_trigger"] = {
-        "root_task_id": root_task.id,
-        "remediation_status": remediation_status,
-        "has_children": has_children,
-        "force": force,
-    }
-    if leader_binding.agent_id not in message.mentions:
-        message.mentions = [*message.mentions, leader_binding.agent_id]
-    message_row = await db.get(WorkspaceMessageModel, message.id)
-    if message_row is not None:
-        message_row.metadata_json = dict(message.metadata)
-        message_row.mentions_json = list(message.mentions)
-        await db.flush()
-    await db.commit()
-    # Drain worker launches queued by the orphan sweep now that the assignee
-    # changes are durably committed. Missing this drain is what left
-    # workspace 2c11849d-… in ``todo + assigned, zero sessions``.
-    if sweep_command_service is not None:
-        try:
-            from src.infrastructure.agent.workspace.worker_launch_drain import (
-                drain_pending_worker_launches_to_outbox,
-            )
-
-            _ = await drain_pending_worker_launches_to_outbox(sweep_command_service, db)
-        except Exception:
-            logger.warning(
-                "autonomy_tick.orphan_sweep.drain_failed",
-                exc_info=True,
-                extra={
-                    "event": "autonomy_tick.orphan_sweep.drain_failed",
-                    "workspace_id": workspace_id,
-                    "root_task_id": root_task.id,
-                },
-            )
     await _mark_autonomy_trigger_cooldown(
         workspace_id,
         root_task.id,
         remediation_status=remediation_status,
     )
-    _fire_mention_routing(
-        request=request,
-        workspace_id=workspace_id,
-        message=message,
-        tenant_id=workspace.tenant_id,
-        project_id=workspace.project_id,
-        user_id=current_user.id,
-    )
-    return {"triggered": True, "root_task_id": root_task.id, "reason": "triggered"}
+    return {"triggered": False, "root_task_id": root_task.id, "reason": "durable_plan_unavailable"}
 
 
 async def _run_autonomy_tick(workspace_id: str, actor_user_id: str) -> None:

@@ -9,13 +9,8 @@ import pytest
 from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
-from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
-    _assign_execution_tasks_to_workers,
     _launch_workspace_retry_attempt,
-    _replan_execution_tasks,
-    _split_title_description,
     adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
     auto_complete_ready_root,
@@ -23,6 +18,7 @@ from src.infrastructure.agent.workspace.workspace_goal_runtime import (
     prepare_workspace_subagent_delegation,
     resolve_workspace_execution_task_for_delegate,
 )
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 
 def _candidate(decision: str = "adopt_existing_goal") -> GoalCandidateRecordModel:
@@ -63,33 +59,6 @@ def _attempt(
 
 
 @pytest.mark.unit
-class TestSplitTitleDescription:
-    def test_short_text_kept_as_title_no_description(self) -> None:
-        title, description = _split_title_description("Short task")
-        assert title == "Short task"
-        assert description is None
-
-    def test_blank_text_falls_back_to_placeholder(self) -> None:
-        title, description = _split_title_description("   ")
-        assert title == "Untitled task"
-        assert description is None
-
-    def test_long_text_truncates_title_preserves_description(self) -> None:
-        long_text = "Execute goal: " + ("word " * 200)
-        title, description = _split_title_description(long_text)
-        assert len(title) <= 255
-        assert title.endswith("…")
-        assert description == long_text.strip()
-
-    def test_long_text_without_spaces_uses_hard_cut(self) -> None:
-        long_text = "a" * 900
-        title, description = _split_title_description(long_text)
-        assert len(title) <= 255
-        assert title.endswith("…")
-        assert description == long_text
-
-
-@pytest.mark.unit
 class TestWorkspaceGoalRuntime:
     async def test_no_workspace_noop(self) -> None:
         session = AsyncMock()
@@ -116,6 +85,10 @@ class TestWorkspaceGoalRuntime:
         workspace = MagicMock()
         workspace.id = "ws-1"
         materialized_task = MagicMock()
+        materialized_task.id = "root-1"
+        materialized_task.title = "Prepare rollback checklist"
+        materialized_task.description = None
+        materialized_task.metadata = {"task_role": "goal_root"}
 
         session = AsyncMock()
 
@@ -159,6 +132,10 @@ class TestWorkspaceGoalRuntime:
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
             ) as publisher_cls,
+            patch(
+                "src.infrastructure.agent.workspace.goal_runtime.kickoff_v2_plan",
+                new=AsyncMock(return_value=True),
+            ) as kickoff,
         ):
             workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
             task_service = task_service_cls.return_value
@@ -177,6 +154,7 @@ class TestWorkspaceGoalRuntime:
             materializer.materialize_candidate.assert_awaited_once()
             session.commit.assert_awaited_once()
             publisher.publish_pending_events.assert_awaited_once()
+            kickoff.assert_awaited_once()
 
     async def test_skips_materialization_when_no_existing_root_candidate_exists(self) -> None:
         workspace = MagicMock()
@@ -236,29 +214,20 @@ class TestWorkspaceGoalRuntime:
             assert result is None
             materializer_cls.return_value.materialize_candidate.assert_not_called()
 
-    async def test_bootstraps_execution_tasks_from_decomposer_when_root_has_no_children(
-        self,
-    ) -> None:
+    async def test_materialization_kicks_off_v2_plan_without_v1_task_creation(self) -> None:
         workspace = MagicMock()
         workspace.id = "ws-1"
         root_task = MagicMock()
         root_task.id = "root-1"
         root_task.title = "Prepare rollback checklist"
+        root_task.description = "desc"
+        root_task.metadata = {"task_role": "goal_root"}
 
         session = AsyncMock()
 
         @asynccontextmanager
         async def fake_session_factory():
             yield session
-
-        task_decomposer = AsyncMock()
-        task_decomposer.decompose.return_value = DecompositionResult(
-            subtasks=(
-                SubTask(id="t1", description="Draft checklist"),
-                SubTask(id="t2", description="Validate rollback steps"),
-            ),
-            is_decomposed=True,
-        )
 
         with (
             patch(
@@ -280,7 +249,7 @@ class TestWorkspaceGoalRuntime:
             ) as objective_repo_cls,
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
+            ),
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
             ) as blackboard_repo_cls,
@@ -296,6 +265,10 @@ class TestWorkspaceGoalRuntime:
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
             ) as publisher_cls,
+            patch(
+                "src.infrastructure.agent.workspace.goal_runtime.kickoff_v2_plan",
+                new=AsyncMock(return_value=True),
+            ) as kickoff,
         ):
             workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
             task_service = task_service_cls.return_value
@@ -303,222 +276,47 @@ class TestWorkspaceGoalRuntime:
             objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
             blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
             message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(side_effect=[[], []])
-            sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
-            materializer = materializer_cls.return_value
-            materializer.materialize_candidate = AsyncMock(return_value=root_task)
-            command_service = materializer_cls.call_args  # placate linters
-            del command_service
-            publisher = publisher_cls.return_value
-            publisher.publish_pending_events = AsyncMock(return_value=None)
-
-            created_calls: list[dict[str, object]] = []
-
-            async def create_task(**kwargs: object) -> object:
-                created_calls.append(dict(kwargs))
-                return MagicMock(id=f"child-{len(created_calls)}", title=kwargs["title"])
-
-            with patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.create_task",
-                new=AsyncMock(side_effect=create_task),
-            ):
-                await maybe_materialize_workspace_goal_candidate(
-                    "p-1",
-                    "t-1",
-                    "u-1",
-                    task_decomposer=task_decomposer,
-                    user_query="Prepare rollback checklist",
-                )
-
-            assert len(created_calls) == 2
-            assert created_calls[0]["metadata"]["root_goal_task_id"] == "root-1"
-            assert created_calls[0]["metadata"]["harness_feature_id"] == "t1"
-            assert created_calls[0]["metadata"]["feature_checkpoint"]["feature_id"] == "t1"
-            assert created_calls[0]["metadata"]["preflight_checks"][0]["check_id"] == (
-                "read-progress"
-            )
-
-    async def test_bootstraps_and_assigns_execution_tasks_to_non_leader_workers(self) -> None:
-        workspace = MagicMock()
-        workspace.id = "ws-1"
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.status = MagicMock(value="todo")
-        root_task.title = "Prepare rollback checklist"
-
-        session = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session_factory():
-            yield session
-
-        task_decomposer = AsyncMock()
-        task_decomposer.decompose.return_value = DecompositionResult(
-            subtasks=(
-                SubTask(id="t1", description="Draft checklist"),
-                SubTask(id="t2", description="Validate rollback steps"),
-            ),
-            is_decomposed=True,
-        )
-
-        leader_binding = MagicMock(id="bind-leader", agent_id="leader-agent", display_name="Leader")
-        worker_a = MagicMock(id="bind-worker-a", agent_id="worker-a", display_name="Worker A")
-        worker_b = MagicMock(id="bind-worker-b", agent_id="worker-b", display_name="Worker B")
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-                fake_session_factory,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-                AsyncMock(return_value=object()),
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
-            ) as workspace_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ) as task_service_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"
-            ) as workspace_agent_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlCyberObjectiveRepository"
-            ) as objective_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
-            ) as blackboard_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMessageRepository"
-            ) as message_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalSensingService"
-            ) as sensing_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalMaterializationService"
-            ) as materializer_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
-            ) as publisher_cls,
-        ):
-            workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
-            task_service = task_service_cls.return_value
-            task_service.list_tasks = AsyncMock(return_value=[])
-            objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
-            message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(side_effect=[[], []])
-            workspace_agent_repo_cls.return_value.find_by_workspace = AsyncMock(
-                return_value=[leader_binding, worker_a, worker_b]
-            )
             sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
             materializer = materializer_cls.return_value
             materializer.materialize_candidate = AsyncMock(return_value=root_task)
             publisher = publisher_cls.return_value
             publisher.publish_pending_events = AsyncMock(return_value=None)
 
-            create_calls: list[dict[str, object]] = []
-            assign_calls: list[dict[str, object]] = []
-            start_calls: list[dict[str, object]] = []
-
-            async def create_task(**kwargs: object) -> object:
-                create_calls.append(dict(kwargs))
-                created = MagicMock(id=f"child-{len(create_calls)}", title=kwargs["title"])
-                created.workspace_id = "ws-1"
-                created.metadata = kwargs["metadata"]
-                created.status = WorkspaceTaskStatus.TODO
-                return created
-
-            async def assign_task_to_agent(**kwargs: object) -> object:
-                assign_calls.append(dict(kwargs))
-                return MagicMock(id=kwargs["task_id"])
-
+            create_task = AsyncMock()
+            assign_task = AsyncMock()
+            start_task = AsyncMock()
             with (
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.create_task",
-                    new=AsyncMock(side_effect=create_task),
+                    new=create_task,
                 ),
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.assign_task_to_agent",
-                    new=AsyncMock(side_effect=assign_task_to_agent),
+                    new=assign_task,
                 ),
                 patch(
                     "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.start_task",
-                    new=AsyncMock(
-                        side_effect=lambda **kwargs: start_calls.append(dict(kwargs))
-                        or MagicMock(id="root-1", status=MagicMock(value="in_progress"))
-                    ),
+                    new=start_task,
                 ),
             ):
                 await maybe_materialize_workspace_goal_candidate(
                     "p-1",
                     "t-1",
                     "u-1",
-                    leader_agent_id="leader-agent",
-                    task_decomposer=task_decomposer,
                     user_query="Prepare rollback checklist",
                 )
 
-            assert len(create_calls) == 2
-            assert create_calls[0]["metadata"]["execution_state"]["last_agent_action"] == "created"
-            assert create_calls[0]["metadata"]["harness_feature_id"] == "t1"
-            assert [call["workspace_agent_id"] for call in assign_calls] == [
-                "bind-worker-a",
-                "bind-worker-b",
-            ]
-            assert all(call["actor_agent_id"] == "leader-agent" for call in assign_calls)
-            assert start_calls[0]["task_id"] == "root-1"
-            assert start_calls[0]["reason"] == (
-                "workspace_goal_runtime.bootstrap_execution_tasks.start_root"
+            create_task.assert_not_awaited()
+            assign_task.assert_not_awaited()
+            start_task.assert_not_awaited()
+            kickoff.assert_awaited_once_with(
+                workspace_id="ws-1",
+                title="Prepare rollback checklist",
+                description="desc",
+                created_by="u-1",
+                root_task_id="root-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
             )
-
-    async def test_assign_corrects_worker_context_leader_to_builtin_sisyphus(self) -> None:
-        created_tasks = [MagicMock(id="child-1"), MagicMock(id="child-2")]
-        workspace_agent_repo = MagicMock()
-        workspace_agent_repo.find_by_workspace = AsyncMock(
-            return_value=[
-                MagicMock(
-                    id="bind-worker",
-                    agent_id="worker-agent",
-                    display_name="Worker",
-                    label="worker",
-                ),
-                MagicMock(
-                    id="bind-sisyphus",
-                    agent_id=BUILTIN_SISYPHUS_ID,
-                    display_name="Sisyphus",
-                    label="leader",
-                ),
-            ]
-        )
-        command_service = MagicMock()
-        assign_calls: list[dict[str, object]] = []
-
-        async def assign_task_to_agent(**kwargs: object) -> object:
-            assign_calls.append(dict(kwargs))
-            return MagicMock(id=kwargs["task_id"])
-
-        command_service.assign_task_to_agent = AsyncMock(side_effect=assign_task_to_agent)
-
-        await _assign_execution_tasks_to_workers(
-            workspace_id="ws-1",
-            actor_user_id="u-1",
-            created_tasks=created_tasks,
-            workspace_agent_repo=workspace_agent_repo,
-            command_service=command_service,
-            leader_agent_id="worker-agent",
-            reason="workspace_goal_runtime.bootstrap_assign_execution_tasks",
-        )
-
-        assert [call["workspace_agent_id"] for call in assign_calls] == [
-            "bind-worker",
-            "bind-worker",
-        ]
-        assert all(call["actor_agent_id"] == BUILTIN_SISYPHUS_ID for call in assign_calls)
 
     async def test_apply_worker_report_uses_leader_side_task_mutations(self) -> None:
         task = MagicMock()
@@ -534,7 +332,7 @@ class TestWorkspaceGoalRuntime:
             "derived_from_internal_plan_step": "t1",
             "execution_state": {
                 "phase": "todo",
-                "last_agent_reason": "workspace_goal_runtime.bootstrap_execution_tasks",
+                "last_agent_reason": "workspace_plan.dispatch_execution_task",
                 "last_agent_action": "created",
                 "updated_by_actor_type": "agent",
                 "updated_by_actor_id": "leader-agent",
@@ -1455,515 +1253,6 @@ class TestWorkspaceGoalRuntime:
 
         assert resolved is None
 
-    async def test_replan_required_replaces_existing_children(self) -> None:
-        workspace = MagicMock()
-        workspace.id = "ws-1"
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.title = "Prepare rollback checklist"
-        root_task.metadata = {
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["message:msg-1"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "replan_required",
-        }
-        root_task.status = MagicMock(value="in_progress")
-
-        session = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session_factory():
-            yield session
-
-        task_decomposer = AsyncMock()
-        task_decomposer.decompose.return_value = DecompositionResult(
-            subtasks=(SubTask(id="t1", description="New step"),),
-            is_decomposed=True,
-        )
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-                fake_session_factory,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-                AsyncMock(return_value=object()),
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
-            ) as workspace_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ) as task_service_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlCyberObjectiveRepository"
-            ) as objective_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
-            ) as blackboard_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMessageRepository"
-            ) as message_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalSensingService"
-            ) as sensing_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalMaterializationService"
-            ) as materializer_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
-            ) as publisher_cls,
-        ):
-            workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
-            task_service = task_service_cls.return_value
-            task_service.list_tasks = AsyncMock(return_value=[])
-            objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
-            message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            old_child = MagicMock(id="child-old")
-            refreshed_root = MagicMock(
-                id="root-1",
-                title="Prepare rollback checklist",
-                metadata=dict(root_task.metadata),
-            )
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(
-                side_effect=[[old_child], [old_child]]
-            )
-            task_repo_cls.return_value.find_by_id = AsyncMock(return_value=refreshed_root)
-            task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
-            sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
-            materializer = materializer_cls.return_value
-            materializer.materialize_candidate = AsyncMock(return_value=root_task)
-            publisher = publisher_cls.return_value
-            publisher.publish_pending_events = AsyncMock(return_value=None)
-
-            create_calls: list[dict[str, object]] = []
-            delete_calls: list[dict[str, object]] = []
-
-            async def create_task(**kwargs: object) -> object:
-                create_calls.append(dict(kwargs))
-                return MagicMock(id="child-new")
-
-            async def delete_task(**kwargs: object) -> bool:
-                delete_calls.append(dict(kwargs))
-                return True
-
-            with (
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.create_task",
-                    new=AsyncMock(side_effect=create_task),
-                ),
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.delete_task",
-                    new=AsyncMock(side_effect=delete_task),
-                ),
-            ):
-                await maybe_materialize_workspace_goal_candidate(
-                    "p-1",
-                    "t-1",
-                    "u-1",
-                    task_decomposer=task_decomposer,
-                    user_query="Prepare rollback checklist",
-                )
-
-            assert delete_calls[0]["task_id"] == "child-old"
-            assert create_calls[0]["reason"] == "workspace_goal_runtime.replan_execution_tasks"
-            assert task_repo_cls.return_value.save.await_count >= 1
-
-    async def test_replan_preserves_durable_plan_children(self) -> None:
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.title = "Ship the DAG-backed implementation"
-
-        plan_child = MagicMock()
-        plan_child.id = "child-plan"
-        plan_child.metadata = {
-            "workspace_plan_id": "plan-1",
-            "workspace_plan_node_id": "node-1",
-        }
-
-        non_plan_child = MagicMock()
-        non_plan_child.id = "child-non-plan"
-        non_plan_child.metadata = {"root_goal_task_id": "root-1"}
-
-        task_repo = MagicMock()
-        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[plan_child, non_plan_child])
-
-        command_service = MagicMock()
-        command_service.delete_task = AsyncMock(return_value=True)
-        command_service.create_task = AsyncMock()
-
-        replanned = await _replan_execution_tasks(
-            workspace_id="ws-1",
-            actor_user_id="u-1",
-            root_task=root_task,
-            task_repo=task_repo,
-            workspace_agent_repo=MagicMock(),
-            command_service=command_service,
-            leader_agent_id="leader-1",
-            task_decomposer=AsyncMock(),
-            user_query="Ship the DAG-backed implementation",
-        )
-
-        assert replanned is False
-        command_service.create_task.assert_not_awaited()
-        command_service.delete_task.assert_awaited_once()
-        assert command_service.delete_task.await_args.kwargs["task_id"] == "child-non-plan"
-
-    async def test_ready_for_completion_completes_root_when_evidence_exists(self) -> None:
-        workspace = MagicMock()
-        workspace.id = "ws-1"
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.title = "Prepare rollback checklist"
-        root_task.metadata = {
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["message:msg-1"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "ready_for_completion",
-            "goal_evidence": {"summary": "done"},
-        }
-        root_task.status = MagicMock(value="in_progress")
-
-        session = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session_factory():
-            yield session
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-                fake_session_factory,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-                AsyncMock(return_value=object()),
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
-            ) as workspace_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ) as task_service_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlCyberObjectiveRepository"
-            ) as objective_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
-            ) as blackboard_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMessageRepository"
-            ) as message_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalSensingService"
-            ) as sensing_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalMaterializationService"
-            ) as materializer_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
-            ) as publisher_cls,
-        ):
-            workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
-            task_service = task_service_cls.return_value
-            task_service.list_tasks = AsyncMock(return_value=[])
-            objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
-            message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_id = AsyncMock(return_value=root_task)
-            sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
-            materializer = materializer_cls.return_value
-            materializer.materialize_candidate = AsyncMock(return_value=root_task)
-            publisher = publisher_cls.return_value
-            publisher.publish_pending_events = AsyncMock(return_value=None)
-
-            start_calls: list[dict[str, object]] = []
-            complete_calls: list[dict[str, object]] = []
-
-            async def start_task(**kwargs: object) -> object:
-                start_calls.append(dict(kwargs))
-                task = MagicMock(id="root-1")
-                task.status = MagicMock(value="in_progress")
-                return task
-
-            async def complete_task(**kwargs: object) -> object:
-                complete_calls.append(dict(kwargs))
-                return MagicMock(id="root-1")
-
-            with (
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.start_task",
-                    new=AsyncMock(side_effect=start_task),
-                ),
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.complete_task",
-                    new=AsyncMock(side_effect=complete_task),
-                ),
-            ):
-                await maybe_materialize_workspace_goal_candidate("p-1", "t-1", "u-1")
-
-            assert start_calls == []
-            assert complete_calls[0]["task_id"] == "root-1"
-            assert complete_calls[0]["reason"] == "workspace_goal_runtime.ready_for_completion"
-
-    async def test_ready_for_completion_synthesizes_goal_evidence_before_closeout(self) -> None:
-        workspace = MagicMock()
-        workspace.id = "ws-1"
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.workspace_id = "ws-1"
-        root_task.title = "Prepare rollback checklist"
-        root_task.metadata = {
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["message:msg-1"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "ready_for_completion",
-        }
-        root_task.status = MagicMock(value="in_progress")
-
-        child_done = MagicMock()
-        child_done.id = "child-1"
-        child_done.title = "Draft checklist"
-        child_done.status = WorkspaceTaskStatus.DONE
-        child_done.completed_at = datetime.fromisoformat("2026-04-16T03:30:00+00:00")
-        child_done.updated_at = child_done.completed_at
-        child_done.created_at = child_done.completed_at
-        child_done.metadata = {
-            "evidence_refs": ["artifact:file-1"],
-            "execution_verifications": ["browser_assert:rollback_check"],
-            "last_mutation_actor": {"reason": "workspace_task.complete"},
-        }
-
-        session = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session_factory():
-            yield session
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-                fake_session_factory,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-                AsyncMock(return_value=object()),
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
-            ) as workspace_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ) as task_service_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlCyberObjectiveRepository"
-            ) as objective_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
-            ) as blackboard_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMessageRepository"
-            ) as message_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalSensingService"
-            ) as sensing_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalMaterializationService"
-            ) as materializer_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
-            ) as publisher_cls,
-        ):
-            workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
-            task_service = task_service_cls.return_value
-            task_service.list_tasks = AsyncMock(return_value=[])
-            objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
-            message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(
-                return_value=[child_done]
-            )
-            task_repo_cls.return_value.find_by_id = AsyncMock(return_value=root_task)
-            task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
-            sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
-            materializer = materializer_cls.return_value
-            materializer.materialize_candidate = AsyncMock(return_value=root_task)
-            publisher = publisher_cls.return_value
-            publisher.publish_pending_events = AsyncMock(return_value=None)
-
-            start_calls: list[dict[str, object]] = []
-            complete_calls: list[dict[str, object]] = []
-
-            async def complete_task(**kwargs: object) -> object:
-                complete_calls.append(dict(kwargs))
-                return MagicMock(id="root-1")
-
-            with (
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.start_task",
-                    new=AsyncMock(
-                        side_effect=lambda **kwargs: start_calls.append(dict(kwargs))
-                        or MagicMock(id="root-1", status=MagicMock(value="in_progress"))
-                    ),
-                ),
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.complete_task",
-                    new=AsyncMock(side_effect=complete_task),
-                ),
-            ):
-                await maybe_materialize_workspace_goal_candidate("p-1", "t-1", "u-1")
-
-            saved_root = task_repo_cls.return_value.save.await_args.args[0]
-            assert saved_root.metadata["goal_evidence"]["artifacts"] == ["artifact:file-1"]
-            assert (
-                "browser_assert:rollback_check"
-                in saved_root.metadata["goal_evidence"]["verifications"]
-            )
-            assert (
-                "actor_reason:workspace_task.complete"
-                in saved_root.metadata["goal_evidence"]["verifications"]
-            )
-            assert saved_root.metadata["goal_evidence"]["verification_grade"] == "pass"
-            assert start_calls == []
-            assert complete_calls[0]["task_id"] == "root-1"
-
-    async def test_ready_for_completion_synthesizes_warn_grade_without_rich_artifacts(self) -> None:
-        workspace = MagicMock()
-        workspace.id = "ws-1"
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.workspace_id = "ws-1"
-        root_task.title = "Prepare rollback checklist"
-        root_task.metadata = {
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["message:msg-1"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "ready_for_completion",
-        }
-        root_task.status = MagicMock(value="in_progress")
-
-        child_done = MagicMock()
-        child_done.id = "child-2"
-        child_done.title = "Validate checklist"
-        child_done.status = WorkspaceTaskStatus.DONE
-        child_done.completed_at = datetime.fromisoformat("2026-04-16T03:40:00+00:00")
-        child_done.updated_at = child_done.completed_at
-        child_done.created_at = child_done.completed_at
-        child_done.metadata = {}
-
-        session = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session_factory():
-            yield session
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-                fake_session_factory,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-                AsyncMock(return_value=object()),
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
-            ) as workspace_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ) as task_service_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlCyberObjectiveRepository"
-            ) as objective_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
-            ) as blackboard_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMessageRepository"
-            ) as message_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalSensingService"
-            ) as sensing_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalMaterializationService"
-            ) as materializer_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
-            ) as publisher_cls,
-        ):
-            workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
-            task_service = task_service_cls.return_value
-            task_service.list_tasks = AsyncMock(return_value=[])
-            objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
-            message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(
-                return_value=[child_done]
-            )
-            task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
-            sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
-            materializer = materializer_cls.return_value
-            materializer.materialize_candidate = AsyncMock(return_value=root_task)
-            publisher = publisher_cls.return_value
-            publisher.publish_pending_events = AsyncMock(return_value=None)
-
-            with patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.complete_task",
-                new=AsyncMock(return_value=MagicMock(id="root-1")),
-            ):
-                await maybe_materialize_workspace_goal_candidate("p-1", "t-1", "u-1")
-
-            saved_root = task_repo_cls.return_value.save.await_args.args[0]
-            assert saved_root.metadata["goal_evidence"]["artifacts"] == ["workspace_task:child-2"]
-            assert saved_root.metadata["goal_evidence"]["verification_grade"] == "warn"
-
     async def test_auto_complete_resynthesizes_failed_evidence_for_accepted_children(self) -> None:
         root_task = MagicMock()
         root_task.id = "root-accepted"
@@ -2033,120 +1322,3 @@ class TestWorkspaceGoalRuntime:
             not in saved_root.metadata["goal_evidence"]["verifications"]
         )
         command_service.complete_task.assert_awaited_once()
-
-    async def test_replan_limit_escalates_to_human_review(self) -> None:
-        workspace = MagicMock()
-        workspace.id = "ws-1"
-        root_task = MagicMock()
-        root_task.id = "root-1"
-        root_task.title = "Prepare rollback checklist"
-        root_task.metadata = {
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["message:msg-1"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {"source_type": "message_signal", "ref": "message:msg-1", "score": 0.85}
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "replan_required",
-            "replan_attempt_count": 2,
-        }
-        root_task.status = MagicMock(value="in_progress")
-
-        session = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session_factory():
-            yield session
-
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-                fake_session_factory,
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-                AsyncMock(return_value=object()),
-            ),
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
-            ) as workspace_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
-            ) as task_service_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlCyberObjectiveRepository"
-            ) as objective_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
-            ) as task_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlBlackboardRepository"
-            ) as blackboard_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMessageRepository"
-            ) as message_repo_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalSensingService"
-            ) as sensing_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceGoalMaterializationService"
-            ) as materializer_cls,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
-            ) as publisher_cls,
-        ):
-            workspace_repo_cls.return_value.find_by_project = AsyncMock(return_value=[workspace])
-            task_service = task_service_cls.return_value
-            task_service.list_tasks = AsyncMock(return_value=[])
-            objective_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            blackboard_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=[])
-            message_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_root_goal_task_id = AsyncMock(return_value=[])
-            task_repo_cls.return_value.find_by_id = AsyncMock(return_value=root_task)
-            task_repo_cls.return_value.save = AsyncMock(side_effect=lambda task: task)
-            sensing_cls.return_value.sense_candidates.return_value = [_candidate()]
-            materializer = materializer_cls.return_value
-            materializer.materialize_candidate = AsyncMock(return_value=root_task)
-            publisher = publisher_cls.return_value
-            publisher.publish_pending_events = AsyncMock(return_value=None)
-
-            create_calls: list[dict[str, object]] = []
-            delete_calls: list[dict[str, object]] = []
-            update_calls: list[dict[str, object]] = []
-            block_calls: list[dict[str, object]] = []
-
-            with (
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.create_task",
-                    new=AsyncMock(side_effect=lambda **kwargs: create_calls.append(dict(kwargs))),
-                ),
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.delete_task",
-                    new=AsyncMock(side_effect=lambda **kwargs: delete_calls.append(dict(kwargs))),
-                ),
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
-                    new=AsyncMock(
-                        side_effect=lambda **kwargs: update_calls.append(dict(kwargs)) or root_task
-                    ),
-                ),
-                patch(
-                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.block_task",
-                    new=AsyncMock(
-                        side_effect=lambda **kwargs: block_calls.append(dict(kwargs))
-                        or MagicMock(id="root-1", status=MagicMock(value="blocked"))
-                    ),
-                ),
-            ):
-                await maybe_materialize_workspace_goal_candidate("p-1", "t-1", "u-1")
-
-            assert create_calls == []
-            assert delete_calls == []
-            assert "requires human review" in update_calls[0]["metadata"]["remediation_summary"]
-            assert block_calls[0]["task_id"] == "root-1"
-            assert block_calls[0]["reason"] == "workspace_goal_runtime.human_review_required.block"

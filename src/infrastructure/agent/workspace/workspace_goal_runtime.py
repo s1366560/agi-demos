@@ -10,7 +10,7 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,6 @@ from src.application.schemas.workspace_agent_autonomy import (
     GoalCandidateRecordModel,
 )
 from src.application.services.workspace_agent_autonomy import (
-    build_execution_task_harness_metadata,
     is_goal_root_task,
     synthesize_goal_evidence_from_children,
     validate_autonomy_metadata,
@@ -77,23 +76,17 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
     SqlWorkspaceTaskSessionAttemptRepository,
 )
-from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
-from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
-    DERIVED_FROM_INTERNAL_PLAN_STEP,
     EXECUTION_STATE,
     LAST_LEADER_ADJUDICATION_STATUS,
-    LAST_REPLAN_AT,
     LAST_WORKER_REPORT_SUMMARY,
-    LINEAGE_SOURCE,
     PENDING_LEADER_ADJUDICATION,
     REMEDIATION_STATUS,
     REMEDIATION_SUMMARY,
-    REPLAN_ATTEMPT_COUNT,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
     WORKSPACE_PLAN_ID,
@@ -102,7 +95,6 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
-_MAX_AUTO_REPLAN_ATTEMPTS = 2
 _WORKSPACE_TASK_ID_PATTERN = re.compile(
     r"(?:workspace_task_id|task_id|child_task_id)\s*[:=]\s*([A-Za-z0-9._-]+)",
     re.IGNORECASE,
@@ -135,34 +127,6 @@ def should_activate_workspace_authority(
     the candidate — not this gate.
     """
     return has_workspace_binding or has_open_root
-
-
-class TaskDecomposerProtocol(Protocol):
-    async def decompose(self, query: str) -> DecompositionResult: ...
-
-
-# ``workspace_tasks.title`` is ``VARCHAR(255)``. Decomposed step descriptions
-# occasionally exceed this when a mention payload or long instruction is used
-# verbatim — truncate for the title column but preserve the full text in the
-# ``description`` column (``Text``). Keep a small safety margin so ellipsis fits.
-_TITLE_MAX_CHARS = 240
-
-
-def _split_title_description(text: str) -> tuple[str, str | None]:
-    """Return a (title, description) pair sized for the DB columns.
-
-    If ``text`` fits in the title column, ``description`` is ``None``. Otherwise
-    the title is truncated at the last whitespace boundary within
-    ``_TITLE_MAX_CHARS`` (falling back to a hard cut) with an ellipsis, and the
-    full original text is placed into ``description`` so no information is lost.
-    """
-    normalized = (text or "").strip() or "Untitled task"
-    if len(normalized) <= _TITLE_MAX_CHARS:
-        return normalized, None
-    cut = normalized.rfind(" ", 0, _TITLE_MAX_CHARS)
-    if cut < int(_TITLE_MAX_CHARS * 0.6):
-        cut = _TITLE_MAX_CHARS
-    return normalized[:cut].rstrip() + "…", normalized
 
 
 def _select_existing_root_candidate(
@@ -233,14 +197,14 @@ async def maybe_materialize_workspace_goal_candidate(
     user_id: str,
     *,
     leader_agent_id: str | None = None,
-    task_decomposer: TaskDecomposerProtocol | None = None,
     user_query: str = "",
 ) -> WorkspaceTask | None:
     """Materialize the top sensed workspace goal candidate when applicable.
 
     This is a bounded runtime hook: it reuses the existing workspace ledger and
-    candidate ranking logic, but it does not yet orchestrate decomposition or
-    execution after materialization.
+    candidate ranking logic, then hands the materialized root goal to the durable
+    V2 workspace plan. Decomposition and execution are no longer performed by
+    this module.
     """
     if not project_id or not tenant_id or not user_id:
         return None
@@ -315,28 +279,6 @@ async def maybe_materialize_workspace_goal_candidate(
             if task is None:
                 return None
 
-            await _maybe_bootstrap_execution_tasks(
-                workspace_id=workspace.id,
-                actor_user_id=user_id,
-                root_task=task,
-                task_repo=task_repo,
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-                command_service=command_service,
-                leader_agent_id=leader_agent_id,
-                task_decomposer=task_decomposer,
-                user_query=user_query,
-            )
-            task = await _maybe_handle_root_remediation(
-                workspace_id=workspace.id,
-                actor_user_id=user_id,
-                root_task=task,
-                task_repo=task_repo,
-                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
-                command_service=command_service,
-                leader_agent_id=leader_agent_id,
-                task_decomposer=task_decomposer,
-                user_query=user_query,
-            )
             if getattr(task, "metadata", {}).get(TASK_ROLE) == "goal_root":
                 extra_events.append(
                     PendingWorkspaceTaskEvent(
@@ -352,104 +294,30 @@ async def maybe_materialize_workspace_goal_candidate(
                 [*command_service.consume_pending_events(), *extra_events]
             )
             try:
-                from src.infrastructure.agent.workspace.worker_launch_drain import (
-                    drain_pending_worker_launches_to_outbox,
+                from src.infrastructure.agent.workspace.goal_runtime import (
+                    kickoff_v2_plan,
+                )
+                from src.infrastructure.agent.workspace_plan.system_actor import (
+                    WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
                 )
 
-                _ = await drain_pending_worker_launches_to_outbox(command_service, db)
+                _ = await kickoff_v2_plan(
+                    workspace_id=workspace.id,
+                    title=getattr(task, "title", "") or user_query,
+                    description=getattr(task, "description", None) or user_query,
+                    created_by=user_id,
+                    root_task_id=task.id,
+                    leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                )
             except Exception:
                 logger.warning(
-                    "workspace_goal_runtime.worker_launch_drain_failed",
+                    "workspace_goal_runtime.v2_kickoff_failed",
                     exc_info=True,
                 )
             return task
     except Exception:
         logger.warning("Workspace goal runtime materialization failed", exc_info=True)
         return None
-
-
-async def _maybe_handle_root_remediation(
-    *,
-    workspace_id: str,
-    actor_user_id: str,
-    root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
-    workspace_agent_repo: SqlWorkspaceAgentRepository,
-    command_service: WorkspaceTaskCommandService,
-    leader_agent_id: str | None,
-    task_decomposer: TaskDecomposerProtocol | None,
-    user_query: str,
-) -> WorkspaceTask:
-    remediation_status = getattr(root_task, "metadata", {}).get(REMEDIATION_STATUS)
-    root_task_id = getattr(root_task, "id", None)
-    if not isinstance(root_task_id, str) or not root_task_id:
-        return root_task
-
-    if remediation_status == "replan_required":
-        attempts_raw = getattr(root_task, "metadata", {}).get(REPLAN_ATTEMPT_COUNT, 0)
-        attempts = attempts_raw if isinstance(attempts_raw, int) and attempts_raw >= 0 else 0
-        if attempts >= _MAX_AUTO_REPLAN_ATTEMPTS:
-            await _mark_root_human_review_required(
-                workspace_id=workspace_id,
-                actor_user_id=actor_user_id,
-                root_task=root_task,
-                task_repo=task_repo,
-                command_service=command_service,
-                leader_agent_id=leader_agent_id,
-            )
-            refreshed = await task_repo.find_by_id(root_task_id)
-            return refreshed or root_task
-        replanned = await _replan_execution_tasks(
-            workspace_id=workspace_id,
-            actor_user_id=actor_user_id,
-            root_task=root_task,
-            task_repo=task_repo,
-            workspace_agent_repo=workspace_agent_repo,
-            command_service=command_service,
-            leader_agent_id=leader_agent_id,
-            task_decomposer=task_decomposer,
-            user_query=user_query,
-        )
-        if replanned:
-            await _increment_root_replan_attempt(
-                root_task=root_task,
-                task_repo=task_repo,
-                next_attempt_count=attempts + 1,
-            )
-        refreshed = await task_repo.find_by_id(root_task_id)
-        return refreshed or root_task
-
-    if remediation_status == "ready_for_completion" and root_task.status.value != "done":
-        await _ensure_root_goal_evidence(
-            root_task=root_task,
-            task_repo=task_repo,
-            generated_by_agent_id=str(actor_user_id),
-        )
-        refreshed = await task_repo.find_by_id(root_task_id)
-        if refreshed is None:
-            return root_task
-        if refreshed.status.value == "todo":
-            refreshed = await command_service.start_task(
-                workspace_id=workspace_id,
-                task_id=root_task_id,
-                actor_user_id=actor_user_id,
-                actor_type="agent",
-                actor_agent_id=leader_agent_id,
-                reason="workspace_goal_runtime.ready_for_completion.start_root",
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-        completed = await command_service.complete_task(
-            workspace_id=workspace_id,
-            task_id=root_task_id,
-            actor_user_id=actor_user_id,
-            actor_type="agent",
-            actor_agent_id=leader_agent_id,
-            reason="workspace_goal_runtime.ready_for_completion",
-            authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-        )
-        return completed
-
-    return root_task
 
 
 async def _ensure_root_goal_evidence(
@@ -553,22 +421,6 @@ async def _record_root_auto_complete_failure(
         )
 
 
-async def _increment_root_replan_attempt(
-    *,
-    root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
-    next_attempt_count: int,
-) -> None:
-    refreshed_root = await task_repo.find_by_id(root_task.id)
-    effective_root = refreshed_root or root_task
-    metadata = dict(getattr(effective_root, "metadata", {}) or {})
-    metadata.setdefault(AUTONOMY_SCHEMA_VERSION_KEY, AUTONOMY_SCHEMA_VERSION)
-    metadata[REPLAN_ATTEMPT_COUNT] = next_attempt_count
-    metadata[LAST_REPLAN_AT] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    effective_root.metadata = validate_autonomy_metadata(metadata)
-    _ = await task_repo.save(effective_root)
-
-
 async def _ensure_root_task_started(
     *,
     workspace_id: str,
@@ -594,50 +446,6 @@ async def _ensure_root_task_started(
         reason=reason,
         authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
     )
-
-
-async def _mark_root_human_review_required(
-    *,
-    workspace_id: str,
-    actor_user_id: str,
-    root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
-    command_service: WorkspaceTaskCommandService,
-    leader_agent_id: str | None,
-) -> None:
-    refreshed_root = await task_repo.find_by_id(root_task.id)
-    effective_root = refreshed_root or root_task
-    metadata = dict(getattr(effective_root, "metadata", {}) or {})
-    metadata.setdefault(AUTONOMY_SCHEMA_VERSION_KEY, AUTONOMY_SCHEMA_VERSION)
-    attempts = metadata.get(REPLAN_ATTEMPT_COUNT, _MAX_AUTO_REPLAN_ATTEMPTS)
-    metadata[REMEDIATION_SUMMARY] = (
-        f"Auto-replan limit reached after {attempts} attempts; root goal requires human review"
-    )
-    metadata[LAST_REPLAN_AT] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    effective_root.metadata = validate_autonomy_metadata(metadata)
-    updated = await command_service.update_task(
-        workspace_id=workspace_id,
-        task_id=effective_root.id,
-        actor_user_id=actor_user_id,
-        metadata=effective_root.metadata,
-        actor_type="agent",
-        actor_agent_id=leader_agent_id,
-        reason="workspace_goal_runtime.human_review_required.metadata",
-        authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-    )
-    updated_status = getattr(
-        getattr(updated, "status", None), "value", getattr(updated, "status", None)
-    )
-    if updated_status != "blocked":
-        _ = await command_service.block_task(
-            workspace_id=workspace_id,
-            task_id=effective_root.id,
-            actor_user_id=actor_user_id,
-            actor_type="agent",
-            actor_agent_id=leader_agent_id,
-            reason="workspace_goal_runtime.human_review_required.block",
-            authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-        )
 
 
 async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touched in this change
@@ -723,202 +531,6 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
             reason=f"root auto-complete failed: {exc}",
         )
         return None
-
-
-async def _maybe_bootstrap_execution_tasks(
-    *,
-    workspace_id: str,
-    actor_user_id: str,
-    root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
-    workspace_agent_repo: SqlWorkspaceAgentRepository,
-    command_service: WorkspaceTaskCommandService,
-    leader_agent_id: str | None,
-    task_decomposer: TaskDecomposerProtocol | None,
-    user_query: str,
-) -> None:
-    root_task_id = getattr(root_task, "id", None)
-    root_title = getattr(root_task, "title", "")
-    if not isinstance(root_task_id, str) or not root_task_id:
-        return
-
-    remediation_status = getattr(root_task, "metadata", {}).get(REMEDIATION_STATUS)
-    if remediation_status in {"replan_required", "ready_for_completion"}:
-        return
-
-    existing_children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
-    if existing_children:
-        return
-
-    decomposed_steps = await _decompose_root_goal(
-        task_decomposer=task_decomposer,
-        root_title=root_title or user_query,
-        user_query=user_query,
-    )
-    created_tasks: list[WorkspaceTask] = []
-    for index, (step_id, description) in enumerate(decomposed_steps, start=1):
-        step_title, step_description = _split_title_description(description)
-        feature_id = step_id or f"bootstrap-{index}"
-        created_tasks.append(
-            await command_service.create_task(
-                workspace_id=workspace_id,
-                actor_user_id=actor_user_id,
-                title=step_title,
-                description=step_description,
-                metadata={
-                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
-                    TASK_ROLE: "execution_task",
-                    ROOT_GOAL_TASK_ID: root_task_id,
-                    LINEAGE_SOURCE: "agent",
-                    DERIVED_FROM_INTERNAL_PLAN_STEP: feature_id,
-                    **build_execution_task_harness_metadata(
-                        feature_id=feature_id,
-                        sequence=index,
-                        title=step_title,
-                        description=step_description or description,
-                    ),
-                    EXECUTION_STATE: _build_execution_state(
-                        phase="todo",
-                        reason="workspace_goal_runtime.bootstrap_execution_tasks",
-                        action="created",
-                        actor_id=leader_agent_id or actor_user_id,
-                    ),
-                },
-                actor_type="agent",
-                reason="workspace_goal_runtime.bootstrap_execution_tasks",
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-        )
-    await _assign_execution_tasks_to_workers(
-        workspace_id=workspace_id,
-        actor_user_id=actor_user_id,
-        created_tasks=created_tasks,
-        workspace_agent_repo=workspace_agent_repo,
-        command_service=command_service,
-        leader_agent_id=leader_agent_id,
-        reason="workspace_goal_runtime.bootstrap_assign_execution_tasks",
-    )
-    if created_tasks:
-        _ = await _ensure_root_task_started(
-            workspace_id=workspace_id,
-            root_task=root_task,
-            actor_user_id=actor_user_id,
-            command_service=command_service,
-            leader_agent_id=leader_agent_id,
-            reason="workspace_goal_runtime.bootstrap_execution_tasks.start_root",
-        )
-
-
-def _is_workspace_plan_linked_task(task: WorkspaceTask) -> bool:
-    metadata = getattr(task, "metadata", None)
-    if not isinstance(metadata, Mapping):
-        return False
-    plan_id = metadata.get(WORKSPACE_PLAN_ID)
-    node_id = metadata.get(WORKSPACE_PLAN_NODE_ID)
-    return isinstance(plan_id, str) and bool(plan_id) and isinstance(node_id, str) and bool(node_id)
-
-
-async def _replan_execution_tasks(
-    *,
-    workspace_id: str,
-    actor_user_id: str,
-    root_task: WorkspaceTask,
-    task_repo: SqlWorkspaceTaskRepository,
-    workspace_agent_repo: SqlWorkspaceAgentRepository,
-    command_service: WorkspaceTaskCommandService,
-    leader_agent_id: str | None,
-    task_decomposer: TaskDecomposerProtocol | None,
-    user_query: str,
-) -> bool:
-    root_task_id = getattr(root_task, "id", None)
-    root_title = getattr(root_task, "title", "")
-    if not isinstance(root_task_id, str) or not root_task_id:
-        return False
-
-    existing_children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
-    plan_linked_children = [
-        child for child in existing_children if _is_workspace_plan_linked_task(child)
-    ]
-    children_to_replace = [
-        child for child in existing_children if not _is_workspace_plan_linked_task(child)
-    ]
-    if plan_linked_children:
-        for child in children_to_replace:
-            _ = await command_service.delete_task(
-                workspace_id=workspace_id,
-                task_id=child.id,
-                actor_user_id=actor_user_id,
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-        logger.info(
-            "workspace_goal_runtime.replan_skipped_for_durable_plan",
-            extra={
-                "event": "workspace_goal_runtime.replan_skipped_for_durable_plan",
-                "workspace_id": workspace_id,
-                "root_task_id": root_task_id,
-                "plan_linked_child_count": len(plan_linked_children),
-                "non_plan_child_deleted_count": len(children_to_replace),
-            },
-        )
-        return False
-
-    for child in children_to_replace:
-        _ = await command_service.delete_task(
-            workspace_id=workspace_id,
-            task_id=child.id,
-            actor_user_id=actor_user_id,
-            authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-        )
-
-    decomposed_steps = await _decompose_root_goal(
-        task_decomposer=task_decomposer,
-        root_title=root_title or user_query,
-        user_query=user_query,
-    )
-    created_tasks: list[WorkspaceTask] = []
-    for index, (step_id, description) in enumerate(decomposed_steps, start=1):
-        step_title, step_description = _split_title_description(description)
-        feature_id = step_id or f"replan-{index}"
-        created_tasks.append(
-            await command_service.create_task(
-                workspace_id=workspace_id,
-                actor_user_id=actor_user_id,
-                title=step_title,
-                description=step_description,
-                metadata={
-                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
-                    TASK_ROLE: "execution_task",
-                    ROOT_GOAL_TASK_ID: root_task_id,
-                    LINEAGE_SOURCE: "agent",
-                    DERIVED_FROM_INTERNAL_PLAN_STEP: feature_id,
-                    **build_execution_task_harness_metadata(
-                        feature_id=feature_id,
-                        sequence=index,
-                        title=step_title,
-                        description=step_description or description,
-                    ),
-                    EXECUTION_STATE: _build_execution_state(
-                        phase="todo",
-                        reason="workspace_goal_runtime.replan_execution_tasks",
-                        action="created",
-                        actor_id=leader_agent_id or actor_user_id,
-                    ),
-                },
-                actor_type="agent",
-                reason="workspace_goal_runtime.replan_execution_tasks",
-                authority=WorkspaceTaskAuthorityContext.leader(leader_agent_id),
-            )
-        )
-    await _assign_execution_tasks_to_workers(
-        workspace_id=workspace_id,
-        actor_user_id=actor_user_id,
-        created_tasks=created_tasks,
-        workspace_agent_repo=workspace_agent_repo,
-        command_service=command_service,
-        leader_agent_id=leader_agent_id,
-        reason="workspace_goal_runtime.replan_assign_execution_tasks",
-    )
-    return True
 
 
 def _build_execution_state(
@@ -1284,99 +896,6 @@ async def _ensure_execution_attempt(
         leader_agent_id=leader_agent_id,
     )
     return await attempt_service.mark_running(attempt.id)
-
-
-async def _assign_execution_tasks_to_workers(
-    *,
-    workspace_id: str,
-    actor_user_id: str,
-    created_tasks: list[WorkspaceTask],
-    workspace_agent_repo: SqlWorkspaceAgentRepository,
-    command_service: WorkspaceTaskCommandService,
-    leader_agent_id: str | None,
-    reason: str,
-) -> None:
-    if not created_tasks or not leader_agent_id:
-        return
-
-    active_bindings = await workspace_agent_repo.find_by_workspace(
-        workspace_id=workspace_id,
-        active_only=True,
-        limit=100,
-        offset=0,
-    )
-    if not active_bindings:
-        logger.warning(
-            "_assign_execution_tasks_to_workers: no active workspace agents",
-            extra={
-                "event": "workspace_assign.no_active_members",
-                "workspace_id": workspace_id,
-                "leader_agent_id": leader_agent_id,
-                "created_count": len(created_tasks),
-                "reason": reason,
-            },
-        )
-        return
-
-    effective_leader_agent_id = leader_agent_id
-    if any(binding.agent_id == BUILTIN_SISYPHUS_ID for binding in active_bindings):
-        if leader_agent_id != BUILTIN_SISYPHUS_ID:
-            logger.warning(
-                "_assign_execution_tasks_to_workers: corrected leader identity to builtin",
-                extra={
-                    "event": "workspace_assign.corrected_leader_agent_id",
-                    "workspace_id": workspace_id,
-                    "requested_leader_agent_id": leader_agent_id,
-                    "effective_leader_agent_id": BUILTIN_SISYPHUS_ID,
-                    "created_count": len(created_tasks),
-                    "reason": reason,
-                },
-            )
-        effective_leader_agent_id = BUILTIN_SISYPHUS_ID
-
-    worker_bindings = [
-        binding for binding in active_bindings if binding.agent_id != effective_leader_agent_id
-    ]
-    if not worker_bindings:
-        # Do NOT fall back to assigning the leader as worker — that violates
-        # the leader/worker separation and causes workers to run with
-        # task_authority=leader (which in turn skips worker-specific
-        # guardrails). Leave tasks unassigned; the UI / autonomy tick will
-        # surface this state so the user can add a worker agent.
-        logger.warning(
-            "_assign_execution_tasks_to_workers: no non-leader workspace members",
-            extra={
-                "event": "workspace_assign.no_worker_members",
-                "workspace_id": workspace_id,
-                "leader_agent_id": effective_leader_agent_id,
-                "created_count": len(created_tasks),
-                "active_binding_count": len(active_bindings),
-                "reason": reason,
-            },
-        )
-        return
-
-    worker_bindings.sort(
-        key=lambda binding: (
-            binding.display_name or "",
-            binding.label or "",
-            binding.agent_id,
-            binding.id,
-        )
-    )
-
-    for index, task in enumerate(created_tasks):
-        binding = worker_bindings[index % len(worker_bindings)]
-        _ = await command_service.assign_task_to_agent(
-            workspace_id=workspace_id,
-            task_id=task.id,
-            actor_user_id=actor_user_id,
-            workspace_agent_id=binding.id,
-            actor_type="agent",
-            actor_agent_id=effective_leader_agent_id,
-            reason=reason,
-            authority=WorkspaceTaskAuthorityContext.leader(effective_leader_agent_id),
-        )
 
 
 async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR0915
@@ -2008,26 +1527,3 @@ def _extract_workspace_task_id(task_text: str) -> str | None:
     if match:
         return match.group(1)
     return None
-
-
-async def _decompose_root_goal(
-    *,
-    task_decomposer: TaskDecomposerProtocol | None,
-    root_title: str,
-    user_query: str,
-) -> list[tuple[str | None, str]]:
-    query = user_query.strip() or root_title.strip()
-    if not query:
-        return []
-    if task_decomposer is not None and hasattr(task_decomposer, "decompose"):
-        try:
-            result = await task_decomposer.decompose(query)
-            if result.subtasks:
-                return [
-                    (subtask.id or None, subtask.description)
-                    for subtask in result.subtasks
-                    if subtask.description
-                ]
-        except Exception:
-            logger.warning("Workspace goal runtime decomposition failed", exc_info=True)
-    return [(None, f"Execute goal: {query}")]

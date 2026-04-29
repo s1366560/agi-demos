@@ -359,7 +359,7 @@ class TestWorkspaceTaskService:
         )
         mock_task_repo.find_by_id.return_value = root_task
 
-        with pytest.raises(PermissionError, match="Sisyphus leader"):
+        with pytest.raises(PermissionError, match="workspace plan leader"):
             await workspace_task_service.start_task(
                 workspace_id="ws-1",
                 task_id="root-1",
@@ -553,7 +553,7 @@ class TestWorkspaceTaskService:
             "root-1": root_task,
         }.get(task_id)
 
-        with pytest.raises(PermissionError, match="Only Sisyphus leader authority"):
+        with pytest.raises(PermissionError, match="Only workspace plan leader authority"):
             await workspace_task_service.block_task(
                 workspace_id="ws-1",
                 task_id="child-1",
@@ -582,7 +582,7 @@ class TestWorkspaceTaskService:
             "root-1": root_task,
         }.get(task_id)
 
-        with pytest.raises(PermissionError, match="Only Sisyphus leader authority"):
+        with pytest.raises(PermissionError, match="Only workspace plan leader authority"):
             await workspace_task_service.complete_task(
                 workspace_id="ws-1",
                 task_id="child-1",

@@ -61,7 +61,6 @@ class TestMaterializeGoalCandidate:
             "tenant",
             "user",
             leader_agent_id="leader",
-            task_decomposer=None,
             user_query="hi",
         )
 

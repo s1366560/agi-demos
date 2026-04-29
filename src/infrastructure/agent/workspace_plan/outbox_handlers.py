@@ -76,7 +76,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
     SqlWorkspaceTaskSessionAttemptRepository,
 )
-from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
     CURRENT_ATTEMPT_ID,
@@ -99,6 +98,10 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
     AttemptContextProvider,
     Dispatcher,
     ProgressSink,
+)
+from src.infrastructure.agent.workspace_plan.system_actor import (
+    LEGACY_SISYPHUS_AGENT_ID,
+    WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
 )
 
 SUPERVISOR_TICK_EVENT = "supervisor_tick"
@@ -206,7 +209,7 @@ def make_supervisor_tick_handler(
     async def _handle(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
         workspace_id = str(item.payload_json.get("workspace_id") or item.workspace_id)
         payload = dict(item.payload_json or {})
-        leader_agent_id = _payload_string(payload, "leader_agent_id") or BUILTIN_SISYPHUS_ID
+        leader_agent_id = _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
         if item.plan_id:
             await _reconcile_plan_nodes_with_terminal_attempts(
                 session=session,
@@ -410,7 +413,7 @@ def _make_sql_agent_pool(
                     ),
                     active_task_count=active_counts.get(binding.agent_id, 0),
                     is_leader=(
-                        binding.agent_id == BUILTIN_SISYPHUS_ID
+                        binding.agent_id == LEGACY_SISYPHUS_AGENT_ID
                         or (leader_agent_id is not None and binding.agent_id == leader_agent_id)
                         or config.get("workspace_role") == "leader"
                     ),
@@ -429,7 +432,7 @@ async def _ensure_leader_execution_team(
     workspace_id: str,
     leader_agent_id: str,
 ) -> None:
-    """Let the leader assemble an execution team before dispatch stalls.
+    """Materialize an execution team before dispatch stalls.
 
     This is intentionally idempotent: if any active non-leader worker exists,
     the existing team is respected. When no worker exists and the active plan has
@@ -456,7 +459,7 @@ async def _ensure_leader_execution_team(
         return
 
     registry = SqlAgentRegistryRepository(session)
-    composition_id = f"leader-team:{workspace_id}:v1"
+    composition_id = f"workspace-plan-team:{workspace_id}:v2"
     ready_capabilities = _capabilities_for_ready_nodes(plan.ready_nodes())
     for role in _AUTO_TEAM_ROLES:
         agent_name = _team_agent_name(workspace_id, str(role["key"]))
@@ -471,7 +474,7 @@ async def _ensure_leader_execution_team(
                     str(role["display_name"]), str(role["description"])
                 ),
                 trigger_description=(
-                    "Execute workspace plan tasks assigned by the Sisyphus leader."
+                    "Execute tasks assigned by the durable workspace plan supervisor."
                 ),
                 allowed_tools=list(_AUTO_TEAM_AGENT_TOOLS),
                 allowed_skills=[],
@@ -481,7 +484,7 @@ async def _ensure_leader_execution_team(
                 agent_to_agent_allowlist=[leader_agent_id],
                 discoverable=True,
                 metadata={
-                    "created_by": "leader_team_setup",
+                    "created_by": "workspace_plan_team_setup",
                     "workspace_id": workspace_id,
                     "workspace_role": "execution_worker",
                     "team_composition_id": composition_id,
@@ -526,7 +529,7 @@ async def _ensure_leader_execution_team(
                 agent.max_iterations = max(agent.max_iterations, _AUTO_TEAM_MAX_ITERATIONS)
                 agent.metadata = {
                     **dict(agent.metadata or {}),
-                    "created_by": "leader_team_setup",
+                    "created_by": "workspace_plan_team_setup",
                     "workspace_id": workspace_id,
                     "max_iterations_explicit": True,
                 }
@@ -564,7 +567,7 @@ async def _upgrade_existing_auto_team_agents(
         agent.max_iterations = max(agent.max_iterations, _AUTO_TEAM_MAX_ITERATIONS)
         agent.metadata = {
             **dict(agent.metadata or {}),
-            "created_by": "leader_team_setup",
+            "created_by": "workspace_plan_team_setup",
             "workspace_id": workspace_id,
             "max_iterations_explicit": True,
         }
@@ -574,7 +577,7 @@ async def _upgrade_existing_auto_team_agents(
 
 def _should_upgrade_auto_team_agent(agent: Agent, workspace_id: str) -> bool:
     metadata = dict(agent.metadata or {})
-    if metadata.get("created_by") != "leader_team_setup":
+    if metadata.get("created_by") != "workspace_plan_team_setup":
         return False
     if metadata.get("workspace_id") != workspace_id:
         return False
@@ -584,7 +587,7 @@ def _should_upgrade_auto_team_agent(agent: Agent, workspace_id: str) -> bool:
 def _is_execution_worker_binding(binding: WorkspaceAgent, leader_agent_id: str) -> bool:
     if not binding.is_active or binding.status == "offline":
         return False
-    if binding.agent_id in {leader_agent_id, BUILTIN_SISYPHUS_ID}:
+    if binding.agent_id in {leader_agent_id, LEGACY_SISYPHUS_AGENT_ID}:
         return False
     return dict(binding.config or {}).get("workspace_role") != "leader"
 
@@ -606,7 +609,7 @@ def _team_agent_prompt(display_name: str, description: str) -> str:
         f"You are {display_name}, an execution worker in an autonomous workspace team. "
         f"{description} Follow the workspace task binding exactly, report progress through "
         "workspace reporting tools, provide concrete artifacts and verification evidence, "
-        "and do not finalize the root goal yourself; Sisyphus remains the leader."
+        "and do not finalize the root goal yourself; the durable plan supervisor owns closeout."
     )
 
 
@@ -624,7 +627,7 @@ def _make_sql_dispatcher(
             raise ValueError("workspace plan dispatch requires a root goal task")
 
         actor_user_id = await _resolve_actor_user_id(session, workspace_id, payload)
-        leader_agent_id = _payload_string(payload, "leader_agent_id") or BUILTIN_SISYPHUS_ID
+        leader_agent_id = _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
         binding = await SqlWorkspaceAgentRepository(session).find_by_workspace_and_agent_id(
             workspace_id=workspace_id,
             agent_id=str(allocation.agent_id),
@@ -979,7 +982,7 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
 
         metadata = dict(task.metadata or {})
         actor_user_id = _payload_string(payload, "actor_user_id") or task.created_by
-        leader_agent_id = _payload_string(payload, "leader_agent_id") or BUILTIN_SISYPHUS_ID
+        leader_agent_id = _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
         worker_agent_id = _payload_string(payload, "worker_agent_id") or task.assignee_agent_id
         if not worker_agent_id:
             raise ValueError(f"workspace task {task_id} has no worker agent")

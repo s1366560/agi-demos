@@ -33,8 +33,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
 )
-from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
-from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
     _launch_workspace_retry_attempt,
     adjudicate_workspace_worker_report,
@@ -597,14 +595,13 @@ async def test_create_objective_auto_triggers_workspace_agent_execution(
     authenticated_async_client, test_db, monkeypatch
 ) -> None:
     client: AsyncClient = authenticated_async_client
-    triggered: dict[str, object] = {}
-
-    def _capture_fire(**kwargs: object) -> None:
-        triggered.update(kwargs)
+    scheduled_ticks: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.cyber_objectives._fire_mention_routing",
-        _capture_fire,
+        "src.infrastructure.adapters.primary.web.routers.cyber_objectives.schedule_autonomy_tick",
+        lambda workspace_id, actor_user_id: scheduled_ticks.append(
+            (str(workspace_id), str(actor_user_id))
+        ),
     )
 
     user = User(
@@ -705,16 +702,9 @@ async def test_create_objective_auto_triggers_workspace_agent_execution(
         .mappings()
         .first()
     )
-    assert message is not None
-    assert '@"Leader Agent"' in message["content"]
-    assert "objective" in message["content"].lower()
-    assert "workspace task" in message["content"].lower()
-    # Agent-First refactor: gate no longer parses text; with an open root it activates.
-    assert should_activate_workspace_authority(message["content"], has_open_root=True) is True
-    assert triggered["workspace_id"] == workspace.id
-    triggered_message = triggered["message"]
-    assert triggered_message.mentions == [agent.id]
-    assert triggered_message.metadata["conversation_scope"] == f"objective:{response.json()['id']}"
+    assert message is None
+    assert should_activate_workspace_authority("", has_open_root=True) is True
+    assert scheduled_ticks == [(workspace.id, user.id)]
     projected_root = (
         (
             await test_db.execute(
@@ -734,35 +724,17 @@ async def test_create_objective_auto_triggers_workspace_agent_execution(
 
 
 @pytest.mark.asyncio
-async def test_create_objective_force_injects_leader_mention_for_routing(
+async def test_create_objective_schedules_autonomy_tick_without_leader_mention(
     authenticated_async_client, test_db, monkeypatch
 ) -> None:
-    from src.domain.model.workspace.workspace_message import MessageSenderType, WorkspaceMessage
-
     client: AsyncClient = authenticated_async_client
-    triggered: dict[str, object] = {}
-
-    def _capture_fire(**kwargs: object) -> None:
-        triggered.update(kwargs)
-
-    class _FakeMessageService:
-        async def send_message(self, **kwargs: object) -> WorkspaceMessage:
-            return WorkspaceMessage(
-                workspace_id=str(kwargs["workspace_id"]),
-                sender_id=str(kwargs["sender_id"]),
-                sender_type=MessageSenderType.HUMAN,
-                content=str(kwargs["content"]),
-                mentions=[],
-                metadata={"sender_name": str(kwargs["sender_name"])},
-            )
+    scheduled_ticks: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.cyber_objectives._fire_mention_routing",
-        _capture_fire,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.cyber_objectives.get_message_service",
-        lambda request, db: _FakeMessageService(),
+        "src.infrastructure.adapters.primary.web.routers.cyber_objectives.schedule_autonomy_tick",
+        lambda workspace_id, actor_user_id: scheduled_ticks.append(
+            (str(workspace_id), str(actor_user_id))
+        ),
     )
 
     user = User(
@@ -852,11 +824,11 @@ async def test_create_objective_force_injects_leader_mention_for_routing(
     )
 
     assert response.status_code == status.HTTP_201_CREATED
-    triggered_message = triggered["message"]
-    assert triggered_message.mentions == [agent.id]
-    assert triggered_message.metadata["conversation_scope"] == f"objective:{response.json()['id']}"
-
-
+    message = await test_db.scalar(
+        select(WorkspaceMessageModel).where(WorkspaceMessageModel.workspace_id == workspace.id)
+    )
+    assert message is None
+    assert scheduled_ticks == [(workspace.id, user.id)]
 @pytest.mark.asyncio
 async def test_update_rejects_immutable_human_root_goal_title_change(
     authenticated_async_client, test_db
@@ -946,7 +918,7 @@ async def test_update_rejects_immutable_human_root_goal_title_change(
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "Sisyphus leader" in response.json()["detail"]
+    assert "workspace plan leader" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -1048,7 +1020,7 @@ async def test_complete_rejects_inferred_root_goal_without_artifact_proof(
     response = await client.post(f"/api/v1/workspaces/{workspace.id}/tasks/{task.id}/complete")
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "Sisyphus leader" in response.json()["detail"]
+    assert "workspace plan leader" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -1153,7 +1125,7 @@ async def test_patch_to_done_rejects_inferred_root_goal_without_artifact_proof(
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "Sisyphus leader" in response.json()["detail"]
+    assert "workspace plan leader" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -1291,217 +1263,6 @@ async def test_project_objective_to_existing_task_requires_membership(
     assert "workspace member" in response.json()["detail"]
 
 
-@pytest.mark.asyncio
-async def test_list_workspace_goal_candidates(authenticated_async_client, test_db) -> None:
-    client: AsyncClient = authenticated_async_client
-
-    user = User(
-        id="550e8400-e29b-41d4-a716-446655440000",
-        email="ws-api-candidates@example.com",
-        hashed_password="hash",
-        full_name="Owner",
-        is_active=True,
-    )
-    tenant = Tenant(
-        id="tenant-ws-api-candidates",
-        name="TenantCandidates",
-        slug="tenant-ws-api-candidates",
-        description="tenant",
-        owner_id=user.id,
-        plan="free",
-        max_projects=10,
-        max_users=10,
-        max_storage=1024,
-    )
-    project = Project(
-        id="project-ws-api-candidates",
-        tenant_id=tenant.id,
-        name="ProjectCandidates",
-        description="project",
-        owner_id=user.id,
-        memory_rules={},
-        graph_config={},
-    )
-    workspace = WorkspaceModel(
-        id="workspace-api-candidates",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="Workspace Candidates",
-        created_by=user.id,
-        metadata_json={},
-    )
-    membership = WorkspaceMemberModel(
-        id="wm-api-candidates",
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        invited_by=user.id,
-    )
-    root_task = WorkspaceTaskModel(
-        id="task-api-candidates",
-        workspace_id=workspace.id,
-        title="Existing goal",
-        created_by=user.id,
-        status="todo",
-        metadata_json={"task_role": "goal_root", "goal_origin": "human_defined"},
-    )
-    objective = CyberObjectiveModel(
-        id="obj-api-candidates",
-        workspace_id=workspace.id,
-        title="Improve resilience",
-        description="Objective description",
-        obj_type="objective",
-        progress=0.2,
-        created_by=user.id,
-    )
-    post = BlackboardPostModel(
-        id="post-api-candidates",
-        workspace_id=workspace.id,
-        author_id=user.id,
-        title="Directive",
-        content="Please prepare rollback checklist",
-        status="open",
-        is_pinned=True,
-    )
-    message = WorkspaceMessageModel(
-        id="msg-api-candidates",
-        workspace_id=workspace.id,
-        sender_id=user.id,
-        sender_type="human",
-        content="Please prepare rollback checklist",
-        mentions_json=[],
-        metadata_json={},
-    )
-    user_tenant = UserTenant(
-        id="ut-api-candidates",
-        user_id=user.id,
-        tenant_id=tenant.id,
-        role="owner",
-        permissions={"admin": True, "read": True, "write": True},
-    )
-    user_project = UserProject(
-        id="up-api-candidates",
-        user_id=user.id,
-        project_id=project.id,
-        role="owner",
-    )
-
-    test_db.add_all(
-        [
-            user,
-            tenant,
-            project,
-            workspace,
-            membership,
-            root_task,
-            objective,
-            post,
-            message,
-            user_tenant,
-            user_project,
-        ]
-    )
-    await test_db.commit()
-
-    response = await client.get(f"/api/v1/workspaces/{workspace.id}/goal-candidates")
-
-    assert response.status_code == status.HTTP_200_OK
-    payload = response.json()
-    decisions = {item["candidate_text"]: item["decision"] for item in payload}
-    assert decisions["Existing goal"] == "adopt_existing_goal"
-    assert decisions["Improve resilience"] == "adopt_existing_goal"
-    # Agent-First: sensing never auto-formalizes inferred candidates; the
-    # Leader agent renders the verdict via an explicit tool-call downstream.
-    assert decisions["Please prepare rollback checklist"] == "defer"
-
-
-@pytest.mark.asyncio
-async def test_materialize_workspace_goal_candidate(authenticated_async_client, test_db) -> None:
-    client: AsyncClient = authenticated_async_client
-
-    user = User(
-        id="550e8400-e29b-41d4-a716-446655440000",
-        email="ws-api-materialize@example.com",
-        hashed_password="hash",
-        full_name="Owner",
-        is_active=True,
-    )
-    tenant = Tenant(
-        id="tenant-ws-api-materialize",
-        name="TenantMaterialize",
-        slug="tenant-ws-api-materialize",
-        description="tenant",
-        owner_id=user.id,
-        plan="free",
-        max_projects=10,
-        max_users=10,
-        max_storage=1024,
-    )
-    project = Project(
-        id="project-ws-api-materialize",
-        tenant_id=tenant.id,
-        name="ProjectMaterialize",
-        description="project",
-        owner_id=user.id,
-        memory_rules={},
-        graph_config={},
-    )
-    workspace = WorkspaceModel(
-        id="workspace-api-materialize",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="Workspace Materialize",
-        created_by=user.id,
-        metadata_json={},
-    )
-    membership = WorkspaceMemberModel(
-        id="wm-api-materialize",
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        invited_by=user.id,
-    )
-    user_tenant = UserTenant(
-        id="ut-api-materialize",
-        user_id=user.id,
-        tenant_id=tenant.id,
-        role="owner",
-        permissions={"admin": True, "read": True, "write": True},
-    )
-    user_project = UserProject(
-        id="up-api-materialize",
-        user_id=user.id,
-        project_id=project.id,
-        role="owner",
-    )
-
-    test_db.add_all([user, tenant, project, workspace, membership, user_tenant, user_project])
-    await test_db.commit()
-
-    response = await client.post(
-        f"/api/v1/workspaces/{workspace.id}/goal-candidates/materialize",
-        json={
-            "candidate_id": "cand-1",
-            "candidate_text": "Prepare rollback checklist",
-            "candidate_kind": "inferred",
-            "source_refs": ["message:msg-1"],
-            "evidence_strength": 0.85,
-            "source_breakdown": [
-                {"source_type": "message_signal", "score": 0.85, "ref": "message:msg-1"}
-            ],
-            "freshness": 1.0,
-            "urgency": 0.8,
-            "user_intent_confidence": 0.85,
-            "formalizable": True,
-            "decision": "formalize_new_goal",
-        },
-    )
-
-    assert response.status_code == status.HTTP_201_CREATED
-    payload = response.json()
-    assert payload["title"] == "Prepare rollback checklist"
-    assert payload["metadata"]["task_role"] == "goal_root"
-    assert payload["metadata"]["goal_origin"] == "agent_inferred"
 
 
 @pytest.mark.asyncio
@@ -1703,12 +1464,6 @@ async def test_blackboard_triggered_runtime_skips_inferred_root_creation_without
     )
     await test_db.commit()
 
-    task_decomposer = AsyncMock()
-    task_decomposer.decompose.return_value = DecompositionResult(
-        subtasks=(SubTask(id="t1", description="Draft checklist"),),
-        is_decomposed=True,
-    )
-
     @asynccontextmanager
     async def fake_session_factory():
         yield test_db
@@ -1727,7 +1482,6 @@ async def test_blackboard_triggered_runtime_skips_inferred_root_creation_without
             project.id,
             tenant.id,
             user.id,
-            task_decomposer=task_decomposer,
             user_query="Please prepare rollback checklist",
         )
 
@@ -1744,295 +1498,6 @@ async def test_blackboard_triggered_runtime_skips_inferred_root_creation_without
     assert persisted_tasks == []
 
 
-@pytest.mark.asyncio
-async def test_blackboard_triggered_runtime_completes_root_on_ready_for_completion(test_db) -> None:
-    user = User(
-        id="550e8400-e29b-41d4-a716-446655440101",
-        email="ws-api-runtime-complete@example.com",
-        hashed_password="hash",
-        full_name="Owner",
-        is_active=True,
-    )
-    tenant = Tenant(
-        id="tenant-ws-runtime-complete",
-        name="TenantRuntimeComplete",
-        slug="tenant-ws-runtime-complete",
-        description="tenant",
-        owner_id=user.id,
-        plan="free",
-        max_projects=10,
-        max_users=10,
-        max_storage=1024,
-    )
-    project = Project(
-        id="project-ws-runtime-complete",
-        tenant_id=tenant.id,
-        name="ProjectRuntimeComplete",
-        description="project",
-        owner_id=user.id,
-        memory_rules={},
-        graph_config={},
-    )
-    workspace = WorkspaceModel(
-        id="workspace-runtime-complete",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="Workspace Runtime Complete",
-        created_by=user.id,
-        metadata_json={},
-    )
-    membership = WorkspaceMemberModel(
-        id="wm-runtime-complete",
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        invited_by=user.id,
-    )
-    root_task = WorkspaceTaskModel(
-        id="root-runtime-complete",
-        workspace_id=workspace.id,
-        title="Prepare rollback checklist",
-        created_by=user.id,
-        status="in_progress",
-        metadata_json={
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["blackboard:post-runtime-complete"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {
-                        "source_type": "blackboard_signal",
-                        "ref": "blackboard:post-runtime-complete",
-                        "score": 0.85,
-                    }
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "ready_for_completion",
-        },
-    )
-    child_task = WorkspaceTaskModel(
-        id="child-runtime-complete",
-        workspace_id=workspace.id,
-        title="Draft checklist",
-        created_by=user.id,
-        status="done",
-        completed_at=datetime.now(UTC),
-        metadata_json={
-            "autonomy_schema_version": 1,
-            "task_role": "execution_task",
-            "root_goal_task_id": root_task.id,
-            "lineage_source": "agent",
-            "evidence_refs": ["artifact:file-1"],
-            "execution_verifications": ["browser_assert:rollback_check"],
-        },
-    )
-    blackboard_post = BlackboardPostModel(
-        id="post-runtime-complete",
-        workspace_id=workspace.id,
-        author_id=user.id,
-        title="Directive",
-        content="Please prepare rollback checklist",
-        status="open",
-        is_pinned=True,
-    )
-    user_tenant = UserTenant(
-        id="ut-runtime-complete",
-        user_id=user.id,
-        tenant_id=tenant.id,
-        role="owner",
-        permissions={"admin": True, "read": True, "write": True},
-    )
-    user_project = UserProject(
-        id="up-runtime-complete",
-        user_id=user.id,
-        project_id=project.id,
-        role="owner",
-    )
-    test_db.add_all(
-        [
-            user,
-            tenant,
-            project,
-            workspace,
-            membership,
-            root_task,
-            child_task,
-            blackboard_post,
-            user_tenant,
-            user_project,
-        ]
-    )
-    await test_db.commit()
-
-    @asynccontextmanager
-    async def fake_session_factory():
-        yield test_db
-
-    with (
-        patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-            fake_session_factory,
-        ),
-        patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-            AsyncMock(return_value=None),
-        ),
-    ):
-        result = await maybe_materialize_workspace_goal_candidate(
-            project.id,
-            tenant.id,
-            user.id,
-            user_query="Please prepare rollback checklist",
-        )
-
-    assert result is not None
-    refreshed_root = await test_db.get(WorkspaceTaskModel, root_task.id)
-    assert refreshed_root is not None
-    await test_db.refresh(refreshed_root)
-    assert refreshed_root.status == "done"
-    assert "goal_evidence" in refreshed_root.metadata_json
-    assert refreshed_root.metadata_json["goal_evidence"]["verification_grade"] in {"pass", "warn"}
-
-
-@pytest.mark.asyncio
-async def test_blackboard_triggered_runtime_blocks_root_only_for_human_review_escalation(
-    test_db,
-) -> None:
-    user = User(
-        id="550e8400-e29b-41d4-a716-446655440102",
-        email="ws-api-runtime-block@example.com",
-        hashed_password="hash",
-        full_name="Owner",
-        is_active=True,
-    )
-    tenant = Tenant(
-        id="tenant-ws-runtime-block",
-        name="TenantRuntimeBlock",
-        slug="tenant-ws-runtime-block",
-        description="tenant",
-        owner_id=user.id,
-        plan="free",
-        max_projects=10,
-        max_users=10,
-        max_storage=1024,
-    )
-    project = Project(
-        id="project-ws-runtime-block",
-        tenant_id=tenant.id,
-        name="ProjectRuntimeBlock",
-        description="project",
-        owner_id=user.id,
-        memory_rules={},
-        graph_config={},
-    )
-    workspace = WorkspaceModel(
-        id="workspace-runtime-block",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="Workspace Runtime Block",
-        created_by=user.id,
-        metadata_json={},
-    )
-    membership = WorkspaceMemberModel(
-        id="wm-runtime-block",
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        invited_by=user.id,
-    )
-    root_task = WorkspaceTaskModel(
-        id="root-runtime-block",
-        workspace_id=workspace.id,
-        title="Prepare rollback checklist",
-        created_by=user.id,
-        status="in_progress",
-        metadata_json={
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "agent_inferred",
-            "goal_source_refs": ["blackboard:post-runtime-block"],
-            "goal_evidence_bundle": {
-                "score": 0.85,
-                "signals": [
-                    {
-                        "source_type": "blackboard_signal",
-                        "ref": "blackboard:post-runtime-block",
-                        "score": 0.85,
-                    }
-                ],
-                "formalized_at": "2026-04-16T03:00:00Z",
-            },
-            "remediation_status": "replan_required",
-            "replan_attempt_count": 2,
-        },
-    )
-    blackboard_post = BlackboardPostModel(
-        id="post-runtime-block",
-        workspace_id=workspace.id,
-        author_id=user.id,
-        title="Directive",
-        content="Please prepare rollback checklist",
-        status="open",
-        is_pinned=True,
-    )
-    user_tenant = UserTenant(
-        id="ut-runtime-block",
-        user_id=user.id,
-        tenant_id=tenant.id,
-        role="owner",
-        permissions={"admin": True, "read": True, "write": True},
-    )
-    user_project = UserProject(
-        id="up-runtime-block",
-        user_id=user.id,
-        project_id=project.id,
-        role="owner",
-    )
-    test_db.add_all(
-        [
-            user,
-            tenant,
-            project,
-            workspace,
-            membership,
-            root_task,
-            blackboard_post,
-            user_tenant,
-            user_project,
-        ]
-    )
-    await test_db.commit()
-
-    @asynccontextmanager
-    async def fake_session_factory():
-        yield test_db
-
-    with (
-        patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
-            fake_session_factory,
-        ),
-        patch(
-            "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
-            AsyncMock(return_value=None),
-        ),
-    ):
-        result = await maybe_materialize_workspace_goal_candidate(
-            project.id,
-            tenant.id,
-            user.id,
-            user_query="Please prepare rollback checklist",
-        )
-
-    assert result is not None
-    refreshed_root = await test_db.get(WorkspaceTaskModel, root_task.id)
-    assert refreshed_root is not None
-    await test_db.refresh(refreshed_root)
-    assert refreshed_root.status == "blocked"
-    assert "requires human review" in refreshed_root.metadata_json["remediation_summary"]
 
 
 @pytest.mark.asyncio
@@ -2610,18 +2075,17 @@ async def test_retry_followup_launch_can_ingest_new_candidate_and_return_to_adju
 
 
 @pytest.mark.asyncio
-async def test_create_objective_auto_binds_builtin_leader_when_workspace_has_no_agents(
+async def test_create_objective_schedules_tick_without_auto_binding_legacy_leader(
     authenticated_async_client, test_db, monkeypatch
 ) -> None:
     client: AsyncClient = authenticated_async_client
-    triggered: dict[str, object] = {}
-
-    def _capture_fire(**kwargs: object) -> None:
-        triggered.update(kwargs)
+    scheduled_ticks: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.cyber_objectives._fire_mention_routing",
-        _capture_fire,
+        "src.infrastructure.adapters.primary.web.routers.cyber_objectives.schedule_autonomy_tick",
+        lambda workspace_id, actor_user_id: scheduled_ticks.append(
+            (str(workspace_id), str(actor_user_id))
+        ),
     )
 
     user = User(
@@ -2692,307 +2156,9 @@ async def test_create_objective_auto_binds_builtin_leader_when_workspace_has_no_
     binding = await test_db.scalar(
         select(WorkspaceAgentModel).where(WorkspaceAgentModel.workspace_id == workspace.id)
     )
-    assert binding is not None
-    assert binding.agent_id == BUILTIN_SISYPHUS_ID
-    builtin_agent = await test_db.get(AgentDefinitionModel, BUILTIN_SISYPHUS_ID)
-    assert builtin_agent is not None
+    assert binding is None
     message = await test_db.scalar(
         select(WorkspaceMessageModel).where(WorkspaceMessageModel.workspace_id == workspace.id)
     )
-    assert message is not None
-    assert message.mentions_json == [BUILTIN_SISYPHUS_ID]
-    assert message.metadata_json["conversation_scope"] == f"objective:{response.json()['id']}"
-    triggered_message = triggered["message"]
-    assert triggered_message.mentions == [BUILTIN_SISYPHUS_ID]
-
-
-@pytest.mark.asyncio
-async def test_goal_candidates_self_heals_missing_leader_binding_and_triggers_existing_root(
-    authenticated_async_client, test_db, monkeypatch
-) -> None:
-    client: AsyncClient = authenticated_async_client
-    triggered: dict[str, object] = {}
-
-    def _capture_fire(**kwargs: object) -> None:
-        triggered.update(kwargs)
-
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap._fire_mention_routing",
-        _capture_fire,
-    )
-
-    user = User(
-        id="550e8400-e29b-41d4-a716-446655440000",
-        email="ws-api-goal-heal@example.com",
-        hashed_password="hash",
-        full_name="Owner",
-        is_active=True,
-    )
-    tenant = Tenant(
-        id="tenant-ws-api-goal-heal",
-        name="TenantGoalHeal",
-        slug="tenant-ws-api-goal-heal",
-        description="tenant",
-        owner_id=user.id,
-        plan="free",
-        max_projects=10,
-        max_users=10,
-        max_storage=1024,
-    )
-    project = Project(
-        id="project-ws-api-goal-heal",
-        tenant_id=tenant.id,
-        name="ProjectGoalHeal",
-        description="project",
-        owner_id=user.id,
-        memory_rules={},
-        graph_config={},
-    )
-    workspace = WorkspaceModel(
-        id="workspace-api-goal-heal",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="Workspace Goal Heal",
-        created_by=user.id,
-        metadata_json={},
-    )
-    membership = WorkspaceMemberModel(
-        id="wm-api-goal-heal",
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        invited_by=user.id,
-    )
-    objective = CyberObjectiveModel(
-        id="objective-api-goal-heal",
-        workspace_id=workspace.id,
-        title="Heal existing root",
-        description="desc",
-        obj_type="objective",
-        parent_id=None,
-        progress=0.0,
-        created_by=user.id,
-    )
-    root_task = WorkspaceTaskModel(
-        id="root-api-goal-heal",
-        workspace_id=workspace.id,
-        title="Heal existing root",
-        created_by=user.id,
-        status="todo",
-        metadata_json={
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "existing_objective",
-            "goal_source_refs": [f"objective:{objective.id}"],
-            "goal_formalization_reason": "selected workspace objective projected into execution root",
-            "objective_id": objective.id,
-            "root_goal_policy": {
-                "mutable_by_agent": False,
-                "completion_requires_external_proof": True,
-            },
-            "goal_health": "healthy",
-            "replan_attempt_count": 0,
-            "last_mutation_actor": {
-                "action": "create",
-                "actor_type": "human",
-                "actor_user_id": user.id,
-                "reason": "workspace_task.create",
-            },
-        },
-    )
-    user_tenant = UserTenant(
-        id="ut-api-goal-heal",
-        user_id=user.id,
-        tenant_id=tenant.id,
-        role="owner",
-        permissions={"admin": True, "read": True, "write": True},
-    )
-    user_project = UserProject(
-        id="up-api-goal-heal",
-        user_id=user.id,
-        project_id=project.id,
-        role="owner",
-    )
-    test_db.add_all(
-        [
-            user,
-            tenant,
-            project,
-            workspace,
-            membership,
-            objective,
-            root_task,
-            user_tenant,
-            user_project,
-        ]
-    )
-    await test_db.commit()
-
-    response = await client.get(f"/api/v1/workspaces/{workspace.id}/goal-candidates")
-
-    assert response.status_code == status.HTTP_200_OK
-    binding = await test_db.scalar(
-        select(WorkspaceAgentModel).where(WorkspaceAgentModel.workspace_id == workspace.id)
-    )
-    assert binding is not None
-    assert binding.agent_id == BUILTIN_SISYPHUS_ID
-    message = await test_db.scalar(
-        select(WorkspaceMessageModel).where(WorkspaceMessageModel.workspace_id == workspace.id)
-    )
-    assert message is not None
-    assert message.metadata_json["conversation_scope"] == f"objective:{objective.id}"
-    assert message.mentions_json == [BUILTIN_SISYPHUS_ID]
-    assert triggered["workspace_id"] == workspace.id
-    triggered_message = triggered["message"]
-    assert triggered_message.mentions == [BUILTIN_SISYPHUS_ID]
-
-
-@pytest.mark.asyncio
-async def test_goal_candidates_triggers_existing_root_when_agents_exist_but_no_bootstrap_message(
-    authenticated_async_client, test_db, monkeypatch
-) -> None:
-    client: AsyncClient = authenticated_async_client
-    triggered: dict[str, object] = {}
-
-    def _capture_fire(**kwargs: object) -> None:
-        triggered.update(kwargs)
-
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap._fire_mention_routing",
-        _capture_fire,
-    )
-
-    user = User(
-        id="550e8400-e29b-41d4-a716-446655440000",
-        email="ws-api-goal-existing-agents@example.com",
-        hashed_password="hash",
-        full_name="Owner",
-        is_active=True,
-    )
-    tenant = Tenant(
-        id="tenant-ws-api-goal-existing-agents",
-        name="TenantGoalExistingAgents",
-        slug="tenant-ws-api-goal-existing-agents",
-        description="tenant",
-        owner_id=user.id,
-        plan="free",
-        max_projects=10,
-        max_users=10,
-        max_storage=1024,
-    )
-    project = Project(
-        id="project-ws-api-goal-existing-agents",
-        tenant_id=tenant.id,
-        name="ProjectGoalExistingAgents",
-        description="project",
-        owner_id=user.id,
-        memory_rules={},
-        graph_config={},
-    )
-    workspace = WorkspaceModel(
-        id="workspace-api-goal-existing-agents",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="Workspace Goal Existing Agents",
-        created_by=user.id,
-        metadata_json={},
-    )
-    membership = WorkspaceMemberModel(
-        id="wm-api-goal-existing-agents",
-        workspace_id=workspace.id,
-        user_id=user.id,
-        role="owner",
-        invited_by=user.id,
-    )
-    agent = AgentDefinitionModel(
-        id="agent-api-goal-existing-agents",
-        tenant_id=tenant.id,
-        project_id=project.id,
-        name="atlas-existing-agents",
-        display_name="Atlas - Master Orchestrator",
-        system_prompt="You lead execution.",
-        allowed_tools=[],
-        allowed_skills=[],
-        allowed_mcp_servers=[],
-    )
-    binding = WorkspaceAgentModel(
-        id="wa-api-goal-existing-agents",
-        workspace_id=workspace.id,
-        agent_id=agent.id,
-        display_name="Atlas - Master Orchestrator",
-        description=None,
-        config_json={},
-        is_active=True,
-    )
-    objective = CyberObjectiveModel(
-        id="objective-api-goal-existing-agents",
-        workspace_id=workspace.id,
-        title="Existing agent root trigger",
-        description="desc",
-        obj_type="objective",
-        parent_id=None,
-        progress=0.0,
-        created_by=user.id,
-    )
-    root_task = WorkspaceTaskModel(
-        id="root-api-goal-existing-agents",
-        workspace_id=workspace.id,
-        title="Existing agent root trigger",
-        created_by=user.id,
-        status="todo",
-        metadata_json={
-            "autonomy_schema_version": 1,
-            "task_role": "goal_root",
-            "goal_origin": "existing_objective",
-            "goal_source_refs": [f"objective:{objective.id}"],
-            "goal_formalization_reason": "selected workspace objective projected into execution root",
-            "objective_id": objective.id,
-            "root_goal_policy": {
-                "mutable_by_agent": False,
-                "completion_requires_external_proof": True,
-            },
-            "goal_health": "healthy",
-            "replan_attempt_count": 0,
-        },
-    )
-    user_tenant = UserTenant(
-        id="ut-api-goal-existing-agents",
-        user_id=user.id,
-        tenant_id=tenant.id,
-        role="owner",
-        permissions={"admin": True, "read": True, "write": True},
-    )
-    user_project = UserProject(
-        id="up-api-goal-existing-agents",
-        user_id=user.id,
-        project_id=project.id,
-        role="owner",
-    )
-    test_db.add_all(
-        [
-            user,
-            tenant,
-            project,
-            workspace,
-            membership,
-            agent,
-            binding,
-            objective,
-            root_task,
-            user_tenant,
-            user_project,
-        ]
-    )
-    await test_db.commit()
-
-    response = await client.get(f"/api/v1/workspaces/{workspace.id}/goal-candidates")
-
-    assert response.status_code == status.HTTP_200_OK
-    message = await test_db.scalar(
-        select(WorkspaceMessageModel).where(WorkspaceMessageModel.workspace_id == workspace.id)
-    )
-    assert message is not None
-    assert message.metadata_json["conversation_scope"] == f"objective:{objective.id}"
-    assert message.mentions_json == [agent.id]
-    assert triggered["workspace_id"] == workspace.id
-    assert triggered["message"].mentions == [agent.id]
+    assert message is None
+    assert scheduled_ticks == [(workspace.id, user.id)]

@@ -55,7 +55,6 @@ class WorkspaceAutonomyOrchestrator:
         user_id: str,
         *,
         leader_agent_id: str | None = None,
-        task_decomposer: _runtime.TaskDecomposerProtocol | None = None,
         user_query: str = "",
     ) -> WorkspaceTask | None:
         """Forward to :func:`workspace_goal_runtime.maybe_materialize_workspace_goal_candidate`."""
@@ -64,7 +63,6 @@ class WorkspaceAutonomyOrchestrator:
             tenant_id,
             user_id,
             leader_agent_id=leader_agent_id,
-            task_decomposer=task_decomposer,
             user_query=user_query,
         )
 

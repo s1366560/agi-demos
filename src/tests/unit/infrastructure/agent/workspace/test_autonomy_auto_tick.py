@@ -224,14 +224,14 @@ class TestWorkerReportHook:
         schedule_idx = source.index("schedule_autonomy_tick")
         assert commit_idx < schedule_idx
 
-    def test_autonomy_tick_kicks_off_v2_plan_before_leader_message(self) -> None:
-        """The explicit/auto tick path must feed the durable plan before dispatch."""
+    def test_autonomy_tick_uses_v2_plan_without_leader_message(self) -> None:
+        """The explicit/auto tick path must feed the durable plan directly."""
         import inspect
 
         source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
-        kickoff_idx = source.index("kickoff_v2_plan")
-        message_idx = source.index("message_service.send_message")
-        assert kickoff_idx < message_idx
+        assert "kickoff_v2_plan" in source
+        assert "message_service.send_message" not in source
+        assert "_fire_mention_routing" not in source
 
     def test_ready_for_completion_auto_complete_precedes_v2_kickoff(self) -> None:
         """Root auto-completion must be attempted before any side-by-side kickoff."""
@@ -241,7 +241,7 @@ class TestWorkerReportHook:
         auto_complete_idx = source.index("_try_auto_complete_root")
         kickoff_idx = source.index("kickoff_v2_plan")
         assert auto_complete_idx < kickoff_idx
-        assert 'if remediation_status != "ready_for_completion"' in source
+        assert '"reason": "root_auto_complete_pending"' in source
 
     def test_auto_complete_reconciles_durable_plan_before_commit(self) -> None:
         """Root completion must reconcile the V2 projection before publish/commit."""
@@ -253,31 +253,25 @@ class TestWorkerReportHook:
         commit_idx = source.index("await db.commit()")
         assert reconcile_idx < publish_idx < commit_idx
 
-    def test_durable_plan_children_suppress_extra_leader_message(self) -> None:
-        """Once V2 has nominal compat tasks, the tick must not ask Sisyphus to replan."""
+    def test_durable_plan_children_absorb_tick_without_leader_message(self) -> None:
+        """Once V2 has projected tasks, the tick must not invoke legacy routing."""
         import inspect
 
         source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
-        gate_idx = source.index("_durable_plan_can_suppress_leader_message")
         lookup_idx = source.index("_root_has_workspace_plan_linked_children")
-        message_idx = source.index("message_service.send_message")
-        assert gate_idx < lookup_idx < message_idx
+        assert lookup_idx > source.index("kickoff_v2_plan")
         assert '"reason": "durable_plan_active"' in source
+        assert "message_service.send_message" not in source
 
-    def test_durable_plan_kickoff_suppresses_initial_leader_message(self) -> None:
-        """A successful V2 kickoff owns the initial decomposition; Sisyphus must not split again."""
+    def test_durable_plan_kickoff_owns_initial_decomposition(self) -> None:
+        """A successful V2 kickoff owns the initial decomposition."""
         import inspect
 
         source = inspect.getsource(wlb.maybe_auto_trigger_existing_root_execution)
         kickoff_idx = source.index("durable_plan_started = await kickoff_v2_plan")
-        suppress_idx = source.index('"reason": "durable_plan_started"')
-        message_idx = source.index("message_service.send_message")
-        assert kickoff_idx < suppress_idx < message_idx
-
-    def test_durable_plan_gate_does_not_suppress_remediation(self) -> None:
-        assert wlb._durable_plan_can_suppress_leader_message("none") is True
-        assert wlb._durable_plan_can_suppress_leader_message("replan_required") is False
-        assert wlb._durable_plan_can_suppress_leader_message("ready_for_completion") is False
+        suppress_idx = source.rindex('"reason": "durable_plan_started"')
+        assert kickoff_idx < suppress_idx
+        assert "message_service.send_message" not in source
 
     @pytest.mark.asyncio
     async def test_root_has_workspace_plan_linked_children(self) -> None:
@@ -533,28 +527,6 @@ class TestAutoCompleteEnabled:
     def test_enabled_values(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
         monkeypatch.setenv(wlb._AUTO_COMPLETE_ENV, val)
         assert wlb._auto_complete_enabled() is True
-
-
-class TestAutonomyMentionContent:
-    def test_ready_for_completion_variant(self) -> None:
-        content = wlb._build_autonomy_mention_content("@leader", "Ship MVP", "ready_for_completion")
-        assert "@leader" in content
-        assert "Ship MVP" in content
-        assert "已完成" in content
-        assert "verify" in content.lower()
-
-    def test_replan_required_variant(self) -> None:
-        content = wlb._build_autonomy_mention_content("@leader", "Ship MVP", "replan_required")
-        assert "重新规划" in content
-        assert "replan" in content.lower()
-        assert "todoread" in content
-        assert "todowrite" in content
-        assert "Do not use implementation tools" in content
-
-    def test_default_variant(self) -> None:
-        content = wlb._build_autonomy_mention_content("@leader", "Ship MVP", "nominal")
-        assert "中央黑板" in content
-        assert "decompose" in content.lower()
 
 
 class TestTryAutoCompleteRoot:

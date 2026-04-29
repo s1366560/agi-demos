@@ -729,7 +729,7 @@ class WorkspaceTaskService:
         self._require_worker_ownership(task, authority)
         if target != WorkspaceTaskStatus.IN_PROGRESS:
             raise PermissionError(
-                "Only Sisyphus leader authority may finalize or block execution tasks"
+                "Only workspace plan leader authority may finalize or block execution tasks"
             )
 
     async def _ensure_root_not_todo_for_child_start(
@@ -756,7 +756,7 @@ class WorkspaceTaskService:
         action: str,
     ) -> None:
         if authority.role != "leader":
-            raise PermissionError(f"Only Sisyphus leader authority may {action}")
+            raise PermissionError(f"Only workspace plan leader authority may {action}")
 
     @staticmethod
     def _require_worker_ownership(

@@ -1,8 +1,7 @@
 """Workspace autonomy manual control endpoints.
 
 Exposes an explicit trigger so operators (or the blackboard UI) can request
-that the workspace leader picks up the next autonomy step, bypassing the
-implicit ``GET /goal-candidates`` polling path.
+that the durable workspace plan runtime advances the next autonomy step.
 """
 
 from __future__ import annotations
@@ -53,7 +52,7 @@ async def trigger_workspace_autonomy_tick(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AutonomyTickResponse:
-    """Ask the leader to advance the next workspace autonomy step.
+    """Ask the durable workspace plan runtime to advance the next autonomy step.
 
     The endpoint is idempotent within a 60 second cooldown per root task.
     Pass ``force=true`` to bypass the cooldown (e.g. after the user clicks
