@@ -23,7 +23,7 @@ import contextlib
 import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -246,7 +246,11 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 )
                 verifies_ran += 1
                 if report.passed:
-                    accepted_node = _node_with_verification_evidence(node, report)
+                    accepted_node = _node_with_verification_evidence(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
                     plan.replace_node(
                         _force_intent(
                             _force_execution(accepted_node, TaskExecution.IDLE),
@@ -790,6 +794,9 @@ def _completed_task_payload(node: PlanNode) -> dict[str, object]:
     evidence_refs = _node_evidence_refs(node)
     if evidence_refs:
         payload["evidence_refs"] = evidence_refs
+    artifacts = _node_artifacts(node)
+    if artifacts:
+        payload["artifacts"] = artifacts
     if node.feature_checkpoint is not None and node.feature_checkpoint.expected_artifacts:
         payload["expected_artifacts"] = list(node.feature_checkpoint.expected_artifacts)
     summary = _node_verification_summary(node)
@@ -803,6 +810,7 @@ def _iteration_deliverables(nodes: list[PlanNode]) -> list[str]:
     for node in nodes:
         if node.feature_checkpoint is not None:
             values.extend(node.feature_checkpoint.expected_artifacts)
+        values.extend(_node_artifacts(node))
         write_set = dict(node.metadata or {}).get("write_set")
         if isinstance(write_set, list):
             values.extend(item for item in write_set if isinstance(item, str) and item)
@@ -843,6 +851,19 @@ def _node_evidence_refs(node: PlanNode) -> list[str]:
     if isinstance(raw, list):
         return [item for item in raw if isinstance(item, str) and item]
     return []
+
+
+def _node_artifacts(node: PlanNode) -> list[str]:
+    metadata = dict(node.metadata or {})
+    values: list[str] = []
+    for key in (
+        "candidate_artifacts",
+        "last_worker_report_artifacts",
+        "execution_artifacts",
+        "expected_artifacts",
+    ):
+        values.extend(_string_list(metadata.get(key)))
+    return list(dict.fromkeys(values))
 
 
 def _current_iteration_task_budget(plan: Plan, iteration_index: int) -> int:
@@ -1101,7 +1122,12 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
     }
 
 
-def _node_with_verification_evidence(node: PlanNode, report: VerificationReport) -> PlanNode:
+def _node_with_verification_evidence(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    artifacts: Mapping[str, Any] | None = None,
+) -> PlanNode:
     refs = _report_evidence_refs(report)
     commit_ref = _first_prefixed_value(refs, "commit_ref:")
     git_diff_summary = _first_prefixed_value(refs, "git_diff_summary:")
@@ -1122,6 +1148,8 @@ def _node_with_verification_evidence(node: PlanNode, report: VerificationReport)
         metadata["verified_git_diff_summary"] = git_diff_summary
     if test_commands:
         metadata["verified_test_commands"] = list(test_commands)
+    if artifacts:
+        _copy_verification_artifacts(metadata, artifacts)
 
     feature_checkpoint = node.feature_checkpoint
     if feature_checkpoint is not None and commit_ref:
@@ -1151,6 +1179,36 @@ def _report_evidence_refs(report: VerificationReport) -> list[str]:
     for result in report.results:
         refs.extend(evidence.ref for evidence in result.evidence if evidence.ref)
     return list(dict.fromkeys(refs))
+
+
+def _copy_verification_artifacts(
+    metadata: dict[str, Any],
+    artifacts: Mapping[str, Any],
+) -> None:
+    for key in (
+        "candidate_artifacts",
+        "last_worker_report_artifacts",
+        "execution_artifacts",
+    ):
+        values = _string_list(artifacts.get(key))
+        if values:
+            metadata[key] = values
+    for key in (
+        "candidate_verifications",
+        "last_worker_report_verifications",
+        "execution_verifications",
+    ):
+        values = _string_list(artifacts.get(key))
+        if values:
+            metadata[key] = values
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list | tuple):
+        return [str(item) for item in value if item]
+    return []
 
 
 def _first_prefixed_value(values: list[str], prefix: str) -> str | None:

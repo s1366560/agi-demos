@@ -627,7 +627,9 @@ async def test_worker_launch_handler_defers_when_active_worker_capacity_reached(
     assert deferred_jobs[0].next_attempt_at is not None
     assert deferred_jobs[0].max_attempts == 9
     assert deferred_jobs[0].payload_json["attempt_id"] == "queued-worker-attempt"
-    assert deferred_jobs[0].metadata_json["source"] == "workspace_plan.worker_launch.deferred_capacity"
+    assert (
+        deferred_jobs[0].metadata_json["source"] == "workspace_plan.worker_launch.deferred_capacity"
+    )
     assert deferred_jobs[0].metadata_json["active_worker_conversations"] == 1
     assert deferred_jobs[0].metadata_json["max_active_worker_conversations"] == 1
 
@@ -819,6 +821,8 @@ async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch
             worker_agent_id="worker-agent",
             leader_agent_id=BUILTIN_SISYPHUS_ID,
             leader_feedback="accepted by durable verifier",
+            candidate_artifacts_json=["docs/final-report.md"],
+            candidate_verifications_json=["test_run:pytest final"],
         )
     )
     plan.replace_node(
@@ -881,12 +885,10 @@ async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch
     assert reconciled_leaf.intent is TaskIntent.DONE
     assert reconciled_leaf.execution is TaskExecution.IDLE
     assert reconciled_leaf.metadata["terminal_attempt_status"] == "accepted"
-    assert reconciled_leaf.metadata["last_verification_summary"] == (
-        "accepted by durable verifier"
-    )
-    assert reconciled_leaf.metadata["last_verification_attempt_id"] == (
-        "accepted-terminal-attempt"
-    )
+    assert reconciled_leaf.metadata["last_verification_summary"] == ("accepted by durable verifier")
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == ("accepted-terminal-attempt")
+    assert reconciled_leaf.metadata["candidate_artifacts"] == ["docs/final-report.md"]
+    assert reconciled_leaf.metadata["candidate_verifications"] == ["test_run:pytest final"]
     outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
         "workspace-1",
         limit=5,
@@ -993,9 +995,7 @@ async def test_supervisor_tick_releases_blocked_node_with_terminal_attempt(
     assert retried_leaf.intent is TaskIntent.IN_PROGRESS
     assert retried_leaf.execution is TaskExecution.DISPATCHED
     assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
-    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == (
-        "terminal_attempt_blocked"
-    )
+    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == ("terminal_attempt_blocked")
     assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
 
 

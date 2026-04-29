@@ -949,6 +949,7 @@ def _supervisor_for_iteration_review(
     repo: InMemoryPlanRepository,
     reviewer: _StaticIterationReviewer,
     events: list[tuple[str, str, dict[str, Any]]],
+    artifacts_by_node: dict[str, dict[str, Any]] | None = None,
 ) -> WorkspaceSupervisor:
     async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
         return []
@@ -957,7 +958,12 @@ def _supervisor_for_iteration_review(
         return None
 
     async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
-        return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+        return VerificationContext(
+            workspace_id=wid,
+            node=node,
+            attempt_id=node.current_attempt_id,
+            artifacts=dict((artifacts_by_node or {}).get(node.id, {})),
+        )
 
     async def event_sink(
         _wid: str,
@@ -1388,11 +1394,73 @@ class TestSupervisorTick:
         accepted = reloaded.nodes[PlanNodeId("b")]
         assert accepted.metadata["last_verification_summary"] == "verified (0 criteria passed)"
         assert accepted.metadata["last_verification_attempt_id"] == "attempt-current"
-        completed = {
-            str(item["id"]): item for item in reviewer.contexts[0].completed_tasks
-        }
+        completed = {str(item["id"]): item for item in reviewer.contexts[0].completed_tasks}
         assert completed["b"]["verification_summary"] == "verified (0 criteria passed)"
         assert "stale attempt" not in completed["b"]["verification_summary"]
+
+    async def test_iteration_review_context_includes_verified_attempt_artifacts(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "iteration_index": 1,
+                    "iteration_phase": "research",
+                    "candidate_artifacts": ["docs/research.md"],
+                },
+            )
+        )
+        plan.replace_node(
+            replace(
+                b,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-current",
+                metadata={"iteration_index": 1, "iteration_phase": "review"},
+            )
+        )
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="complete_goal",
+                confidence=0.9,
+                summary="Verified artifacts satisfy the goal.",
+            )
+        )
+
+        await _supervisor_for_iteration_review(
+            repo,
+            reviewer,
+            events,
+            artifacts_by_node={
+                "b": {
+                    "candidate_artifacts": ["src/runtime/supervisor.py"],
+                    "candidate_verifications": ["test_run:pytest workspace_plan"],
+                }
+            },
+        ).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        verified_node = reloaded.nodes[PlanNodeId("b")]
+        assert verified_node.metadata["candidate_artifacts"] == ["src/runtime/supervisor.py"]
+        assert verified_node.metadata["candidate_verifications"] == [
+            "test_run:pytest workspace_plan"
+        ]
+        assert "docs/research.md" in reviewer.contexts[0].deliverables
+        assert "src/runtime/supervisor.py" in reviewer.contexts[0].deliverables
+        completed = {str(item["id"]): item for item in reviewer.contexts[0].completed_tasks}
+        assert completed["b"]["artifacts"] == ["src/runtime/supervisor.py"]
 
     async def test_iteration_review_context_suppresses_superseded_terminal_failure_summary(
         self,
@@ -1424,9 +1492,7 @@ class TestSupervisorTick:
 
         await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
 
-        completed = {
-            str(item["id"]): item for item in reviewer.contexts[0].completed_tasks
-        }
+        completed = {str(item["id"]): item for item in reviewer.contexts[0].completed_tasks}
         assert completed["b"]["verification_summary"] == "accepted terminal attempt"
         assert reviewer.contexts[0].feedback_items == ()
 
@@ -1532,9 +1598,7 @@ class TestSupervisorTick:
         )
         assert evidence_node.feature_checkpoint is not None
         assert evidence_node.feature_checkpoint.expected_artifacts == ()
-        assert evidence_node.metadata["expected_artifacts"] == [
-            "docs/E2E-ACCEPTANCE-REPORT.md"
-        ]
+        assert evidence_node.metadata["expected_artifacts"] == ["docs/E2E-ACCEPTANCE-REPORT.md"]
 
     async def test_completed_iteration_suspends_at_max_iterations(
         self,

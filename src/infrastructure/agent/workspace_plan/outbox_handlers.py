@@ -363,12 +363,10 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             )
             changed = True
             continue
-        status = str(attempt.status or "")
+        status = _attempt_status_value(attempt)
         if status == "accepted":
             summary = str(
-                attempt.leader_feedback
-                or attempt.candidate_summary
-                or "accepted terminal attempt"
+                attempt.leader_feedback or attempt.candidate_summary or "accepted terminal attempt"
             )
             plan.replace_node(
                 replace(
@@ -384,6 +382,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                         "last_verification_hard_fail": False,
                         "last_verification_attempt_id": attempt.id,
                         "last_verification_ran_at": now.isoformat().replace("+00:00", "Z"),
+                        **_accepted_attempt_evidence_metadata(attempt),
                     },
                     updated_at=now,
                 )
@@ -403,6 +402,50 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     if changed:
         await repo.save(plan)
     return changed
+
+
+def _accepted_attempt_evidence_metadata(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    candidate_artifacts = _attempt_list_field(
+        attempt,
+        domain_field="candidate_artifacts",
+        model_field="candidate_artifacts_json",
+    )
+    candidate_verifications = _attempt_list_field(
+        attempt,
+        domain_field="candidate_verifications",
+        model_field="candidate_verifications_json",
+    )
+    if candidate_artifacts:
+        metadata["candidate_artifacts"] = candidate_artifacts
+    if candidate_verifications:
+        metadata["candidate_verifications"] = candidate_verifications
+    return metadata
+
+
+def _attempt_status_value(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> str:
+    status = attempt.status
+    return (
+        status.value if isinstance(status, WorkspaceTaskSessionAttemptStatus) else str(status or "")
+    )
+
+
+def _attempt_list_field(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+    *,
+    domain_field: str,
+    model_field: str,
+) -> list[str]:
+    value = getattr(attempt, domain_field, None)
+    if value is None:
+        value = getattr(attempt, model_field, None)
+    if isinstance(value, list | tuple):
+        return list(dict.fromkeys(str(item) for item in value if item))
+    return []
 
 
 async def _load_plan_attempt(
