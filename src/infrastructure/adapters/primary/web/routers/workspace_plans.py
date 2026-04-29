@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.workspace_service import WorkspaceService
 from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
-from src.domain.model.workspace_plan import Plan, PlanNode, PlanNodeId, Progress
+from src.domain.model.workspace_plan import Plan, PlanNode, PlanNodeId, PlanStatus, Progress
 from src.domain.model.workspace_plan.plan_node import TaskExecution, TaskIntent
 from src.domain.model.workspace_plan.state_machine import transition_execution, transition_intent
 from src.domain.ports.services.blackboard_port import BlackboardEntry
@@ -118,10 +118,25 @@ class WorkspacePlanIterationPhaseResponse(BaseModel):
     progress: int = 0
 
 
+class WorkspacePlanIterationHistoryResponse(BaseModel):
+    iteration_index: int
+    verdict: str
+    summary: str
+    confidence: float = 0.0
+    next_sprint_goal: str = ""
+    created_at: str = ""
+
+
 class WorkspacePlanIterationSummaryResponse(BaseModel):
     current_iteration: int = 1
     loop_label: str = "Scrum feedback loop"
     cadence: str = "research -> plan -> implement -> test -> deploy -> review"
+    loop_status: str = "active"
+    max_iterations: int = 8
+    completed_iterations: list[int] = Field(default_factory=list)
+    current_sprint_goal: str = ""
+    review_summary: str = ""
+    stop_reason: str = ""
     active_phase: str = "research"
     active_phase_label: str = "Research"
     next_action: str = ""
@@ -130,6 +145,8 @@ class WorkspacePlanIterationSummaryResponse(BaseModel):
     phases: list[WorkspacePlanIterationPhaseResponse] = Field(default_factory=list)
     deliverables: list[str] = Field(default_factory=list)
     feedback_items: list[str] = Field(default_factory=list)
+    history: list[WorkspacePlanIterationHistoryResponse] = Field(default_factory=list)
+    actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
 
 
 class WorkspacePlanBlackboardEntryResponse(BaseModel):
@@ -380,8 +397,19 @@ def _to_iteration_summary(
     ]
     phases = [_phase_response(phase_id, iteration_nodes) for phase_id in _ITERATION_PHASE_ORDER]
     active_phase = _active_iteration_phase(iteration_nodes)
+    loop = _goal_iteration_loop_metadata(plan)
+    loop_status = _iteration_loop_status(plan, loop)
+    review_summary = _metadata_string(loop.get("last_review_summary"))
+    stop_reason = _metadata_string(loop.get("stop_reason"))
     return WorkspacePlanIterationSummaryResponse(
         current_iteration=current_iteration,
+        loop_status=loop_status,
+        max_iterations=_metadata_int(loop.get("max_iterations"), fallback=8),
+        completed_iterations=_metadata_int_list(loop.get("completed_iterations")),
+        current_sprint_goal=_metadata_string(loop.get("current_sprint_goal"))
+        or plan.goal_node.title,
+        review_summary=review_summary,
+        stop_reason=stop_reason,
         active_phase=active_phase,
         active_phase_label=_ITERATION_PHASE_LABELS[active_phase],
         next_action=_iteration_next_action(
@@ -389,13 +417,130 @@ def _to_iteration_summary(
             nodes=iteration_nodes,
             root_goal=root_goal,
             outbox_items=outbox_items,
+            loop_status=loop_status,
+            stop_reason=stop_reason,
         ),
         task_count=len(iteration_nodes),
         task_budget=len(_ITERATION_PHASE_ORDER),
         phases=phases,
         deliverables=_iteration_deliverables(iteration_nodes, blackboard_entries),
         feedback_items=_iteration_feedback_items(root_goal, outbox_items, event_items),
+        history=_iteration_history(loop, event_items),
+        actions=_iteration_actions(plan, loop_status),
     )
+
+
+def _goal_iteration_loop_metadata(plan: Plan) -> dict[str, Any]:
+    value = dict(plan.goal_node.metadata or {}).get("iteration_loop")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _iteration_loop_status(plan: Plan, loop: dict[str, Any]) -> str:
+    value = _metadata_string(loop.get("loop_status"))
+    if value:
+        return value
+    if plan.status is PlanStatus.COMPLETED:
+        return "completed"
+    if plan.status is PlanStatus.SUSPENDED:
+        return "suspended"
+    return "active"
+
+
+def _metadata_string(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _metadata_int(value: object, *, fallback: int) -> int:
+    if isinstance(value, int):
+        return max(1, value)
+    if isinstance(value, str) and value.isdigit():
+        return max(1, int(value))
+    return fallback
+
+
+def _metadata_int_list(value: object) -> list[int]:
+    if not isinstance(value, list | tuple | set):
+        return []
+    output: list[int] = []
+    for item in value:
+        if isinstance(item, int):
+            output.append(item)
+        elif isinstance(item, str) and item.isdigit():
+            output.append(int(item))
+    return list(dict.fromkeys(output))
+
+
+def _iteration_history(
+    loop: dict[str, Any],
+    event_items: list[WorkspacePlanEventModel],
+) -> list[WorkspacePlanIterationHistoryResponse]:
+    rows: list[WorkspacePlanIterationHistoryResponse] = []
+    raw_history = loop.get("history")
+    if isinstance(raw_history, list):
+        for item in raw_history:
+            if isinstance(item, dict):
+                row = _history_response_from_payload(item)
+                if row is not None:
+                    rows.append(row)
+    for event in event_items:
+        if event.event_type not in {
+            "iteration_review_completed",
+            "iteration_next_sprint_planned",
+            "iteration_loop_completed",
+            "iteration_loop_suspended",
+        }:
+            continue
+        row = _history_response_from_payload(event.payload_json or {})
+        if row is not None:
+            rows.append(row)
+    deduped: dict[tuple[int, str, str], WorkspacePlanIterationHistoryResponse] = {}
+    for row in rows:
+        deduped[(row.iteration_index, row.verdict, row.summary)] = row
+    return list(deduped.values())[-8:]
+
+
+def _history_response_from_payload(
+    payload: dict[str, Any],
+) -> WorkspacePlanIterationHistoryResponse | None:
+    iteration_index = _metadata_int(payload.get("iteration_index"), fallback=0)
+    if iteration_index <= 0:
+        return None
+    return WorkspacePlanIterationHistoryResponse(
+        iteration_index=iteration_index,
+        verdict=_metadata_string(payload.get("verdict")) or "reviewed",
+        summary=_metadata_string(payload.get("summary")),
+        confidence=float(payload.get("confidence") or 0.0),
+        next_sprint_goal=_metadata_string(payload.get("next_sprint_goal")),
+        created_at=_metadata_string(payload.get("created_at")),
+    )
+
+
+def _iteration_actions(
+    plan: Plan,
+    loop_status: str,
+) -> dict[str, WorkspacePlanActionCapabilityResponse]:
+    is_terminal = plan.status is PlanStatus.COMPLETED
+    return {
+        "pause_auto_loop": WorkspacePlanActionCapabilityResponse(
+            enabled=not is_terminal and loop_status not in {"paused", "completed"},
+            label="Pause auto-loop",
+            reason="The iteration loop is already paused or complete."
+            if loop_status in {"paused", "completed"} or is_terminal
+            else None,
+        ),
+        "resume_auto_loop": WorkspacePlanActionCapabilityResponse(
+            enabled=not is_terminal and loop_status in {"paused", "suspended"},
+            label="Resume auto-loop",
+            reason="Only paused or suspended loops can be resumed."
+            if loop_status not in {"paused", "suspended"} or is_terminal
+            else None,
+        ),
+        "trigger_next_iteration": WorkspacePlanActionCapabilityResponse(
+            enabled=not is_terminal,
+            label="Plan next iteration",
+            reason="The plan is already complete." if is_terminal else None,
+        ),
+    }
 
 
 def _current_iteration(nodes: list[PlanNode]) -> int:
@@ -504,14 +649,22 @@ def _active_iteration_phase(nodes: list[PlanNode]) -> str:
     return "review"
 
 
-def _iteration_next_action(
+def _iteration_next_action(  # noqa: PLR0911
     *,
     phase_id: str,
     nodes: list[PlanNode],
     root_goal: WorkspacePlanRootGoalResponse | None,
     outbox_items: list[WorkspacePlanOutboxModel],
+    loop_status: str,
+    stop_reason: str,
 ) -> str:
     phase_label = _ITERATION_PHASE_LABELS[phase_id].lower()
+    if loop_status == "paused":
+        return "Auto-loop is paused. Resume it when this workspace should continue."
+    if loop_status == "suspended":
+        return stop_reason or "Auto-loop is suspended for human review."
+    if loop_status == "completed":
+        return "The iteration loop completed the root goal."
     if any(item.status in {"failed", "dead_letter"} for item in outbox_items):
         return "Recover failed queue work before advancing the sprint."
     if any(node.intent is TaskIntent.BLOCKED for node in nodes):
@@ -800,6 +953,87 @@ def _reset_node_for_operator(
         },
         completed_at=None,
         updated_at=current_time,
+    )
+
+
+async def _update_iteration_loop_for_operator(
+    *,
+    workspace_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User,
+    db: AsyncSession,
+    action: str,
+    loop_status: str,
+    plan_status: PlanStatus,
+    message: str,
+    enqueue_tick: bool,
+) -> WorkspacePlanActionResultResponse:
+    await _ensure_workspace_access(
+        workspace_id=workspace_id,
+        request=request,
+        db=db,
+        current_user=current_user,
+    )
+    plan = await _load_plan_for_workspace(db, workspace_id)
+    goal_node = plan.goal_node
+    metadata = dict(goal_node.metadata or {})
+    raw_loop = metadata.get("iteration_loop")
+    loop = dict(raw_loop) if isinstance(raw_loop, dict) else {}
+    now = datetime.now(UTC).isoformat()
+    loop.update(
+        {
+            "mode": "auto",
+            "loop_status": loop_status,
+            "stop_reason": body.reason if loop_status in {"paused", "suspended"} else "",
+            "operator_action": {
+                "action": action,
+                "actor_id": current_user.id,
+                "reason": body.reason,
+                "created_at": now,
+            },
+        }
+    )
+    metadata["iteration_loop"] = loop
+    plan.replace_node(replace(goal_node, metadata=metadata, updated_at=datetime.now(UTC)))
+    plan = replace(plan, status=plan_status, updated_at=datetime.now(UTC))
+    await SqlPlanRepository(db).save(plan)
+    _ = await SqlWorkspacePlanEventRepository(db).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id=goal_node.id,
+        event_type=action,
+        source="operator",
+        actor_id=current_user.id,
+        payload={
+            "reason": body.reason,
+            "loop_status": loop_status,
+        },
+    )
+    if enqueue_tick:
+        await _enqueue_operator_tick(
+            db=db,
+            plan=plan,
+            workspace_id=workspace_id,
+            node_id=goal_node.id,
+            actor_id=current_user.id,
+            reason=body.reason,
+            action=action,
+        )
+    await db.commit()
+    await _publish_plan_updated_event(
+        request=request,
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+        action=action,
+        node_id=goal_node.id,
+        reason=body.reason,
+    )
+    return WorkspacePlanActionResultResponse(
+        ok=True,
+        message=message,
+        plan_id=plan.id,
+        node_id=goal_node.id,
     )
 
 
@@ -1277,6 +1511,84 @@ async def retry_workspace_plan_outbox_item(
             message="Outbox job queued for retry.",
             plan_id=plan_id,
             outbox_id=outbox_id,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post("/iteration/pause", response_model=WorkspacePlanActionResultResponse)
+async def pause_workspace_plan_iteration_loop(
+    workspace_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Pause the automatic iteration loop without marking work done."""
+    try:
+        return await _update_iteration_loop_for_operator(
+            workspace_id=workspace_id,
+            body=body,
+            request=request,
+            current_user=current_user,
+            db=db,
+            action="operator_iteration_loop_paused",
+            loop_status="paused",
+            plan_status=PlanStatus.SUSPENDED,
+            message="Automatic iteration loop paused.",
+            enqueue_tick=False,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post("/iteration/resume", response_model=WorkspacePlanActionResultResponse)
+async def resume_workspace_plan_iteration_loop(
+    workspace_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Resume a paused or suspended automatic iteration loop."""
+    try:
+        return await _update_iteration_loop_for_operator(
+            workspace_id=workspace_id,
+            body=body,
+            request=request,
+            current_user=current_user,
+            db=db,
+            action="operator_iteration_loop_resumed",
+            loop_status="active",
+            plan_status=PlanStatus.ACTIVE,
+            message="Automatic iteration loop resumed.",
+            enqueue_tick=True,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post("/iteration/trigger-next", response_model=WorkspacePlanActionResultResponse)
+async def trigger_workspace_plan_next_iteration(
+    workspace_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Ask the supervisor to run the iteration review / next sprint step."""
+    try:
+        return await _update_iteration_loop_for_operator(
+            workspace_id=workspace_id,
+            body=body,
+            request=request,
+            current_user=current_user,
+            db=db,
+            action="operator_iteration_next_requested",
+            loop_status="active",
+            plan_status=PlanStatus.ACTIVE,
+            message="Next iteration review requested.",
+            enqueue_tick=True,
         )
     except Exception as exc:
         raise _map_error(exc) from exc

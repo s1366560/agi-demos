@@ -118,6 +118,27 @@ def _make_plan(workspace_id: str) -> Plan:
         title="Complete autonomous objective",
         intent=TaskIntent.IN_PROGRESS,
         execution=TaskExecution.IDLE,
+        metadata={
+            "iteration_loop": {
+                "mode": "auto",
+                "loop_status": "active",
+                "current_iteration": 1,
+                "max_iterations": 8,
+                "current_sprint_goal": "Ship the durable supervisor increment.",
+                "last_review_summary": "Previous review requested implementation evidence.",
+                "completed_iterations": [],
+                "history": [
+                    {
+                        "iteration_index": 1,
+                        "verdict": "continue_next_iteration",
+                        "summary": "Previous review requested implementation evidence.",
+                        "confidence": 0.82,
+                        "next_sprint_goal": "Ship the durable supervisor increment.",
+                        "created_at": "2026-04-29T00:00:00+00:00",
+                    }
+                ],
+            }
+        },
     )
     plan.nodes[task_id] = PlanNode(
         id=task_id.value,
@@ -214,10 +235,17 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert response.events[0].payload["summary"] == "verified"
     assert response.iteration is not None
     assert response.iteration.current_iteration == 1
+    assert response.iteration.loop_status == "active"
+    assert response.iteration.max_iterations == 8
+    assert response.iteration.current_sprint_goal == "Ship the durable supervisor increment."
+    assert response.iteration.review_summary == "Previous review requested implementation evidence."
     assert response.iteration.active_phase == "implement"
     assert response.iteration.task_count == 1
     assert "docs/sprint.md" in response.iteration.deliverables
     assert "src/runtime/supervisor.py" in response.iteration.deliverables
+    assert response.iteration.actions["pause_auto_loop"].enabled is True
+    assert response.iteration.actions["resume_auto_loop"].enabled is False
+    assert response.iteration.history[0].verdict == "continue_next_iteration"
     task_node = next(node for node in response.plan.nodes if node.id == "task-api")
     assert task_node.feature_checkpoint is not None
     assert task_node.feature_checkpoint["feature_id"] == "feature-api"
@@ -534,6 +562,86 @@ async def test_retry_workspace_plan_outbox_item_queues_failed_job(
     events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=5)
     assert events[0].event_type == "operator_retry_outbox"
     assert events[0].payload["outbox_id"] == item.id
+
+
+@pytest.mark.asyncio
+async def test_iteration_loop_pause_resume_and_trigger_update_goal_metadata(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-loop-operator"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+    request = cast(Request, SimpleNamespace())
+    current_user = cast(User, SimpleNamespace(id="plan-api-user"))
+
+    paused = await workspace_plans.pause_workspace_plan_iteration_loop(
+        workspace_id=workspace_id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="operator review"),
+        request=request,
+        current_user=current_user,
+        db=db_session,
+    )
+
+    assert paused.ok is True
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    assert loaded.status is PlanStatus.SUSPENDED
+    loop = loaded.goal_node.metadata["iteration_loop"]
+    assert loop["loop_status"] == "paused"
+    assert loop["stop_reason"] == "operator review"
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=5)
+    assert events[0].event_type == "operator_iteration_loop_paused"
+    assert (
+        await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(workspace_id, limit=5)
+    ) == []
+
+    resumed = await workspace_plans.resume_workspace_plan_iteration_loop(
+        workspace_id=workspace_id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="resume after review"),
+        request=request,
+        current_user=current_user,
+        db=db_session,
+    )
+
+    assert resumed.ok is True
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    assert loaded.status is PlanStatus.ACTIVE
+    assert loaded.goal_node.metadata["iteration_loop"]["loop_status"] == "active"
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "operator_iteration_loop_resumed"
+
+    triggered = await workspace_plans.trigger_workspace_plan_next_iteration(
+        workspace_id=workspace_id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="manual sprint review"),
+        request=request,
+        current_user=current_user,
+        db=db_session,
+    )
+
+    assert triggered.ok is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert any(
+        item.payload_json["operator_action"] == "operator_iteration_next_requested"
+        for item in outbox
+    )
 
 
 @pytest.mark.asyncio

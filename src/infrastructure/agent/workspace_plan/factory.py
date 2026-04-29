@@ -19,6 +19,7 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttemptStatus,
 )
 from src.domain.model.workspace_plan import PlanNode
+from src.domain.ports.services.iteration_review_port import IterationReviewPort
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -379,6 +380,7 @@ def build_default_orchestrator(
     *,
     config: OrchestratorConfig | None = None,
     decomposer: TaskDecomposerProtocol | None = None,
+    iteration_reviewer: IterationReviewPort | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a default, side-effect-free :class:`WorkspaceOrchestrator`.
 
@@ -402,6 +404,7 @@ def build_default_orchestrator(
         agent_pool=_empty_agent_pool,
         dispatcher=_noop_dispatcher,
         attempt_context=_default_attempt_context,
+        iteration_reviewer=iteration_reviewer,
         heartbeat_seconds=cfg.heartbeat_seconds,
         max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )
@@ -427,6 +430,7 @@ def build_sql_orchestrator(
     attempt_context: AttemptContextProvider | None = None,
     progress_sink: ProgressSink | None = None,
     event_sink: PlanEventSink | None = None,
+    iteration_reviewer: IterationReviewPort | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a SQL-backed Workspace V2 orchestrator.
 
@@ -453,6 +457,7 @@ def build_sql_orchestrator(
         attempt_context=attempt_context or _default_attempt_context,
         progress_sink=progress_sink,
         event_sink=event_sink or _make_sql_plan_event_sink(db),
+        iteration_reviewer=iteration_reviewer,
         heartbeat_seconds=cfg.heartbeat_seconds,
         max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )

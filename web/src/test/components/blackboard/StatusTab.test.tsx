@@ -17,9 +17,12 @@ vi.mock('@/services/workspaceService', () => ({
   },
   workspacePlanService: {
     getSnapshot: vi.fn(),
+    pauseAutoLoop: vi.fn(),
     reopenBlockedNode: vi.fn(),
     requestNodeReplan: vi.fn(),
+    resumeAutoLoop: vi.fn(),
     retryOutboxItem: vi.fn(),
+    triggerNextIteration: vi.fn(),
   },
 }));
 
@@ -189,6 +192,12 @@ describe('StatusTab', () => {
   });
 
   it('renders durable plan snapshot state', async () => {
+    vi.mocked(workspacePlanService.pauseAutoLoop).mockResolvedValue({
+      ok: true,
+      message: 'Automatic iteration loop paused.',
+      plan_id: 'plan-1',
+      node_id: 'goal-1',
+    });
     vi.mocked(workspacePlanService.getSnapshot).mockResolvedValueOnce({
       workspace_id: 'ws-1',
       plan: {
@@ -289,6 +298,12 @@ describe('StatusTab', () => {
         current_iteration: 1,
         loop_label: 'Scrum feedback loop',
         cadence: 'research -> plan -> implement -> test -> deploy -> review',
+        loop_status: 'active',
+        max_iterations: 8,
+        completed_iterations: [],
+        current_sprint_goal: 'Ship the autonomous plan increment.',
+        review_summary: 'Review requested implementation evidence.',
+        stop_reason: '',
         active_phase: 'implement',
         active_phase_label: 'Implement',
         next_action: 'Let active implement work finish and collect verification evidence.',
@@ -319,7 +334,35 @@ describe('StatusTab', () => {
           { id: 'review', label: 'Review', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
         ],
         deliverables: ['artifact.spec'],
-        feedback_items: [],
+        feedback_items: ['Add browser verification before completing the goal.'],
+        history: [
+          {
+            iteration_index: 1,
+            verdict: 'continue_next_iteration',
+            summary: 'Review requested implementation evidence.',
+            confidence: 0.82,
+            next_sprint_goal: 'Ship the autonomous plan increment.',
+            created_at: '2026-04-29T00:00:00Z',
+          },
+        ],
+        actions: {
+          pause_auto_loop: {
+            enabled: true,
+            label: 'Pause auto-loop',
+            requires_confirmation: false,
+          },
+          resume_auto_loop: {
+            enabled: false,
+            label: 'Resume auto-loop',
+            reason: 'Only paused or suspended loops can be resumed.',
+            requires_confirmation: false,
+          },
+          trigger_next_iteration: {
+            enabled: true,
+            label: 'Plan next iteration',
+            requires_confirmation: false,
+          },
+        },
       },
     });
 
@@ -341,17 +384,34 @@ describe('StatusTab', () => {
 
     expect((await screen.findAllByText('Ship autonomous plan'))[0]).toBeInTheDocument();
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Iteration 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Iteration 1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('active').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Ship the autonomous plan increment.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Review requested implementation evidence.').length).toBeGreaterThan(
+      0
+    );
     expect(screen.getAllByText('Implement')[0]).toBeInTheDocument();
     expect(
       screen.getByText('Let active implement work finish and collect verification evidence.')
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('Add browser verification before completing the goal.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Review history')).toBeInTheDocument();
+    expect(screen.getByText('Plan next')).toBeInTheDocument();
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('supervisor_tick')).toBeInTheDocument();
     expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
       outboxLimit: 20,
       eventLimit: 80,
+    });
+
+    fireEvent.click(screen.getByText('Pause'));
+    await waitFor(() => {
+      expect(workspacePlanService.pauseAutoLoop).toHaveBeenCalledWith('ws-1', {
+        reason: 'operator action from central blackboard',
+      });
     });
   });
 

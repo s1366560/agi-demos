@@ -21,15 +21,21 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.domain.model.workspace_plan import (
+    Capability,
+    FeatureCheckpoint,
     GoalProgress,
+    Plan,
     PlanNode,
     PlanNodeId,
+    PlanNodeKind,
     PlanStatus,
     TaskExecution,
     TaskIntent,
@@ -40,6 +46,12 @@ from src.domain.model.workspace_plan import (
 from src.domain.ports.services.goal_planner_port import (
     GoalPlannerPort,
     ReplanTrigger,
+)
+from src.domain.ports.services.iteration_review_port import (
+    IterationNextTask,
+    IterationReviewContext,
+    IterationReviewPort,
+    IterationReviewVerdict,
 )
 from src.domain.ports.services.plan_repository_port import PlanRepositoryPort
 from src.domain.ports.services.progress_projector_port import ProgressProjectorPort
@@ -56,12 +68,33 @@ from src.domain.ports.services.workspace_supervisor_port import (
     TickReport,
     WorkspaceSupervisorPort,
 )
+from src.infrastructure.agent.workspace_plan.planner import (
+    _default_acceptance_criteria,
+    _infer_write_set,
+    _iteration_phase_for_sequence,
+    _planner_node_metadata,
+)
 
 logger = logging.getLogger(__name__)
 
 _RETRYABLE_INFRASTRUCTURE_CRITERION = "retryable_infrastructure_failure"
 _RETRY_BACKOFF_BASE_SECONDS = 60
 _RETRY_BACKOFF_MAX_SECONDS = 900
+_ITERATION_LOOP_ENABLED_ENV = "WORKSPACE_V2_ITERATION_LOOP_ENABLED"
+_ITERATION_LOOP_MAX_ITERATIONS_ENV = "WORKSPACE_V2_MAX_ITERATIONS"
+_ITERATION_LOOP_MAX_SUBTASKS_ENV = "WORKSPACE_V2_SOFTWARE_MAX_SUBTASKS"
+_ITERATION_LOOP_DEFAULT_MAX_ITERATIONS = 8
+_ITERATION_LOOP_DEFAULT_MAX_SUBTASKS = 6
+_ITERATION_REVIEW_MIN_CONFIDENCE = 0.6
+_ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
+_SCRUM_ARTIFACT_BY_PHASE = {
+    "research": "product_discovery",
+    "plan": "sprint_backlog",
+    "implement": "increment",
+    "test": "verification",
+    "deploy": "release_candidate",
+    "review": "feedback",
+}
 
 
 # Callbacks keep the supervisor pure — infrastructure injects concrete impls.
@@ -86,7 +119,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
     keeps per-workspace state in ``self._tasks`` indexed by ``workspace_id``.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         plan_repo: PlanRepositoryPort,
@@ -99,6 +132,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         attempt_context: AttemptContextProvider,
         progress_sink: ProgressSink | None = None,
         event_sink: PlanEventSink | None = None,
+        iteration_reviewer: IterationReviewPort | None = None,
         heartbeat_seconds: float = 10.0,
         max_dispatches_per_tick: int = 2,
     ) -> None:
@@ -115,6 +149,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         self._attempt_context = attempt_context
         self._progress_sink = progress_sink
         self._event_sink = event_sink
+        self._iteration_reviewer = iteration_reviewer
         self._heartbeat = heartbeat_seconds
         self._max_dispatches_per_tick = max_dispatches_per_tick
 
@@ -257,7 +292,9 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
 
         # --- 2. allocate ready nodes -----------------------------------
         ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
-        ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(ready_candidates)
+        ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(
+            ready_candidates
+        )
         for deferred_node in deferred_by_write_scope:
             await self._emit_event(
                 errors,
@@ -323,12 +360,12 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         await self._repo.save(plan)
         progress = self._projector.project(plan)
         if progress.is_complete:
-            plan_final = plan
-            # Mark plan completed if every executable leaf is DONE.
-            from dataclasses import replace as _r
-
-            plan_final = _r(plan, status=PlanStatus.COMPLETED)
-            await self._repo.save(plan_final)
+            plan = await self._handle_completed_progress(
+                workspace_id=workspace_id,
+                plan=plan,
+                errors=errors,
+            )
+            progress = self._projector.project(plan)
         if self._progress_sink is not None:
             try:
                 await self._progress_sink(progress)
@@ -343,6 +380,226 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             nodes_blocked=nodes_blocked,
             errors=tuple(errors),
         )
+
+    async def _handle_completed_progress(  # noqa: PLR0911
+        self,
+        *,
+        workspace_id: str,
+        plan: Plan,
+        errors: list[str],
+    ) -> Plan:
+        if not _iteration_loop_enabled() or self._iteration_reviewer is None:
+            completed = replace(
+                plan,
+                status=PlanStatus.COMPLETED,
+                updated_at=datetime.now(UTC),
+            )
+            await self._repo.save(completed)
+            return completed
+
+        goal_node = plan.goal_node
+        runnable_nodes = _runnable_nodes(plan)
+        if not runnable_nodes:
+            completed = replace(plan, status=PlanStatus.COMPLETED, updated_at=datetime.now(UTC))
+            await self._repo.save(completed)
+            return completed
+
+        current_iteration = _max_iteration(runnable_nodes)
+        if _has_iteration_nodes(plan, current_iteration + 1):
+            active = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.ACTIVE,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": current_iteration + 1,
+                    "max_iterations": _max_iterations(),
+                    "loop_status": "active",
+                    "stop_reason": "",
+                },
+            )
+            await self._repo.save(active)
+            return active
+
+        loop_metadata = _goal_iteration_loop_metadata(goal_node)
+        if loop_metadata.get("loop_status") == "paused":
+            suspended = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.SUSPENDED,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": current_iteration,
+                    "max_iterations": _max_iterations(),
+                    "loop_status": "paused",
+                    "stop_reason": str(loop_metadata.get("stop_reason") or "auto-loop paused"),
+                },
+            )
+            await self._repo.save(suspended)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                suspended.goal_node,
+                "iteration_loop_suspended",
+                {
+                    "iteration_index": current_iteration,
+                    "reason": "auto-loop paused",
+                },
+            )
+            return suspended
+
+        max_iterations = _max_iterations()
+        if current_iteration >= max_iterations:
+            suspended = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.SUSPENDED,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": current_iteration,
+                    "max_iterations": max_iterations,
+                    "loop_status": "suspended",
+                    "stop_reason": f"max iterations reached: {max_iterations}",
+                },
+            )
+            await self._repo.save(suspended)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                suspended.goal_node,
+                "iteration_loop_suspended",
+                {
+                    "iteration_index": current_iteration,
+                    "reason": f"max iterations reached: {max_iterations}",
+                },
+            )
+            return suspended
+
+        if current_iteration in _reviewed_iterations(loop_metadata):
+            suspended = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.SUSPENDED,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": current_iteration,
+                    "max_iterations": max_iterations,
+                    "loop_status": "suspended",
+                    "stop_reason": "iteration already reviewed without a next sprint",
+                },
+            )
+            await self._repo.save(suspended)
+            return suspended
+
+        max_next_tasks = _current_iteration_task_budget(plan, current_iteration)
+        verdict = await self._iteration_reviewer.review(
+            _iteration_review_context(
+                workspace_id=workspace_id,
+                plan=plan,
+                iteration_index=current_iteration,
+                max_next_tasks=max_next_tasks,
+            )
+        )
+        verdict = _clamp_iteration_verdict_tasks(verdict, max_next_tasks=max_next_tasks)
+        await self._emit_event(
+            errors,
+            workspace_id,
+            goal_node,
+            "iteration_review_completed",
+            _iteration_review_payload(current_iteration, verdict),
+        )
+
+        if verdict.verdict == "complete_goal":
+            completed = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.COMPLETED,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": current_iteration,
+                    "max_iterations": max_iterations,
+                    "loop_status": "completed",
+                    "last_review_summary": verdict.summary,
+                    "last_review_confidence": verdict.confidence,
+                    "stop_reason": "",
+                    "completed_iterations": _append_int(
+                        loop_metadata.get("completed_iterations"),
+                        current_iteration,
+                    ),
+                    "reviewed_iterations": _append_int(
+                        loop_metadata.get("reviewed_iterations"),
+                        current_iteration,
+                    ),
+                    "history": _append_history(
+                        loop_metadata.get("history"), current_iteration, verdict
+                    ),
+                },
+            )
+            await self._repo.save(completed)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                completed.goal_node,
+                "iteration_loop_completed",
+                _iteration_review_payload(current_iteration, verdict),
+            )
+            return completed
+
+        if (
+            verdict.verdict == "needs_human_review"
+            or verdict.confidence < _ITERATION_REVIEW_MIN_CONFIDENCE
+            or not verdict.next_tasks
+        ):
+            reason = verdict.summary or "iteration review requires human review"
+            suspended = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.SUSPENDED,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": current_iteration,
+                    "max_iterations": max_iterations,
+                    "loop_status": "suspended",
+                    "last_review_summary": verdict.summary,
+                    "last_review_confidence": verdict.confidence,
+                    "stop_reason": reason,
+                    "feedback_items": list(verdict.feedback_items),
+                    "reviewed_iterations": _append_int(
+                        loop_metadata.get("reviewed_iterations"),
+                        current_iteration,
+                    ),
+                    "history": _append_history(
+                        loop_metadata.get("history"), current_iteration, verdict
+                    ),
+                },
+            )
+            await self._repo.save(suspended)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                suspended.goal_node,
+                "iteration_loop_suspended",
+                {
+                    **_iteration_review_payload(current_iteration, verdict),
+                    "reason": reason,
+                },
+            )
+            return suspended
+
+        next_iteration = current_iteration + 1
+        continued = _append_next_iteration(
+            plan,
+            verdict=verdict,
+            next_iteration=next_iteration,
+            max_iterations=max_iterations,
+        )
+        await self._repo.save(continued)
+        await self._emit_event(
+            errors,
+            workspace_id,
+            continued.goal_node,
+            "iteration_next_sprint_planned",
+            {
+                **_iteration_review_payload(current_iteration, verdict),
+                "next_iteration": next_iteration,
+                "task_count": len(verdict.next_tasks),
+            },
+        )
+        return continued
 
     async def _emit_event(
         self,
@@ -361,6 +618,355 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
 
 
 # --- helpers ---------------------------------------------------------
+
+
+def _iteration_loop_enabled() -> bool:
+    return os.getenv(_ITERATION_LOOP_ENABLED_ENV, "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _max_iterations() -> int:
+    raw_value = os.getenv(_ITERATION_LOOP_MAX_ITERATIONS_ENV)
+    if raw_value is None:
+        return _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
+    return max(1, parsed)
+
+
+def _runnable_nodes(plan: Plan) -> list[PlanNode]:
+    return [
+        node
+        for node in plan.nodes.values()
+        if node.kind in {PlanNodeKind.TASK, PlanNodeKind.VERIFY}
+    ]
+
+
+def _max_iteration(nodes: list[PlanNode]) -> int:
+    if not nodes:
+        return 1
+    return max(_node_iteration_index(node) for node in nodes)
+
+
+def _has_iteration_nodes(plan: Plan, iteration_index: int) -> bool:
+    return any(_node_iteration_index(node) == iteration_index for node in _runnable_nodes(plan))
+
+
+def _node_iteration_index(node: PlanNode) -> int:
+    value = dict(node.metadata or {}).get("iteration_index")
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return max(1, int(value))
+    return 1
+
+
+def _node_iteration_phase(node: PlanNode) -> str:
+    phase = dict(node.metadata or {}).get("iteration_phase")
+    if isinstance(phase, str) and phase in _ITERATION_PHASES:
+        return phase
+    sequence = node.feature_checkpoint.sequence if node.feature_checkpoint is not None else 0
+    return _iteration_phase_for_sequence(sequence)
+
+
+def _goal_iteration_loop_metadata(goal_node: PlanNode) -> dict[str, Any]:
+    value = dict(goal_node.metadata or {}).get("iteration_loop")
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def _replace_goal_loop_metadata(
+    plan: Plan,
+    *,
+    status: PlanStatus,
+    updates: dict[str, Any],
+) -> Plan:
+    goal_node = plan.goal_node
+    metadata = dict(goal_node.metadata or {})
+    loop = _goal_iteration_loop_metadata(goal_node)
+    loop.update(updates)
+    metadata["iteration_loop"] = loop
+    plan.replace_node(replace(goal_node, metadata=metadata, updated_at=datetime.now(UTC)))
+    return replace(plan, status=status, updated_at=datetime.now(UTC))
+
+
+def _reviewed_iterations(loop_metadata: dict[str, Any]) -> set[int]:
+    return {
+        item
+        for item in _int_list(loop_metadata.get("reviewed_iterations"))
+        if isinstance(item, int)
+    }
+
+
+def _int_list(value: object) -> list[int]:
+    if not isinstance(value, list | tuple | set):
+        return []
+    items: list[int] = []
+    for item in value:
+        if isinstance(item, int):
+            items.append(item)
+        elif isinstance(item, str) and item.isdigit():
+            items.append(int(item))
+    return items
+
+
+def _append_int(value: object, item: int) -> list[int]:
+    items = _int_list(value)
+    if item not in items:
+        items.append(item)
+    return items
+
+
+def _append_history(
+    value: object,
+    iteration_index: int,
+    verdict: IterationReviewVerdict,
+) -> list[dict[str, Any]]:
+    history = (
+        [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+    )
+    history.append(
+        {
+            "iteration_index": iteration_index,
+            "verdict": verdict.verdict,
+            "confidence": verdict.confidence,
+            "summary": verdict.summary,
+            "next_sprint_goal": verdict.next_sprint_goal,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    return history[-12:]
+
+
+def _clamp_iteration_verdict_tasks(
+    verdict: IterationReviewVerdict,
+    *,
+    max_next_tasks: int,
+) -> IterationReviewVerdict:
+    if len(verdict.next_tasks) <= max_next_tasks:
+        return verdict
+    return replace(verdict, next_tasks=verdict.next_tasks[:max_next_tasks])
+
+
+def _iteration_review_context(
+    *,
+    workspace_id: str,
+    plan: Plan,
+    iteration_index: int,
+    max_next_tasks: int,
+) -> IterationReviewContext:
+    nodes = [
+        node for node in _runnable_nodes(plan) if _node_iteration_index(node) == iteration_index
+    ]
+    return IterationReviewContext(
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+        iteration_index=iteration_index,
+        goal_title=plan.goal_node.title,
+        goal_description=plan.goal_node.description,
+        completed_tasks=tuple(_completed_task_payload(node) for node in nodes),
+        deliverables=tuple(_iteration_deliverables(nodes)),
+        feedback_items=tuple(_iteration_feedback_items(nodes)),
+        max_next_tasks=max_next_tasks,
+    )
+
+
+def _completed_task_payload(node: PlanNode) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": node.id,
+        "title": node.title,
+        "description": node.description,
+        "phase": _node_iteration_phase(node),
+        "intent": node.intent.value,
+    }
+    evidence_refs = _node_evidence_refs(node)
+    if evidence_refs:
+        payload["evidence_refs"] = evidence_refs
+    if node.feature_checkpoint is not None and node.feature_checkpoint.expected_artifacts:
+        payload["expected_artifacts"] = list(node.feature_checkpoint.expected_artifacts)
+    summary = dict(node.metadata or {}).get("last_verification_summary")
+    if isinstance(summary, str) and summary:
+        payload["verification_summary"] = summary
+    return payload
+
+
+def _iteration_deliverables(nodes: list[PlanNode]) -> list[str]:
+    values: list[str] = []
+    for node in nodes:
+        if node.feature_checkpoint is not None:
+            values.extend(node.feature_checkpoint.expected_artifacts)
+        write_set = dict(node.metadata or {}).get("write_set")
+        if isinstance(write_set, list):
+            values.extend(item for item in write_set if isinstance(item, str) and item)
+    return list(dict.fromkeys(values))[:12]
+
+
+def _iteration_feedback_items(nodes: list[PlanNode]) -> list[str]:
+    values: list[str] = []
+    for node in nodes:
+        metadata = dict(node.metadata or {})
+        for key in ("last_verification_summary", "retry_last_reason"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value:
+                values.append(value)
+    return list(dict.fromkeys(values))[:8]
+
+
+def _node_evidence_refs(node: PlanNode) -> list[str]:
+    raw = dict(node.metadata or {}).get("verification_evidence_refs")
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, str) and item]
+    return []
+
+
+def _current_iteration_task_budget(plan: Plan, iteration_index: int) -> int:
+    _ = (plan, iteration_index)
+    raw_value = os.getenv(_ITERATION_LOOP_MAX_SUBTASKS_ENV)
+    if raw_value is None:
+        return _ITERATION_LOOP_DEFAULT_MAX_SUBTASKS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return _ITERATION_LOOP_DEFAULT_MAX_SUBTASKS
+    return max(1, min(parsed, len(_ITERATION_PHASES)))
+
+
+def _iteration_review_payload(
+    iteration_index: int,
+    verdict: IterationReviewVerdict,
+) -> dict[str, Any]:
+    return {
+        "iteration_index": iteration_index,
+        "verdict": verdict.verdict,
+        "confidence": verdict.confidence,
+        "summary": verdict.summary,
+        "next_sprint_goal": verdict.next_sprint_goal,
+        "feedback_items": list(verdict.feedback_items),
+        "next_tasks": [
+            {
+                "id": task.id,
+                "description": task.description,
+                "target_subagent": task.target_subagent,
+                "dependencies": list(task.dependencies),
+                "priority": task.priority,
+                "phase": task.phase,
+                "expected_artifacts": list(task.expected_artifacts),
+            }
+            for task in verdict.next_tasks
+        ],
+    }
+
+
+def _append_next_iteration(
+    plan: Plan,
+    *,
+    verdict: IterationReviewVerdict,
+    next_iteration: int,
+    max_iterations: int,
+) -> Plan:
+    loop_metadata = _goal_iteration_loop_metadata(plan.goal_node)
+    id_map = {
+        task.id: PlanNodeId(f"node-{uuid.uuid4().hex[:12]}")
+        for task in verdict.next_tasks
+        if task.id
+    }
+    for sequence, task in enumerate(verdict.next_tasks, start=1):
+        _add_next_iteration_node(
+            plan,
+            task=task,
+            node_id=id_map.get(task.id) or PlanNodeId(f"node-{uuid.uuid4().hex[:12]}"),
+            id_map=id_map,
+            next_iteration=next_iteration,
+            sequence=sequence,
+        )
+    return _replace_goal_loop_metadata(
+        plan,
+        status=PlanStatus.ACTIVE,
+        updates={
+            "mode": "auto",
+            "current_iteration": next_iteration,
+            "max_iterations": max_iterations,
+            "loop_status": "active",
+            "last_review_summary": verdict.summary,
+            "last_review_confidence": verdict.confidence,
+            "current_sprint_goal": verdict.next_sprint_goal,
+            "next_sprint_goal": verdict.next_sprint_goal,
+            "stop_reason": "",
+            "feedback_items": list(verdict.feedback_items),
+            "completed_iterations": _append_int(
+                loop_metadata.get("completed_iterations"),
+                next_iteration - 1,
+            ),
+            "reviewed_iterations": _append_int(
+                loop_metadata.get("reviewed_iterations"),
+                next_iteration - 1,
+            ),
+            "history": _append_history(loop_metadata.get("history"), next_iteration - 1, verdict),
+        },
+    )
+
+
+def _add_next_iteration_node(
+    plan: Plan,
+    *,
+    task: IterationNextTask,
+    node_id: PlanNodeId,
+    id_map: dict[str, PlanNodeId],
+    next_iteration: int,
+    sequence: int,
+) -> None:
+    phase = (
+        task.phase if task.phase in _ITERATION_PHASES else _iteration_phase_for_sequence(sequence)
+    )
+    metadata = _planner_node_metadata(
+        task.description,
+        node_id=node_id,
+        sequence=sequence,
+    )
+    metadata.update(
+        {
+            "iteration_index": next_iteration,
+            "iteration_phase": phase,
+            "iteration_loop": "scrum_feedback_loop_v1",
+            "scrum_artifact": _SCRUM_ARTIFACT_BY_PHASE[phase],
+        }
+    )
+    if task.expected_artifacts:
+        metadata["expected_artifacts"] = list(task.expected_artifacts)
+    write_set = _infer_write_set(task.description)
+    if write_set:
+        metadata["write_set"] = list(write_set)
+    plan.add_node(
+        PlanNode(
+            id=node_id.value,
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title=task.description[:120] or f"Iteration {next_iteration} task {sequence}",
+            description=task.description,
+            depends_on=frozenset(id_map[dep] for dep in task.dependencies if dep in id_map),
+            recommended_capabilities=(Capability(name=f"agent:{task.target_subagent}", weight=2.0),)
+            if task.target_subagent
+            else (),
+            preferred_agent_id=task.target_subagent,
+            priority=max(0, task.priority),
+            acceptance_criteria=_default_acceptance_criteria(task.description),
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id=f"iteration-{next_iteration}-{sequence}-{node_id.value}",
+                sequence=sequence,
+                title=task.description[:120],
+                expected_artifacts=task.expected_artifacts,
+            ),
+            metadata=metadata,
+        )
+    )
 
 
 def _pid(value: str) -> PlanNodeId:

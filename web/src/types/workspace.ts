@@ -275,10 +275,25 @@ export interface WorkspacePlanIterationPhase {
   progress: number;
 }
 
+export interface WorkspacePlanIterationHistory {
+  iteration_index: number;
+  verdict: string;
+  summary: string;
+  confidence: number;
+  next_sprint_goal: string;
+  created_at: string;
+}
+
 export interface WorkspacePlanIterationSummary {
   current_iteration: number;
   loop_label: string;
   cadence: string;
+  loop_status: string;
+  max_iterations: number;
+  completed_iterations: number[];
+  current_sprint_goal: string;
+  review_summary: string;
+  stop_reason: string;
   active_phase: string;
   active_phase_label: string;
   next_action: string;
@@ -287,6 +302,8 @@ export interface WorkspacePlanIterationSummary {
   phases: WorkspacePlanIterationPhase[];
   deliverables: string[];
   feedback_items: string[];
+  history: WorkspacePlanIterationHistory[];
+  actions: Record<string, WorkspacePlanActionCapability>;
 }
 
 export interface WorkspacePlanSnapshot {

@@ -6,7 +6,7 @@ Everything here is deterministic and in-memory — no LLM, no sandbox, no Ray.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pytest
@@ -25,6 +25,11 @@ from src.domain.model.workspace_plan import (
     TaskExecution,
     TaskIntent,
     VerificationReport,
+)
+from src.domain.ports.services.iteration_review_port import (
+    IterationNextTask,
+    IterationReviewContext,
+    IterationReviewVerdict,
 )
 from src.domain.ports.services.task_allocator_port import WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
@@ -888,6 +893,72 @@ class _RetryableInfrastructureVerifier:
         )
 
 
+class _StaticIterationReviewer:
+    def __init__(self, verdict: IterationReviewVerdict) -> None:
+        self.verdict = verdict
+        self.contexts: list[IterationReviewContext] = []
+
+    async def review(self, context: IterationReviewContext) -> IterationReviewVerdict:
+        self.contexts.append(context)
+        return self.verdict
+
+
+def _mark_plan_tasks_done(plan: Plan) -> Plan:
+    for node in list(plan.nodes.values()):
+        if node.kind in {PlanNodeKind.TASK, PlanNodeKind.VERIFY}:
+            plan.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.DONE,
+                    execution=TaskExecution.IDLE,
+                    metadata={
+                        **dict(node.metadata or {}),
+                        "iteration_index": 1,
+                        "iteration_phase": "implement",
+                        "verification_evidence_refs": [f"evidence://{node.id}"],
+                    },
+                )
+            )
+    return plan
+
+
+def _supervisor_for_iteration_review(
+    repo: InMemoryPlanRepository,
+    reviewer: _StaticIterationReviewer,
+    events: list[tuple[str, str, dict[str, Any]]],
+) -> WorkspaceSupervisor:
+    async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+        return []
+
+    async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+        return None
+
+    async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+        return VerificationContext(workspace_id=wid, node=node)
+
+    async def event_sink(
+        _wid: str,
+        node: PlanNode,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        events.append((event_type, node.id, payload))
+
+    return WorkspaceSupervisor(
+        plan_repo=repo,
+        allocator=CapabilityAllocator(),
+        verifier=_AlwaysPassVerifier(),
+        projector=ProgressProjector(),
+        planner=LLMGoalPlanner(decomposer=None),
+        agent_pool=agent_pool,
+        dispatcher=dispatcher,
+        attempt_context=attempt_ctx,
+        event_sink=event_sink,
+        iteration_reviewer=reviewer,
+        heartbeat_seconds=0.05,
+    )
+
+
 class TestSupervisorTick:
     async def test_tick_dispatches_ready_and_verifies_reported(self) -> None:
         repo = InMemoryPlanRepository()
@@ -1150,6 +1221,171 @@ class TestSupervisorTick:
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_count"] == 1
+
+    async def test_completed_iteration_accepts_complete_goal_verdict(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="complete_goal",
+                confidence=0.92,
+                summary="Goal satisfies the requested scope.",
+            )
+        )
+
+        report = await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert report.allocations_made == 0
+        assert reloaded.status is PlanStatus.COMPLETED
+        assert not any(
+            dict(node.metadata or {}).get("iteration_index") == 2
+            for node in reloaded.nodes.values()
+        )
+        assert reviewer.contexts[0].iteration_index == 1
+        assert reviewer.contexts[0].max_next_tasks == 6
+        assert [event[0] for event in events] == [
+            "iteration_review_completed",
+            "iteration_loop_completed",
+        ]
+        assert reloaded.goal_node.metadata["iteration_loop"]["loop_status"] == "completed"
+
+    async def test_completed_iteration_plans_bounded_next_sprint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        next_tasks = tuple(
+            IterationNextTask(
+                id=f"t{index}",
+                description=f"Iteration 2 task {index}",
+                dependencies=(f"t{index - 1}",) if index > 1 else (),
+                phase="implement",
+            )
+            for index in range(1, 8)
+        )
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="One more sprint is needed.",
+                next_sprint_goal="Close the remaining verification and polish gaps.",
+                feedback_items=("Need browser verification.",),
+                next_tasks=next_tasks,
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.status is PlanStatus.ACTIVE
+        iteration_two_nodes = [
+            node
+            for node in reloaded.nodes.values()
+            if dict(node.metadata or {}).get("iteration_index") == 2
+        ]
+        assert len(iteration_two_nodes) == 6
+        assert all(node.intent is TaskIntent.TODO for node in iteration_two_nodes)
+        assert len(iteration_two_nodes[1].depends_on) == 1
+        loop = reloaded.goal_node.metadata["iteration_loop"]
+        assert loop["current_iteration"] == 2
+        assert loop["loop_status"] == "active"
+        assert loop["completed_iterations"] == [1]
+        assert loop["current_sprint_goal"] == "Close the remaining verification and polish gaps."
+        assert events[-1][0] == "iteration_next_sprint_planned"
+        assert events[-1][2]["task_count"] == 6
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+        rerun = await repo.get_by_workspace("ws-1")
+        assert rerun is not None
+        assert (
+            len(
+                [
+                    node
+                    for node in rerun.nodes.values()
+                    if dict(node.metadata or {}).get("iteration_index") == 2
+                ]
+            )
+            == 6
+        )
+        assert len(reviewer.contexts) == 1
+
+    async def test_completed_iteration_suspends_at_max_iterations(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        monkeypatch.setenv("WORKSPACE_V2_MAX_ITERATIONS", "1")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="Needs more work.",
+                next_tasks=(IterationNextTask(id="t1", description="Follow up"),),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.status is PlanStatus.SUSPENDED
+        assert reloaded.goal_node.metadata["iteration_loop"]["stop_reason"] == (
+            "max iterations reached: 1"
+        )
+        assert reviewer.contexts == []
+        assert events[-1][0] == "iteration_loop_suspended"
+
+    async def test_completed_iteration_suspends_low_confidence_review(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.41,
+                summary="Evidence is not strong enough to continue automatically.",
+                next_tasks=(IterationNextTask(id="t1", description="Follow up"),),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.status is PlanStatus.SUSPENDED
+        loop = reloaded.goal_node.metadata["iteration_loop"]
+        assert loop["loop_status"] == "suspended"
+        assert loop["stop_reason"] == "Evidence is not strong enough to continue automatically."
+        assert not any(
+            dict(node.metadata or {}).get("iteration_index") == 2
+            for node in reloaded.nodes.values()
+        )
+        assert [event[0] for event in events] == [
+            "iteration_review_completed",
+            "iteration_loop_suspended",
+        ]
 
 
 # ---------------------------------------------------------------------------

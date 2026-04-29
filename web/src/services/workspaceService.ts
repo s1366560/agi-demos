@@ -525,6 +525,36 @@ export const workspacePlanService = {
     });
     return response.json() as Promise<WorkspacePlanActionResult>;
   },
+
+  pauseAutoLoop: async (
+    workspaceId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/iteration/pause`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
+
+  resumeAutoLoop: async (
+    workspaceId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/iteration/resume`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
+
+  triggerNextIteration: async (
+    workspaceId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/iteration/trigger-next`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
 };
 
 export const workspaceTopologyService = {

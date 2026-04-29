@@ -244,6 +244,65 @@ describe('workspaceService', () => {
     expect(result.node_id).toBe('node-1');
   });
 
+  it('pauses, resumes, and triggers durable workspace plan iteration loop', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({
+          ok: true,
+          message: 'Automatic iteration loop paused.',
+          plan_id: 'plan-1',
+          node_id: 'goal-1',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({
+          ok: true,
+          message: 'Automatic iteration loop resumed.',
+          plan_id: 'plan-1',
+          node_id: 'goal-1',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({
+          ok: true,
+          message: 'Next iteration review requested.',
+          plan_id: 'plan-1',
+          node_id: 'goal-1',
+        }),
+      } as Response);
+
+    await workspacePlanService.pauseAutoLoop('ws-1', { reason: 'operator review' });
+    await workspacePlanService.resumeAutoLoop('ws-1', { reason: 'continue' });
+    await workspacePlanService.triggerNextIteration('ws-1', { reason: 'manual review' });
+
+    expect(apiFetch.post).toHaveBeenNthCalledWith(1, '/workspaces/ws-1/plan/iteration/pause', {
+      reason: 'operator review',
+    });
+    expect(apiFetch.post).toHaveBeenNthCalledWith(2, '/workspaces/ws-1/plan/iteration/resume', {
+      reason: 'continue',
+    });
+    expect(apiFetch.post).toHaveBeenNthCalledWith(
+      3,
+      '/workspaces/ws-1/plan/iteration/trigger-next',
+      {
+        reason: 'manual review',
+      }
+    );
+  });
+
   it('updates workspace agent binding via tenant/project/workspace route', async () => {
     const { apiFetch } = await import('@/services/client/urlUtils');
     vi.mocked(apiFetch.patch).mockResolvedValueOnce({

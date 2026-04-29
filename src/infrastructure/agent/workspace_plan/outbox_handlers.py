@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_agent_autonomy import AUTONOMY_SCHEMA_VERSION
+from src.application.services.workspace_autonomy_profiles import resolve_workspace_type
 from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
 from src.application.services.workspace_task_service import (
     WorkspaceTaskAuthorityContext,
@@ -44,6 +45,7 @@ from src.domain.model.workspace_plan import (
     TaskExecution,
     TaskIntent,
 )
+from src.domain.ports.services.iteration_review_port import IterationReviewPort
 from src.domain.ports.services.task_allocator_port import (
     Allocation,
     WorkspaceAgent as AllocatorAgent,
@@ -91,6 +93,10 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_NODE_ID,
 )
 from src.infrastructure.agent.workspace_plan.factory import build_sql_orchestrator
+from src.infrastructure.agent.workspace_plan.iteration_review import (
+    LLMIterationReviewProvider,
+    UnavailableIterationReviewProvider,
+)
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxHandler
 from src.infrastructure.agent.workspace_plan.supervisor import (
@@ -113,6 +119,8 @@ logger = logging.getLogger(__name__)
 _WORKER_LAUNCH_MAX_ACTIVE_ENV = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE"
 _WORKER_LAUNCH_DEFER_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS"
 _PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES"
+_DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
+_MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 _DEFAULT_WORKER_LAUNCH_MAX_ACTIVE = 4
 _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS = 20
 _DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES = 3
@@ -221,7 +229,9 @@ def make_supervisor_tick_handler(
     async def _handle(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
         workspace_id = str(item.payload_json.get("workspace_id") or item.workspace_id)
         payload = dict(item.payload_json or {})
-        leader_agent_id = _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        leader_agent_id = (
+            _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        )
         if item.plan_id:
             await _reconcile_plan_nodes_with_terminal_attempts(
                 session=session,
@@ -246,12 +256,67 @@ def make_supervisor_tick_handler(
             dispatcher=dispatcher or _make_sql_dispatcher(session, item, payload),
             attempt_context=attempt_context or _make_sql_attempt_context(session),
             progress_sink=progress_sink,
+            iteration_reviewer=await _make_sql_iteration_reviewer(
+                session=session,
+                workspace_id=workspace_id,
+                root_task_id=_payload_string(payload, "root_task_id"),
+            ),
         )
         report = await orchestrator.tick_once(workspace_id)
         if report.errors:
             raise RuntimeError("; ".join(report.errors))
 
     return _handle
+
+
+async def _make_sql_iteration_reviewer(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    root_task_id: str | None,
+) -> IterationReviewPort | None:
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    if workspace is None:
+        return None
+    root_metadata: Mapping[str, Any] | None = None
+    if root_task_id:
+        root_task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
+        if root_task is not None and root_task.workspace_id == workspace_id:
+            root_metadata = root_task.metadata
+    if resolve_workspace_type(root_metadata, workspace.metadata) != "software_development":
+        return None
+    try:
+        from src.domain.llm_providers.models import OperationType
+        from src.infrastructure.llm.provider_factory import AIServiceFactory
+
+        factory = AIServiceFactory()
+        provider = await factory.resolve_provider(
+            workspace.tenant_id,
+            operation_type=OperationType.LLM,
+        )
+        llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
+        return LLMIterationReviewProvider(
+            llm_client,
+            max_next_tasks=_software_iteration_task_budget(),
+        )
+    except Exception:
+        logger.warning(
+            "workspace_plan.iteration_reviewer_unavailable",
+            exc_info=True,
+            extra={"workspace_id": workspace_id},
+        )
+        return UnavailableIterationReviewProvider("iteration review agent is unavailable")
+
+
+def _software_iteration_task_budget() -> int:
+    raw_value = os.getenv("WORKSPACE_V2_SOFTWARE_MAX_SUBTASKS")
+    if raw_value is None:
+        return _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS
+    return max(1, min(value, _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS))
 
 
 async def _reconcile_plan_nodes_with_terminal_attempts(
@@ -306,9 +371,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                     metadata={
                         **dict(node.metadata or {}),
                         "terminal_attempt_status": status,
-                        "terminal_attempt_reconciled_at": now.isoformat().replace(
-                            "+00:00", "Z"
-                        ),
+                        "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
                     },
                     updated_at=now,
                 )
@@ -639,7 +702,9 @@ def _make_sql_dispatcher(
             raise ValueError("workspace plan dispatch requires a root goal task")
 
         actor_user_id = await _resolve_actor_user_id(session, workspace_id, payload)
-        leader_agent_id = _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        leader_agent_id = (
+            _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        )
         binding = await SqlWorkspaceAgentRepository(session).find_by_workspace_and_agent_id(
             workspace_id=workspace_id,
             agent_id=str(allocation.agent_id),
@@ -925,9 +990,7 @@ def _worker_launch_max_active() -> int:
 
 
 def _worker_launch_defer_seconds() -> int:
-    return _positive_int_env(
-        _WORKER_LAUNCH_DEFER_SECONDS_ENV, _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS
-    )
+    return _positive_int_env(_WORKER_LAUNCH_DEFER_SECONDS_ENV, _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS)
 
 
 def _plan_terminal_attempt_max_retries() -> int:
@@ -994,7 +1057,9 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
 
         metadata = dict(task.metadata or {})
         actor_user_id = _payload_string(payload, "actor_user_id") or task.created_by
-        leader_agent_id = _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        leader_agent_id = (
+            _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        )
         worker_agent_id = _payload_string(payload, "worker_agent_id") or task.assignee_agent_id
         if not worker_agent_id:
             raise ValueError(f"workspace task {task_id} has no worker agent")

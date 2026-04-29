@@ -12,11 +12,14 @@ import {
   GitBranch,
   Loader2,
   PackageCheck,
+  Pause,
+  Play,
   RefreshCw,
   Repeat2,
   RotateCcw,
   Search,
   ShieldCheck,
+  SkipForward,
   Split,
   Zap,
 } from 'lucide-react';
@@ -99,12 +102,25 @@ function nodePhaseLabel(nodeMetadata: Record<string, unknown>): string {
 
 function IterationLoopPanel({
   iteration,
+  isActionPending,
+  onAction,
 }: {
   iteration: WorkspacePlanIterationSummary | null | undefined;
+  isActionPending: boolean;
+  onAction: (actionId: 'pause_auto_loop' | 'resume_auto_loop' | 'trigger_next_iteration') => void;
 }) {
   if (!iteration) {
     return null;
   }
+  const pauseAction = iteration.actions.pause_auto_loop;
+  const resumeAction = iteration.actions.resume_auto_loop;
+  const triggerAction = iteration.actions.trigger_next_iteration;
+  const statusTone =
+    iteration.loop_status === 'completed'
+      ? 'text-status-text-success'
+      : iteration.loop_status === 'paused' || iteration.loop_status === 'suspended'
+        ? 'text-status-text-warning'
+        : 'text-status-text-info';
 
   return (
     <div className="border-t border-border-separator px-4 py-4 dark:border-border-dark">
@@ -117,17 +133,78 @@ function IterationLoopPanel({
           <div className="mt-2 text-sm font-medium text-text-primary dark:text-text-inverse">
             {iteration.active_phase_label}
           </div>
+          <div className={`mt-1 text-xs font-medium uppercase ${statusTone}`}>
+            {iteration.loop_status}
+          </div>
+          {iteration.current_sprint_goal && (
+            <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+              {iteration.current_sprint_goal}
+            </p>
+          )}
           <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
             {iteration.next_action}
           </p>
+          {iteration.review_summary && (
+            <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+              {iteration.review_summary}
+            </p>
+          )}
+          {iteration.stop_reason && (
+            <p className="mt-1 break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
+              {iteration.stop_reason}
+            </p>
+          )}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap items-start gap-2">
           <StatBadge
             label="Sprint tasks"
             value={`${String(iteration.task_count)}/${String(iteration.task_budget)}`}
           />
           <StatBadge label="Loop" value={iteration.loop_label} />
+          <StatBadge
+            label="Completed"
+            value={`${String(iteration.completed_iterations.length)}/${String(iteration.max_iterations)}`}
+          />
         </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+          disabled={isActionPending || !actionEnabled(pauseAction)}
+          title={actionDisabledReason(pauseAction, 'Pause is not available.')}
+          onClick={() => {
+            onAction('pause_auto_loop');
+          }}
+        >
+          <Pause className="h-3.5 w-3.5" aria-hidden />
+          Pause
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+          disabled={isActionPending || !actionEnabled(resumeAction)}
+          title={actionDisabledReason(resumeAction, 'Resume is not available.')}
+          onClick={() => {
+            onAction('resume_auto_loop');
+          }}
+        >
+          <Play className="h-3.5 w-3.5" aria-hidden />
+          Resume
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+          disabled={isActionPending || !actionEnabled(triggerAction)}
+          title={actionDisabledReason(triggerAction, 'Next iteration is not available.')}
+          onClick={() => {
+            onAction('trigger_next_iteration');
+          }}
+        >
+          <SkipForward className="h-3.5 w-3.5" aria-hidden />
+          Plan next
+        </button>
       </div>
 
       <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
@@ -203,6 +280,34 @@ function IterationLoopPanel({
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {iteration.history.length > 0 && (
+        <div className="mt-4 border-t border-border-separator pt-3 dark:border-border-dark">
+          <div className="text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Review history
+          </div>
+          <div className="mt-2 space-y-2">
+            {iteration.history.slice(-3).map((item) => (
+              <div
+                key={`${String(item.iteration_index)}-${item.verdict}-${item.summary}`}
+                className="min-w-0 rounded-md border border-border-light bg-surface-muted px-3 py-2 text-xs text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-text-primary dark:text-text-inverse">
+                    Iteration {item.iteration_index}
+                  </span>
+                  <span className="uppercase">{item.verdict}</span>
+                  <span>{Math.round(item.confidence * 100)}%</span>
+                </div>
+                <p className="mt-1 break-words leading-5">{item.summary}</p>
+                {item.next_sprint_goal && (
+                  <p className="mt-1 break-words leading-5">{item.next_sprint_goal}</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -574,6 +679,34 @@ export function PlanRunSnapshotSection({
     }
   };
 
+  const runIterationAction = async (
+    actionId: 'pause_auto_loop' | 'resume_auto_loop' | 'trigger_next_iteration'
+  ) => {
+    const action = iteration?.actions[actionId];
+    if (!actionEnabled(action)) {
+      setActionError(action?.reason ?? 'This iteration action is not available.');
+      return;
+    }
+    setIsActionPending(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const reason = reasonOrFallback(operatorReason, DEFAULT_NODE_ACTION_REASON);
+      const result =
+        actionId === 'pause_auto_loop'
+          ? await workspacePlanService.pauseAutoLoop(workspaceId, { reason })
+          : actionId === 'resume_auto_loop'
+            ? await workspacePlanService.resumeAutoLoop(workspaceId, { reason })
+            : await workspacePlanService.triggerNextIteration(workspaceId, { reason });
+      setActionMessage(result.message);
+      await loadSnapshot({ silent: true });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
   return (
     <section className="rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt">
       <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
@@ -700,7 +833,11 @@ export function PlanRunSnapshotSection({
               {rootGoal.completion_blocker_reason}
             </div>
           )}
-          <IterationLoopPanel iteration={iteration} />
+          <IterationLoopPanel
+            iteration={iteration}
+            isActionPending={isActionPending}
+            onAction={(actionId) => void runIterationAction(actionId)}
+          />
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
             <div className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-t-0">
