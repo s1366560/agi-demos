@@ -420,6 +420,9 @@ async def get_or_create_tools(
     # 8. Add Todo Tools
     _add_todo_tools(tools, project_id)
 
+    # 8c. Configure skill evolution session capture
+    _configure_skill_evolution_capture()
+
     # 8b. Add model availability tool
     _add_model_awareness_tools(tools, tenant_id, project_id)
 
@@ -683,6 +686,24 @@ def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
         logger.info(f"Agent Worker: Todo tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure todo tools: {e}")
+
+
+def _configure_skill_evolution_capture() -> None:
+    """Configure skill evolution session capture with the DB session factory."""
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+            configure_skill_evolution_capture,
+        )
+
+        configure_skill_evolution_capture(session_factory=async_session_factory)
+        logger.info("Agent Worker: Skill evolution capture configured")
+    except Exception as e:
+        logger.warning(
+            f"Agent Worker: Failed to configure skill evolution capture: {e}"
+        )
 
 
 def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:

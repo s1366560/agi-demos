@@ -39,6 +39,7 @@ from .evolution_engine import EvolutionEngine
 from .models import SkillEvolutionJob, SkillEvolutionSession
 from .plugin import (
     SkillEvolutionPlugin,
+    configure_skill_evolution_capture,
     register_builtin_skill_evolution_plugin,
 )
 from .repository import SkillEvolutionRepository
@@ -62,5 +63,6 @@ __all__ = [
     "SkillMerger",
     "SkillSessionAggregator",
     "SkillSessionGroup",
+    "configure_skill_evolution_capture",
     "register_builtin_skill_evolution_plugin",
 ]

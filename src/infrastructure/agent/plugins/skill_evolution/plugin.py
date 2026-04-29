@@ -170,6 +170,39 @@ class SkillEvolutionPlugin:
         )
 
 
+def configure_skill_evolution_capture(
+    session_factory: Any = None,  # noqa: ANN401
+) -> None:
+    """Initialize just the session capture layer of the skill evolution plugin.
+
+    This is a lightweight setup that only initialises the collector with a
+    DB session factory so that ``after_turn_complete`` hooks can persist
+    skill-execution sessions. The full evolution pipeline (summarizer,
+    judge, scheduler) is NOT started here — that requires the DI container.
+
+    Safe to call multiple times; only the first non-None session_factory
+    is retained.
+    """
+    global _config, _session_factory, _collector
+
+    if _config is None:
+        from src.infrastructure.agent.plugins.skill_evolution.config import (
+            SkillEvolutionConfig,
+        )
+
+        _config = SkillEvolutionConfig.from_env()
+
+    if _session_factory is None and session_factory is not None:
+        _session_factory = session_factory
+
+    if _collector is None:
+        from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
+            SessionCollector,
+        )
+
+        _collector = SessionCollector(_config)
+
+
 def register_builtin_skill_evolution_plugin(
     registry: AgentPluginRegistry,
     config: SkillEvolutionConfig | None = None,
