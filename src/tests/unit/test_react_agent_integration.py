@@ -555,6 +555,10 @@ class TestReActAgentWorkspaceDelegation:
                 "attempt_id": "attempt-bound",
                 "leader_agent_id": "leader-bound",
             },
+            "code_context": {
+                "sandbox_code_root": "/workspace/my-game",
+                "loaded_agents_files": [],
+            },
         }
 
         async def _empty_async_gen(*args, **kwargs):
@@ -665,6 +669,140 @@ class TestReActAgentWorkspaceDelegation:
         assert config.runtime_context["attempt_id"] == "attempt-bound"
         assert config.runtime_context["leader_agent_id"] == "leader-bound"
         assert config.runtime_context["workspace_session_role"] == "worker"
+        assert config.runtime_context["sandbox_code_root"] == "/workspace/my-game"
+        assert config.runtime_context["code_context"]["sandbox_code_root"] == "/workspace/my-game"
+
+    async def test_worker_runtime_code_context_survives_activation_miss(self):
+        agent = _make_react_agent()
+        captured: dict[str, object] = {}
+        runtime_context = {
+            "context_type": "workspace_worker_runtime",
+            "workspace_binding": {
+                "workspace_id": "ws-bound",
+                "workspace_task_id": "task-bound",
+                "root_goal_task_id": "root-bound",
+                "attempt_id": "attempt-bound",
+                "leader_agent_id": "leader-bound",
+            },
+            "code_context": {
+                "sandbox_code_root": "/workspace/my-game",
+                "loaded_agents_files": [],
+            },
+        }
+
+        async def _empty_async_gen(*args, **kwargs):
+            if False:
+                yield args, kwargs
+
+        async def _process_events(**kwargs):
+            del kwargs
+            agent._stream_final_content = "done"
+            agent._stream_success = True
+            yield {"type": "complete", "data": {"content": "done"}}
+
+        def _match_skill(*args, **kwargs):
+            del args, kwargs
+            agent._stream_skill_state = {
+                "matched_skill": None,
+                "skill_score": 0.0,
+                "is_forced": False,
+                "should_inject_prompt": False,
+            }
+            return []
+
+        def _capture_processor(**kwargs):
+            captured["config"] = kwargs["config"]
+            return MagicMock()
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime."
+                "should_activate_workspace_authority",
+                return_value=False,
+            ),
+            patch.object(agent, "_stream_detect_plan_mode", side_effect=_empty_async_gen),
+            patch.object(
+                agent,
+                "_stream_decide_route",
+                return_value=(SimpleNamespace(), None, None, {}, None, None),
+            ),
+            patch.object(
+                agent,
+                "_load_selected_agent",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id="agent-1", name="Atlas", allowed_skills=[])
+                ),
+            ),
+            patch.object(
+                agent,
+                "_build_runtime_profile",
+                return_value=SimpleNamespace(
+                    available_skills=[MagicMock()],
+                    allow_tools=[],
+                    deny_tools=[],
+                    tenant_agent_config=SimpleNamespace(runtime_hooks=[]),
+                    agent_definition_prompt="",
+                    effective_model="test-model",
+                    effective_temperature=0.2,
+                    effective_max_tokens=1024,
+                    effective_max_steps=4,
+                ),
+            ),
+            patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
+            patch.object(agent, "_stream_match_skill", side_effect=_match_skill),
+            patch.object(
+                agent,
+                "_stream_resolve_mode",
+                return_value=("build", SimpleNamespace(metadata={})),
+            ),
+            patch.object(
+                agent,
+                "_apply_before_prompt_build_hook",
+                new=AsyncMock(return_value=("", [])),
+            ),
+            patch.object(agent, "_build_primary_agent_prompt", return_value=""),
+            patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
+            patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_prepare_tools", return_value=[]),
+            patch.object(agent, "_stream_process_events", side_effect=_process_events),
+            patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
+            patch.object(agent, "_stream_record_skill_usage", return_value=None),
+            patch.object(
+                agent,
+                "_processor_factory",
+                new=SimpleNamespace(create_for_main=_capture_processor),
+            ),
+        ):
+            agent._stream_messages = [{"role": "system", "content": "system"}]
+            agent._stream_tools_to_use = []
+            agent._stream_memory_context = ""
+            events = []
+            async for event in agent.stream(
+                conversation_id="conv-1",
+                user_message="Execute bound worker task.",
+                project_id="proj-1",
+                user_id="user-1",
+                tenant_id="tenant-1",
+                conversation_context=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "[Workspace Runtime Context]\n"
+                            + json.dumps(runtime_context, ensure_ascii=False)
+                        ),
+                    }
+                ],
+                agent_id="agent-1",
+            ):
+                events.append(event)
+
+        config = captured["config"]
+        assert events[-1]["type"] == "complete"
+        assert config.runtime_context["workspace_id"] == "ws-bound"
+        assert config.runtime_context["root_goal_task_id"] == "root-bound"
+        assert config.runtime_context["workspace_task_id"] == "task-bound"
+        assert config.runtime_context["sandbox_code_root"] == "/workspace/my-game"
+        assert config.runtime_context["code_context"]["sandbox_code_root"] == "/workspace/my-game"
 
     async def test_leader_replan_runtime_context_restricts_tools_to_task_ledger(self):
         from src.domain.model.agent.tenant_agent_config import TenantAgentConfig

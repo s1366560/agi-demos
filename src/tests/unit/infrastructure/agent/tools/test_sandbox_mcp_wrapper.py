@@ -13,7 +13,7 @@ from src.infrastructure.agent.tools.sandbox_tool_wrapper import (
 )
 
 
-def _make_ctx() -> ToolContext:
+def _make_ctx(runtime_context: dict | None = None) -> ToolContext:
     """Create a minimal ToolContext for testing."""
     return ToolContext(
         session_id="test-session",
@@ -21,6 +21,7 @@ def _make_ctx() -> ToolContext:
         call_id="test-call",
         agent_name="test-agent",
         conversation_id="test-conv",
+        runtime_context=runtime_context or {},
     )
 
 
@@ -595,15 +596,174 @@ class TestSandboxMCPToolExecute:
 
         assert result.is_error is False
         assert "timeout --kill-after=5s 20s bash -lc" in adapter.last_kwargs["command"]
-        assert "[workspace_harness_timeout] bash command exceeded 20s" in adapter.last_kwargs[
-            "command"
-        ]
+        assert (
+            "[workspace_harness_timeout] bash command exceeded 20s"
+            in adapter.last_kwargs["command"]
+        )
         assert 'exit "$status"' in adapter.last_kwargs["command"]
         assert "printf" in adapter.last_kwargs["command"]
         assert "ready" in adapter.last_kwargs["command"]
         assert "sleep 600" in adapter.last_kwargs["command"]
         assert adapter.last_kwargs["timeout"] == 20
         assert adapter.last_call_options["timeout"] == 25.0
+
+    async def test_workspace_worker_bash_defaults_to_configured_code_root(self):
+        """Worker sandbox bash calls should inherit the workspace code root as cwd."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(runtime_context={"sandbox_code_root": "/workspace/my-game"}),
+            command="pwd",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/my-game"
+
+    async def test_workspace_worker_write_rejects_absolute_path_outside_code_root(self):
+        """Worker writes should not silently create project files outside sandbox_code_root."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={"code_context": {"sandbox_code_root": "/workspace/my-game"}}
+            ),
+            file_path="/workspace/package.json",
+            content="{}",
+        )
+
+        assert result.is_error is True
+        assert (
+            "outside the configured workspace sandbox_code_root /workspace/my-game" in result.output
+        )
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_write_allows_relative_path_under_code_root(self):
+        """Relative writes should resolve under the injected code root working directory."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(runtime_context={"sandbox_code_root": "/workspace/my-game"}),
+            file_path="package.json",
+            content="{}",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["file_path"] == "/workspace/my-game/package.json"
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/my-game"
+
+    async def test_workspace_worker_write_rejects_relative_path_escape(self):
+        """Relative write paths must not escape the configured code root."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(runtime_context={"sandbox_code_root": "/workspace/my-game"}),
+            file_path="../package.json",
+            content="{}",
+        )
+
+        assert result.is_error is True
+        assert (
+            "outside the configured workspace sandbox_code_root /workspace/my-game" in result.output
+        )
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_create_file_scopes_relative_path_to_code_root(self):
+        """create_file is a write tool and should also be pinned to sandbox_code_root."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="create_file",
+            tool_schema={
+                "name": "create_file",
+                "description": "Create file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(runtime_context={"sandbox_code_root": "/workspace/my-game"}),
+            path="src/main.ts",
+            content="export {};",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["path"] == "/workspace/my-game/src/main.ts"
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/my-game"
 
     async def test_execute_error_response(self):
         """Test tool execution with error response."""

@@ -2193,7 +2193,9 @@ class ReActAgent:
         )
 
     @classmethod
-    def _has_workspace_runtime_context(cls, conversation_context: Sequence[Mapping[str, Any]]) -> bool:
+    def _has_workspace_runtime_context(
+        cls, conversation_context: Sequence[Mapping[str, Any]]
+    ) -> bool:
         """Detect hidden workspace worker app context injected as system metadata."""
         return cls._workspace_runtime_context(conversation_context) is not None
 
@@ -2905,14 +2907,11 @@ class ReActAgent:
         has_workspace_binding = False
         workspace_runtime_payload = self._workspace_runtime_context(conversation_context)
         workspace_replan_turn = self._is_workspace_leader_replan_context(workspace_runtime_payload)
-        workspace_binding = (
-            self._normalize_workspace_binding(
-                workspace_runtime_payload.get("workspace_binding")
-                if isinstance(workspace_runtime_payload, Mapping)
-                else None
-            )
-            or self._workspace_binding_from_text(processed_user_message)
-        )
+        workspace_binding = self._normalize_workspace_binding(
+            workspace_runtime_payload.get("workspace_binding")
+            if isinstance(workspace_runtime_payload, Mapping)
+            else None
+        ) or self._workspace_binding_from_text(processed_user_message)
         if project_id and tenant_id and user_id:
             from src.infrastructure.agent.workspace.orchestrator import (
                 WorkspaceAutonomyOrchestrator,
@@ -3203,7 +3202,11 @@ class ReActAgent:
             "route_id": selection_context.metadata.get("route_id"),
             "trace_id": selection_context.metadata.get("trace_id"),
         }
-        if workspace_root_task is not None:
+        if (
+            workspace_root_task is not None
+            or workspace_binding is not None
+            or isinstance(workspace_runtime_payload, Mapping)
+        ):
             from src.infrastructure.agent.workspace.runtime_role_contract import (
                 derive_workspace_session_role,
             )
@@ -3218,17 +3221,30 @@ class ReActAgent:
                 if isinstance(runtime_role, str) and runtime_role.strip():
                     workspace_session_role = runtime_role.strip()
 
-            workspace_runtime_context = {
-                "workspace_id": getattr(workspace_root_task, "workspace_id", project_id),
-                "root_goal_task_id": getattr(workspace_root_task, "id", ""),
+            workspace_runtime_context: dict[str, Any] = {
                 "task_authority": "workspace",
                 WORKSPACE_SESSION_ROLE_KEY: workspace_session_role,
             }
+            workspace_id_value = getattr(workspace_root_task, "workspace_id", None)
+            if not workspace_id_value and workspace_binding is not None:
+                workspace_id_value = workspace_binding.get("workspace_id")
+            workspace_runtime_context["workspace_id"] = workspace_id_value or project_id
+
+            root_goal_task_id = getattr(workspace_root_task, "id", None)
+            if not root_goal_task_id and workspace_binding is not None:
+                root_goal_task_id = workspace_binding.get("root_goal_task_id")
+            workspace_runtime_context["root_goal_task_id"] = root_goal_task_id or ""
             if isinstance(workspace_runtime_payload, Mapping):
                 for key in (WORKSPACE_TURN_TYPE_KEY, WORKSPACE_TOOL_MODE_KEY):
                     value = workspace_runtime_payload.get(key)
                     if isinstance(value, str) and value.strip():
                         workspace_runtime_context[key] = value.strip()
+                code_context = workspace_runtime_payload.get("code_context")
+                if isinstance(code_context, Mapping):
+                    workspace_runtime_context["code_context"] = dict(code_context)
+                    sandbox_code_root = code_context.get("sandbox_code_root")
+                    if isinstance(sandbox_code_root, str) and sandbox_code_root.strip():
+                        workspace_runtime_context["sandbox_code_root"] = sandbox_code_root.strip()
             if workspace_binding is not None:
                 for key in ("workspace_task_id", "attempt_id", "leader_agent_id"):
                     value = workspace_binding.get(key)
@@ -3464,8 +3480,7 @@ class ReActAgent:
         execution_time_ms = int((time.time() - start_time) * 1000)
         # Count tool calls from conversation context for skill evolution capture.
         tool_call_count = sum(
-            1 for msg in conversation_context
-            if msg.get("role") in ("tool", "function")
+            1 for msg in conversation_context if msg.get("role") in ("tool", "function")
         )
         async for event in self._stream_post_process(
             processed_user_message=processed_user_message,

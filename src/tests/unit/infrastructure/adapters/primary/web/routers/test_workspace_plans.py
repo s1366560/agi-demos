@@ -176,10 +176,23 @@ def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> 
             task,
             metadata={
                 **task.metadata,
+                "pipeline_status": "failed",
+                "pipeline_gate_status": "failed",
+                "pipeline_run_id": "stale-run",
+                "pipeline_evidence_refs": [
+                    "pipeline_run:failed:stale-run",
+                    "ci_pipeline:passed",
+                    "pipeline_run:success:pipeline-run-1",
+                ],
                 "evidence_refs": [
+                    "pipeline_run:failed:stale-run",
                     "ci_pipeline:passed",
                     "pipeline_stage:test:passed",
                     "pipeline_run:success:pipeline-run-1",
+                ],
+                "verification_evidence_refs": [
+                    "pipeline_run:success:pipeline-run-1",
+                    "pipeline_run:failed:older-verification-run",
                 ],
             },
         )
@@ -548,8 +561,8 @@ async def test_snapshot_recovery_skips_stale_node_with_running_local_subprocess(
         current_attempt_id="attempt-local-subprocess",
     )
     await db_session.flush()
-    AgentRuntimeBootstrapper._local_subprocesses["conversation-local-subprocess"] = (
-        SimpleNamespace(returncode=None)
+    AgentRuntimeBootstrapper._local_subprocesses["conversation-local-subprocess"] = SimpleNamespace(
+        returncode=None
     )
     monkeypatch.setattr(
         "src.infrastructure.agent.state.agent_worker_state.get_redis_client",

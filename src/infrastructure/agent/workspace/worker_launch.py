@@ -56,9 +56,7 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # Cooldown TTL — long enough to avoid double-launch on transient retries
 # but short enough that a genuine re-assignment after rework can re-fire.
 WORKER_LAUNCH_COOLDOWN_SECONDS = 300
-WORKER_LAUNCH_HEARTBEAT_SECONDS = int(
-    os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45")
-)
+WORKER_LAUNCH_HEARTBEAT_SECONDS = int(os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45"))
 WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 8_000
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
@@ -296,15 +294,21 @@ def _build_worker_system_context(
         context["harness"] = harness_context
 
     if code_context is not None and code_context.sandbox_code_root:
+        sandbox_code_root = code_context.sandbox_code_root
         code_context_payload: dict[str, Any] = {
-            "sandbox_code_root": code_context.sandbox_code_root,
+            "sandbox_code_root": sandbox_code_root,
             "loaded_agents_files": list(code_context.loaded_agents_paths),
             "agents_digest": code_context.agents_digest,
+            "required_tool_workdir": sandbox_code_root,
+            "bootstrap_command": f"mkdir -p {sandbox_code_root} && cd {sandbox_code_root}",
             "rule": (
-                "Perform repository inspection, file edits, terminal commands, git diff, "
-                "and tests from sandbox_code_root. Ignore unrelated files outside that "
-                "directory unless the task explicitly asks for them. Read and follow the "
-                "listed AGENTS.md files before decomposing or executing the task."
+                "Before the first file operation or shell command, ensure sandbox_code_root "
+                "exists and make it the working directory. Perform repository inspection, "
+                "file edits, terminal commands, git diff, and tests from sandbox_code_root. "
+                "Do not create project files directly under /workspace or another sibling "
+                "directory. Ignore unrelated files outside sandbox_code_root unless the task "
+                "explicitly asks for them. Read and follow the listed AGENTS.md files before "
+                "decomposing or executing the task."
             ),
         }
         if code_context.agents_files:
@@ -441,6 +445,16 @@ def _build_worker_brief(
         "verify with a separate short health-check command. If a port is already in use, "
         "probe the existing service before starting another one. Do not assume `ss` exists."
     )
+    if code_context is not None and code_context.sandbox_code_root:
+        code_root = code_context.sandbox_code_root
+        sections.append(
+            "## Code root discipline\n"
+            f"Use `{code_root}` as the project root for this task. Before creating, reading, "
+            f"editing, or testing project files, run `mkdir -p {code_root} && cd {code_root}` "
+            "or pass the same directory as the tool working directory. Do not place "
+            "`package.json`, source files, tests, build output, or service code directly under "
+            "`/workspace` or a sibling directory unless the task explicitly says to do so."
+        )
     sections.append(
         "## Completion gate\n"
         "Before calling workspace_report_complete, include these exact verification refs in "
@@ -785,8 +799,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     leader_agent_id=leader_agent_id,
                     launch_state="code_context_not_ready",
                     summary=(
-                        "worker_launch.code_context_not_ready: "
-                        f"{code_context_evaluation.reason}"
+                        f"worker_launch.code_context_not_ready: {code_context_evaluation.reason}"
                     ),
                     apply_fn=apply_workspace_worker_report,
                 )
@@ -802,6 +815,27 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 root_metadata=root_metadata,
                 workspace_metadata=workspace_metadata,
             )
+            if code_context.sandbox_code_root and code_context.host_code_root is not None:
+                try:
+                    code_context.host_code_root.mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    logger.warning(
+                        "workspace_worker_launch.code_root_mkdir_failed",
+                        extra={
+                            "event": "workspace_worker_launch.code_root_mkdir_failed",
+                            "workspace_id": workspace_id,
+                            "task_id": task.id,
+                            "sandbox_code_root": code_context.sandbox_code_root,
+                            "host_code_root": str(code_context.host_code_root),
+                        },
+                        exc_info=True,
+                    )
+                else:
+                    code_context = load_workspace_code_context(
+                        project_id=workspace.project_id,
+                        root_metadata=root_metadata,
+                        workspace_metadata=workspace_metadata,
+                    )
 
             # Defensive membership check: the worker_agent_id MUST be an
             # active workspace binding. This guards against races where a
@@ -837,8 +871,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     leader_agent_id=leader_agent_id,
                     launch_state="worker_not_workspace_member",
                     summary=(
-                        "worker_launch.worker_not_workspace_member: "
-                        f"agent_id={worker_agent_id}"
+                        f"worker_launch.worker_not_workspace_member: agent_id={worker_agent_id}"
                     ),
                     apply_fn=apply_workspace_worker_report,
                 )
@@ -1184,9 +1217,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             task_id=task.id,
             actor_user_id=actor_user_id,
             leader_agent_id=leader_agent_id,
-            launch_state=(
-                "completed_via_stream" if reported else "terminal_report_failed"
-            ),
+            launch_state=("completed_via_stream" if reported else "terminal_report_failed"),
         )
         logger.info(
             "workspace_worker_launch.stream_complete_synthesized_report",

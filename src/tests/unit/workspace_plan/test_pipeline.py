@@ -79,6 +79,46 @@ async def test_sandbox_native_pipeline_success_records_stage_results() -> None:
     assert "ci_pipeline:passed" in result.evidence_refs
     assert "pipeline_stage:test:passed" in result.evidence_refs
     assert "cd /workspace/app" in runner.commands[0]
+    assert 'if [ "$code" -ne 0 ]; then' in runner.commands[0]
+    assert "workspace pipeline code_root is not accessible: %s" in runner.commands[0]
+    assert " /workspace/app >&2" in runner.commands[0]
+
+
+@pytest.mark.asyncio
+async def test_sandbox_native_pipeline_does_not_continue_when_code_root_cd_fails() -> None:
+    class CdFailRunner:
+        commands: list[str]
+
+        def __init__(self) -> None:
+            self.commands = []
+
+        async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+            self.commands.append(command)
+            return {
+                "exit_code": 0,
+                "stdout": "__MEMSTACK_PIPELINE_EXIT_CODE__=2\n",
+                "stderr": "/bin/sh: 2: cd: can't cd to /workspace/missing\n",
+            }
+
+    runner = CdFailRunner()
+    provider = SandboxNativePipelineProvider(runner)
+
+    result = await provider.run(
+        PipelineContractSpec(
+            code_root="/workspace/missing",
+            stages=(
+                PipelineStageSpec(stage="install", command="npm install", required=True),
+                PipelineStageSpec(stage="test", command="npm test", required=True),
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    assert result.reason == "stage install failed with exit 2"
+    assert len(runner.commands) == 1
+    assert runner.commands[0].find('if [ "$code" -ne 0 ]; then') < runner.commands[0].find(
+        "npm install"
+    )
 
 
 @pytest.mark.asyncio
@@ -256,6 +296,18 @@ def test_pipeline_contract_uses_workspace_delivery_metadata() -> None:
     assert contract.provider == "sandbox_native"
     assert contract.code_root == "/workspace/app"
     assert [stage.stage for stage in contract.stages] == ["test", "build", "health"]
+
+
+def test_default_npm_test_stage_skips_missing_test_script() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={},
+        fallback_code_root="/workspace/app",
+    )
+
+    test_stage = next(stage for stage in contract.stages if stage.stage == "test")
+
+    assert "p.scripts&&p.scripts.test" in test_stage.command
+    assert "no npm test script" in test_stage.command
 
 
 def test_pipeline_contract_maps_legacy_deploy_fields_to_default_service() -> None:

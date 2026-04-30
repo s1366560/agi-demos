@@ -476,18 +476,28 @@ def _node_response_metadata(node: PlanNode) -> dict[str, Any]:
 
 
 def _fill_pipeline_status_from_evidence(metadata: dict[str, Any]) -> None:
-    refs = _metadata_string_values(
-        metadata.get("pipeline_evidence_refs"),
-        metadata.get("evidence_refs"),
-        metadata.get("execution_verifications"),
-        metadata.get("verification_evidence_refs"),
-    )
+    refs = _metadata_string_values(metadata.get("pipeline_evidence_refs"))
+    if not refs:
+        refs = _metadata_string_values(
+            metadata.get("evidence_refs"),
+            metadata.get("execution_verifications"),
+            metadata.get("verification_evidence_refs"),
+        )
     status, run_id = _pipeline_status_from_evidence_refs(refs)
-    if status and not _metadata_nonempty_string(metadata.get("pipeline_status")):
+    current_status = metadata.get("pipeline_status")
+    current_run_id = metadata.get("pipeline_run_id")
+    if (
+        status
+        and current_status in {"requested", "running"}
+        and _metadata_nonempty_string(current_run_id)
+        and run_id
+        and current_run_id != run_id
+    ):
+        return
+    if status:
         metadata["pipeline_status"] = status
-    if status and not _metadata_nonempty_string(metadata.get("pipeline_gate_status")):
         metadata["pipeline_gate_status"] = status
-    if run_id and not _metadata_nonempty_string(metadata.get("pipeline_run_id")):
+    if run_id:
         metadata["pipeline_run_id"] = run_id
 
 

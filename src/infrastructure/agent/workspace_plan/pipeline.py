@@ -523,7 +523,11 @@ def _default_lint_command() -> str:
 def _default_test_command() -> str:
     return (
         "if [ -f Makefile ] && grep -qE '^test:' Makefile; then make test; "
-        "elif [ -f package.json ]; then npm test -- --runInBand=false 2>/dev/null || npm test; "
+        "elif [ -f package.json ]; then "
+        "if node -e \"const p=require('./package.json');"
+        'process.exit(p.scripts&&p.scripts.test?0:1)"; '
+        "then npm test -- --runInBand=false 2>/dev/null || npm test; "
+        "else echo 'no npm test script'; fi; "
         "elif [ -d tests ]; then pytest; else echo 'no test step'; fi"
     )
 
@@ -566,7 +570,21 @@ def _health_command(url: str) -> str:
 def _wrapped_command(command: str, *, code_root: str | None, env: dict[str, str]) -> str:
     lines = ["set +e"]
     if code_root:
-        lines.append(f"cd {shlex.quote(code_root)}")
+        quoted_code_root = shlex.quote(code_root)
+        lines.extend(
+            [
+                f"cd {quoted_code_root}",
+                "code=$?",
+                'if [ "$code" -ne 0 ]; then',
+                (
+                    "  printf 'workspace pipeline code_root is not accessible: %s\\n' "
+                    f"{quoted_code_root} >&2"
+                ),
+                f'  printf "\\n{_EXIT_MARKER}%s\\n" "$code"',
+                "  exit 0",
+                "fi",
+            ]
+        )
     for key, value in sorted(env.items()):
         if key.replace("_", "").isalnum():
             lines.append(f"export {key}={shlex.quote(value)}")

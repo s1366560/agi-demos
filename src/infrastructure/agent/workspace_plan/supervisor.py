@@ -344,7 +344,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "summary": "pending sprint nodes were missing phase barrier dependencies",
                     "node_count": repaired_phase_barriers,
                 },
-        )
+            )
         ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
         ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(
             ready_candidates,
@@ -997,9 +997,7 @@ def _append_next_iteration(
     nodes_by_phase: dict[str, list[PlanNodeId]] = {phase: [] for phase in _ITERATION_PHASES}
     normalized_phases = _normalized_next_iteration_task_phases(verdict.next_tasks)
     sequence_by_task_id = {
-        task.id: sequence
-        for sequence, task in enumerate(verdict.next_tasks, start=1)
-        if task.id
+        task.id: sequence for sequence, task in enumerate(verdict.next_tasks, start=1) if task.id
     }
     for sequence, task in enumerate(verdict.next_tasks, start=1):
         node_id = id_map.get(task.id) or PlanNodeId(f"node-{uuid.uuid4().hex[:12]}")
@@ -1120,13 +1118,14 @@ def _add_next_iteration_node(
 
 
 def _next_iteration_task_phase(task: IterationNextTask, sequence: int) -> str:
-    return task.phase if task.phase in _ITERATION_PHASES else _iteration_phase_for_sequence(sequence)
+    return (
+        task.phase if task.phase in _ITERATION_PHASES else _iteration_phase_for_sequence(sequence)
+    )
 
 
 def _normalized_next_iteration_task_phases(tasks: tuple[IterationNextTask, ...]) -> list[str]:
     phases = [
-        _next_iteration_task_phase(task, sequence)
-        for sequence, task in enumerate(tasks, start=1)
+        _next_iteration_task_phase(task, sequence) for sequence, task in enumerate(tasks, start=1)
     ]
     if _phases_are_monotonic(phases):
         return phases
@@ -1199,8 +1198,7 @@ def _repair_pending_iteration_phase_barriers(plan: Plan) -> int:
             continue
         ordered_nodes = _ordered_iteration_nodes(nodes)
         sequence_by_node = {
-            node.node_id: sequence
-            for sequence, node in enumerate(ordered_nodes, start=1)
+            node.node_id: sequence for sequence, node in enumerate(ordered_nodes, start=1)
         }
         normalized_phases = _normalized_pending_iteration_phases(ordered_nodes)
         phase_nodes: dict[str, list[PlanNodeId]] = {phase: [] for phase in _ITERATION_PHASES}
@@ -1497,7 +1495,9 @@ def _node_with_verification_evidence(
         metadata["verified_git_diff_summary"] = git_diff_summary
     if test_commands:
         metadata["verified_test_commands"] = list(test_commands)
-    pipeline_status, pipeline_run_id = _pipeline_status_from_refs(refs)
+    pipeline_status, pipeline_run_id = _pipeline_status_from_refs(
+        _pipeline_refs_for_verification(refs, artifacts)
+    )
     if pipeline_status:
         metadata["pipeline_status"] = pipeline_status
         metadata["pipeline_gate_status"] = pipeline_status
@@ -1534,6 +1534,23 @@ def _report_evidence_refs(report: VerificationReport) -> list[str]:
     for result in report.results:
         refs.extend(evidence.ref for evidence in result.evidence if evidence.ref)
     return list(dict.fromkeys(refs))
+
+
+def _pipeline_refs_for_verification(
+    refs: list[str],
+    artifacts: Mapping[str, Any] | None,
+) -> list[str]:
+    pipeline_refs: list[str] = []
+    if artifacts:
+        pipeline_refs.extend(_string_list(artifacts.get("pipeline_evidence_refs")))
+    if pipeline_refs:
+        return list(dict.fromkeys(pipeline_refs))
+
+    pipeline_refs = list(refs)
+    if artifacts:
+        for key in ("evidence_refs", "execution_verifications", "verification_evidence_refs"):
+            pipeline_refs.extend(_string_list(artifacts.get(key)))
+    return list(dict.fromkeys(pipeline_refs))
 
 
 def _pipeline_status_from_refs(refs: list[str]) -> tuple[str | None, str | None]:

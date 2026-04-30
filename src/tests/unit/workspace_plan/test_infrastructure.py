@@ -45,7 +45,10 @@ from src.infrastructure.agent.workspace_plan.orchestrator import (
 from src.infrastructure.agent.workspace_plan.planner import LLMGoalPlanner
 from src.infrastructure.agent.workspace_plan.progress import ProgressProjector
 from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepository
-from src.infrastructure.agent.workspace_plan.supervisor import WorkspaceSupervisor
+from src.infrastructure.agent.workspace_plan.supervisor import (
+    WorkspaceSupervisor,
+    _node_with_verification_evidence,
+)
 from src.infrastructure.agent.workspace_plan.verifier import (
     AcceptanceCriterionVerifier,
     BrowserE2ECriterionRunner,
@@ -1108,8 +1111,7 @@ class TestVerifier:
 
         assert rep.passed
         assert any(
-            result.message.startswith("clean worktree check skipped")
-            for result in rep.results
+            result.message.startswith("clean worktree check skipped") for result in rep.results
         )
 
     async def test_verifier_skips_broad_clean_worktree_after_pipeline_success_without_code_root(
@@ -1147,7 +1149,8 @@ class TestVerifier:
 
         assert rep.passed
         assert any(
-            result.message == "clean worktree check skipped: code root unavailable after pipeline success"
+            result.message
+            == "clean worktree check skipped: code root unavailable after pipeline success"
             for result in rep.results
         )
 
@@ -1304,6 +1307,33 @@ class _StaticIterationReviewer:
     async def review(self, context: IterationReviewContext) -> IterationReviewVerdict:
         self.contexts.append(context)
         return self.verdict
+
+
+def test_node_with_verification_evidence_prefers_latest_pipeline_artifact_status() -> None:
+    node = _leaf_node(
+        metadata={
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+            "pipeline_run_id": "old-run",
+        }
+    )
+    report = VerificationReport(node_id=node.id, attempt_id=None, results=())
+
+    updated = _node_with_verification_evidence(
+        node,
+        report,
+        artifacts={
+            "pipeline_evidence_refs": [
+                "pipeline_run:failed:old-run",
+                "ci_pipeline:passed",
+                "pipeline_run:success:new-run",
+            ]
+        },
+    )
+
+    assert updated.metadata["pipeline_status"] == "success"
+    assert updated.metadata["pipeline_gate_status"] == "success"
+    assert updated.metadata["pipeline_run_id"] == "new-run"
 
 
 def _mark_plan_tasks_done(plan: Plan) -> Plan:

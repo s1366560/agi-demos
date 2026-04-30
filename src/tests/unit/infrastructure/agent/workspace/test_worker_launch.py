@@ -326,12 +326,8 @@ class TestBuildBrief:
             system_context["artifact_write_policy"]["max_single_bash_command_chars"]
             == wl.WORKER_MAX_SINGLE_BASH_COMMAND_CHARS
         )
-        assert "smaller chunks" in " ".join(
-            system_context["artifact_write_policy"]["instructions"]
-        )
-        assert "giant heredoc" in " ".join(
-            system_context["artifact_write_policy"]["instructions"]
-        )
+        assert "smaller chunks" in " ".join(system_context["artifact_write_policy"]["instructions"])
+        assert "giant heredoc" in " ".join(system_context["artifact_write_policy"]["instructions"])
         shell_instructions = " ".join(system_context["shell_execution_policy"]["instructions"])
         assert "nohup" in shell_instructions
         assert "playwright install --with-deps" in shell_instructions
@@ -408,6 +404,9 @@ class TestBuildBrief:
 
         assert "[workspace-code-context]" not in brief
         assert "Always run npm test." not in brief
+        assert "## Code root discipline" in brief
+        assert "mkdir -p /workspace/my-evo && cd /workspace/my-evo" in brief
+        assert "Do not place `package.json`" in brief
         assert "Artifact write discipline" in brief
         assert "git_diff_summary" in brief
 
@@ -421,8 +420,15 @@ class TestBuildBrief:
         code_context_payload = system_context["code_context"]
         assert code_context_payload["sandbox_code_root"] == "/workspace/my-evo"
         assert code_context_payload["loaded_agents_files"] == ["/workspace/my-evo/AGENTS.md"]
+        assert code_context_payload["required_tool_workdir"] == "/workspace/my-evo"
+        assert code_context_payload["bootstrap_command"] == (
+            "mkdir -p /workspace/my-evo && cd /workspace/my-evo"
+        )
         assert code_context_payload["agents_files"][0]["content"] == "Always run npm test."
-        assert "Perform repository inspection" in code_context_payload["rule"]
+        assert "Before the first file operation" in code_context_payload["rule"]
+        assert (
+            "Do not create project files directly under /workspace" in code_context_payload["rule"]
+        )
 
     def test_renders_code_root_placeholder_in_extra_instructions(self) -> None:
         task = _make_task()

@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import posixpath
 import shlex
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
+    from src.infrastructure.agent.tools.context import ToolContext
     from src.infrastructure.agent.tools.define import ToolInfo
 
 
@@ -28,6 +31,28 @@ WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS = 6_000
 WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS = 12_000
 WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS = 64_000
+
+_WORKSPACE_CODE_ROOT_DEFAULT_WORKDIR_TOOLS = frozenset(
+    {
+        "bash",
+        "create_file",
+        "read",
+        "write",
+        "edit",
+        "glob",
+        "grep",
+        "list",
+        "ls",
+        "file_read",
+        "file_write",
+        "file_edit",
+        "list_files",
+    }
+)
+_WORKSPACE_CODE_ROOT_WRITE_TOOLS = frozenset(
+    {"create_file", "write", "edit", "file_write", "file_edit"}
+)
+_PATH_ARGUMENT_KEYS = ("file_path", "path")
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -152,6 +177,73 @@ def _normalize_workspace_harness_kwargs(tool_name: str, kwargs: dict[str, Any]) 
     return normalized
 
 
+def _sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
+    runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
+    raw = runtime.get("sandbox_code_root")
+    if not isinstance(raw, str) or not raw.strip():
+        code_context = runtime.get("code_context")
+        if isinstance(code_context, Mapping):
+            raw = code_context.get("sandbox_code_root")
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip().rstrip("/")
+    if not value or value == "/workspace" or not value.startswith("/workspace/"):
+        return None
+    return value
+
+
+def _path_is_inside_code_root(path: str, code_root: str) -> bool:
+    if not path.startswith("/"):
+        return True
+    return path == code_root or path.startswith(f"{code_root}/")
+
+
+def _path_scoped_to_code_root(path: str, code_root: str) -> str:
+    return posixpath.normpath(f"{code_root.rstrip('/')}/{path}")
+
+
+def _workspace_code_root_argument_error(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    code_root: str | None,
+) -> str | None:
+    if not code_root or tool_name not in _WORKSPACE_CODE_ROOT_WRITE_TOOLS:
+        return None
+    for key in _PATH_ARGUMENT_KEYS:
+        value = kwargs.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        path = value.strip()
+        scoped_path = (
+            _path_scoped_to_code_root(path, code_root) if not path.startswith("/") else path
+        )
+        if _path_is_inside_code_root(scoped_path, code_root):
+            continue
+        return (
+            f"{tool_name}.{key} targets {path}, which is outside the configured "
+            f"workspace sandbox_code_root {code_root}. Retry inside {code_root} "
+            "or use a relative path from that directory."
+        )
+    return None
+
+
+def _apply_workspace_code_root_defaults(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    code_root: str | None,
+) -> dict[str, Any]:
+    if not code_root or tool_name not in _WORKSPACE_CODE_ROOT_DEFAULT_WORKDIR_TOOLS:
+        return kwargs
+    scoped = dict(kwargs)
+    for key in _PATH_ARGUMENT_KEYS:
+        value = scoped.get(key)
+        if isinstance(value, str) and value.strip() and not value.strip().startswith("/"):
+            scoped[key] = _path_scoped_to_code_root(value.strip(), code_root)
+    if not scoped.get("_workspace_dir"):
+        scoped["_workspace_dir"] = code_root
+    return scoped
+
+
 def _with_bash_timeout_guard(
     tool_name: str,
     kwargs: dict[str, Any],
@@ -178,7 +270,7 @@ def _with_bash_timeout_guard(
         'case "$status" in '
         "124|137|143) "
         "printf '\\n[workspace_harness_timeout] bash command exceeded "
-        f"{timeout_seconds}s and was terminated (exit=%s)\\n' \"$status\" >&2; "
+        f'{timeout_seconds}s and was terminated (exit=%s)\\n\' "$status" >&2; '
         ";; "
         "esac; "
         'exit "$status"; '
@@ -422,7 +514,6 @@ def create_sandbox_mcp_tool(
     Returns:
         A :class:`ToolInfo` instance representing this sandbox tool.
     """
-    from src.infrastructure.agent.tools.context import ToolContext
     from src.infrastructure.agent.tools.define import ToolInfo
     from src.infrastructure.agent.tools.result import ToolResult
 
@@ -436,9 +527,16 @@ def create_sandbox_mcp_tool(
 
     async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
         """Execute the sandbox MCP tool with retry logic."""
-        _ = ctx  # Context available but not used by MCP tool calls
         try:
             normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
+            code_root = _sandbox_code_root_from_context(ctx)
+            if argument_error := _workspace_code_root_argument_error(
+                tool_name, normalized_kwargs, code_root
+            ):
+                return ToolResult(output=argument_error, is_error=True)
+            normalized_kwargs = _apply_workspace_code_root_defaults(
+                tool_name, normalized_kwargs, code_root
+            )
             if argument_error := _workspace_harness_argument_error(tool_name, normalized_kwargs):
                 return ToolResult(output=argument_error, is_error=True)
             output, raw_result = await _execute_with_retry(
