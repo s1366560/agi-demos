@@ -18,7 +18,9 @@ vi.mock('@/services/workspaceService', () => ({
   workspacePlanService: {
     getSnapshot: vi.fn(),
     pauseAutoLoop: vi.fn(),
+    regenerateDeliveryContract: vi.fn(),
     reopenBlockedNode: vi.fn(),
+    requestPipelineRun: vi.fn(),
     requestNodeReplan: vi.fn(),
     resumeAutoLoop: vi.fn(),
     retryOutboxItem: vi.fn(),
@@ -228,6 +230,30 @@ describe('StatusTab', () => {
             workspace_task_id: null,
             priority: 1,
             metadata: {},
+            phase_contract: {
+              phase: 'implement',
+              title: 'Implement',
+              entry_gate: 'Story card and write scope are bounded.',
+              exit_gate: 'Changed files and a local recovery boundary are recorded.',
+              required_evidence: ['changed files', 'commit or recovery ref'],
+              allowed_routing: ['continue', 'recover', 'replan'],
+              blocked_semantics: 'Blocked is reserved for human-only inputs.',
+            },
+            evidence_bundle: {
+              artifacts: ['artifact.spec'],
+              evidence_refs: ['pipeline_run:success:run-1'],
+              changed_files: ['web/src/App.tsx'],
+              pipeline_refs: ['pipeline_run:success:run-1'],
+              verification_summary: 'verified',
+              review_summary: 'Review requested implementation evidence.',
+            },
+            gate_status: {
+              status: 'running',
+              summary: 'This phase is collecting its required evidence.',
+              missing: ['commit or recovery ref'],
+              evidence_refs: ['pipeline_run:success:run-1'],
+              routing: 'continue',
+            },
             created_at: '2026-04-23T00:00:00Z',
             actions: {
               request_replan: {
@@ -328,6 +354,16 @@ describe('StatusTab', () => {
             running: 1,
             blocked: 0,
             progress: 25,
+            gate_status: {
+              status: 'running',
+              summary: 'Implement evidence is being collected.',
+              missing: ['commit or recovery ref'],
+              evidence_refs: ['pipeline_run:success:run-1'],
+              routing: 'continue',
+            },
+            required_artifacts: ['changed files', 'commit or recovery ref'],
+            missing_artifacts: ['commit or recovery ref'],
+            summary: 'Implement evidence is being collected.',
           },
           { id: 'test', label: 'Test', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
           { id: 'deploy', label: 'Deploy', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
@@ -399,9 +435,15 @@ describe('StatusTab', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Review history')).toBeInTheDocument();
     expect(screen.getByText('Plan next')).toBeInTheDocument();
+    expect(screen.getByText('Phase contract')).toBeInTheDocument();
+    expect(screen.getAllByText(/commit or recovery ref/).length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
     expect(screen.getByText('supervisor_tick')).toBeInTheDocument();
     expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    expect(screen.getByText('Review gate')).toBeInTheDocument();
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
       outboxLimit: 20,
       eventLimit: 80,
@@ -651,6 +693,7 @@ describe('StatusTab', () => {
     fireEvent.change(screen.getByLabelText('blackboard.planRunSearch'), {
       target: { value: 'blocked' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(screen.getByText('artifact.blocked-report')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open attempt' })).toHaveAttribute(
       'href',
@@ -661,6 +704,7 @@ describe('StatusTab', () => {
       target: { value: 'operator reviewed blocked evidence' },
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
     fireEvent.click(screen.getByText('Retry now'));
     await waitFor(() => {
       expect(workspacePlanService.retryOutboxItem).toHaveBeenCalledWith('ws-1', 'outbox-failed-1', {

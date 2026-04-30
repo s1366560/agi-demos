@@ -486,19 +486,35 @@ export const WorkspaceSettingsPanel: React.FC<{
               <div className="rounded-md border border-border-light bg-surface-muted px-3 py-3 dark:border-border-dark dark:bg-surface-dark-alt">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
-                      Agent managed contract
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
+                        Agent-managed contract summary
+                      </div>
+                      <span className="rounded border border-border-light bg-surface-light px-2 py-0.5 text-[11px] font-semibold uppercase text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+                        {draft.deliveryAgentManaged ? 'auto' : 'manual locked'}
+                      </span>
                     </div>
                     <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
                       {draft.deliveryContractSource || 'metadata'} ·{' '}
                       {Math.round(draft.deliveryContractConfidence * 100)}% confidence
                     </p>
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                      <span className="max-w-full truncate rounded border border-border-light bg-surface-light px-2 py-1 font-mono text-[11px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+                        {draft.deliveryProvider || 'sandbox_native'}
+                      </span>
+                      <span className="rounded border border-border-light bg-surface-light px-2 py-1 text-[11px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+                        {String(draft.deliveryServices.length)} service(s)
+                      </span>
+                      <span className="rounded border border-border-light bg-surface-light px-2 py-1 text-[11px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+                        {draft.deliveryAutoDeploy ? 'auto preview' : 'pipeline only'}
+                      </span>
+                    </div>
                   </div>
                   <SwitchField
-                    label="Agent managed"
-                    checked={draft.deliveryAgentManaged}
+                    label="Manual lock"
+                    checked={!draft.deliveryAgentManaged}
                     onChange={(checked) => {
-                      updateDraft('deliveryAgentManaged', checked);
+                      updateDraft('deliveryAgentManaged', !checked);
                     }}
                   />
                 </div>
@@ -681,6 +697,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                               updateDeliveryService(index, 'start_command', event.target.value);
                             }}
                             placeholder="pnpm dev --host 0.0.0.0 --port 3000"
+                            className="font-mono text-xs"
                             rows={3}
                           />
                         </Field>
@@ -711,6 +728,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                               updateDeliveryService(index, 'health_command', event.target.value);
                             }}
                             placeholder="curl -fsS http://127.0.0.1:3000/"
+                            className="font-mono text-xs"
                             rows={2}
                           />
                         </Field>
@@ -747,6 +765,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                     updateDraft('deliveryInstallCommand', event.target.value);
                   }}
                   placeholder="pnpm install --frozen-lockfile"
+                  className="font-mono text-xs"
                   rows={3}
                 />
               </Field>
@@ -758,6 +777,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                     updateDraft('deliveryLintCommand', event.target.value);
                   }}
                   placeholder="pnpm lint"
+                  className="font-mono text-xs"
                   rows={3}
                 />
               </Field>
@@ -769,6 +789,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                     updateDraft('deliveryTestCommand', event.target.value);
                   }}
                   placeholder="pnpm test"
+                  className="font-mono text-xs"
                   rows={3}
                 />
               </Field>
@@ -780,6 +801,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                     updateDraft('deliveryBuildCommand', event.target.value);
                   }}
                   placeholder="pnpm build"
+                  className="font-mono text-xs"
                   rows={3}
                 />
               </Field>
@@ -791,6 +813,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                     updateDraft('deliveryDeployCommand', event.target.value);
                   }}
                   placeholder="pnpm start --host 0.0.0.0 --port 3000"
+                  className="font-mono text-xs"
                   rows={3}
                 />
               </Field>
@@ -802,6 +825,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                     updateDraft('deliveryHealthCommand', event.target.value);
                   }}
                   placeholder="curl -fsS http://127.0.0.1:3000 >/dev/null"
+                  className="font-mono text-xs"
                   rows={3}
                 />
               </Field>

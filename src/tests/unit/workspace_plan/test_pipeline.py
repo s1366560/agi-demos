@@ -17,12 +17,16 @@ from src.domain.model.workspace_plan import (
 )
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    _node_has_required_deployment_health,
     _parse_agent_managed_pipeline_probe,
     _pipeline_completion_node_state,
     _propose_agent_managed_pipeline_contract,
+    _workspace_proxy_service_id,
+    _workspace_scoped_pipeline_contract,
 )
 from src.infrastructure.agent.workspace_plan.pipeline import (
     PipelineContractSpec,
+    PipelineServiceSpec,
     PipelineStageSpec,
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
@@ -459,6 +463,89 @@ def test_agent_managed_pipeline_probe_maps_start_script_to_service() -> None:
             "auto_open": True,
         }
     ]
+
+
+def test_workspace_proxy_service_id_is_stable_and_workspace_scoped() -> None:
+    service_a = _workspace_proxy_service_id(
+        workspace_id="cb8139b9-3744-462e-8415-5ef684781fec",
+        service_id="default",
+    )
+    service_b = _workspace_proxy_service_id(
+        workspace_id="f400e7f1-e784-43df-ae29-ac28b8f1c8e3",
+        service_id="default",
+    )
+
+    assert service_a == _workspace_proxy_service_id(
+        workspace_id="cb8139b9-3744-462e-8415-5ef684781fec",
+        service_id="default",
+    )
+    assert service_a.startswith("ws-cb8139b9-default-")
+    assert service_b.startswith("ws-f400e7f1-default-")
+    assert service_a != service_b
+    assert len(service_a) <= 63
+
+
+def test_workspace_scoped_pipeline_contract_rewrites_services_and_stage_ids() -> None:
+    contract = PipelineContractSpec(
+        stages=(
+            PipelineStageSpec(stage="deploy", command="npm start", service_id="default"),
+            PipelineStageSpec(stage="health", command="curl /", service_id="default"),
+        ),
+        services=(
+            PipelineServiceSpec(
+                service_id="default",
+                name="Preview",
+                start_command="npm start",
+                internal_port=3000,
+            ),
+        ),
+    )
+
+    scoped = _workspace_scoped_pipeline_contract(
+        contract,
+        workspace_id="cb8139b9-3744-462e-8415-5ef684781fec",
+    )
+
+    scoped_service_id = scoped.services[0].service_id
+    assert scoped_service_id.startswith("ws-cb8139b9-default-")
+    assert [stage.service_id for stage in scoped.stages] == [
+        scoped_service_id,
+        scoped_service_id,
+    ]
+
+
+def test_node_health_idempotency_requires_scoped_service_evidence() -> None:
+    contract = PipelineContractSpec(
+        services=(
+            PipelineServiceSpec(
+                service_id="ws-cb8139b9-default-12345678",
+                name="Preview",
+                start_command="npm start",
+                internal_port=3000,
+            ),
+        )
+    )
+    node = _node(
+        metadata={
+            "pipeline_evidence_refs": [
+                "deployment_health:passed",
+                "deployment_health:passed:default",
+            ]
+        }
+    )
+
+    assert not _node_has_required_deployment_health(node, contract=contract)
+
+    node = replace(
+        node,
+        metadata={
+            "pipeline_evidence_refs": [
+                "deployment_health:passed:ws-cb8139b9-default-12345678",
+            ]
+        },
+    )
+
+    assert _node_has_required_deployment_health(node, contract=contract)
 
 
 @pytest.mark.asyncio

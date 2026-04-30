@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -1313,6 +1314,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
         )
         contract = _pipeline_contract_for_workspace(
             project_id=workspace.project_id,
+            workspace_id=workspace_id,
             workspace_metadata=workspace_metadata,
             root_metadata=root_metadata,
         )
@@ -1338,6 +1340,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             )
             contract = _pipeline_contract_for_workspace(
                 project_id=workspace.project_id,
+                workspace_id=workspace_id,
                 workspace_metadata=workspace_metadata,
                 root_metadata=root_metadata,
             )
@@ -1370,7 +1373,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 latest.status == "success"
                 and (
                     not _requires_preview_deployment(contract)
-                    or _node_has_required_deployment_health(node)
+                    or _node_has_required_deployment_health(node, contract=contract)
                 )
             )
         ):
@@ -1606,6 +1609,7 @@ async def _pipeline_root_metadata(
 def _pipeline_contract_for_workspace(
     *,
     project_id: str,
+    workspace_id: str,
     workspace_metadata: dict[str, Any],
     root_metadata: dict[str, Any],
 ) -> PipelineContractSpec:
@@ -1616,10 +1620,11 @@ def _pipeline_contract_for_workspace(
         root_metadata=root_metadata,
         workspace_metadata=workspace_metadata,
     )
-    return build_pipeline_contract_from_metadata(
+    contract = build_pipeline_contract_from_metadata(
         workspace_metadata=workspace_metadata,
         fallback_code_root=code_context.sandbox_code_root,
     )
+    return _workspace_scoped_pipeline_contract(contract, workspace_id=workspace_id)
 
 
 def _needs_agent_managed_pipeline_proposal(contract: PipelineContractSpec) -> bool:
@@ -1636,11 +1641,61 @@ def _requires_preview_deployment(contract: PipelineContractSpec) -> bool:
     return contract.auto_deploy
 
 
-def _node_has_required_deployment_health(node: PlanNode) -> bool:
+def _node_has_required_deployment_health(
+    node: PlanNode,
+    *,
+    contract: PipelineContractSpec,
+) -> bool:
     refs = _merge_string_values(node.metadata.get("pipeline_evidence_refs"), [])
+    required_service_ids = [service.service_id for service in contract.services if service.required]
+    if required_service_ids:
+        return all(
+            f"deployment_health:passed:{service_id}" in refs for service_id in required_service_ids
+        )
     return "deployment_health:passed" in refs or any(
         ref.startswith("deployment_health:passed:") for ref in refs
     )
+
+
+def _workspace_scoped_pipeline_contract(
+    contract: PipelineContractSpec,
+    *,
+    workspace_id: str,
+) -> PipelineContractSpec:
+    if not contract.services:
+        return contract
+    service_id_map = {
+        service.service_id: _workspace_proxy_service_id(
+            workspace_id=workspace_id,
+            service_id=service.service_id,
+        )
+        for service in contract.services
+    }
+    services = tuple(
+        replace(service, service_id=service_id_map[service.service_id])
+        for service in contract.services
+    )
+    stages = tuple(
+        replace(stage, service_id=service_id_map.get(stage.service_id, stage.service_id))
+        if stage.service_id
+        else stage
+        for stage in contract.stages
+    )
+    return replace(contract, services=services, stages=stages)
+
+
+def _workspace_proxy_service_id(*, workspace_id: str, service_id: str) -> str:
+    prefix = _workspace_proxy_service_prefix(workspace_id)
+    if service_id.startswith(f"{prefix}-"):
+        return service_id
+    fragment = re.sub(r"[^a-z0-9-]+", "-", service_id.lower()).strip("-") or "service"
+    digest = hashlib.sha1(f"{workspace_id}:{service_id}".encode()).hexdigest()[:8]
+    return f"{prefix}-{fragment[:24].strip('-') or 'service'}-{digest}"
+
+
+def _workspace_proxy_service_prefix(workspace_id: str) -> str:
+    fragment = re.sub(r"[^a-z0-9]+", "", workspace_id.lower())[:8]
+    return f"ws-{fragment or 'workspace'}"
 
 
 async def _propose_agent_managed_pipeline_contract(

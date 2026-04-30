@@ -80,6 +80,49 @@ _ITERATION_PHASE_LABELS = {
     "deploy": "Deploy",
     "review": "Review",
 }
+_PHASE_CONTRACTS: dict[str, dict[str, Any]] = {
+    "research": {
+        "entry_gate": "Root goal and code context are visible to the worker.",
+        "exit_gate": "Problem facts, constraints, and unknowns are captured as evidence.",
+        "required_evidence": ["research notes", "scope facts"],
+        "allowed_routing": ["continue", "replan", "recover"],
+    },
+    "plan": {
+        "entry_gate": "Research context is available or explicitly not required.",
+        "exit_gate": "Story card includes AC, dependencies, impact, out-of-scope, and task budget.",
+        "required_evidence": ["story card", "acceptance criteria", "task budget"],
+        "allowed_routing": ["continue", "replan", "needs_human_review"],
+    },
+    "implement": {
+        "entry_gate": "Story card and write scope are bounded.",
+        "exit_gate": "Changed files and a local recovery boundary are recorded.",
+        "required_evidence": ["changed files", "commit or recovery ref", "scope discipline"],
+        "allowed_routing": ["continue", "recover", "replan"],
+    },
+    "test": {
+        "entry_gate": "Implementation evidence exists.",
+        "exit_gate": "Required checks produce machine-verifiable evidence.",
+        "required_evidence": ["ci pipeline", "test stage", "failure recovery"],
+        "allowed_routing": ["continue", "recover", "replan"],
+    },
+    "deploy": {
+        "entry_gate": "Pipeline is green or recovery is in progress.",
+        "exit_gate": "Required preview services are registered and healthy.",
+        "required_evidence": ["deployment health", "preview URL", "service logs"],
+        "allowed_routing": ["continue", "recover", "needs_human_review"],
+    },
+    "review": {
+        "entry_gate": "Pipeline and deployment evidence are available.",
+        "exit_gate": "AC-by-AC verdict and next-iteration routing verdict are recorded.",
+        "required_evidence": ["review verdict", "evidence index", "next routing"],
+        "allowed_routing": ["complete_goal", "continue_next_iteration", "needs_human_review"],
+    },
+}
+_HUMAN_ONLY_BLOCKED_SEMANTICS = (
+    "Blocked is reserved for missing human permission, credentials, policy decisions, or "
+    "irreversible operator choices. Test, pipeline, or evidence failures should route to "
+    "recovery or replan."
+)
 
 
 class WorkspacePlanActionCapabilityResponse(BaseModel):
@@ -87,6 +130,41 @@ class WorkspacePlanActionCapabilityResponse(BaseModel):
     label: str
     reason: str | None = None
     requires_confirmation: bool = False
+
+
+class WorkspacePlanPhaseContractResponse(BaseModel):
+    phase: str = "plan"
+    title: str = "Plan"
+    entry_gate: str = ""
+    exit_gate: str = ""
+    required_evidence: list[str] = Field(default_factory=list)
+    allowed_routing: list[str] = Field(default_factory=list)
+    blocked_semantics: str = _HUMAN_ONLY_BLOCKED_SEMANTICS
+
+
+class WorkspacePlanGateStatusResponse(BaseModel):
+    status: str = "pending"
+    summary: str = ""
+    missing: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    routing: str = "continue"
+
+
+class WorkspacePlanEvidenceBundleResponse(BaseModel):
+    artifacts: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    pipeline_refs: list[str] = Field(default_factory=list)
+    verification_summary: str = ""
+    review_summary: str = ""
+
+
+class WorkspacePlanBlockerAnalysisResponse(BaseModel):
+    blocker_type: str = "none"
+    root_cause: str = ""
+    resolution: str = ""
+    routing_decision: str = "continue"
+    human_intervention_required: bool = False
 
 
 class WorkspacePlanNodeResponse(BaseModel):
@@ -111,6 +189,14 @@ class WorkspacePlanNodeResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None
     completed_at: datetime | None
+    phase_contract: WorkspacePlanPhaseContractResponse | None = None
+    evidence_bundle: WorkspacePlanEvidenceBundleResponse = Field(
+        default_factory=WorkspacePlanEvidenceBundleResponse
+    )
+    gate_status: WorkspacePlanGateStatusResponse = Field(
+        default_factory=WorkspacePlanGateStatusResponse
+    )
+    blocker_analysis: WorkspacePlanBlockerAnalysisResponse | None = None
     actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
 
 
@@ -133,6 +219,12 @@ class WorkspacePlanIterationPhaseResponse(BaseModel):
     running: int = 0
     blocked: int = 0
     progress: int = 0
+    gate_status: WorkspacePlanGateStatusResponse = Field(
+        default_factory=WorkspacePlanGateStatusResponse
+    )
+    required_artifacts: list[str] = Field(default_factory=list)
+    missing_artifacts: list[str] = Field(default_factory=list)
+    summary: str = ""
 
 
 class WorkspacePlanIterationHistoryResponse(BaseModel):
@@ -236,17 +328,32 @@ class WorkspaceDeliveryServiceResponse(BaseModel):
     status: str = "not_deployed"
 
 
+class WorkspacePlanRunAssessmentResponse(BaseModel):
+    status: str = "not_run"
+    summary: str = "No pipeline run has been recorded."
+    evidence_refs: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    required_services_total: int = 0
+    required_services_healthy: int = 0
+    failed_required_services: list[str] = Field(default_factory=list)
+
+
 class WorkspaceDeliverySummaryResponse(BaseModel):
     provider: str = "sandbox_native"
     status: str = "not_configured"
     contract_source: str = "metadata"
     contract_confidence: float = 0.0
     agent_managed: bool = True
+    code_root: str | None = None
     latest_run: WorkspacePipelineRunResponse | None = None
     recent_runs: list[WorkspacePipelineRunResponse] = Field(default_factory=list)
     services: list[WorkspaceDeliveryServiceResponse] = Field(default_factory=list)
     deployment: WorkspaceDeploymentResponse | None = None
     deployments: list[WorkspaceDeploymentResponse] = Field(default_factory=list)
+    run_assessment: WorkspacePlanRunAssessmentResponse = Field(
+        default_factory=WorkspacePlanRunAssessmentResponse
+    )
+    warnings: list[str] = Field(default_factory=list)
     actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
 
 
@@ -421,58 +528,354 @@ def _outbox_actions(
 
 def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
     nodes = sorted(plan.nodes.values(), key=lambda node: (node.kind.value, node.priority, node.id))
-    return [
-        WorkspacePlanNodeResponse(
-            id=node.id,
-            parent_id=node.parent_id.value if node.parent_id else None,
-            kind=node.kind.value,
-            title=node.title,
-            description=node.description,
-            depends_on=sorted(dep.value for dep in node.depends_on),
-            acceptance_criteria=[
-                {
-                    "kind": criterion.kind.value,
-                    "spec": criterion.spec,
-                    "required": criterion.required,
-                    "description": criterion.description,
-                }
-                for criterion in node.acceptance_criteria
-            ],
-            feature_checkpoint=(
-                node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else None
-            ),
-            handoff_package=(
-                node.handoff_package.to_json() if node.handoff_package is not None else None
-            ),
-            recommended_capabilities=[
-                {"name": capability.name, "weight": capability.weight}
-                for capability in node.recommended_capabilities
-            ],
-            intent=node.intent.value,
-            execution=node.execution.value,
-            progress={
-                "percent": node.progress.percent,
-                "confidence": node.progress.confidence,
-                "note": node.progress.note,
-            },
-            assignee_agent_id=node.assignee_agent_id,
-            current_attempt_id=node.current_attempt_id,
-            workspace_task_id=node.workspace_task_id,
-            priority=node.priority,
-            metadata=_node_response_metadata(node),
-            created_at=node.created_at,
-            updated_at=node.updated_at,
-            completed_at=node.completed_at,
-            actions=_node_actions(node),
+    responses: list[WorkspacePlanNodeResponse] = []
+    for node in nodes:
+        metadata = _node_response_metadata(node)
+        phase_id = _node_iteration_phase(node)
+        evidence_bundle = _node_evidence_bundle_response(node, metadata)
+        gate_status = _node_gate_status_response(
+            node,
+            phase_id=phase_id,
+            metadata=metadata,
+            evidence_bundle=evidence_bundle,
         )
-        for node in nodes
-    ]
+        responses.append(
+            WorkspacePlanNodeResponse(
+                id=node.id,
+                parent_id=node.parent_id.value if node.parent_id else None,
+                kind=node.kind.value,
+                title=node.title,
+                description=node.description,
+                depends_on=sorted(dep.value for dep in node.depends_on),
+                acceptance_criteria=[
+                    {
+                        "kind": criterion.kind.value,
+                        "spec": criterion.spec,
+                        "required": criterion.required,
+                        "description": criterion.description,
+                    }
+                    for criterion in node.acceptance_criteria
+                ],
+                feature_checkpoint=(
+                    node.feature_checkpoint.to_json()
+                    if node.feature_checkpoint is not None
+                    else None
+                ),
+                handoff_package=(
+                    node.handoff_package.to_json() if node.handoff_package is not None else None
+                ),
+                recommended_capabilities=[
+                    {"name": capability.name, "weight": capability.weight}
+                    for capability in node.recommended_capabilities
+                ],
+                intent=node.intent.value,
+                execution=node.execution.value,
+                progress={
+                    "percent": node.progress.percent,
+                    "confidence": node.progress.confidence,
+                    "note": node.progress.note,
+                },
+                assignee_agent_id=node.assignee_agent_id,
+                current_attempt_id=node.current_attempt_id,
+                workspace_task_id=node.workspace_task_id,
+                priority=node.priority,
+                metadata=metadata,
+                created_at=node.created_at,
+                updated_at=node.updated_at,
+                completed_at=node.completed_at,
+                phase_contract=_phase_contract_response(phase_id),
+                evidence_bundle=evidence_bundle,
+                gate_status=gate_status,
+                blocker_analysis=_node_blocker_analysis_response(
+                    node,
+                    metadata=metadata,
+                    gate_status=gate_status,
+                ),
+                actions=_node_actions(node),
+            )
+        )
+    return responses
 
 
 def _node_response_metadata(node: PlanNode) -> dict[str, Any]:
     metadata = dict(node.metadata)
     _fill_pipeline_status_from_evidence(metadata)
     return metadata
+
+
+def _phase_contract_response(phase_id: str) -> WorkspacePlanPhaseContractResponse:
+    contract = _PHASE_CONTRACTS.get(phase_id) or _PHASE_CONTRACTS["plan"]
+    return WorkspacePlanPhaseContractResponse(
+        phase=phase_id,
+        title=_ITERATION_PHASE_LABELS.get(phase_id, phase_id.title()),
+        entry_gate=str(contract.get("entry_gate") or ""),
+        exit_gate=str(contract.get("exit_gate") or ""),
+        required_evidence=[
+            str(item) for item in contract.get("required_evidence", []) if str(item)
+        ],
+        allowed_routing=[str(item) for item in contract.get("allowed_routing", []) if str(item)],
+    )
+
+
+def _node_evidence_bundle_response(
+    node: PlanNode,
+    metadata: Mapping[str, Any],
+) -> WorkspacePlanEvidenceBundleResponse:
+    evidence_refs = _metadata_string_values(
+        metadata.get("pipeline_evidence_refs"),
+        metadata.get("evidence_refs"),
+        metadata.get("execution_verifications"),
+        metadata.get("verification_evidence_refs"),
+    )
+    artifacts = _node_artifact_refs(node, metadata)
+    changed_files = _node_changed_files(node, metadata)
+    pipeline_refs = [
+        ref
+        for ref in evidence_refs
+        if ref.startswith(("ci_pipeline:", "pipeline_", "deployment_", "preview_"))
+    ]
+    return WorkspacePlanEvidenceBundleResponse(
+        artifacts=artifacts,
+        evidence_refs=evidence_refs,
+        changed_files=changed_files,
+        pipeline_refs=pipeline_refs,
+        verification_summary=_first_metadata_string(
+            metadata,
+            "last_verification_summary",
+            "verification_summary",
+            "worker_report_summary",
+            "terminal_report_summary",
+        ),
+        review_summary=_first_metadata_string(
+            metadata,
+            "review_summary",
+            "last_review_summary",
+            "phase_review_summary",
+        ),
+    )
+
+
+def _node_artifact_refs(node: PlanNode, metadata: Mapping[str, Any]) -> list[str]:
+    values: list[str] = []
+    if node.feature_checkpoint is not None:
+        values.extend(node.feature_checkpoint.expected_artifacts)
+    values.extend(
+        _metadata_string_values(
+            metadata.get("artifacts"),
+            metadata.get("artifact_refs"),
+            metadata.get("deliverables"),
+            metadata.get("expected_artifacts"),
+        )
+    )
+    return list(dict.fromkeys(values))[:12]
+
+
+def _node_changed_files(node: PlanNode, metadata: Mapping[str, Any]) -> list[str]:
+    values = _metadata_string_values(
+        metadata.get("write_set"),
+        metadata.get("changed_files"),
+        metadata.get("git_changed_files"),
+    )
+    checkpoint = node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else {}
+    if isinstance(checkpoint, dict):
+        values.extend(_metadata_string_values(checkpoint.get("changed_files")))
+    return list(dict.fromkeys(values))[:16]
+
+
+def _first_metadata_string(metadata: Mapping[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = _metadata_string(metadata.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _node_gate_status_response(
+    node: PlanNode,
+    *,
+    phase_id: str,
+    metadata: Mapping[str, Any],
+    evidence_bundle: WorkspacePlanEvidenceBundleResponse,
+) -> WorkspacePlanGateStatusResponse:
+    missing = _node_missing_phase_evidence(
+        node,
+        phase_id=phase_id,
+        metadata=metadata,
+        evidence_bundle=evidence_bundle,
+    )
+    evidence_refs = evidence_bundle.evidence_refs[:8]
+    if node.intent is TaskIntent.BLOCKED:
+        return WorkspacePlanGateStatusResponse(
+            status="blocked",
+            summary=_first_metadata_string(metadata, "blocker_reason", "last_error")
+            or node.progress.note
+            or "Human intervention is required before this node can advance.",
+            missing=missing,
+            evidence_refs=evidence_refs,
+            routing="needs_human_review",
+        )
+    if node.intent is TaskIntent.DONE:
+        status = "missing" if missing else "passed"
+        return WorkspacePlanGateStatusResponse(
+            status=status,
+            summary=(
+                f"Exit gate is missing {', '.join(missing[:3])}."
+                if missing
+                else "Exit gate has the required evidence."
+            ),
+            missing=missing,
+            evidence_refs=evidence_refs,
+            routing="recover" if missing else "continue",
+        )
+    if (
+        node.execution
+        in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.REPORTED,
+            TaskExecution.VERIFYING,
+        }
+        or node.intent is TaskIntent.IN_PROGRESS
+    ):
+        return WorkspacePlanGateStatusResponse(
+            status="running",
+            summary="This phase is collecting its required evidence.",
+            missing=missing,
+            evidence_refs=evidence_refs,
+            routing="continue",
+        )
+    return WorkspacePlanGateStatusResponse(
+        status="pending",
+        summary="This phase gate has not started yet.",
+        missing=missing,
+        evidence_refs=evidence_refs,
+        routing="continue",
+    )
+
+
+def _node_missing_phase_evidence(
+    node: PlanNode,
+    *,
+    phase_id: str,
+    metadata: Mapping[str, Any],
+    evidence_bundle: WorkspacePlanEvidenceBundleResponse,
+) -> list[str]:
+    by_phase = {
+        "research": lambda: _missing_research_evidence(evidence_bundle),
+        "plan": lambda: _missing_plan_evidence(node, metadata),
+        "implement": lambda: _missing_implement_evidence(metadata, evidence_bundle),
+        "test": lambda: _missing_test_evidence(evidence_bundle),
+        "deploy": lambda: _missing_deploy_evidence(evidence_bundle),
+        "review": lambda: _missing_review_evidence(metadata, evidence_bundle),
+    }
+    resolver = by_phase.get(phase_id)
+    return resolver() if resolver is not None else []
+
+
+def _missing_research_evidence(
+    evidence_bundle: WorkspacePlanEvidenceBundleResponse,
+) -> list[str]:
+    if evidence_bundle.artifacts or evidence_bundle.verification_summary:
+        return []
+    return ["research notes"]
+
+
+def _missing_plan_evidence(node: PlanNode, metadata: Mapping[str, Any]) -> list[str]:
+    missing: list[str] = []
+    if not node.acceptance_criteria:
+        missing.append("acceptance criteria")
+    has_story_card = (
+        _metadata_string(metadata.get("scrum_artifact"))
+        or _metadata_string(metadata.get("story_card"))
+        or node.feature_checkpoint is not None
+    )
+    if not has_story_card:
+        missing.append("story card")
+    return missing
+
+
+def _missing_implement_evidence(
+    metadata: Mapping[str, Any],
+    evidence_bundle: WorkspacePlanEvidenceBundleResponse,
+) -> list[str]:
+    missing: list[str] = []
+    if not evidence_bundle.changed_files:
+        missing.append("changed files")
+    has_recovery_ref = (
+        _metadata_string(metadata.get("commit_ref"))
+        or _metadata_string(metadata.get("local_recovery_ref"))
+        or _metadata_string(metadata.get("git_diff_summary"))
+    )
+    if not has_recovery_ref:
+        missing.append("commit or recovery ref")
+    return missing
+
+
+def _missing_test_evidence(evidence_bundle: WorkspacePlanEvidenceBundleResponse) -> list[str]:
+    refs = set(evidence_bundle.evidence_refs)
+    if (
+        "ci_pipeline:passed" in refs
+        or any(ref.startswith("pipeline_stage:test:passed") for ref in refs)
+        or any(ref.startswith("pipeline_run:success:") for ref in refs)
+    ):
+        return []
+    return ["pipeline test evidence"]
+
+
+def _missing_deploy_evidence(evidence_bundle: WorkspacePlanEvidenceBundleResponse) -> list[str]:
+    refs = set(evidence_bundle.evidence_refs)
+    missing: list[str] = []
+    if not (
+        "deployment_health:passed" in refs
+        or any(ref.startswith("deployment_health:passed:") for ref in refs)
+    ):
+        missing.append("deployment health")
+    if not any(ref.startswith("preview_url:") for ref in refs):
+        missing.append("preview URL")
+    return missing
+
+
+def _missing_review_evidence(
+    metadata: Mapping[str, Any],
+    evidence_bundle: WorkspacePlanEvidenceBundleResponse,
+) -> list[str]:
+    missing: list[str] = []
+    has_review_verdict = (
+        evidence_bundle.review_summary
+        or _metadata_string(metadata.get("review_verdict"))
+        or metadata.get("last_verification_passed") is True
+    )
+    if not has_review_verdict:
+        missing.append("review verdict")
+    if not evidence_bundle.evidence_refs and not evidence_bundle.artifacts:
+        missing.append("evidence index")
+    return missing
+
+
+def _node_blocker_analysis_response(
+    node: PlanNode,
+    *,
+    metadata: Mapping[str, Any],
+    gate_status: WorkspacePlanGateStatusResponse,
+) -> WorkspacePlanBlockerAnalysisResponse | None:
+    if node.intent is TaskIntent.BLOCKED:
+        return WorkspacePlanBlockerAnalysisResponse(
+            blocker_type="human_required",
+            root_cause=gate_status.summary or node.progress.note,
+            resolution="Collect the required human decision, credential, or permission, then reopen.",
+            routing_decision="needs_human_review",
+            human_intervention_required=True,
+        )
+    pipeline_status = _metadata_string(metadata.get("pipeline_status"))
+    if pipeline_status == "failed" or gate_status.status == "missing":
+        return WorkspacePlanBlockerAnalysisResponse(
+            blocker_type="recovery",
+            root_cause=gate_status.summary or "Required evidence is missing or failed.",
+            resolution="Route through recovery or replan; do not mark blocked unless a human-only input is required.",
+            routing_decision=gate_status.routing or "recover",
+            human_intervention_required=False,
+        )
+    return None
 
 
 def _fill_pipeline_status_from_evidence(metadata: dict[str, Any]) -> None:
@@ -565,7 +968,11 @@ async def _to_delivery_summary(
     for stage in stages:
         stage_map.setdefault(stage.run_id, []).append(stage)
     run_responses = [_to_pipeline_run_response(run, stage_map.get(run.id, [])) for run in runs]
-    deployment_responses = [_to_deployment_response(deployment) for deployment in deployments]
+    contract_metadata = dict(contract.metadata_json or {}) if contract is not None else {}
+    deployment_responses = _filter_current_delivery_deployments(
+        contract_metadata,
+        [_to_deployment_response(deployment) for deployment in deployments],
+    )
     deployment_response = deployment_responses[0] if deployment_responses else None
     latest_run = run_responses[0] if run_responses else None
     status = latest_run.status if latest_run is not None else "not_configured"
@@ -578,8 +985,12 @@ async def _to_delivery_summary(
         status = "not_deployed"
     elif required_deployments and all(item.status == "healthy" for item in required_deployments):
         status = "healthy"
-    contract_metadata = dict(contract.metadata_json or {}) if contract is not None else {}
     services = _to_delivery_services(contract_metadata, deployment_responses)
+    warnings = _delivery_warnings(
+        latest_run=latest_run,
+        services=services,
+        deployments=deployment_responses,
+    )
     return WorkspaceDeliverySummaryResponse(
         provider=latest_run.provider
         if latest_run is not None
@@ -588,11 +999,19 @@ async def _to_delivery_summary(
         contract_source=_metadata_string(contract_metadata.get("contract_source")) or "metadata",
         contract_confidence=_metadata_float(contract_metadata.get("contract_confidence")),
         agent_managed=_metadata_bool(contract_metadata.get("agent_managed"), fallback=True),
+        code_root=contract.code_root if contract is not None else None,
         latest_run=latest_run,
         recent_runs=run_responses,
         services=services,
         deployment=deployment_response,
         deployments=deployment_responses,
+        run_assessment=_delivery_run_assessment_response(
+            latest_run=latest_run,
+            services=services,
+            deployments=deployment_responses,
+            warnings=warnings,
+        ),
+        warnings=warnings,
         actions={
             "request_pipeline": _action(
                 enabled=plan.status is not PlanStatus.COMPLETED,
@@ -623,6 +1042,103 @@ async def _to_delivery_summary(
             ),
         },
     )
+
+
+def _delivery_run_assessment_response(
+    *,
+    latest_run: WorkspacePipelineRunResponse | None,
+    services: list[WorkspaceDeliveryServiceResponse],
+    deployments: list[WorkspaceDeploymentResponse],
+    warnings: list[str],
+) -> WorkspacePlanRunAssessmentResponse:
+    required_services = [service for service in services if service.required]
+    deployment_by_service = {
+        deployment.service_id or "default": deployment for deployment in deployments
+    }
+    healthy_required = [
+        service
+        for service in required_services
+        if deployment_by_service.get(service.service_id) is not None
+        and deployment_by_service[service.service_id].status == "healthy"
+    ]
+    failed_required = [
+        service.service_id
+        for service in required_services
+        if deployment_by_service.get(service.service_id) is not None
+        and deployment_by_service[service.service_id].status in {"failed", "unhealthy"}
+    ]
+    if latest_run is None:
+        return WorkspacePlanRunAssessmentResponse(
+            required_services_total=len(required_services),
+            failed_required_services=failed_required,
+            warnings=warnings,
+        )
+    evidence_refs = _pipeline_run_evidence_refs(latest_run)
+    if latest_run.status == "failed":
+        status = "failed"
+        summary = latest_run.reason or "The latest pipeline run failed."
+    elif failed_required:
+        status = "unhealthy"
+        summary = "Required preview services are not healthy."
+    elif required_services and len(healthy_required) == len(required_services):
+        status = "passed"
+        summary = "Pipeline and required preview health evidence are complete."
+    elif latest_run.status == "success" and not required_services:
+        status = "passed"
+        summary = "Pipeline completed successfully."
+    else:
+        status = latest_run.status
+        summary = "Pipeline evidence exists, but preview health is still incomplete."
+    return WorkspacePlanRunAssessmentResponse(
+        status=status,
+        summary=summary,
+        evidence_refs=evidence_refs,
+        warnings=warnings,
+        required_services_total=len(required_services),
+        required_services_healthy=len(healthy_required),
+        failed_required_services=failed_required,
+    )
+
+
+def _pipeline_run_evidence_refs(run: WorkspacePipelineRunResponse) -> list[str]:
+    refs = [f"pipeline_run:{run.status}:{run.id}"]
+    if run.status == "success":
+        refs.append("ci_pipeline:passed")
+    elif run.status == "failed":
+        refs.append("ci_pipeline:failed")
+    for stage in run.stages:
+        service_suffix = f":{stage.service_id}" if stage.service_id else ""
+        refs.append(f"pipeline_stage:{stage.stage}:{stage.status}{service_suffix}")
+    return refs
+
+
+def _delivery_warnings(
+    *,
+    latest_run: WorkspacePipelineRunResponse | None,
+    services: list[WorkspaceDeliveryServiceResponse],
+    deployments: list[WorkspaceDeploymentResponse],
+) -> list[str]:
+    warnings: list[str] = []
+    if latest_run is None:
+        warnings.append("No pipeline run has been captured for this plan.")
+    elif latest_run.status == "failed" and latest_run.reason:
+        warnings.append(latest_run.reason)
+    deployment_by_service = {
+        deployment.service_id or "default": deployment for deployment in deployments
+    }
+    for service in services:
+        deployment = deployment_by_service.get(service.service_id)
+        if deployment is None:
+            if service.required:
+                warnings.append(f"{service.name} has no preview deployment yet.")
+            continue
+        if service.required and deployment.status in {"failed", "unhealthy"}:
+            warnings.append(f"{service.name} is required but {deployment.status}.")
+        if not service.required and deployment.status in {"failed", "unhealthy"}:
+            warnings.append(f"Optional service {service.name} is {deployment.status}.")
+        if deployment.status == "healthy" and not deployment.preview_url:
+            warnings.append(f"{service.name} is healthy but has no preview URL.")
+    return list(dict.fromkeys(warnings))[:6]
 
 
 def _to_pipeline_run_response(
@@ -690,6 +1206,34 @@ def _to_deployment_response(deployment: WorkspaceDeploymentModel) -> WorkspaceDe
         created_at=deployment.created_at,
         updated_at=deployment.updated_at,
     )
+
+
+def _filter_current_delivery_deployments(
+    contract_metadata: Mapping[str, Any],
+    deployments: list[WorkspaceDeploymentResponse],
+) -> list[WorkspaceDeploymentResponse]:
+    service_ids = _contract_service_ids(contract_metadata)
+    if not service_ids:
+        return deployments
+    return [
+        deployment
+        for deployment in deployments
+        if (deployment.service_id or "default") in service_ids
+    ]
+
+
+def _contract_service_ids(contract_metadata: Mapping[str, Any]) -> set[str]:
+    raw_services = contract_metadata.get("services")
+    if not isinstance(raw_services, list):
+        return set()
+    service_ids: set[str] = set()
+    for item in raw_services:
+        if not isinstance(item, Mapping):
+            continue
+        service_id = _metadata_string(item.get("service_id") or item.get("id"))
+        if service_id:
+            service_ids.add(service_id)
+    return service_ids
 
 
 def _to_delivery_services(
@@ -1004,6 +1548,7 @@ def _phase_response(
             )
             / len(phase_nodes)
         )
+    gate_status = _phase_gate_status_response(phase_id, phase_nodes)
     return WorkspacePlanIterationPhaseResponse(
         id=phase_id,
         label=_ITERATION_PHASE_LABELS[phase_id],
@@ -1012,6 +1557,71 @@ def _phase_response(
         running=running,
         blocked=blocked,
         progress=max(0, min(progress, 100)),
+        gate_status=gate_status,
+        required_artifacts=_phase_contract_response(phase_id).required_evidence,
+        missing_artifacts=gate_status.missing,
+        summary=gate_status.summary,
+    )
+
+
+def _phase_gate_status_response(
+    phase_id: str,
+    phase_nodes: list[PlanNode],
+) -> WorkspacePlanGateStatusResponse:
+    if not phase_nodes:
+        return WorkspacePlanGateStatusResponse(
+            status="not_applicable",
+            summary="No sprint work is currently assigned to this phase.",
+            routing="continue",
+        )
+    gate_rows: list[WorkspacePlanGateStatusResponse] = []
+    for node in phase_nodes:
+        metadata = _node_response_metadata(node)
+        evidence_bundle = _node_evidence_bundle_response(node, metadata)
+        gate_rows.append(
+            _node_gate_status_response(
+                node,
+                phase_id=phase_id,
+                metadata=metadata,
+                evidence_bundle=evidence_bundle,
+            )
+        )
+    missing = list(dict.fromkeys(item for row in gate_rows for item in row.missing))[:8]
+    evidence_refs = list(dict.fromkeys(ref for row in gate_rows for ref in row.evidence_refs))[:8]
+    if any(row.status == "blocked" for row in gate_rows):
+        return WorkspacePlanGateStatusResponse(
+            status="blocked",
+            summary="This phase is waiting on a human-only blocked item.",
+            missing=missing,
+            evidence_refs=evidence_refs,
+            routing="needs_human_review",
+        )
+    if all(node.intent is TaskIntent.DONE for node in phase_nodes):
+        return WorkspacePlanGateStatusResponse(
+            status="missing" if missing else "passed",
+            summary=(
+                f"{_ITERATION_PHASE_LABELS[phase_id]} exit gate is missing {', '.join(missing[:3])}."
+                if missing
+                else f"{_ITERATION_PHASE_LABELS[phase_id]} exit gate is satisfied."
+            ),
+            missing=missing,
+            evidence_refs=evidence_refs,
+            routing="recover" if missing else "continue",
+        )
+    if any(row.status == "running" for row in gate_rows):
+        return WorkspacePlanGateStatusResponse(
+            status="running",
+            summary=f"{_ITERATION_PHASE_LABELS[phase_id]} evidence is being collected.",
+            missing=missing,
+            evidence_refs=evidence_refs,
+            routing="continue",
+        )
+    return WorkspacePlanGateStatusResponse(
+        status="pending",
+        summary=f"{_ITERATION_PHASE_LABELS[phase_id]} has pending work.",
+        missing=missing,
+        evidence_refs=evidence_refs,
+        routing="continue",
     )
 
 

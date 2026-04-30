@@ -147,4 +147,5 @@ local-sandbox-app/
 .ruff_cache/
 .gitnexus
 .omx/
+.memstack/git-remotes/
 .memstack/worktrees/

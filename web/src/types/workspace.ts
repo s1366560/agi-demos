@@ -228,6 +228,41 @@ export interface WorkspacePlanActionCapability {
   requires_confirmation: boolean;
 }
 
+export interface WorkspacePlanPhaseContract {
+  phase: string;
+  title: string;
+  entry_gate: string;
+  exit_gate: string;
+  required_evidence: string[];
+  allowed_routing: string[];
+  blocked_semantics: string;
+}
+
+export interface WorkspacePlanGateStatus {
+  status: string;
+  summary: string;
+  missing: string[];
+  evidence_refs: string[];
+  routing: string;
+}
+
+export interface WorkspacePlanEvidenceBundle {
+  artifacts: string[];
+  evidence_refs: string[];
+  changed_files: string[];
+  pipeline_refs: string[];
+  verification_summary: string;
+  review_summary: string;
+}
+
+export interface WorkspacePlanBlockerAnalysis {
+  blocker_type: string;
+  root_cause: string;
+  resolution: string;
+  routing_decision: string;
+  human_intervention_required: boolean;
+}
+
 export interface WorkspacePlanNode {
   id: string;
   parent_id: string | null;
@@ -252,6 +287,10 @@ export interface WorkspacePlanNode {
   created_at: string;
   updated_at?: string | null | undefined;
   completed_at?: string | null | undefined;
+  phase_contract?: WorkspacePlanPhaseContract | null | undefined;
+  evidence_bundle?: WorkspacePlanEvidenceBundle | undefined;
+  gate_status?: WorkspacePlanGateStatus | undefined;
+  blocker_analysis?: WorkspacePlanBlockerAnalysis | null | undefined;
   actions?: Record<string, WorkspacePlanActionCapability> | undefined;
 }
 
@@ -317,6 +356,10 @@ export interface WorkspacePlanIterationPhase {
   running: number;
   blocked: number;
   progress: number;
+  gate_status?: WorkspacePlanGateStatus | undefined;
+  required_artifacts?: string[] | undefined;
+  missing_artifacts?: string[] | undefined;
+  summary?: string | undefined;
 }
 
 export interface WorkspacePlanIterationHistory {
@@ -420,17 +463,30 @@ export interface WorkspaceDeliveryServiceSummary {
   status: string;
 }
 
+export interface WorkspacePlanRunAssessment {
+  status: string;
+  summary: string;
+  evidence_refs: string[];
+  warnings: string[];
+  required_services_total: number;
+  required_services_healthy: number;
+  failed_required_services: string[];
+}
+
 export interface WorkspacePlanDeliverySummary {
   provider: string;
   status: string;
   contract_source: string;
   contract_confidence: number;
   agent_managed: boolean;
+  code_root?: string | null | undefined;
   latest_run?: WorkspacePipelineRun | null | undefined;
   recent_runs: WorkspacePipelineRun[];
   services: WorkspaceDeliveryServiceSummary[];
   deployment?: WorkspaceDeployment | null | undefined;
   deployments: WorkspaceDeployment[];
+  run_assessment?: WorkspacePlanRunAssessment | undefined;
+  warnings?: string[] | undefined;
   actions: Record<string, WorkspacePlanActionCapability>;
 }
 

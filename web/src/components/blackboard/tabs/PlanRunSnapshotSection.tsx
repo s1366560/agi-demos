@@ -63,7 +63,10 @@ import {
 import type {
   WorkspacePlanActionCapability,
   WorkspacePlanDeliverySummary,
+  WorkspacePlanEvidenceBundle,
+  WorkspacePlanGateStatus,
   WorkspacePlanIterationSummary,
+  WorkspacePlanNode,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
   WorkspaceTask,
@@ -82,6 +85,15 @@ interface PlanRunSnapshotSectionProps {
 const OPERATOR_REASON_LIMIT = 500;
 const DEFAULT_NODE_ACTION_REASON = 'operator action from central blackboard';
 const DEFAULT_RETRY_ACTION_REASON = 'operator retry from central blackboard';
+type DetailTabId = 'story' | 'evidence' | 'runs' | 'review' | 'blocker';
+
+const DETAIL_TABS: Array<{ id: DetailTabId; label: string }> = [
+  { id: 'story', label: 'Story' },
+  { id: 'evidence', label: 'Evidence' },
+  { id: 'runs', label: 'Runs' },
+  { id: 'review', label: 'Review' },
+  { id: 'blocker', label: 'Blocker' },
+];
 
 function actionLabel(action: WorkspacePlanActionCapability | undefined, fallback: string): string {
   return action?.label || fallback;
@@ -101,6 +113,56 @@ function reasonOrFallback(value: string, fallback: string): string {
 function nodePhaseLabel(nodeMetadata: Record<string, unknown>): string {
   const phase = nodeMetadata.iteration_phase;
   return typeof phase === 'string' && phase ? phase : 'plan';
+}
+
+function gateTone(status: string | undefined): string {
+  if (status === 'passed') {
+    return 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark';
+  }
+  if (
+    status === 'blocked' ||
+    status === 'missing' ||
+    status === 'failed' ||
+    status === 'unhealthy'
+  ) {
+    return 'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark';
+  }
+  if (status === 'running') {
+    return 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark';
+  }
+  return 'border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted';
+}
+
+function compactList(items: string[] | undefined, fallback: string): string {
+  if (!items || items.length === 0) {
+    return fallback;
+  }
+  return items.slice(0, 3).join(', ');
+}
+
+function nodeEvidenceBundle(node: WorkspacePlanNode): WorkspacePlanEvidenceBundle {
+  return (
+    node.evidence_bundle ?? {
+      artifacts: [],
+      evidence_refs: [],
+      changed_files: nodeWriteSet(node),
+      pipeline_refs: [],
+      verification_summary: '',
+      review_summary: '',
+    }
+  );
+}
+
+function nodeGateStatus(node: WorkspacePlanNode): WorkspacePlanGateStatus {
+  return (
+    node.gate_status ?? {
+      status: node.intent === 'done' ? 'passed' : node.intent,
+      summary: '',
+      missing: [],
+      evidence_refs: [],
+      routing: 'continue',
+    }
+  );
 }
 
 function IterationLoopPanel({
@@ -224,7 +286,19 @@ function IterationLoopPanel({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-xs font-semibold">{phase.label}</span>
-                <span className="font-mono text-[11px]">{phase.progress}%</span>
+                <span
+                  className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${gateTone(
+                    phase.gate_status?.status
+                  )}`}
+                >
+                  {phase.gate_status?.status ?? 'pending'}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="truncate text-[11px] text-text-secondary dark:text-text-muted">
+                  {phase.summary || 'No gate summary yet.'}
+                </span>
+                <span className="shrink-0 font-mono text-[11px]">{phase.progress}%</span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background-light/70 dark:bg-background-dark/60">
                 <div
@@ -242,6 +316,9 @@ function IterationLoopPanel({
                 {phase.done}/{phase.total || 0}
                 {phase.running > 0 ? ` · ${String(phase.running)} active` : ''}
                 {phase.blocked > 0 ? ` · ${String(phase.blocked)} blocked` : ''}
+              </div>
+              <div className="mt-1 line-clamp-2 break-words text-[11px] leading-4 text-text-secondary dark:text-text-muted">
+                Missing: {compactList(phase.missing_artifacts, 'none')}
               </div>
             </div>
           );
@@ -363,10 +440,20 @@ function DeliveryPanel({
             Provider {delivery.provider}
             {run ? ` · run ${shortId(run.id)} · ${run.status}` : ' · no pipeline run yet'}
           </p>
+          {delivery.code_root && (
+            <p className="mt-1 break-all font-mono text-[11px] leading-5 text-text-secondary dark:text-text-muted">
+              {delivery.code_root}
+            </p>
+          )}
           <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
             {delivery.agent_managed ? 'Agent managed' : 'Manual'} · {delivery.contract_source} ·{' '}
             {Math.round(delivery.contract_confidence * 100)}% confidence
           </p>
+          {delivery.run_assessment?.summary && (
+            <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+              {delivery.run_assessment.summary}
+            </p>
+          )}
           {run?.reason && (
             <p className="mt-1 break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
               {run.reason}
@@ -375,6 +462,10 @@ function DeliveryPanel({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <StatBadge label="Pipeline" value={run?.status ?? 'none'} />
+          <StatBadge
+            label="Assessment"
+            value={delivery.run_assessment?.status ?? run?.status ?? 'none'}
+          />
           <StatBadge label="Health" value={deployment?.status ?? 'none'} />
           <StatBadge label="Restarts" value={String(deployment?.restart_count ?? 0)} />
           <button
@@ -403,6 +494,19 @@ function DeliveryPanel({
         </div>
       </div>
 
+      {(delivery.warnings?.length ?? 0) > 0 && (
+        <div className="mt-3 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-xs leading-5 text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+          <div className="font-semibold uppercase">Warnings</div>
+          <ul className="mt-1 space-y-1">
+            {delivery.warnings?.map((warning) => (
+              <li key={warning} className="break-words">
+                {warning}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {(services.length > 0 || deployments.length > 0) && (
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {(services.length > 0 ? services : deployments).map((item) => {
@@ -428,6 +532,16 @@ function DeliveryPanel({
                 <p className="mt-1 truncate font-mono text-[11px] text-text-secondary dark:text-text-muted">
                   {serviceId} · {required ? 'required' : 'optional'}
                 </p>
+                {'start_command' in item && item.start_command && (
+                  <p className="mt-1 line-clamp-2 break-words font-mono text-[11px] text-text-secondary dark:text-text-muted">
+                    {item.start_command}
+                  </p>
+                )}
+                {'health_path' in item && item.health_path && (
+                  <p className="mt-1 truncate font-mono text-[11px] text-text-secondary dark:text-text-muted">
+                    health {item.health_path}
+                  </p>
+                )}
                 {previewUrl && (
                   <button
                     type="button"
@@ -481,6 +595,84 @@ function DeliveryPanel({
   );
 }
 
+function WorkbenchStatusBar({
+  snapshot,
+  lastUpdatedAt,
+  isStale,
+}: {
+  snapshot: WorkspacePlanSnapshot;
+  lastUpdatedAt: Date | null;
+  isStale: boolean;
+}) {
+  const iteration = snapshot.iteration;
+  const delivery = snapshot.delivery;
+  const outbox = snapshot.outbox;
+  const failedQueue = outbox.filter(
+    (item) => item.status === 'failed' || item.status === 'dead_letter'
+  ).length;
+  const healthyServices =
+    delivery?.deployments.filter((deployment) => deployment.status === 'healthy').length ?? 0;
+  const serviceTotal = delivery?.services.length || delivery?.deployments.length || 0;
+
+  return (
+    <div className="border-t border-border-separator bg-surface-muted/60 px-4 py-3 dark:border-border-dark dark:bg-background-dark/30">
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Code root
+          </div>
+          <div className="mt-1 truncate font-mono text-xs text-text-primary dark:text-text-inverse">
+            {delivery?.code_root || 'not configured'}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Iteration
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
+            {iteration
+              ? `${String(iteration.current_iteration)} · ${iteration.loop_status}`
+              : 'not started'}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Active phase
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
+            {iteration?.active_phase_label ?? 'n/a'}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Queue
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
+            {String(outbox.length)} jobs{failedQueue > 0 ? ` · ${String(failedQueue)} failed` : ''}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Pipeline
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
+            {delivery?.run_assessment?.status ?? delivery?.latest_run?.status ?? 'none'}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+            Preview
+          </div>
+          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
+            {String(healthyServices)} / {String(serviceTotal)}
+            {isStale ? ` · updated ${formatRelative(lastUpdatedAt)}` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PlanRunSnapshotSection({
   workspaceId,
   tenantId,
@@ -494,6 +686,7 @@ export function PlanRunSnapshotSection({
   const lastRefreshTokenRef = useRef(refreshToken ?? 0);
   const [snapshot, setSnapshot] = useState<WorkspacePlanSnapshot | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedDetailTab, setSelectedDetailTab] = useState<DetailTabId>('story');
   const [filter, setFilter] = useState<NodeFilter>('all');
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -744,6 +937,10 @@ export function PlanRunSnapshotSection({
   const reopenBlockedDisabledReason = !actionEnabled(reopenBlockedAction)
     ? actionDisabledReason(reopenBlockedAction, 'This node cannot be reopened.')
     : undefined;
+  const selectedGate = selectedNode ? nodeGateStatus(selectedNode) : null;
+  const selectedEvidence = selectedNode ? nodeEvidenceBundle(selectedNode) : null;
+  const selectedContract = selectedNode?.phase_contract ?? null;
+  const selectedBlocker = selectedNode?.blocker_analysis ?? null;
 
   const formatAutonomyTickMessage = (result: { triggered: boolean; reason: string }) => {
     if (result.triggered) {
@@ -1102,6 +1299,13 @@ export function PlanRunSnapshotSection({
               {rootGoal.completion_blocker_reason}
             </div>
           )}
+          {snapshot && (
+            <WorkbenchStatusBar
+              snapshot={snapshot}
+              lastUpdatedAt={lastUpdatedAt}
+              isStale={isStale}
+            />
+          )}
           <IterationLoopPanel
             iteration={iteration}
             isActionPending={isActionPending}
@@ -1360,73 +1564,245 @@ export function PlanRunSnapshotSection({
                     </div>
                   </div>
 
-                  <div className="grid flex-1 grid-rows-[auto_auto_auto]">
-                    <section className="min-w-0 border-b border-border-separator px-4 py-3 dark:border-border-dark">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-                        <Clock3 className="h-4 w-4" aria-hidden />
-                        {t('blackboard.planRunNarrativeTitle', 'Execution narrative')}
-                      </div>
-                      <ul className="mt-1">
-                        {selectedEvents.map((event) => (
-                          <TimelineRow key={event.id} event={event} />
-                        ))}
-                      </ul>
-                      {selectedEvents.length === 0 && (
-                        <div className="py-3">
-                          <EmptyState>
-                            {t('blackboard.planRunNoEvents', 'No plan events.')}
-                          </EmptyState>
-                        </div>
-                      )}
-                    </section>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="flex min-w-0 flex-wrap gap-2 border-b border-border-separator px-4 py-3 dark:border-border-dark"
+                      aria-label="Plan node details"
+                    >
+                      {DETAIL_TABS.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDetailTab(tab.id);
+                          }}
+                          className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium transition-colors ${
+                            selectedDetailTab === tab.id
+                              ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                              : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
 
-                    <section className="min-w-0 border-b border-border-separator px-4 py-3 dark:border-border-dark">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-                        <Activity className="h-4 w-4" aria-hidden />
-                        {t('blackboard.planRunOutboxTitle', 'Outbox')}
-                      </div>
-                      <ul className="mt-1">
-                        {selectedOutbox.map((item) => (
-                          <OutboxRow
-                            key={item.id}
-                            item={item}
-                            onRetry={(target) => {
-                              void retryOutbox(target);
-                            }}
-                            isActionPending={isActionPending}
-                          />
-                        ))}
-                      </ul>
-                      {selectedOutbox.length === 0 && (
-                        <div className="py-3">
-                          <EmptyState>
-                            {t('blackboard.planRunNoOutbox', 'No queued events.')}
-                          </EmptyState>
-                        </div>
+                    <div className="min-w-0 px-4 py-3">
+                      {selectedDetailTab === 'story' && (
+                        <section className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                            <ShieldCheck className="h-4 w-4" aria-hidden />
+                            Phase contract
+                          </div>
+                          <div className="rounded-md border border-border-light bg-surface-muted p-3 text-xs leading-5 text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted">
+                            <div className="font-medium text-text-primary dark:text-text-inverse">
+                              {selectedContract?.title ??
+                                nodePhaseLabel(asRecord(selectedNode.metadata))}
+                            </div>
+                            <p className="mt-2 break-words">
+                              Entry: {selectedContract?.entry_gate || 'No entry gate recorded.'}
+                            </p>
+                            <p className="mt-1 break-words">
+                              Exit: {selectedContract?.exit_gate || 'No exit gate recorded.'}
+                            </p>
+                            <p className="mt-1 break-words">
+                              Routing:{' '}
+                              {compactList(selectedContract?.allowed_routing, 'standard routing')}
+                            </p>
+                            <p className="mt-1 break-words">
+                              Blocked: {selectedContract?.blocked_semantics ?? 'Human-only stops.'}
+                            </p>
+                          </div>
+                          <div className="rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
+                            <div className="text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                              Acceptance criteria
+                            </div>
+                            {selectedNode.acceptance_criteria.length > 0 ? (
+                              <ul className="mt-2 space-y-2 text-xs leading-5 text-text-secondary dark:text-text-muted">
+                                {selectedNode.acceptance_criteria.map((criterion, index) => (
+                                  <li
+                                    key={`${criterion.kind}-${String(index)}`}
+                                    className="break-words"
+                                  >
+                                    <span className="font-mono">{criterion.kind}</span>
+                                    {criterion.description ? ` · ${criterion.description}` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-2 text-xs text-text-secondary dark:text-text-muted">
+                                No acceptance criteria recorded.
+                              </p>
+                            )}
+                          </div>
+                        </section>
                       )}
-                    </section>
 
-                    <section className="min-w-0 px-4 py-3">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-                        <ShieldCheck className="h-4 w-4" aria-hidden />
-                        {t('blackboard.planRunBlackboardTitle', 'Typed blackboard')}
-                      </div>
-                      <ul className="mt-1">
-                        {visibleBlackboard.map((entry) => (
-                          <BlackboardEntryRow
-                            key={`${entry.key}:${String(entry.version)}`}
-                            entry={entry}
-                          />
-                        ))}
-                      </ul>
-                      {visibleBlackboard.length === 0 && (
-                        <div className="py-3">
-                          <EmptyState>
-                            {t('blackboard.planRunNoBlackboard', 'No typed entries yet.')}
-                          </EmptyState>
-                        </div>
+                      {selectedDetailTab === 'evidence' && selectedEvidence && (
+                        <section className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                            <PackageCheck className="h-4 w-4" aria-hidden />
+                            Evidence bundle
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {[
+                              ['Changed files', selectedEvidence.changed_files],
+                              ['Artifacts', selectedEvidence.artifacts],
+                              ['Evidence refs', selectedEvidence.evidence_refs],
+                              ['Pipeline refs', selectedEvidence.pipeline_refs],
+                            ].map(([label, values]) => (
+                              <div
+                                key={label as string}
+                                className="min-w-0 rounded-md border border-border-light bg-surface-muted p-3 dark:border-border-dark dark:bg-background-dark/35"
+                              >
+                                <div className="text-[11px] font-semibold uppercase text-text-secondary dark:text-text-muted">
+                                  {label as string}
+                                </div>
+                                {(values as string[]).length > 0 ? (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {(values as string[]).slice(0, 10).map((item) => (
+                                      <span
+                                        key={item}
+                                        className="max-w-full truncate rounded border border-border-light bg-surface-light px-1.5 py-0.5 font-mono text-[10px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted"
+                                      >
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 text-xs text-text-secondary dark:text-text-muted">
+                                    none
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </section>
                       )}
-                    </section>
+
+                      {selectedDetailTab === 'runs' && (
+                        <section className="space-y-4">
+                          <div>
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                              <Clock3 className="h-4 w-4" aria-hidden />
+                              {t('blackboard.planRunNarrativeTitle', 'Execution narrative')}
+                            </div>
+                            <ul className="mt-1">
+                              {selectedEvents.map((event) => (
+                                <TimelineRow key={event.id} event={event} />
+                              ))}
+                            </ul>
+                            {selectedEvents.length === 0 && (
+                              <div className="py-3">
+                                <EmptyState>
+                                  {t('blackboard.planRunNoEvents', 'No plan events.')}
+                                </EmptyState>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                              <Activity className="h-4 w-4" aria-hidden />
+                              {t('blackboard.planRunOutboxTitle', 'Outbox')}
+                            </div>
+                            <ul className="mt-1">
+                              {selectedOutbox.map((item) => (
+                                <OutboxRow
+                                  key={item.id}
+                                  item={item}
+                                  onRetry={(target) => {
+                                    void retryOutbox(target);
+                                  }}
+                                  isActionPending={isActionPending}
+                                />
+                              ))}
+                            </ul>
+                            {selectedOutbox.length === 0 && (
+                              <div className="py-3">
+                                <EmptyState>
+                                  {t('blackboard.planRunNoOutbox', 'No queued events.')}
+                                </EmptyState>
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      )}
+
+                      {selectedDetailTab === 'review' && selectedGate && (
+                        <section className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                              <ShieldCheck className="h-4 w-4" aria-hidden />
+                              Review gate
+                            </div>
+                            <span
+                              className={`rounded border px-2 py-0.5 text-[11px] font-semibold uppercase ${gateTone(
+                                selectedGate.status
+                              )}`}
+                            >
+                              {selectedGate.status}
+                            </span>
+                          </div>
+                          <p className="break-words text-sm leading-6 text-text-secondary dark:text-text-muted">
+                            {selectedGate.summary || 'No review summary yet.'}
+                          </p>
+                          {selectedGate.missing.length > 0 && (
+                            <div className="rounded-md border border-warning-border bg-warning-bg p-3 text-xs text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+                              Missing: {selectedGate.missing.join(', ')}
+                            </div>
+                          )}
+                          {selectedEvidence?.verification_summary && (
+                            <p className="break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+                              Verification: {selectedEvidence.verification_summary}
+                            </p>
+                          )}
+                          {selectedEvidence?.review_summary && (
+                            <p className="break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+                              Review: {selectedEvidence.review_summary}
+                            </p>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                              <ShieldCheck className="h-4 w-4" aria-hidden />
+                              {t('blackboard.planRunBlackboardTitle', 'Typed blackboard')}
+                            </div>
+                            <ul className="mt-1">
+                              {visibleBlackboard.map((entry) => (
+                                <BlackboardEntryRow
+                                  key={`${entry.key}:${String(entry.version)}`}
+                                  entry={entry}
+                                />
+                              ))}
+                            </ul>
+                          </div>
+                        </section>
+                      )}
+
+                      {selectedDetailTab === 'blocker' && (
+                        <section className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                            <AlertTriangle className="h-4 w-4" aria-hidden />
+                            Blocker analysis
+                          </div>
+                          <div className="rounded-md border border-border-light bg-surface-muted p-3 text-xs leading-5 text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted">
+                            <div className="font-medium text-text-primary dark:text-text-inverse">
+                              {selectedBlocker?.blocker_type ?? 'none'}
+                            </div>
+                            <p className="mt-2 break-words">
+                              Root cause: {selectedBlocker?.root_cause || 'No blocker recorded.'}
+                            </p>
+                            <p className="mt-1 break-words">
+                              Resolution:{' '}
+                              {selectedBlocker?.resolution ||
+                                'Continue normal execution or recovery routing.'}
+                            </p>
+                            <p className="mt-1 break-words">
+                              Routing: {selectedBlocker?.routing_decision ?? 'continue'}
+                            </p>
+                          </div>
+                        </section>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
