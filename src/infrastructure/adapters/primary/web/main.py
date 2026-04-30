@@ -3,7 +3,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 # Configure application-wide logging before any other imports.
 # Uvicorn only configures its own loggers; without this, all src.* loggers
@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from redis.asyncio import Redis
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -227,10 +228,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             await plugin.on_enable()
             logger.info("Skill evolution plugin scheduler started")
         else:
-            logger.info(
-                "Skill evolution plugin not started "
-                "(disabled or missing dependencies)"
-            )
+            logger.info("Skill evolution plugin not started (disabled or missing dependencies)")
     except Exception:
         logger.exception("Failed to start skill evolution plugin")
 
@@ -238,7 +236,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_attempt_recovery()
 
     # Start Workspace Plan V2 durable outbox worker
-    await initialize_workspace_plan_outbox_worker(redis_client=redis_client)
+    await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
 
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
@@ -580,6 +578,10 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     app.include_router(voice_websocket.router)
     logger.info("Voice WebSocket registered at /api/v1/voice/chat")
+
+    # Host-based sandbox service previews. This catch-all router is intentionally
+    # last so normal API/static routes win for localhost.
+    app.include_router(project_sandbox.preview_router)
 
     return app
 

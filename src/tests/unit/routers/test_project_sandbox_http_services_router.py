@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
@@ -16,6 +17,7 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """Create a TestClient with lightweight dependency overrides."""
     app = FastAPI()
     app.include_router(router_mod.router)
+    app.include_router(router_mod.preview_router)
 
     router_mod._http_service_registry.clear()
 
@@ -215,9 +217,7 @@ def test_http_proxy_rejects_external_service_source(sandbox_http_client: TestCli
 @pytest.mark.unit
 def test_http_proxy_returns_404_when_service_missing(sandbox_http_client: TestClient) -> None:
     """HTTP reverse proxy endpoint returns 404 for unknown service."""
-    response = sandbox_http_client.get(
-        "/api/v1/projects/proj-1/sandbox/http-services/nope/proxy/"
-    )
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/http-services/nope/proxy/")
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -232,18 +232,20 @@ def test_http_proxy_returns_502_when_upstream_fails(
         lambda: event_publisher
     )
 
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = router_mod.HttpServiceProxyInfo(
-        service_id="svc-int",
-        name="internal",
-        source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
-        status="running",
-        service_url="http://127.0.0.1:3000",
-        preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/",
-        ws_preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/ws/",
-        sandbox_id="sandbox-1",
-        auto_open=True,
-        restart_token="r1",
-        updated_at="2025-01-01T00:00:00+00:00",
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/",
+            ws_preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/ws/",
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
     )
 
     class _FailingAsyncClient:
@@ -262,6 +264,11 @@ def test_http_proxy_returns_502_when_upstream_fails(
 
     monkeypatch.setattr("httpx.AsyncClient", _FailingAsyncClient)
 
+    async def _raise_exec_fetch(*args, **kwargs):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(router_mod, "_request_http_service_via_sandbox_exec", _raise_exec_fetch)
+
     response = sandbox_http_client.get(
         "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/"
     )
@@ -279,18 +286,20 @@ def test_http_proxy_rewrites_root_relative_assets(
     sandbox_http_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """HTML content from upstream should be rewritten to use proxy paths."""
-    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = router_mod.HttpServiceProxyInfo(
-        service_id="svc-int",
-        name="internal",
-        source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
-        status="running",
-        service_url="http://127.0.0.1:3000",
-        preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/",
-        ws_preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/ws/",
-        sandbox_id="sandbox-1",
-        auto_open=True,
-        restart_token="r1",
-        updated_at="2025-01-01T00:00:00+00:00",
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/",
+            ws_preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/ws/",
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
     )
 
     class _SuccessAsyncClient:
@@ -316,6 +325,127 @@ def test_http_proxy_rewrites_root_relative_assets(
         "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/?token=ms_sk_test",
     )
     assert response.status_code == status.HTTP_200_OK
-    assert "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/main.js?token=ms_sk_test" in (
+    assert (
+        "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/main.js?token=ms_sk_test"
+        in (response.text)
+    )
+
+
+@pytest.mark.unit
+def test_create_preview_session_returns_host_based_launch_url(
+    sandbox_http_client: TestClient,
+) -> None:
+    """Preview launch URL should use a root host instead of a path-prefixed proxy."""
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url=router_mod._build_http_preview_proxy_url("proj-1", "svc-int"),
+            ws_preview_url=router_mod._build_http_preview_ws_proxy_url("proj-1", "svc-int"),
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox/http-services/svc-int/preview-session"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    parsed = urlparse(response.json()["preview_url"])
+    assert parsed.hostname == "svc-int.proj-1.preview.localhost"
+    assert parsed.path == "/"
+    assert router_mod._PREVIEW_SESSION_QUERY_PARAM in parse_qs(parsed.query)
+
+
+@pytest.mark.unit
+def test_host_preview_proxy_redirects_session_token_to_clean_url(
+    sandbox_http_client: TestClient,
+) -> None:
+    """One-time preview launch token should be moved into a host cookie."""
+    token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url=router_mod._build_http_preview_proxy_url("proj-1", "svc-int"),
+            ws_preview_url=router_mod._build_http_preview_ws_proxy_url("proj-1", "svc-int"),
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
+    )
+
+    response = sandbox_http_client.get(
+        f"/?{router_mod._PREVIEW_SESSION_QUERY_PARAM}={token}",
+        headers={"host": "svc-int.proj-1.preview.localhost:8000"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == status.HTTP_302_FOUND
+    assert response.headers["location"] == "http://svc-int.proj-1.preview.localhost:8000/"
+    assert router_mod._PREVIEW_SESSION_COOKIE_NAME in response.headers["set-cookie"]
+
+
+@pytest.mark.unit
+def test_host_preview_proxy_keeps_root_relative_assets_unmodified(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host-based preview should preserve normal root-relative app URLs."""
+    token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url=router_mod._build_http_preview_proxy_url("proj-1", "svc-int"),
+            ws_preview_url=router_mod._build_http_preview_ws_proxy_url("proj-1", "svc-int"),
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
+    )
+
+    class _SuccessAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, *args, **kwargs):
+            return httpx.Response(
+                status_code=200,
+                headers={"content-type": "text/html"},
+                content=b'<html><script src="/main.js"></script></html>',
+            )
+
+    monkeypatch.setattr("httpx.AsyncClient", _SuccessAsyncClient)
+
+    response = sandbox_http_client.get(
+        "/",
+        headers={"host": "svc-int.proj-1.preview.localhost:8000"},
+        cookies={router_mod._PREVIEW_SESSION_COOKIE_NAME: token},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert '<script src="/main.js">' in response.text
+    assert "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/main.js" not in (
         response.text
     )

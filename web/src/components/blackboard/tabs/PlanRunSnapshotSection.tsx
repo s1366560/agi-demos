@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 
+import { projectSandboxService } from '@/services/projectSandboxService';
 import { workspaceAutonomyService, workspacePlanService } from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
@@ -329,7 +330,7 @@ function DeliveryPanel({
   previewOpeningUrl: string | null;
   onRunPipeline: () => void;
   onRegenerateContract: () => void;
-  onOpenPreview: (previewUrl: string) => void;
+  onOpenPreview: (previewUrl: string, serviceId: string) => void;
 }) {
   if (!delivery) {
     return null;
@@ -432,7 +433,7 @@ function DeliveryPanel({
                     type="button"
                     disabled={isActionPending || previewOpeningUrl === previewUrl}
                     onClick={() => {
-                      onOpenPreview(previewUrl);
+                      onOpenPreview(previewUrl, serviceId);
                     }}
                     className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-status-text-info hover:underline"
                   >
@@ -922,7 +923,7 @@ export function PlanRunSnapshotSection({
     }
   };
 
-  const openPreview = async (previewUrl: string) => {
+  const openPreview = async (previewUrl: string, serviceId?: string) => {
     const previewWindow = window.open('about:blank', '_blank');
     if (previewWindow) {
       previewWindow.opener = null;
@@ -937,11 +938,19 @@ export function PlanRunSnapshotSection({
         throw new Error('No authentication token is available for preview access.');
       }
 
+      let launchUrl = previewUrl;
+      if (projectId && serviceId) {
+        const session = await projectSandboxService.createHttpServicePreviewSession(
+          projectId,
+          serviceId
+        );
+        launchUrl = session.preview_url;
+      }
+
       const isSandboxProxyUrl =
-        previewUrl.startsWith('/api/v1/projects/') &&
-        previewUrl.includes('/sandbox/http-services/');
-      if (isSandboxProxyUrl) {
-        const response = await fetch(previewUrl, {
+        launchUrl.startsWith('/api/v1/projects/') && launchUrl.includes('/sandbox/http-services/');
+      if (isSandboxProxyUrl && !serviceId) {
+        const response = await fetch(launchUrl, {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -953,9 +962,9 @@ export function PlanRunSnapshotSection({
       }
 
       if (previewWindow) {
-        previewWindow.location.replace(previewUrl);
+        previewWindow.location.replace(launchUrl);
       } else {
-        window.open(previewUrl, '_blank', 'noopener,noreferrer');
+        window.open(launchUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
       if (previewWindow) {
@@ -1104,7 +1113,7 @@ export function PlanRunSnapshotSection({
             previewOpeningUrl={previewOpeningUrl}
             onRunPipeline={() => void runDeliveryPipeline()}
             onRegenerateContract={() => void regenerateDeliveryContract()}
-            onOpenPreview={(previewUrl) => void openPreview(previewUrl)}
+            onOpenPreview={(previewUrl, serviceId) => void openPreview(previewUrl, serviceId)}
           />
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">

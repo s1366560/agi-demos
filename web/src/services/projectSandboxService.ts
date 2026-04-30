@@ -227,6 +227,11 @@ export interface HttpServiceActionResponse {
   service?: HttpServiceInfo | undefined;
 }
 
+export interface HttpServicePreviewSessionResponse {
+  preview_url: string;
+  expires_in_seconds: number;
+}
+
 /**
  * Desktop API response from backend
  */
@@ -366,6 +371,14 @@ export interface ProjectSandboxService {
    * Stop/unregister a sandbox HTTP preview service
    */
   stopHttpService(projectId: string, serviceId: string): Promise<HttpServiceActionResponse>;
+
+  /**
+   * Create a short-lived launch URL for a sandbox HTTP preview service
+   */
+  createHttpServicePreviewSession(
+    projectId: string,
+    serviceId: string
+  ): Promise<HttpServicePreviewSessionResponse>;
 }
 
 /**
@@ -723,6 +736,19 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     );
     return this.api.delete<HttpServiceActionResponse>(
       `/projects/${projectId}/sandbox/http-services/${encodeURIComponent(serviceId)}`
+    );
+  }
+
+  async createHttpServicePreviewSession(
+    projectId: string,
+    serviceId: string
+  ): Promise<HttpServicePreviewSessionResponse> {
+    logger.debug(
+      `[ProjectSandboxService] Creating preview session for HTTP service ${serviceId} in project: ${projectId}`
+    );
+    return this.api.post<HttpServicePreviewSessionResponse>(
+      `/projects/${projectId}/sandbox/http-services/${encodeURIComponent(serviceId)}/preview-session`,
+      {}
     );
   }
 }

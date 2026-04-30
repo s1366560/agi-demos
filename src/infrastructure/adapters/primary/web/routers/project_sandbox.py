@@ -9,9 +9,13 @@ Provides REST API endpoints for managing persistent sandboxes per project:
 import asyncio
 import base64
 import contextlib
+import hashlib
+import hmac
 import json
 import logging
+import os
 import re
+import time
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, cast
@@ -30,6 +34,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +48,7 @@ from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.sandbox_profile import (
     SandboxProfileType,
 )
+from src.configuration.config import get_settings
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -62,6 +68,13 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["project-sandbox"])
+preview_router = APIRouter(tags=["project-sandbox-preview"])
+
+_PREVIEW_SESSION_COOKIE_NAME = "memstack_preview_session"
+_PREVIEW_SESSION_QUERY_PARAM = "ms_preview_session"
+_PREVIEW_HOST_SUFFIX_ENV = "WORKSPACE_HTTP_PREVIEW_HOST_SUFFIX"
+_PREVIEW_SCHEME_ENV = "WORKSPACE_HTTP_PREVIEW_SCHEME"
+_PREVIEW_SESSION_TTL_ENV = "WORKSPACE_HTTP_PREVIEW_SESSION_TTL_SECONDS"
 
 
 # ============================================================================
@@ -295,6 +308,13 @@ class HttpServiceActionResponse(BaseModel):
     service: HttpServiceResponse | None = None
 
 
+class HttpServicePreviewSessionResponse(BaseModel):
+    """Short-lived launch URL for a sandbox HTTP service preview."""
+
+    preview_url: str
+    expires_in_seconds: int
+
+
 class HttpServiceProxyInfo(BaseModel):
     """Internal HTTP service registry record."""
 
@@ -501,12 +521,169 @@ def _validate_external_http_url(url: str) -> str:
     return url.strip()
 
 
-def _build_http_preview_proxy_url(project_id: str, service_id: str) -> str:
+def _preview_public_scheme() -> str:
+    scheme = os.environ.get(_PREVIEW_SCHEME_ENV, "http").strip().lower()
+    return "https" if scheme == "https" else "http"
+
+
+def _preview_host_suffix() -> str:
+    raw = os.environ.get(_PREVIEW_HOST_SUFFIX_ENV, "preview.localhost:8000").strip()
+    if not raw:
+        raw = "preview.localhost:8000"
+    parsed = urlparse(raw if "://" in raw else f"//{raw}")
+    return parsed.netloc or parsed.path
+
+
+def _preview_host_suffix_hostname() -> str:
+    parsed = urlparse(f"//{_preview_host_suffix()}")
+    hostname = parsed.hostname or _preview_host_suffix().split(":", 1)[0]
+    return hostname.lower().strip(".")
+
+
+def _preview_session_ttl_seconds() -> int:
+    raw = os.environ.get(_PREVIEW_SESSION_TTL_ENV, "").strip()
+    if not raw:
+        return 86400
+    try:
+        return max(60, min(int(raw), 7 * 86400))
+    except ValueError:
+        return 86400
+
+
+def _preview_service_host_label(service_id: str) -> str:
+    label = re.sub(r"[^a-z0-9-]+", "-", service_id.lower()).strip("-")
+    return label[:63].strip("-") or "service"
+
+
+def _build_http_path_preview_proxy_url(project_id: str, service_id: str) -> str:
     return f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy/"
 
 
-def _build_http_preview_ws_proxy_url(project_id: str, service_id: str) -> str:
+def _build_http_path_preview_ws_proxy_url(project_id: str, service_id: str) -> str:
     return f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy/ws/"
+
+
+def _build_http_preview_proxy_url(project_id: str, service_id: str) -> str:
+    label = _preview_service_host_label(service_id)
+    return f"{_preview_public_scheme()}://{label}.{project_id.lower()}.{_preview_host_suffix()}/"
+
+
+def _build_http_preview_ws_proxy_url(project_id: str, service_id: str) -> str:
+    preview_url = _build_http_preview_proxy_url(project_id, service_id)
+    if preview_url.startswith("https://"):
+        return f"wss://{preview_url.removeprefix('https://')}"
+    return f"ws://{preview_url.removeprefix('http://')}"
+
+
+def _urlsafe_b64encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _urlsafe_b64decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(f"{data}{padding}".encode("ascii"))
+
+
+def _create_preview_session_token(project_id: str, service_id: str, user_id: str) -> str:
+    expires_at = int(time.time()) + _preview_session_ttl_seconds()
+    payload = {
+        "project_id": project_id,
+        "service_id": service_id,
+        "user_id": user_id,
+        "exp": expires_at,
+    }
+    payload_b64 = _urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
+    signature = hmac.new(
+        get_settings().secret_key.encode("utf-8"),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return f"{payload_b64}.{_urlsafe_b64encode(signature)}"
+
+
+def _verify_preview_session_token(token: str | None) -> dict[str, Any] | None:
+    if not token or "." not in token:
+        return None
+    payload_b64, signature_b64 = token.rsplit(".", 1)
+    expected = hmac.new(
+        get_settings().secret_key.encode("utf-8"),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    try:
+        supplied = _urlsafe_b64decode(signature_b64)
+        if not hmac.compare_digest(expected, supplied):
+            return None
+        payload = json.loads(_urlsafe_b64decode(payload_b64).decode("utf-8"))
+    except Exception:
+        return None
+    if int(payload.get("exp") or 0) < int(time.time()):
+        return None
+    return cast(dict[str, Any], payload)
+
+
+def _preview_session_matches_service(
+    token: str | None,
+    *,
+    project_id: str,
+    service_id: str,
+) -> dict[str, Any] | None:
+    payload = _verify_preview_session_token(token)
+    if not payload:
+        return None
+    if payload.get("project_id") != project_id or payload.get("service_id") != service_id:
+        return None
+    return payload
+
+
+def _append_preview_session_token(url: str, token: str) -> str:
+    parsed = urlparse(url)
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    query_pairs.append((_PREVIEW_SESSION_QUERY_PARAM, token))
+    return parsed._replace(query=urlencode(query_pairs, doseq=True)).geturl()
+
+
+def _clean_preview_session_url(url: str) -> str:
+    parsed = urlparse(url)
+    query_pairs = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key != _PREVIEW_SESSION_QUERY_PARAM
+    ]
+    return parsed._replace(query=urlencode(query_pairs, doseq=True)).geturl()
+
+
+def _parse_http_preview_host(host_header: str) -> tuple[str, str] | None:
+    parsed = urlparse(f"//{host_header.strip()}")
+    hostname = (parsed.hostname or "").lower().strip(".")
+    suffix = _preview_host_suffix_hostname()
+    expected_tail = f".{suffix}"
+    if not hostname.endswith(expected_tail):
+        return None
+    preview_prefix = hostname[: -len(expected_tail)]
+    labels = preview_prefix.split(".")
+    if len(labels) != 2:
+        return None
+    service_label, project_id = labels
+    if not service_label or not re.fullmatch(r"[a-z0-9-]{1,63}", service_label):
+        return None
+    if not project_id or not re.fullmatch(r"[a-z0-9-]{1,63}", project_id):
+        return None
+    return project_id, service_label
+
+
+async def _get_http_service_by_preview_label(
+    project_id: str,
+    service_label: str,
+    redis_client: redis.Redis | None = None,
+) -> HttpServiceProxyInfo | None:
+    services = await _list_http_services(project_id, redis_client)
+    for service in services:
+        if _preview_service_host_label(service.service_id) == service_label:
+            return service
+    return None
 
 
 async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: str) -> str:
@@ -795,8 +972,8 @@ def _rewrite_http_service_content(
         return content_bytes
 
     content_str = content_bytes.decode("utf-8", errors="replace")
-    proxy_prefix = _build_http_preview_proxy_url(project_id, service_id)
-    ws_proxy_prefix = _build_http_preview_ws_proxy_url(project_id, service_id)
+    proxy_prefix = _build_http_path_preview_proxy_url(project_id, service_id)
+    ws_proxy_prefix = _build_http_path_preview_ws_proxy_url(project_id, service_id)
 
     def _rewrite_root_relative(match: re.Match[str]) -> str:
         attr = match.group(1)
@@ -897,7 +1074,7 @@ def _rewrite_http_service_location(
     if not location:
         return location
 
-    proxy_prefix = _build_http_preview_proxy_url(project_id, service_id)
+    proxy_prefix = _build_http_path_preview_proxy_url(project_id, service_id)
     parsed_location = urlparse(location)
     upstream = urlparse(upstream_base_url)
 
@@ -917,6 +1094,29 @@ def _rewrite_http_service_location(
         return _append_proxy_token(f"{proxy_prefix}{location.lstrip('/')}", token_param)
 
     return _append_proxy_token(f"{proxy_prefix}{location}", token_param)
+
+
+def _rewrite_http_service_host_location(
+    location: str,
+    *,
+    request: Request,
+    upstream_base_url: str,
+) -> str:
+    """Rewrite upstream redirects for host-based preview without adding a path prefix."""
+    if not location:
+        return location
+
+    parsed_location = urlparse(location)
+    upstream = urlparse(upstream_base_url)
+    if parsed_location.scheme and parsed_location.netloc:
+        if parsed_location.netloc != upstream.netloc:
+            return location
+        return parsed_location._replace(
+            scheme=request.url.scheme,
+            netloc=request.headers.get("host", request.url.netloc),
+        ).geturl()
+
+    return location
 
 
 async def _connect_http_service_upstream(ws_target: str, origin: str) -> Any:
@@ -1814,6 +2014,43 @@ async def list_project_http_services(
     )
 
 
+@router.post(
+    "/{project_id}/sandbox/http-services/{service_id}/preview-session",
+    response_model=HttpServicePreviewSessionResponse,
+)
+async def create_project_http_service_preview_session(
+    project_id: str,
+    service_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+) -> HttpServicePreviewSessionResponse:
+    """Create a short-lived root-host preview launch URL for a sandbox HTTP service."""
+    await verify_project_access(project_id, current_user, db)
+
+    service_info = await _get_http_service(project_id, service_id, redis_client)
+    if not service_info:
+        raise HTTPException(
+            status_code=404,
+            detail=f"HTTP service {service_id} not found for project {project_id}",
+        )
+
+    if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
+        return HttpServicePreviewSessionResponse(
+            preview_url=service_info.preview_url,
+            expires_in_seconds=0,
+        )
+
+    token = _create_preview_session_token(project_id, service_id, str(current_user.id))
+    return HttpServicePreviewSessionResponse(
+        preview_url=_append_preview_session_token(
+            _build_http_preview_proxy_url(project_id, service_id),
+            token,
+        ),
+        expires_in_seconds=_preview_session_ttl_seconds(),
+    )
+
+
 @router.delete(
     "/{project_id}/sandbox/http-services/{service_id}",
     response_model=HttpServiceActionResponse,
@@ -2393,6 +2630,224 @@ async def proxy_project_http_service_websocket(
             await websocket.send_text(f'{{"error": "{e!s}"}}')
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason="HTTP service WS proxy failure")
+            websocket_closed = True
+    finally:
+        if upstream_ws:
+            with contextlib.suppress(Exception):
+                await upstream_ws.close()
+        if not websocket_closed:
+            with contextlib.suppress(Exception):
+                await websocket.close()
+
+
+@preview_router.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def proxy_project_http_service_preview_host(
+    request: Request,
+    path: str = "",
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
+) -> Any:
+    """Root-path reverse proxy for preview hosts.
+
+    Unlike the legacy path-prefix proxy, this route keeps the browser-visible
+    pathname identical to the sandbox app's pathname.
+    """
+    route = _parse_http_preview_host(request.headers.get("host", ""))
+    if not route:
+        raise HTTPException(status_code=404, detail="Not found")
+    project_id, service_label = route
+
+    service_info = await _get_http_service_by_preview_label(project_id, service_label, redis_client)
+    if not service_info:
+        raise HTTPException(
+            status_code=404,
+            detail=f"HTTP service {service_label} not found for project {project_id}",
+        )
+    if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
+        raise HTTPException(
+            status_code=400,
+            detail="HTTP preview host is only available for sandbox_internal services",
+        )
+
+    query_token = request.query_params.get(_PREVIEW_SESSION_QUERY_PARAM)
+    cookie_token = request.cookies.get(_PREVIEW_SESSION_COOKIE_NAME)
+    session = _preview_session_matches_service(
+        query_token or cookie_token,
+        project_id=project_id,
+        service_id=service_info.service_id,
+    )
+    if not session:
+        raise HTTPException(status_code=401, detail="Preview session is missing or expired")
+
+    if query_token:
+        response = RedirectResponse(_clean_preview_session_url(str(request.url)), status_code=302)
+        response.set_cookie(
+            key=_PREVIEW_SESSION_COOKIE_NAME,
+            value=query_token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            max_age=max(1, int(session.get("exp") or 0) - int(time.time())),
+            path="/",
+        )
+        return response
+
+    import httpx
+
+    query_pairs = [
+        (key, value)
+        for key, value in parse_qsl(request.url.query, keep_blank_values=True)
+        if key != _PREVIEW_SESSION_QUERY_PARAM
+    ]
+    target_url = _build_upstream_http_url(service_info.service_url, path, query_pairs)
+
+    try:
+        body = await request.body()
+        headers = _filter_proxy_headers(request.headers)
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=2.0),
+                verify=False,
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
+                upstream_response = await client.request(
+                    request.method,
+                    target_url,
+                    headers=headers,
+                    content=body,
+                )
+                upstream_status_code = upstream_response.status_code
+                upstream_headers = upstream_response.headers
+                upstream_content = upstream_response.content
+        except httpx.RequestError:
+            (
+                upstream_status_code,
+                upstream_headers,
+                upstream_content,
+            ) = await _request_http_service_via_sandbox_exec(
+                service_info=service_info,
+                target_url=target_url,
+                method=request.method,
+                headers=headers,
+                body=body,
+            )
+
+        content_type = upstream_headers.get("content-type", "application/octet-stream")
+        response_obj = Response(
+            content=upstream_content,
+            status_code=upstream_status_code,
+            headers={"content-type": content_type},
+        )
+
+        cache_control = upstream_headers.get("cache-control")
+        if cache_control:
+            response_obj.headers["cache-control"] = cache_control
+
+        location = upstream_headers.get("location")
+        if location:
+            response_obj.headers["location"] = _rewrite_http_service_host_location(
+                location,
+                request=request,
+                upstream_base_url=service_info.service_url,
+            )
+
+        return response_obj
+    except (httpx.RequestError, RuntimeError) as e:
+        error_detail = str(e) or type(e).__name__
+        logger.error(
+            "HTTP preview host proxy error for %s (%s): %s",
+            service_info.service_id,
+            target_url,
+            error_detail,
+        )
+        await _publish_http_service_error_event(
+            event_publisher,
+            project_id=project_id,
+            sandbox_id=service_info.sandbox_id,
+            service_id=service_info.service_id,
+            service_name=service_info.name,
+            error_message=error_detail,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to connect to HTTP service {service_info.service_id}: {error_detail}",
+        ) from e
+
+
+@preview_router.websocket("/{path:path}")
+async def proxy_project_http_service_preview_host_websocket(
+    websocket: WebSocket,
+    path: str = "",
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher_for_websocket),
+    redis_client: redis.Redis | None = Depends(get_http_service_redis_client_for_websocket),
+) -> None:
+    """Root-path WebSocket proxy for preview hosts."""
+    route = _parse_http_preview_host(websocket.headers.get("host", ""))
+    if not route:
+        await websocket.close(code=1008, reason="Not a preview host")
+        return
+    project_id, service_label = route
+
+    service_info = await _get_http_service_by_preview_label(project_id, service_label, redis_client)
+    if not service_info:
+        await websocket.close(
+            code=1008,
+            reason=f"HTTP service {service_label} not found for project {project_id}",
+        )
+        return
+
+    query_token = websocket.query_params.get(_PREVIEW_SESSION_QUERY_PARAM)
+    cookie_token = websocket.cookies.get(_PREVIEW_SESSION_COOKIE_NAME)
+    if not _preview_session_matches_service(
+        query_token or cookie_token,
+        project_id=project_id,
+        service_id=service_info.service_id,
+    ):
+        await websocket.close(code=1008, reason="Preview session is missing or expired")
+        return
+
+    query_pairs = [
+        (key, value)
+        for key, value in websocket.query_params.multi_items()
+        if key != _PREVIEW_SESSION_QUERY_PARAM
+    ]
+    ws_target = _build_upstream_ws_url(service_info.service_url, path, query_pairs)
+
+    await websocket.accept()
+
+    upstream_ws = None
+    websocket_closed = False
+    try:
+        upstream_ws = await _connect_http_service_upstream(
+            ws_target,
+            websocket.headers.get("origin") or service_info.service_url,
+        )
+        await _run_ws_relay_pair(
+            lambda: _relay_binary_browser_to_upstream(websocket, upstream_ws),
+            lambda: _relay_binary_upstream_to_browser(websocket, upstream_ws),
+        )
+    except Exception as e:
+        logger.error(
+            "HTTP preview host WS proxy error for %s (%s): %s",
+            service_info.service_id,
+            ws_target,
+            e,
+        )
+        await _publish_http_service_error_event(
+            event_publisher,
+            project_id=project_id,
+            sandbox_id=service_info.sandbox_id,
+            service_id=service_info.service_id,
+            service_name=service_info.name,
+            error_message=str(e) or type(e).__name__,
+        )
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011, reason="HTTP preview host WS proxy failure")
             websocket_closed = True
     finally:
         if upstream_ws:
