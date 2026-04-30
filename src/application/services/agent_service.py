@@ -837,11 +837,32 @@ class AgentService(AgentServicePort):
     @staticmethod
     def _coerce_tool_input(tool_input: Any) -> dict[str, Any]:
         """Keep tool inputs JSON-object shaped for historical timeline APIs."""
-        if isinstance(tool_input, Mapping):
-            return dict(tool_input)
-        if tool_input is None:
+        sanitized_input = AgentService._sanitize_persisted_value(tool_input)
+        if isinstance(sanitized_input, Mapping):
+            return dict(sanitized_input)
+        if sanitized_input is None:
             return {}
-        return {"value": tool_input}
+        return {"value": sanitized_input}
+
+    @staticmethod
+    def _sanitize_persisted_text(value: str) -> str:
+        """Remove characters PostgreSQL text/json columns cannot store."""
+        return value.replace("\x00", "")
+
+    @staticmethod
+    def _sanitize_persisted_value(value: Any) -> Any:
+        if isinstance(value, str):
+            return AgentService._sanitize_persisted_text(value)
+        if isinstance(value, Mapping):
+            return {
+                AgentService._sanitize_persisted_text(str(key)): AgentService._sanitize_persisted_value(
+                    item
+                )
+                for key, item in value.items()
+            }
+        if isinstance(value, list | tuple):
+            return [AgentService._sanitize_persisted_value(item) for item in value]
+        return value
 
     @staticmethod
     def _coerce_duration_ms(duration_ms: Any) -> int | None:
@@ -857,11 +878,16 @@ class AgentService(AgentServicePort):
         if result is None:
             return ""
         if isinstance(result, str):
-            return result
+            return AgentService._sanitize_persisted_text(result)
         try:
-            return json.dumps(result, ensure_ascii=False, default=str)
+            serialized = json.dumps(
+                AgentService._sanitize_persisted_value(result),
+                ensure_ascii=False,
+                default=str,
+            )
         except TypeError:
-            return str(result)
+            serialized = str(result)
+        return AgentService._sanitize_persisted_text(serialized)
 
     @staticmethod
     def _is_failed_tool_observation(event_data: Mapping[str, Any]) -> bool:
@@ -932,7 +958,9 @@ class AgentService(AgentServicePort):
                 record.duration_ms = self._coerce_duration_ms(event_data.get("duration_ms"))
                 if self._is_failed_tool_observation(event_data):
                     record.status = ToolExecutionStatus.FAILED
-                    record.error = str(event_data.get("error") or "Tool execution failed")
+                    record.error = self._sanitize_persisted_text(
+                        str(event_data.get("error") or "Tool execution failed")
+                    )
                 else:
                     record.status = ToolExecutionStatus.SUCCESS
                     record.tool_output = self._serialize_tool_result(event_data.get("result"))

@@ -536,7 +536,10 @@ class ToolExecutor:
                 "(2) Write a short skeleton first, "
                 "(3) Use 'edit' or short append commands to add sections incrementally, "
                 "(4) Split the content into multiple smaller files. "
-                "Keep each write/edit/bash payload under 6000 characters."
+                "The write tool hard limit is 64000 content characters per call; "
+                "if the model stream truncates JSON arguments, retry with smaller "
+                "~4000-8000 character write/append chunks. Keep bash heredocs "
+                "under 6000 characters."
             ),
             "edit": (
                 "The edit content is too large. "

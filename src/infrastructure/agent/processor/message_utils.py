@@ -149,3 +149,76 @@ def build_assistant_message_with_tool_calls(
     if content:
         msg["content"] = content
     return msg
+
+
+def sanitize_tool_call_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return messages with only provider-valid assistant/tool result pairs.
+
+    OpenAI-format tool messages must answer tool calls from the immediately
+    preceding assistant message. Anthropic-compatible adapters are stricter
+    about this than some OpenAI endpoints; an orphaned tool result can make the
+    next model call fail before the agent has a chance to recover.
+    """
+    if not messages:
+        return []
+
+    sanitized: list[dict[str, Any]] = []
+    index = 0
+    while index < len(messages):
+        message = messages[index]
+        if message.get("role") == "assistant":
+            group, consumed = _sanitize_assistant_tool_group(messages, index)
+            sanitized.extend(group)
+            index += consumed
+            continue
+
+        if message.get("role") == "tool":
+            index += 1
+            continue
+
+        sanitized.append(message)
+        index += 1
+
+    return sanitized
+
+
+def _sanitize_assistant_tool_group(
+    messages: list[dict[str, Any]],
+    assistant_index: int,
+) -> tuple[list[dict[str, Any]], int]:
+    assistant = messages[assistant_index]
+    raw_tool_calls = assistant.get("tool_calls")
+    if not isinstance(raw_tool_calls, list) or not raw_tool_calls:
+        return [assistant], 1
+
+    following_tools: list[dict[str, Any]] = []
+    cursor = assistant_index + 1
+    while cursor < len(messages) and messages[cursor].get("role") == "tool":
+        following_tools.append(messages[cursor])
+        cursor += 1
+
+    following_ids = {
+        tool_msg.get("tool_call_id")
+        for tool_msg in following_tools
+        if isinstance(tool_msg.get("tool_call_id"), str)
+    }
+    kept_tool_calls = [
+        tool_call
+        for tool_call in raw_tool_calls
+        if isinstance(tool_call, dict)
+        and isinstance(tool_call.get("id"), str)
+        and tool_call["id"] in following_ids
+    ]
+
+    if not kept_tool_calls:
+        assistant_copy = {key: value for key, value in assistant.items() if key != "tool_calls"}
+        if assistant_copy.get("content") is None:
+            assistant_copy["content"] = ""
+        return [assistant_copy], 1
+
+    kept_ids = {tool_call["id"] for tool_call in kept_tool_calls}
+    assistant_copy = {**assistant, "tool_calls": kept_tool_calls}
+    sanitized_tools = [
+        tool_msg for tool_msg in following_tools if tool_msg.get("tool_call_id") in kept_ids
+    ]
+    return [assistant_copy, *sanitized_tools], 1 + len(following_tools)

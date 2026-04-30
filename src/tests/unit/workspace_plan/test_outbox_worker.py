@@ -63,6 +63,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     HANDOFF_RESUME_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
+    _is_structural_sandbox_command,
     _node_allowed_sandbox_commands,
     _persisted_attempt_leader_agent_id,
     _WorkspaceSandboxCommandRunner,
@@ -204,6 +205,25 @@ def _session_factory(db_session: AsyncSession) -> WorkspacePlanSessionFactory:
     return factory
 
 
+def _with_stale_attempt_metadata(
+    node: PlanNode,
+    *,
+    previous_attempt_id: str,
+) -> PlanNode:
+    return replace(
+        node,
+        metadata={
+            **dict(node.metadata or {}),
+            "last_verification_summary": "verification failed: old attempt",
+            "last_verification_passed": False,
+            "last_verification_attempt_id": previous_attempt_id,
+            "verification_evidence_refs": ["old-evidence"],
+            "terminal_attempt_status": "blocked",
+            "terminal_attempt_retry_count": 1,
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_worker_start_restarts_after_stop(db_session: AsyncSession) -> None:
     worker = WorkspacePlanOutboxWorker(
@@ -237,6 +257,12 @@ async def test_workspace_sandbox_runner_blocks_commands_outside_harness_allowlis
     assert result["exit_code"] == 126
     assert result["stdout"] == ""
     assert "not allowed by workspace harness" in result["stderr"]
+
+
+def test_structural_sandbox_commands_allow_git_status_in_code_root() -> None:
+    assert _is_structural_sandbox_command("git -C /workspace/my-evo status --short")
+    assert not _is_structural_sandbox_command("git -C /workspace/my-evo reset --hard")
+    assert not _is_structural_sandbox_command("git -C /workspace/my-evo status --short\nrm -rf .")
 
 
 def test_node_allowed_sandbox_commands_collects_checkpoint_and_preflight_commands() -> None:
@@ -1452,7 +1478,7 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
 
 
 @pytest.mark.asyncio
-async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(
+async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(  # noqa: PLR0915
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1503,6 +1529,10 @@ async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(
     assert leaf.workspace_task_id is not None
     assert leaf.current_attempt_id is not None
     previous_attempt_id = leaf.current_attempt_id
+    dispatched.replace_node(
+        _with_stale_attempt_metadata(leaf, previous_attempt_id=previous_attempt_id)
+    )
+    await SqlPlanRepository(db_session).save(dispatched)
 
     task_row = await db_session.get(WorkspaceTaskModel, leaf.workspace_task_id)
     assert task_row is not None
@@ -1560,6 +1590,12 @@ async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(
     assert resumed is not None
     resumed_leaf = resumed.leaf_tasks()[0]
     assert resumed_leaf.current_attempt_id != previous_attempt_id
+    assert "last_verification_summary" not in resumed_leaf.metadata
+    assert "last_verification_passed" not in resumed_leaf.metadata
+    assert "last_verification_attempt_id" not in resumed_leaf.metadata
+    assert "verification_evidence_refs" not in resumed_leaf.metadata
+    assert "terminal_attempt_status" not in resumed_leaf.metadata
+    assert resumed_leaf.metadata["terminal_attempt_retry_count"] == 1
     assert resumed_leaf.handoff_package is not None
     assert resumed_leaf.handoff_package.git_head == "abc123"
     assert resumed_leaf.handoff_package.changed_files == ("src/example.py",)

@@ -41,6 +41,8 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
+    PlanModel,
+    PlanNodeModel,
     WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
@@ -72,6 +74,8 @@ TERMINAL_ATTEMPT_STATUSES = {
     WorkspaceTaskSessionAttemptStatus.BLOCKED,
     WorkspaceTaskSessionAttemptStatus.CANCELLED,
 }
+SUPPRESSED_PLAN_STATUSES = {"suspended", "completed", "abandoned"}
+SUPPRESSED_LOOP_STATUSES = {"paused", "suspended", "completed"}
 
 
 def _attempt_summary(summary: str | Mapping[str, str], attempt_id: str) -> str:
@@ -387,27 +391,23 @@ class WorkspaceAttemptRecoveryService:
                 )
                 continue
             actor_user_id, parent_status, parent_metadata = resolution
-            if attempt.status is WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION:
-                if parent_status in terminal_parent_statuses:
-                    await self._quiet_finalize_attempt(
-                        attempt,
-                        reason=f"parent_{parent_status.value}",
-                        status=self._terminal_status_for_parent(parent_status),
-                    )
-                    continue
-                await self._touch_awaiting_leader_attempt(attempt)
-                scheduled_roots.add((attempt.workspace_id, actor_user_id))
-                recovered += 1
-                logger.warning(
-                    "workspace_attempt_recovery.awaiting_leader_rescheduled",
-                    extra={
-                        "event": "workspace_attempt_recovery.awaiting_leader_rescheduled",
-                        "attempt_id": attempt.id,
-                        "workspace_task_id": attempt.workspace_task_id,
-                        "workspace_id": attempt.workspace_id,
-                        "reason": attempt_summary,
-                    },
-                )
+            is_v2_plan_linked = self._is_v2_plan_linked(parent_metadata)
+            plan_recovery_suppressed = (
+                await self._plan_recovery_suppressed(parent_metadata)
+                if is_v2_plan_linked
+                else False
+            )
+            awaiting_recovered = await self._recover_awaiting_leader_attempt(
+                attempt=attempt,
+                parent_status=parent_status,
+                terminal_parent_statuses=terminal_parent_statuses,
+                plan_recovery_suppressed=plan_recovery_suppressed,
+                actor_user_id=actor_user_id,
+                attempt_summary=attempt_summary,
+                scheduled_roots=scheduled_roots,
+            )
+            if awaiting_recovered is not None:
+                recovered += awaiting_recovered
                 continue
             if parent_status in terminal_parent_statuses:
                 # Parent already completed / blocked. Do NOT cascade a new
@@ -428,28 +428,13 @@ class WorkspaceAttemptRecoveryService:
                     status=self._terminal_status_for_parent(parent_status),
                 )
                 continue
-            if self._is_v2_plan_linked(parent_metadata):
-                await self._quiet_finalize_attempt(
+            if is_v2_plan_linked:
+                recovered += await self._recover_plan_linked_attempt(
                     attempt,
-                    reason=attempt_summary,
-                    status=WorkspaceTaskSessionAttemptStatus.BLOCKED,
-                )
-                recovered += 1
-                await self._enqueue_resume_if_configured(
-                    attempt=attempt,
-                    summary=attempt_summary,
+                    attempt_summary=attempt_summary,
                     actor_user_id=actor_user_id,
-                )
-                scheduled_roots.add((attempt.workspace_id, actor_user_id))
-                logger.warning(
-                    "workspace_attempt_recovery.plan_attempt_resumed",
-                    extra={
-                        "event": "workspace_attempt_recovery.plan_attempt_resumed",
-                        "attempt_id": attempt.id,
-                        "workspace_task_id": attempt.workspace_task_id,
-                        "workspace_id": attempt.workspace_id,
-                        "reason": attempt_summary,
-                    },
+                    plan_recovery_suppressed=plan_recovery_suppressed,
+                    scheduled_roots=scheduled_roots,
                 )
                 continue
             try:
@@ -527,6 +512,144 @@ class WorkspaceAttemptRecoveryService:
                     },
                 )
         return recovered
+
+    async def _recover_awaiting_leader_attempt(
+        self,
+        *,
+        attempt: WorkspaceTaskSessionAttempt,
+        parent_status: WorkspaceTaskStatus,
+        terminal_parent_statuses: set[WorkspaceTaskStatus],
+        plan_recovery_suppressed: bool,
+        actor_user_id: str,
+        attempt_summary: str,
+        scheduled_roots: set[tuple[str, str]],
+    ) -> int | None:
+        if attempt.status is not WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION:
+            return None
+        if parent_status in terminal_parent_statuses:
+            await self._quiet_finalize_attempt(
+                attempt,
+                reason=f"parent_{parent_status.value}",
+                status=self._terminal_status_for_parent(parent_status),
+            )
+            return 0
+        if plan_recovery_suppressed:
+            await self._touch_awaiting_leader_attempt(attempt)
+            logger.info(
+                "workspace_attempt_recovery.skip_plan_suppressed_awaiting_leader",
+                extra={
+                    "event": "workspace_attempt_recovery.skip_plan_suppressed_awaiting_leader",
+                    "attempt_id": attempt.id,
+                    "workspace_task_id": attempt.workspace_task_id,
+                    "workspace_id": attempt.workspace_id,
+                    "reason": attempt_summary,
+                },
+            )
+            return 0
+        await self._touch_awaiting_leader_attempt(attempt)
+        scheduled_roots.add((attempt.workspace_id, actor_user_id))
+        logger.warning(
+            "workspace_attempt_recovery.awaiting_leader_rescheduled",
+            extra={
+                "event": "workspace_attempt_recovery.awaiting_leader_rescheduled",
+                "attempt_id": attempt.id,
+                "workspace_task_id": attempt.workspace_task_id,
+                "workspace_id": attempt.workspace_id,
+                "reason": attempt_summary,
+            },
+        )
+        return 1
+
+    async def _recover_plan_linked_attempt(
+        self,
+        attempt: WorkspaceTaskSessionAttempt,
+        *,
+        attempt_summary: str,
+        actor_user_id: str,
+        plan_recovery_suppressed: bool,
+        scheduled_roots: set[tuple[str, str]],
+    ) -> int:
+        await self._quiet_finalize_attempt(
+            attempt,
+            reason=attempt_summary,
+            status=WorkspaceTaskSessionAttemptStatus.BLOCKED,
+        )
+        if plan_recovery_suppressed:
+            logger.info(
+                "workspace_attempt_recovery.skip_plan_suppressed_resume",
+                extra={
+                    "event": "workspace_attempt_recovery.skip_plan_suppressed_resume",
+                    "attempt_id": attempt.id,
+                    "workspace_task_id": attempt.workspace_task_id,
+                    "workspace_id": attempt.workspace_id,
+                    "reason": attempt_summary,
+                },
+            )
+            return 1
+        await self._enqueue_resume_if_configured(
+            attempt=attempt,
+            summary=attempt_summary,
+            actor_user_id=actor_user_id,
+        )
+        scheduled_roots.add((attempt.workspace_id, actor_user_id))
+        logger.warning(
+            "workspace_attempt_recovery.plan_attempt_resumed",
+            extra={
+                "event": "workspace_attempt_recovery.plan_attempt_resumed",
+                "attempt_id": attempt.id,
+                "workspace_task_id": attempt.workspace_task_id,
+                "workspace_id": attempt.workspace_id,
+                "reason": attempt_summary,
+            },
+        )
+        return 1
+
+    async def _plan_recovery_suppressed(self, metadata: Mapping[str, object]) -> bool:
+        """Return True when an operator/loop state should suppress auto-recovery.
+
+        Attempt recovery is a crash/error watchdog, not an override for a paused
+        Scrum loop. V2 plan-linked attempts may still be finalized, but they must
+        not enqueue handoff resume jobs or schedule ticks while the plan is
+        intentionally paused or suspended.
+        """
+        plan_id = metadata.get(WORKSPACE_PLAN_ID)
+        if not isinstance(plan_id, str) or not plan_id:
+            return False
+        try:
+            async with self._session_factory() as session:
+                stmt = (
+                    select(PlanModel.status, PlanNodeModel.metadata_json)
+                    .join(
+                        PlanNodeModel,
+                        (PlanNodeModel.plan_id == PlanModel.id)
+                        & (PlanNodeModel.id == PlanModel.goal_id),
+                    )
+                    .where(PlanModel.id == plan_id)
+                    .limit(1)
+                )
+                row = (await session.execute(stmt)).one_or_none()
+                if row is None:
+                    return False
+                plan_status, goal_metadata = row
+        except Exception:
+            logger.warning(
+                "workspace_attempt_recovery.plan_state_lookup_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_attempt_recovery.plan_state_lookup_failed",
+                    "plan_id": plan_id,
+                },
+            )
+            return False
+        if str(plan_status or "").lower() in SUPPRESSED_PLAN_STATUSES:
+            return True
+        if isinstance(goal_metadata, Mapping):
+            loop = goal_metadata.get("iteration_loop")
+            if isinstance(loop, Mapping):
+                loop_status = loop.get("loop_status")
+                if str(loop_status or "").lower() in SUPPRESSED_LOOP_STATUSES:
+                    return True
+        return False
 
     async def _enqueue_resume_if_configured(
         self,

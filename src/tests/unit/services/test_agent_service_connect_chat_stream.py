@@ -330,6 +330,45 @@ async def test_persist_tool_execution_event_marks_failed_observations() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_persist_tool_execution_event_strips_nul_bytes() -> None:
+    tool_record_repo = _InMemoryToolExecutionRecordRepo()
+    service = _build_service(tool_record_repo)
+
+    await service._persist_tool_execution_event(
+        conversation_id="conv-1",
+        message_id="m1",
+        event_type="act",
+        event_data={
+            "tool_execution_id": "ter-binary",
+            "call_id": "call-binary",
+            "tool_name": "bash",
+            "tool_input": {"command": "printf '\\0'", "nested": ["a\x00b"]},
+        },
+        event_time_us=2_000_000,
+        event_counter=5,
+    )
+    await service._persist_tool_execution_event(
+        conversation_id="conv-1",
+        message_id="m1",
+        event_type="observe",
+        event_data={
+            "tool_execution_id": "ter-binary",
+            "call_id": "call-binary",
+            "tool_name": "bash",
+            "result": "binary\x00payload",
+            "status": "success",
+        },
+        event_time_us=2_100_000,
+        event_counter=6,
+    )
+
+    record = tool_record_repo.records["ter-binary"]
+    assert record.tool_input == {"command": "printf '\\0'", "nested": ["ab"]}
+    assert record.tool_output == "binarypayload"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_replay_db_events_repairs_malformed_task_list_updated_payload() -> None:
     service = _build_service()
     created_at = datetime.now(UTC)

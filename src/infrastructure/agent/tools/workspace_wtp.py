@@ -456,6 +456,24 @@ async def workspace_report_progress_tool(
                     "commit_ref:<sha>, or git_diff_summary:<summary>."
                 ),
             },
+            "commit_ref": {
+                "type": "string",
+                "description": (
+                    "Optional git commit SHA for the completed work. Prefer this when "
+                    "the task committed its changes."
+                ),
+            },
+            "git_diff_summary": {
+                "type": "string",
+                "description": (
+                    "Optional concise git diff summary for changed files when no commit_ref exists."
+                ),
+            },
+            "changed_files": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional changed file paths produced by the task.",
+            },
         },
         "required": ["task_id", "attempt_id", "leader_agent_id", "summary"],
     },
@@ -471,6 +489,9 @@ async def workspace_report_complete_tool(
     summary: str,
     artifacts: list[str] | None = None,
     verifications: list[str] | None = None,
+    commit_ref: str | None = None,
+    git_diff_summary: str | None = None,
+    changed_files: list[str] | None = None,
 ) -> ToolResult:
     role_error = _require_worker_role(ctx)
     if role_error:
@@ -482,6 +503,19 @@ async def workspace_report_complete_tool(
     normalized_verifications = [
         item for item in (verifications or []) if isinstance(item, str) and item
     ]
+    normalized_commit_ref = commit_ref.strip() if isinstance(commit_ref, str) else ""
+    normalized_git_diff_summary = (
+        git_diff_summary.strip() if isinstance(git_diff_summary, str) else ""
+    )
+    normalized_changed_files = [
+        item.strip() for item in (changed_files or []) if isinstance(item, str) and item.strip()
+    ]
+    if normalized_commit_ref:
+        normalized_artifacts.append(f"commit_ref:{normalized_commit_ref}")
+    if normalized_git_diff_summary:
+        normalized_artifacts.append(f"git_diff_summary:{normalized_git_diff_summary}")
+    normalized_artifacts.extend(f"changed_file:{item}" for item in normalized_changed_files)
+    normalized_artifacts = list(dict.fromkeys(normalized_artifacts))
     payload: dict[str, Any] = {
         "summary": summary,
         "task_id": task_id,
@@ -491,6 +525,12 @@ async def workspace_report_complete_tool(
         payload["artifacts"] = normalized_artifacts
     if normalized_verifications:
         payload["verifications"] = normalized_verifications
+    if normalized_commit_ref:
+        payload["commit_ref"] = normalized_commit_ref
+    if normalized_git_diff_summary:
+        payload["git_diff_summary"] = normalized_git_diff_summary
+    if normalized_changed_files:
+        payload["changed_files"] = normalized_changed_files
 
     try:
         envelope = WtpEnvelope(

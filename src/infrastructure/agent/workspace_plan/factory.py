@@ -119,6 +119,42 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
                 },
                 next_attempt_at=_payload_datetime(payload, "retry_not_before"),
             )
+        if event_type == "iteration_next_sprint_planned":
+            await SqlWorkspacePlanOutboxRepository(db).enqueue(
+                plan_id=node.plan_id,
+                workspace_id=workspace_id,
+                event_type="supervisor_tick",
+                payload={
+                    "workspace_id": workspace_id,
+                    "plan_id": node.plan_id,
+                    "iteration_followup": "next_sprint_dispatch",
+                    "reviewed_iteration": payload.get("iteration_index"),
+                    "next_iteration": payload.get("next_iteration"),
+                },
+                metadata={
+                    "source_event_type": event_type,
+                    "node_id": node.id,
+                    "iteration_index": payload.get("iteration_index"),
+                    "next_iteration": payload.get("next_iteration"),
+                },
+            )
+        if event_type == "dispatch_deferred_concurrency_limit":
+            await SqlWorkspacePlanOutboxRepository(db).enqueue(
+                plan_id=node.plan_id,
+                workspace_id=workspace_id,
+                event_type="supervisor_tick",
+                payload={
+                    "workspace_id": workspace_id,
+                    "plan_id": node.plan_id,
+                    "deferred_node_id": node.id,
+                    "deferred_reason": "dispatch_concurrency_limit",
+                },
+                metadata={
+                    "source_event_type": event_type,
+                    "node_id": node.id,
+                    "max_dispatches_per_tick": payload.get("max_dispatches_per_tick"),
+                },
+            )
 
     return _sink
 

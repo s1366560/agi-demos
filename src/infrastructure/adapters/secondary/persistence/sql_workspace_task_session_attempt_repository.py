@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import override
 
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task_session_attempt import (
@@ -18,6 +18,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
     refresh_select_statement,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
     WorkspaceTaskSessionAttemptModel,
 )
 
@@ -131,9 +132,23 @@ class SqlWorkspaceTaskSessionAttemptRepository(
             WorkspaceTaskSessionAttemptStatus.RUNNING.value,
             WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value,
         ]
-        last_activity = func.coalesce(
+        attempt_activity = func.coalesce(
             WorkspaceTaskSessionAttemptModel.updated_at,
             WorkspaceTaskSessionAttemptModel.created_at,
+        )
+        latest_conversation_event = (
+            select(func.max(AgentExecutionEvent.created_at))
+            .where(
+                AgentExecutionEvent.conversation_id
+                == WorkspaceTaskSessionAttemptModel.conversation_id
+            )
+            .correlate(WorkspaceTaskSessionAttemptModel)
+            .scalar_subquery()
+        )
+        conversation_activity = func.coalesce(latest_conversation_event, attempt_activity)
+        last_activity = case(
+            (conversation_activity > attempt_activity, conversation_activity),
+            else_=attempt_activity,
         )
         stmt = (
             select(WorkspaceTaskSessionAttemptModel)

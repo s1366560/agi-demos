@@ -15,9 +15,15 @@ from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, Projec
 def _reset_local_task_tracking() -> None:
     AgentRuntimeBootstrapper._local_chat_tasks.clear()
     AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
+    AgentRuntimeBootstrapper._local_subprocesses.clear()
+    AgentRuntimeBootstrapper._local_subprocess_request_paths.clear()
+    AgentRuntimeBootstrapper._local_subprocess_superseded.clear()
     yield
     AgentRuntimeBootstrapper._local_chat_tasks.clear()
     AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
+    AgentRuntimeBootstrapper._local_subprocesses.clear()
+    AgentRuntimeBootstrapper._local_subprocess_request_paths.clear()
+    AgentRuntimeBootstrapper._local_subprocess_superseded.clear()
 
 
 class _FakeTask:
@@ -35,6 +41,25 @@ class _FakeTask:
 
     def add_done_callback(self, callback) -> None:
         self.callbacks.append(callback)
+
+
+class _FakeProcess:
+    def __init__(self, *, pid: int, returncode: int | None = None) -> None:
+        self.pid = pid
+        self.returncode = returncode
+        self.terminate_called = False
+        self.kill_called = False
+
+    def terminate(self) -> None:
+        self.terminate_called = True
+        self.returncode = -15
+
+    def kill(self) -> None:
+        self.kill_called = True
+        self.returncode = -9
+
+    async def wait(self) -> int:
+        return self.returncode if self.returncode is not None else 0
 
 
 @pytest.fixture
@@ -225,7 +250,7 @@ async def test_start_chat_actor_local_workspace_worker_uses_subprocess(
 async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_path):
     """Detached process sessions keep workspace workers alive across dev reloads."""
     request_path = tmp_path / "request.json"
-    process = SimpleNamespace(wait=AsyncMock(return_value=0))
+    process = _FakeProcess(pid=123)
     created_tasks = []
 
     def _capture_task(coro, **kwargs):
@@ -256,6 +281,48 @@ async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_p
     subprocess_mock.assert_awaited_once()
     assert subprocess_mock.await_args.kwargs["start_new_session"] is True
     assert created_tasks
+    assert AgentRuntimeBootstrapper._local_subprocesses["conv-1"] is process
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_local_workspace_subprocess_replaces_previous_process(bootstrapper, tmp_path):
+    """Relaunching the same conversation should terminate the old detached worker."""
+    request_paths = [tmp_path / "request-1.json", tmp_path / "request-2.json"]
+    for path in request_paths:
+        path.write_text("{}", encoding="utf-8")
+    previous = _FakeProcess(pid=111)
+    current = _FakeProcess(pid=222)
+
+    def _capture_task(coro, **kwargs):
+        coro.close()
+        return _FakeTask(done=True)
+
+    config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
+    request = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+    )
+
+    with (
+        patch.object(
+            bootstrapper,
+            "_write_local_subprocess_request",
+            side_effect=request_paths,
+        ),
+        patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as subprocess_mock,
+        patch("asyncio.create_task", side_effect=_capture_task),
+    ):
+        subprocess_mock.side_effect = [previous, current]
+        await bootstrapper._start_local_subprocess_chat("conv-1", config, request)
+        await bootstrapper._start_local_subprocess_chat("conv-1", config, request)
+
+    assert previous.terminate_called is True
+    assert AgentRuntimeBootstrapper._local_subprocesses["conv-1"] is current
+    assert AgentRuntimeBootstrapper._local_subprocess_request_paths["conv-1"] == request_paths[1]
+    assert not request_paths[0].exists()
 
 
 @pytest.mark.unit
@@ -612,3 +679,36 @@ async def test_cancel_local_chat_sets_abort_and_cancels_task() -> None:
     assert cancelled is True
     assert abort_signal.is_set()
     assert task.cancel_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cancel_local_chat_terminates_subprocess(tmp_path) -> None:
+    """cancel_local_chat should also stop detached workspace worker processes."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{}", encoding="utf-8")
+    process = _FakeProcess(pid=333)
+    AgentRuntimeBootstrapper._local_subprocesses["conv-1"] = process
+    AgentRuntimeBootstrapper._local_subprocess_request_paths["conv-1"] = request_path
+
+    cancelled = await AgentRuntimeBootstrapper.cancel_local_chat("conv-1")
+
+    assert cancelled is True
+    assert process.terminate_called is True
+    assert "conv-1" not in AgentRuntimeBootstrapper._local_subprocesses
+    assert not request_path.exists()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_has_running_local_subprocess_reflects_process_returncode() -> None:
+    """Snapshot recovery can use the tracked detached worker as a liveness signal."""
+    AgentRuntimeBootstrapper._local_subprocesses["conv-running"] = _FakeProcess(pid=444)
+    AgentRuntimeBootstrapper._local_subprocesses["conv-finished"] = _FakeProcess(
+        pid=555,
+        returncode=0,
+    )
+
+    assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-running") is True
+    assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-finished") is False
+    assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-missing") is False

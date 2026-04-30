@@ -49,6 +49,82 @@ from src.infrastructure.security.encryption_service import get_encryption_servic
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_tool_call_adjacency(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop provider-invalid tool-call/result fragments before LiteLLM sees them.
+
+    Context trimming can remove only part of an assistant/tool-result exchange.
+    Anthropic rejects those orphaned tool results before the agent can recover,
+    so the final provider boundary must enforce adjacent complete pairs.
+    """
+    if not messages:
+        return []
+
+    sanitized: list[dict[str, Any]] = []
+    index = 0
+    while index < len(messages):
+        message = messages[index]
+        role = message.get("role")
+        if role == "assistant":
+            group, consumed = _sanitize_assistant_tool_group(messages, index)
+            sanitized.extend(group)
+            index += consumed
+            continue
+        if role == "tool":
+            index += 1
+            continue
+        sanitized.append(message)
+        index += 1
+    return sanitized
+
+
+def _sanitize_assistant_tool_group(
+    messages: list[dict[str, Any]],
+    assistant_index: int,
+) -> tuple[list[dict[str, Any]], int]:
+    assistant = messages[assistant_index]
+    raw_tool_calls = assistant.get("tool_calls")
+    if not isinstance(raw_tool_calls, list) or not raw_tool_calls:
+        return [assistant], 1
+
+    tool_call_ids = [
+        tool_call.get("id")
+        for tool_call in raw_tool_calls
+        if isinstance(tool_call, dict) and isinstance(tool_call.get("id"), str)
+    ]
+    if len(tool_call_ids) != len(raw_tool_calls):
+        return [_strip_assistant_tool_calls(assistant)], 1
+
+    following_tools: list[dict[str, Any]] = []
+    cursor = assistant_index + 1
+    while cursor < len(messages) and messages[cursor].get("role") == "tool":
+        following_tools.append(messages[cursor])
+        cursor += 1
+
+    following_ids = {
+        tool_msg.get("tool_call_id")
+        for tool_msg in following_tools
+        if isinstance(tool_msg.get("tool_call_id"), str)
+    }
+    if not set(tool_call_ids).issubset(following_ids):
+        return [_strip_assistant_tool_calls(assistant)], 1 + len(following_tools)
+
+    kept_ids = set(tool_call_ids)
+    return (
+        [
+            assistant,
+            *[tool_msg for tool_msg in following_tools if tool_msg.get("tool_call_id") in kept_ids],
+        ],
+        1 + len(following_tools),
+    )
+
+
+def _strip_assistant_tool_calls(message: dict[str, Any]) -> dict[str, Any]:
+    stripped = {key: value for key, value in message.items() if key != "tool_calls"}
+    if stripped.get("content") is None:
+        stripped["content"] = ""
+    return stripped
+
+
 # Default API base URLs for known providers
 _DEFAULT_API_BASES: dict[str, str] = {
     "zai": "https://open.bigmodel.cn/api/paas/v4",
@@ -218,10 +294,12 @@ class LiteLLMClient(LLMClient):
           4. Omit (LiteLLM uses its own defaults)
         """
         clamped_max_tokens = _clamp_max_tokens(model, max_tokens)
-        normalized_messages = self._trim_messages_to_input_limit(
-            model=model,
-            messages=messages,
-            max_tokens=clamped_max_tokens,
+        normalized_messages = _sanitize_tool_call_adjacency(
+            self._trim_messages_to_input_limit(
+                model=model,
+                messages=messages,
+                max_tokens=clamped_max_tokens,
+            )
         )
 
         # --- Vision capability gating ---

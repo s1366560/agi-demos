@@ -294,7 +294,7 @@ class StreamConfig:
     api_key: str | None = None
     base_url: str | None = None
     temperature: float = 0.0
-    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments
+    max_tokens: int = 32768  # Larger budget prevents write/tool JSON truncation.
 
     # Tool configuration
     tools: list[dict[str, Any]] | None = None
@@ -1113,7 +1113,7 @@ def create_stream(
     api_key: str | None = None,
     base_url: str | None = None,
     temperature: float = 0.0,
-    max_tokens: int = 16384,
+    max_tokens: int = 32768,
     tools: list[dict[str, Any]] | None = None,
     **kwargs: Any,
 ) -> LLMStream:

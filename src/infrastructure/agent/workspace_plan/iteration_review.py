@@ -29,11 +29,12 @@ class LLMIterationReviewProvider:
         self._max_next_tasks = max(1, max_next_tasks)
 
     async def review(self, context: IterationReviewContext) -> IterationReviewVerdict:
+        user_payload = _user_payload(context)
         try:
             response = await self._llm_client.generate(
                 messages=[
                     {"role": "system", "content": _system_prompt(self._max_next_tasks)},
-                    {"role": "user", "content": _user_payload(context)},
+                    {"role": "user", "content": user_payload},
                 ],
                 tools=[_review_tool_schema(self._max_next_tasks)],
                 temperature=0.0,
@@ -52,7 +53,7 @@ class LLMIterationReviewProvider:
                 response = await self._llm_client.generate(
                     messages=[
                         {"role": "system", "content": _system_prompt(self._max_next_tasks)},
-                        {"role": "user", "content": _user_payload(context)},
+                        {"role": "user", "content": user_payload},
                     ],
                     tools=[_review_tool_schema(self._max_next_tasks)],
                     temperature=0.0,
@@ -62,7 +63,36 @@ class LLMIterationReviewProvider:
                 logger.warning("workspace iteration review failed: %s", exc)
                 return _needs_human_review(f"iteration review failed: {exc}")
 
-        return _parse_review_response(response, max_next_tasks=context.max_next_tasks)
+        parsed = _parse_review_response(response, max_next_tasks=context.max_next_tasks)
+        if parsed.summary != "iteration review did not return structured arguments":
+            return parsed
+
+        try:
+            repaired_response = await self._llm_client.generate(
+                messages=[
+                    {"role": "system", "content": _json_repair_system_prompt(self._max_next_tasks)},
+                    {
+                        "role": "user",
+                        "content": _json_repair_user_payload(
+                            context_payload=user_payload,
+                            prior_response=_response_text(response),
+                        ),
+                    },
+                ],
+                temperature=0.0,
+                max_tokens=1600,
+            )
+        except Exception as exc:
+            logger.warning("workspace iteration review json repair failed: %s", exc)
+            return parsed
+
+        repaired = _parse_review_response(
+            repaired_response,
+            max_next_tasks=context.max_next_tasks,
+        )
+        if repaired.summary == "iteration review did not return structured arguments":
+            return parsed
+        return repaired
 
 
 class UnavailableIterationReviewProvider:
@@ -84,10 +114,26 @@ def _system_prompt(max_next_tasks: int) -> str:
         "is complete, whether a bounded next sprint is needed, or whether human review "
         "is required. Do not create a full future backlog. If continuing, return at "
         f"most {max_next_tasks} next_tasks for only the next sprint. Use phases in this "
-        "order when useful: research, plan, implement, test, deploy, review. If evidence "
-        "is ambiguous or confidence is low, choose needs_human_review. In summary and "
-        "next_sprint_goal text, refer only to the provided iteration_index; do not invent "
-        "or increment iteration numbers."
+        "order when useful: research, plan, implement, test, deploy, review. Choose "
+        "continue_next_iteration when remaining uncertainty can be converted into "
+        "bounded agent work such as research, browser/product parity checks, API "
+        "verification, UI comparison, E2E testing, documentation, or release readiness "
+        "tasks. Missing evidence is normally next-sprint work, not human review. Do not "
+        "produce aggregate implementation tasks such as 'fix all P0/P1 gaps' or "
+        "'complete the frontend/backend'; each next_task must target one functional area, "
+        "one user journey, or one concrete artifact that can be verified independently. "
+        "If there are more actionable gaps than the task budget, choose the highest-risk "
+        "bounded items for next_tasks and put the rest in feedback_items. Do not "
+        "choose needs_human_review solely because you, as the review agent, cannot browse "
+        "a public reference site or run the app yourself; turn that into next-sprint "
+        "browser_e2e, screenshot comparison, public-web research, or API verification "
+        "tasks. Choose needs_human_review only when progress is blocked by a truly "
+        "human-only decision or authority boundary, such as missing credentials or "
+        "permissions, irreversible external deployment/spend, legal/compliance/product "
+        "approval, unsafe destructive action, or inability to produce concrete next_tasks. "
+        "If confidence is low, choose needs_human_review and leave next_tasks empty. In "
+        "summary and next_sprint_goal text, refer only to the provided iteration_index; "
+        "do not invent or increment iteration numbers."
     )
 
 
@@ -104,6 +150,67 @@ def _user_payload(context: IterationReviewContext) -> str:
         "deliverables": list(context.deliverables),
         "feedback_items": list(context.feedback_items),
         "max_next_tasks": context.max_next_tasks,
+        "review_policy": {
+            "mode": "auto",
+            "available_next_sprint_capabilities": [
+                "public web research and reference-site inspection",
+                "browser_e2e workflows with screenshots and console capture",
+                "API contract verification and integration tests",
+                "code, test, documentation, and release-readiness implementation",
+            ],
+            "continue_next_iteration_for": [
+                "missing acceptance evidence",
+                "public reference product parity checks",
+                "UI/UX comparison work",
+                "E2E user journey verification",
+                "release-readiness checks that do not require external production authority",
+            ],
+            "needs_human_review_only_for": [
+                "missing credentials or private access",
+                "irreversible external deployment, spending, or data transmission",
+                "legal, compliance, or product approval",
+                "unsafe destructive action",
+                "no concrete next sprint tasks can be produced",
+            ],
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _json_repair_system_prompt(max_next_tasks: int) -> str:
+    return (
+        "You are the workspace iteration review agent. Your previous response did not "
+        "produce machine-readable arguments. Make the same subjective review decision, "
+        "but return ONLY one JSON object and no markdown. The JSON object must contain "
+        "verdict, confidence, summary, next_sprint_goal, feedback_items, and next_tasks. "
+        "verdict must be one of complete_goal, continue_next_iteration, or "
+        "needs_human_review. If verdict is continue_next_iteration, include between 1 "
+        f"and {max_next_tasks} next_tasks for only the next sprint."
+    )
+
+
+def _json_repair_user_payload(*, context_payload: str, prior_response: str) -> str:
+    payload = {
+        "context": json.loads(context_payload),
+        "previous_unstructured_response": prior_response[:4000],
+        "required_json_shape": {
+            "verdict": "continue_next_iteration",
+            "confidence": 0.75,
+            "summary": "short review summary",
+            "next_sprint_goal": "bounded goal for the next sprint",
+            "feedback_items": ["feedback or evidence gap"],
+            "next_tasks": [
+                {
+                    "id": "t1",
+                    "description": "bounded next sprint task",
+                    "target_subagent": None,
+                    "dependencies": [],
+                    "priority": 0,
+                    "phase": "test",
+                    "expected_artifacts": ["artifact or evidence"],
+                }
+            ],
+        },
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -119,6 +226,10 @@ def _review_tool_schema(max_next_tasks: int) -> dict[str, Any]:
                 "properties": {
                     "verdict": {
                         "type": "string",
+                        "description": (
+                            "Use continue_next_iteration for actionable gaps; reserve "
+                            "needs_human_review for human-only authority or judgment."
+                        ),
                         "enum": [
                             "complete_goal",
                             "continue_next_iteration",
@@ -135,6 +246,10 @@ def _review_tool_schema(max_next_tasks: int) -> dict[str, Any]:
                     },
                     "next_tasks": {
                         "type": "array",
+                        "description": (
+                            "Required for continue_next_iteration; leave empty for "
+                            "complete_goal or needs_human_review."
+                        ),
                         "maxItems": max_next_tasks,
                         "items": {
                             "type": "object",
@@ -237,6 +352,22 @@ def _response_arguments(response: dict[str, Any]) -> dict[str, Any] | None:  # n
         except json.JSONDecodeError:
             return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _response_text(response: dict[str, Any]) -> str:
+    content = response.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    tool_calls = response.get("tool_calls")
+    if tool_calls:
+        try:
+            return json.dumps(tool_calls, ensure_ascii=False, default=str)
+        except TypeError:
+            return str(tool_calls)
+    try:
+        return json.dumps(response, ensure_ascii=False, default=str)
+    except TypeError:
+        return str(response)
 
 
 def _read_field(source: object, key: str, default: object) -> object:

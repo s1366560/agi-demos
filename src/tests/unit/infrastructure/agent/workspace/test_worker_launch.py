@@ -270,6 +270,9 @@ class TestBuildBrief:
         assert "Build report" in brief
         assert "Render quarterly stats" in brief
         assert "## Completion gate" in brief
+        assert "## Shell execution discipline" in brief
+        assert "nohup" in brief
+        assert "Do not assume `ss` exists" in brief
         assert "preflight:read-progress" in brief
         assert "preflight:git-status" in brief
 
@@ -311,8 +314,10 @@ class TestBuildBrief:
             "preflight:read-progress",
             "preflight:git-status",
         ]
+        assert "git_diff_summary" in reporting["completion_contract"]["required_change_evidence"]
         assert "workspace_report_complete" in reporting["completion_contract"]["example"]
         assert "preflight:read-progress" in " ".join(reporting["instructions"])
+        assert "commit_ref" in " ".join(reporting["instructions"])
         assert (
             system_context["artifact_write_policy"]["max_single_write_chars"]
             == wl.WORKER_MAX_SINGLE_WRITE_CHARS
@@ -327,6 +332,14 @@ class TestBuildBrief:
         assert "giant heredoc" in " ".join(
             system_context["artifact_write_policy"]["instructions"]
         )
+        shell_instructions = " ".join(system_context["shell_execution_policy"]["instructions"])
+        assert "nohup" in shell_instructions
+        assert "playwright install --with-deps" in shell_instructions
+        assert "port is already in use" in shell_instructions
+        assert "stop the stale PID" in shell_instructions
+        assert "E2E_BASE_URL" in shell_instructions
+        assert "empty string" in shell_instructions
+        assert "ss" in shell_instructions
 
     def test_system_context_includes_harness_preflight_contract(self) -> None:
         task = _make_task(
@@ -396,6 +409,7 @@ class TestBuildBrief:
         assert "[workspace-code-context]" not in brief
         assert "Always run npm test." not in brief
         assert "Artifact write discipline" in brief
+        assert "git_diff_summary" in brief
 
         system_context = wl._build_worker_system_context(
             workspace_id="w",

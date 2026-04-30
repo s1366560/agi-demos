@@ -52,9 +52,18 @@ _FILE_PATH_RE = re.compile(
         (
             r"(?<![A-Za-z0-9_./-])",
             r"((?:src|web|tests?|packages?|apps?|docs|scripts)/[A-Za-z0-9_./-]+",
-            r"\.(?:py|ts|tsx|js|jsx|json|md|css|scss|yaml|yml))",
+            r"\.(?:py|tsx|ts|jsx|js|json|md|css|scss|yaml|yml))",
         )
     )
+)
+_READ_ONLY_PATH_CONTEXT_RE = re.compile(
+    r"(?:读取|阅读|查看|参考|根据|基于|read|inspect|review|reference|from)\s*$",
+    re.IGNORECASE,
+)
+_WRITE_PATH_CONTEXT_RE = re.compile(
+    r"(?:更新|修改|修复|补充|创建|生成|输出到?|写入|保存到?|"
+    r"update|modify|fix|create|generate|write|save(?:\s+to)?|output(?:\s+to)?)\s*$",
+    re.IGNORECASE,
 )
 _ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
 _SCRUM_ARTIFACT_BY_PHASE = {
@@ -453,7 +462,12 @@ def _extract_sandbox_root(description: str) -> str | None:
 
 
 def _infer_write_set(description: str) -> tuple[str, ...]:
-    paths = [match.group(1).rstrip(".,;:)") for match in _FILE_PATH_RE.finditer(description)]
+    paths = []
+    for match in _FILE_PATH_RE.finditer(description):
+        prefix = description[max(0, match.start() - 32) : match.start()]
+        if _READ_ONLY_PATH_CONTEXT_RE.search(prefix) and not _WRITE_PATH_CONTEXT_RE.search(prefix):
+            continue
+        paths.append(match.group(1).rstrip(".,;:)"))
     return tuple(dict.fromkeys(paths))
 
 

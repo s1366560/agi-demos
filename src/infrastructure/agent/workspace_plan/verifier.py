@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import shlex
 from typing import Any, Protocol
 
 from src.domain.model.workspace_plan import (
@@ -49,6 +50,9 @@ _TRANSIENT_INFRA_FAILURE_MARKERS = (
     "request timed out",
     "工具执行超时",
     "litellm.APIConnectionError",
+    "litellm.InternalServerError",
+    "Expected HTTP/, RTSP/ or ICE/",
+    "Handle with `litellm.InternalServerError`",
     "is unavailable and could not be rebuilt",
     "Rate limit exceeded",
     "Please wait a moment and try again",
@@ -391,6 +395,9 @@ class AcceptanceCriterionVerifier(VerifierPort):
         checkpoint_guard = _feature_checkpoint_evidence_guard(ctx)
         if checkpoint_guard is not None:
             results.append(checkpoint_guard)
+        clean_worktree_guard = await _clean_worktree_after_commit_guard(ctx)
+        if clean_worktree_guard is not None:
+            results.append(clean_worktree_guard)
         for crit in ctx.node.acceptance_criteria:
             runner = self._runners.get(crit.kind, self._fallback)
             try:
@@ -580,6 +587,71 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
     )
 
 
+async def _clean_worktree_after_commit_guard(ctx: VerificationContext) -> CriterionResult | None:
+    """When a checkpoint reports a commit, ensure no extra changes were left behind."""
+
+    if ctx.sandbox is None or not _required_change_refs(ctx):
+        return None
+
+    evidence_values = _artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "last_worker_report_artifacts",
+        "candidate_artifacts",
+        "execution_verifications",
+        "last_worker_report_verifications",
+        "candidate_verifications",
+    )
+    if not _first_prefixed(evidence_values, "commit_ref:"):
+        return None
+
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "clean_worktree_after_commit"},
+        required=True,
+        description="committed feature checkpoints must not leave uncommitted changes",
+    )
+    code_root = _sandbox_code_root(ctx)
+    command = "git status --short"
+    if code_root:
+        command = f"git -C {shlex.quote(code_root)} status --short"
+    try:
+        result = await ctx.sandbox.run_command(command, timeout=15)
+    except Exception as exc:
+        return CriterionResult(
+            criterion=criterion,
+            passed=True,
+            confidence=0.4,
+            message=f"clean worktree check skipped: {exc}",
+        )
+
+    exit_code = int(result.get("exit_code", 1))
+    stdout = str(result.get("stdout", "")).strip()
+    stderr = str(result.get("stderr", "")).strip()
+    if exit_code != 0:
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=0.9,
+            message=f"git status failed: {stderr or stdout or exit_code}",
+        )
+    if stdout:
+        preview = stdout.replace("\n", "; ")[:300]
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=f"uncommitted changes remain after commit_ref: {preview}",
+            evidence=(EvidenceRef(kind="git_status", ref=stdout[:2000], note=command),),
+        )
+    return CriterionResult(
+        criterion=criterion,
+        passed=True,
+        confidence=1.0,
+        message="clean worktree after commit",
+    )
+
+
 def _required_change_refs(ctx: VerificationContext) -> set[str]:
     refs: set[str] = set()
     feature = ctx.node.feature_checkpoint
@@ -678,6 +750,14 @@ def _requires_terminal_worker_report(ctx: VerificationContext) -> bool:
 def _artifact_text(ctx: VerificationContext, key: str) -> str:
     value = ctx.artifacts.get(key)
     return value.strip() if isinstance(value, str) else ""
+
+
+def _sandbox_code_root(ctx: VerificationContext) -> str | None:
+    raw = ctx.node.metadata.get("code_context")
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("sandbox_code_root")
+    return value if isinstance(value, str) and value.strip() else None
 
 
 # Keep :mod:`asyncio` imported so subclasses can override with timing logic.

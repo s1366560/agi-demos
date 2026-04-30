@@ -86,7 +86,11 @@ from .hitl_tool_handler import (
     pop_tool_part_hitl_completion_request_ids,
     queue_tool_part_hitl_completion,
 )
-from .message_utils import classify_tool_by_description, extract_user_query
+from .message_utils import (
+    classify_tool_by_description,
+    extract_user_query,
+    sanitize_tool_call_messages,
+)
 from .run_context import RunContext
 
 logger = logging.getLogger(__name__)
@@ -144,7 +148,7 @@ class ProcessorConfig:
     api_key: str | None = None
     base_url: str | None = None
     temperature: float = 0.0
-    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments (e.g., write)
+    max_tokens: int = 32768  # Larger budget prevents write/tool JSON truncation.
 
     # Processing limits
     max_steps: int = 50  # Maximum steps before forcing stop
@@ -1951,6 +1955,7 @@ class SessionProcessor:
                 if runtime_guidance is not None:
                     step_messages.append(runtime_guidance)
                     reminder_injected = self._TOOL_USAGE_REMINDER in runtime_guidance["content"]
+                step_messages = sanitize_tool_call_messages(step_messages)
 
                 # Build step-specific langfuse context
                 step_langfuse_context = None
@@ -2684,7 +2689,10 @@ class SessionProcessor:
                 "(2) Write a short skeleton first, "
                 "(3) Use 'edit' or short append commands to add sections incrementally, "
                 "(4) Split the content into multiple smaller files. "
-                "Keep each write/edit/bash payload under 6000 characters."
+                "The write tool hard limit is 64000 content characters per call; "
+                "if the model stream truncates JSON arguments, retry with smaller "
+                "~4000-8000 character write/append chunks. Keep bash heredocs "
+                "under 6000 characters."
             ),
             "edit": (
                 "The edit content is too large. "

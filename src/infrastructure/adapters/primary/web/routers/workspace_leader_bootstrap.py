@@ -91,15 +91,12 @@ def _resolve_container(request: Request | None, db: AsyncSession) -> DIContainer
         return get_container_with_db(request, db)
     app_container = get_app_container()
     if app_container is None:
-        raise RuntimeError(
-            "Application DI container is not initialized; "
-            "cannot run headless workspace autonomy tick."
+        logger.warning(
+            "autonomy_tick.container_fallback_db_only",
+            extra={"event": "autonomy_tick.container_fallback_db_only"},
         )
-    return DIContainer(
-        db=db,
-        graph_service=app_container.graph_service,
-        redis_client=app_container._redis_client,
-    )
+        return DIContainer(db=db)
+    return app_container.with_db(db)
 
 
 async def _is_on_cooldown(workspace_id: str, root_task_id: str) -> bool:
@@ -364,6 +361,8 @@ async def _reconcile_durable_plan_after_root_auto_complete(
     plan = await plan_repo.get_by_workspace(workspace_id)
     if plan is None or plan.status is PlanStatus.COMPLETED:
         return False
+    if _active_iteration_loop_status(plan) not in {None, "completed"}:
+        return False
 
     now = datetime.now(UTC)
     reconciled_node_count = 0
@@ -485,11 +484,6 @@ async def _durable_plan_allows_root_auto_complete(
 ) -> bool:
     """Return True when the durable plan cannot still dispatch useful work."""
     from src.domain.model.workspace_plan import PlanStatus
-    from src.domain.model.workspace_plan.plan_node import (
-        PlanNodeKind,
-        TaskExecution,
-        TaskIntent,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
         SqlPlanRepository,
     )
@@ -506,25 +500,21 @@ async def _durable_plan_allows_root_auto_complete(
             },
         )
         return False
-    allowed = plan is None or plan.status is PlanStatus.COMPLETED
-    if not allowed and plan.status is PlanStatus.ACTIVE:
-        nodes = list(plan.nodes.values()) if isinstance(plan.nodes, Mapping) else []
-        actionable_nodes = [
-            node for node in nodes if node.kind in {PlanNodeKind.TASK, PlanNodeKind.VERIFY}
-        ]
-        active_execution = {
-            TaskExecution.DISPATCHED,
-            TaskExecution.RUNNING,
-            TaskExecution.REPORTED,
-            TaskExecution.VERIFYING,
-        }
-        allowed = bool(actionable_nodes) and not any(
-            node.execution in active_execution for node in actionable_nodes
-        )
-        allowed = allowed and all(
-            node.intent in {TaskIntent.DONE, TaskIntent.BLOCKED} for node in actionable_nodes
-        )
-    return allowed
+    if plan is None:
+        return True
+    return plan.status is PlanStatus.COMPLETED
+
+
+def _active_iteration_loop_status(plan: object) -> str | None:
+    goal_node = getattr(plan, "goal_node", None)
+    metadata = getattr(goal_node, "metadata", None)
+    if not isinstance(metadata, Mapping):
+        return None
+    loop = metadata.get("iteration_loop")
+    if not isinstance(loop, Mapping) or loop.get("mode") != "auto":
+        return None
+    status = loop.get("loop_status")
+    return status if isinstance(status, str) and status else None
 
 
 async def _try_auto_complete_root(

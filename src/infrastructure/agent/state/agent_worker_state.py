@@ -3466,7 +3466,7 @@ async def prewarm_agent_session(
             api_key="",
             base_url=None,
             temperature=0.7,
-            max_tokens=16384,  # Increased from 4096 to support larger tool arguments
+            max_tokens=32768,  # Larger budget prevents write/tool JSON truncation.
             max_steps=20,
         )
 

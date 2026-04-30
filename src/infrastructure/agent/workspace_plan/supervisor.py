@@ -26,6 +26,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import Any
 
 from src.domain.model.workspace_plan import (
@@ -296,9 +297,22 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 errors.append(f"verify({node.id}): {exc}")
 
         # --- 2. allocate ready nodes -----------------------------------
+        repaired_phase_barriers = _repair_pending_iteration_phase_barriers(plan)
+        if repaired_phase_barriers:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                plan.goal_node,
+                "iteration_phase_barriers_repaired",
+                {
+                    "summary": "pending sprint nodes were missing phase barrier dependencies",
+                    "node_count": repaired_phase_barriers,
+                },
+        )
         ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
         ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(
-            ready_candidates
+            ready_candidates,
+            active_nodes=_active_write_scope_nodes(plan),
         )
         for deferred_node in deferred_by_write_scope:
             await self._emit_event(
@@ -342,13 +356,10 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     continue
                 if not attempt_id:
                     continue
-                updated = replace(
+                updated = _node_dispatched_with_fresh_attempt(
                     alloc_node,
-                    intent=TaskIntent.IN_PROGRESS,
-                    execution=TaskExecution.DISPATCHED,
                     assignee_agent_id=alloc.agent_id,
-                    current_attempt_id=attempt_id,
-                    updated_at=datetime.now(UTC),
+                    attempt_id=attempt_id,
                 )
                 try:
                     transition_intent(alloc_node.intent, TaskIntent.IN_PROGRESS)
@@ -393,7 +404,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         plan: Plan,
         errors: list[str],
     ) -> Plan:
-        if not _iteration_loop_enabled() or self._iteration_reviewer is None:
+        if not _iteration_loop_enabled():
             completed = replace(
                 plan,
                 status=PlanStatus.COMPLETED,
@@ -403,6 +414,36 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             return completed
 
         goal_node = plan.goal_node
+        loop_metadata = _goal_iteration_loop_metadata(goal_node)
+        if self._iteration_reviewer is None and loop_metadata.get("mode") == "auto":
+            suspended = _replace_goal_loop_metadata(
+                plan,
+                status=PlanStatus.SUSPENDED,
+                updates={
+                    "mode": "auto",
+                    "current_iteration": _max_iteration(_runnable_nodes(plan)),
+                    "max_iterations": _max_iterations(),
+                    "loop_status": "suspended",
+                    "stop_reason": "iteration review agent is unavailable",
+                },
+            )
+            await self._repo.save(suspended)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                suspended.goal_node,
+                "iteration_loop_suspended",
+                {
+                    "iteration_index": _max_iteration(_runnable_nodes(plan)),
+                    "reason": "iteration review agent is unavailable",
+                },
+            )
+            return suspended
+        if self._iteration_reviewer is None:
+            completed = replace(plan, status=PlanStatus.COMPLETED, updated_at=datetime.now(UTC))
+            await self._repo.save(completed)
+            return completed
+
         runnable_nodes = _runnable_nodes(plan)
         if not runnable_nodes:
             completed = replace(plan, status=PlanStatus.COMPLETED, updated_at=datetime.now(UTC))
@@ -425,7 +466,6 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             await self._repo.save(active)
             return active
 
-        loop_metadata = _goal_iteration_loop_metadata(goal_node)
         if loop_metadata.get("loop_status") == "paused":
             suspended = _replace_goal_loop_metadata(
                 plan,
@@ -917,15 +957,47 @@ def _append_next_iteration(
         for task in verdict.next_tasks
         if task.id
     }
+    task_specs: list[tuple[int, IterationNextTask, PlanNodeId, str]] = []
+    nodes_by_phase: dict[str, list[PlanNodeId]] = {phase: [] for phase in _ITERATION_PHASES}
+    normalized_phases = _normalized_next_iteration_task_phases(verdict.next_tasks)
+    sequence_by_task_id = {
+        task.id: sequence
+        for sequence, task in enumerate(verdict.next_tasks, start=1)
+        if task.id
+    }
     for sequence, task in enumerate(verdict.next_tasks, start=1):
+        node_id = id_map.get(task.id) or PlanNodeId(f"node-{uuid.uuid4().hex[:12]}")
+        phase = normalized_phases[sequence - 1]
+        task_specs.append((sequence, task, node_id, phase))
+        nodes_by_phase.setdefault(phase, []).append(node_id)
+    dependencies_by_node: dict[PlanNodeId, tuple[PlanNodeId, ...]] = {}
+    for sequence, task, node_id, phase in task_specs:
+        explicit_dependencies = tuple(
+            id_map[dep]
+            for dep in task.dependencies
+            if dep in id_map
+            and id_map[dep] != node_id
+            and sequence_by_task_id.get(dep, sequence + 1) < sequence
+        )
+        dependencies_by_node[node_id] = tuple(
+            dict.fromkeys(
+                (
+                    *explicit_dependencies,
+                    *_phase_barrier_dependencies(phase, nodes_by_phase),
+                )
+            )
+        )
         _add_next_iteration_node(
             plan,
             task=task,
-            node_id=id_map.get(task.id) or PlanNodeId(f"node-{uuid.uuid4().hex[:12]}"),
-            id_map=id_map,
+            node_id=node_id,
             next_iteration=next_iteration,
             sequence=sequence,
+            phase=phase,
         )
+    for node_id, dependencies in dependencies_by_node.items():
+        node = plan.nodes[node_id]
+        plan.replace_node(replace(node, depends_on=frozenset(dependencies)))
     return _replace_goal_loop_metadata(
         plan,
         status=PlanStatus.ACTIVE,
@@ -958,13 +1030,10 @@ def _add_next_iteration_node(
     *,
     task: IterationNextTask,
     node_id: PlanNodeId,
-    id_map: dict[str, PlanNodeId],
     next_iteration: int,
     sequence: int,
+    phase: str,
 ) -> None:
-    phase = (
-        task.phase if task.phase in _ITERATION_PHASES else _iteration_phase_for_sequence(sequence)
-    )
     metadata = _planner_node_metadata(
         task.description,
         node_id=node_id,
@@ -996,7 +1065,7 @@ def _add_next_iteration_node(
             kind=PlanNodeKind.TASK,
             title=task.description[:120] or f"Iteration {next_iteration} task {sequence}",
             description=task.description,
-            depends_on=frozenset(id_map[dep] for dep in task.dependencies if dep in id_map),
+            depends_on=frozenset(),
             recommended_capabilities=(Capability(name=f"agent:{task.target_subagent}", weight=2.0),)
             if task.target_subagent
             else (),
@@ -1014,6 +1083,131 @@ def _add_next_iteration_node(
     )
 
 
+def _next_iteration_task_phase(task: IterationNextTask, sequence: int) -> str:
+    return task.phase if task.phase in _ITERATION_PHASES else _iteration_phase_for_sequence(sequence)
+
+
+def _normalized_next_iteration_task_phases(tasks: tuple[IterationNextTask, ...]) -> list[str]:
+    phases = [
+        _next_iteration_task_phase(task, sequence)
+        for sequence, task in enumerate(tasks, start=1)
+    ]
+    if _phases_are_monotonic(phases):
+        return phases
+    return [_iteration_phase_for_sequence(sequence) for sequence in range(1, len(tasks) + 1)]
+
+
+def _normalized_pending_iteration_phases(nodes: list[PlanNode]) -> dict[PlanNodeId, str]:
+    ordered = _ordered_iteration_nodes(nodes)
+    phases = [_node_iteration_phase(node) for node in ordered]
+    if not _phases_are_monotonic(phases):
+        phases = [_iteration_phase_for_sequence(index) for index in range(1, len(ordered) + 1)]
+    return {node.node_id: phase for node, phase in zip(ordered, phases, strict=False)}
+
+
+def _phases_are_monotonic(phases: list[str]) -> bool:
+    phase_indexes = [_phase_index(phase) for phase in phases]
+    return all(current >= previous for previous, current in pairwise(phase_indexes))
+
+
+def _phase_index(phase: str) -> int:
+    try:
+        return _ITERATION_PHASES.index(phase)
+    except ValueError:
+        return 0
+
+
+def _ordered_iteration_nodes(nodes: list[PlanNode]) -> list[PlanNode]:
+    return sorted(nodes, key=lambda node: (_node_sequence(node), node.created_at, node.id))
+
+
+def _node_sequence(node: PlanNode) -> int:
+    if node.feature_checkpoint is not None and node.feature_checkpoint.sequence > 0:
+        return node.feature_checkpoint.sequence
+    value = dict(node.metadata or {}).get("sequence")
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return max(1, int(value))
+    return 999_999
+
+
+def _phase_barrier_dependencies(
+    phase: str,
+    nodes_by_phase: dict[str, list[PlanNodeId]],
+) -> tuple[PlanNodeId, ...]:
+    if phase not in _ITERATION_PHASES:
+        return ()
+    phase_index = _ITERATION_PHASES.index(phase)
+    dependencies: list[PlanNodeId] = []
+    for prior_phase in _ITERATION_PHASES[:phase_index]:
+        dependencies.extend(nodes_by_phase.get(prior_phase, ()))
+    return tuple(dependencies)
+
+
+def _repair_pending_iteration_phase_barriers(plan: Plan) -> int:
+    """Repair persisted next-sprint nodes created before phase barriers existed.
+
+    The append path now writes these dependencies up front. This tick-time repair keeps
+    already persisted, not-yet-started sprint nodes from dispatching test/deploy/review
+    work before the implementation phase has produced evidence.
+    """
+    nodes_by_iteration: dict[int, list[PlanNode]] = {}
+    for node in _runnable_nodes(plan):
+        nodes_by_iteration.setdefault(_node_iteration_index(node), []).append(node)
+
+    repaired = 0
+    now = datetime.now(UTC)
+    for iteration_index, nodes in nodes_by_iteration.items():
+        if iteration_index <= 1 or len(nodes) < 2:
+            continue
+        ordered_nodes = _ordered_iteration_nodes(nodes)
+        sequence_by_node = {
+            node.node_id: sequence
+            for sequence, node in enumerate(ordered_nodes, start=1)
+        }
+        normalized_phases = _normalized_pending_iteration_phases(ordered_nodes)
+        phase_nodes: dict[str, list[PlanNodeId]] = {phase: [] for phase in _ITERATION_PHASES}
+        for node in ordered_nodes:
+            phase_nodes.setdefault(normalized_phases[node.node_id], []).append(node.node_id)
+        iteration_node_ids = frozenset(sequence_by_node)
+        for node in ordered_nodes:
+            if node.intent is not TaskIntent.TODO or node.current_attempt_id:
+                continue
+            phase = normalized_phases[node.node_id]
+            node_sequence = sequence_by_node[node.node_id]
+            desired_dependencies = {
+                dep
+                for dep in node.depends_on
+                if dep not in iteration_node_ids
+                or sequence_by_node.get(dep, node_sequence + 1) < node_sequence
+            }
+            desired_dependencies.update(
+                dep
+                for dep in _phase_barrier_dependencies(phase, phase_nodes)
+                if sequence_by_node.get(dep, node_sequence + 1) < node_sequence
+            )
+            desired_dependencies.discard(node.node_id)
+            desired = frozenset(desired_dependencies)
+            metadata = dict(node.metadata or {})
+            phase_changed = metadata.get("iteration_phase") != phase
+            if desired == node.depends_on and not phase_changed:
+                continue
+            metadata["iteration_phase"] = phase
+            metadata["scrum_artifact"] = _SCRUM_ARTIFACT_BY_PHASE[phase]
+            metadata["phase_barrier_dependencies_repaired_at"] = now.isoformat()
+            plan.replace_node(
+                replace(
+                    node,
+                    depends_on=desired,
+                    metadata=metadata,
+                    updated_at=now,
+                )
+            )
+            repaired += 1
+    return repaired
+
+
 def _feature_checkpoint_expected_artifacts(
     task: IterationNextTask,
     *,
@@ -1029,6 +1223,49 @@ def _feature_checkpoint_expected_artifacts(
 
 def _pid(value: str) -> PlanNodeId:
     return PlanNodeId(value)
+
+
+_STALE_ATTEMPT_METADATA_KEYS = frozenset(
+    {
+        "last_verification_summary",
+        "last_verification_passed",
+        "last_verification_hard_fail",
+        "last_verification_attempt_id",
+        "last_verification_ran_at",
+        "verification_evidence_refs",
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "retry_last_reason",
+        "terminal_attempt_status",
+        "terminal_attempt_reconciled_at",
+    }
+)
+
+
+def _clear_stale_attempt_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    cleaned = dict(metadata)
+    for key in _STALE_ATTEMPT_METADATA_KEYS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
+def _node_dispatched_with_fresh_attempt(
+    node: PlanNode,
+    *,
+    assignee_agent_id: str,
+    attempt_id: str,
+) -> PlanNode:
+    metadata = _clear_stale_attempt_metadata(node.metadata)
+    return replace(
+        node,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.DISPATCHED,
+        assignee_agent_id=assignee_agent_id,
+        current_attempt_id=attempt_id,
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
 
 
 def _force_execution(node: PlanNode, target: TaskExecution) -> PlanNode:
@@ -1220,12 +1457,16 @@ def _first_prefixed_value(values: list[str], prefix: str) -> str | None:
 
 def _select_ready_nodes_without_write_conflicts(
     ready_nodes: list[PlanNode],
+    *,
+    active_nodes: list[PlanNode] | None = None,
 ) -> tuple[list[PlanNode], list[PlanNode]]:
-    """Keep parallel dispatch from assigning overlapping write sets in one tick."""
+    """Keep parallel dispatch from assigning overlapping write sets."""
 
     selected: list[PlanNode] = []
     deferred: list[PlanNode] = []
     claimed: set[str] = set()
+    for active_node in active_nodes or ():
+        claimed.update(_node_write_set(active_node))
     for node in sorted(ready_nodes, key=lambda n: n.priority, reverse=True):
         write_set = _node_write_set(node)
         if write_set and not claimed.isdisjoint(write_set):
@@ -1234,6 +1475,20 @@ def _select_ready_nodes_without_write_conflicts(
         selected.append(node)
         claimed.update(write_set)
     return selected, deferred
+
+
+def _active_write_scope_nodes(plan: Plan) -> list[PlanNode]:
+    return [
+        node
+        for node in plan.leaf_tasks()
+        if node.execution
+        in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.REPORTED,
+            TaskExecution.VERIFYING,
+        }
+    ]
 
 
 def _node_write_set(node: PlanNode) -> frozenset[str]:

@@ -6,6 +6,7 @@ Everything here is deterministic and in-memory — no LLM, no sandbox, no Ray.
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -36,6 +37,7 @@ from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.agent.workspace_plan import factory as workspace_plan_factory
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
+from src.infrastructure.agent.workspace_plan.iteration_review import LLMIterationReviewProvider
 from src.infrastructure.agent.workspace_plan.orchestrator import (
     OrchestratorConfig,
     WorkspaceOrchestrator,
@@ -85,6 +87,21 @@ class _FakeDecomposer:
         return SimpleNamespace(subtasks=list(self.result))
 
 
+@dataclass
+class _CapturingIterationReviewLLM:
+    response: dict[str, Any] | list[dict[str, Any]]
+    calls: list[dict[str, Any]] = field(default_factory=list)
+    _index: int = 0
+
+    async def generate(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(kwargs)
+        if isinstance(self.response, list):
+            index = min(self._index, len(self.response) - 1)
+            self._index += 1
+            return self.response[index]
+        return self.response
+
+
 def _plan_with_two_tasks() -> Plan:
     plan_id = "plan-1"
     goal_id = PlanNodeId("goal-1")
@@ -130,6 +147,106 @@ def _plan_with_two_tasks() -> Plan:
 # ---------------------------------------------------------------------------
 # M2 planner
 # ---------------------------------------------------------------------------
+
+
+class TestLLMIterationReviewProvider:
+    async def test_prompt_treats_actionable_evidence_gaps_as_next_sprint_work(self) -> None:
+        llm = _CapturingIterationReviewLLM(
+            response={
+                "tool_calls": [
+                    {
+                        "function": {
+                            "arguments": json.dumps(
+                                {
+                                    "verdict": "continue_next_iteration",
+                                    "confidence": 0.82,
+                                    "summary": "A browser parity pass is still actionable.",
+                                    "next_sprint_goal": "Verify product parity.",
+                                    "next_tasks": [
+                                        {
+                                            "id": "parity-1",
+                                            "description": "Run browser parity verification.",
+                                            "phase": "test",
+                                        }
+                                    ],
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+        provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+
+        verdict = await provider.review(
+            IterationReviewContext(
+                workspace_id="ws-1",
+                plan_id="plan-1",
+                iteration_index=3,
+                goal_title="Clone evomap.ai",
+                goal_description="Verify the clone against the reference product.",
+                max_next_tasks=6,
+            )
+        )
+
+        system_prompt = llm.calls[0]["messages"][0]["content"]
+        user_payload = json.loads(llm.calls[0]["messages"][1]["content"])
+        assert "browser/product parity checks" in system_prompt
+        assert "Missing evidence is normally next-sprint work" in system_prompt
+        assert "fix all P0/P1 gaps" in system_prompt
+        assert "one concrete artifact" in system_prompt
+        assert "cannot browse" in system_prompt
+        assert (
+            "browser_e2e workflows with screenshots and console capture"
+            in (user_payload["review_policy"]["available_next_sprint_capabilities"])
+        )
+        assert verdict.verdict == "continue_next_iteration"
+        assert verdict.next_tasks[0].description == "Run browser parity verification."
+
+    async def test_retries_as_json_when_tool_call_response_is_unstructured(self) -> None:
+        llm = _CapturingIterationReviewLLM(
+            response=[
+                {"content": "The sprint is close, but it still needs a browser proof pass."},
+                {
+                    "content": json.dumps(
+                        {
+                            "verdict": "continue_next_iteration",
+                            "confidence": 0.78,
+                            "summary": "The work is actionable but still lacks browser proof.",
+                            "next_sprint_goal": "Collect browser parity evidence.",
+                            "feedback_items": ["Browser evidence is missing."],
+                            "next_tasks": [
+                                {
+                                    "id": "browser-proof",
+                                    "description": "Run browser parity and console verification.",
+                                    "phase": "test",
+                                    "expected_artifacts": ["screenshot", "console log"],
+                                }
+                            ],
+                        }
+                    )
+                },
+            ]
+        )
+        provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+
+        verdict = await provider.review(
+            IterationReviewContext(
+                workspace_id="ws-1",
+                plan_id="plan-1",
+                iteration_index=5,
+                goal_title="Clone evomap.ai",
+                goal_description="Verify the clone against the reference product.",
+                max_next_tasks=6,
+            )
+        )
+
+        assert len(llm.calls) == 2
+        assert "return ONLY one JSON object" in llm.calls[1]["messages"][0]["content"]
+        assert "tools" not in llm.calls[1]
+        assert verdict.verdict == "continue_next_iteration"
+        assert verdict.summary == "The work is actionable but still lacks browser proof."
+        assert verdict.next_tasks[0].id == "browser-proof"
 
 
 class TestLLMGoalPlanner:
@@ -233,6 +350,25 @@ class TestLLMGoalPlanner:
             "test-command-1",
         ]
         assert any(crit.kind is CriterionKind.CMD for crit in leaf.acceptance_criteria)
+
+    async def test_read_only_reference_paths_are_not_inferred_as_write_sets(self) -> None:
+        sub = [
+            _FakeSubTask(
+                id="s1",
+                description=(
+                    "读取 docs/GAP-EXTRACT-P0-P1.md，评估未完成项，"
+                    "更新 src/components/Dashboard.tsx。"
+                ),
+                target_subagent="coder",
+            ),
+        ]
+        planner = LLMGoalPlanner(decomposer=_FakeDecomposer(sub))
+        plan = await planner.plan(_goal("ship gap fix"), _ctx())
+        leaf = plan.leaf_tasks()[0]
+
+        assert leaf.feature_checkpoint is not None
+        assert leaf.metadata["write_set"] == ["src/components/Dashboard.tsx"]
+        assert leaf.feature_checkpoint.expected_artifacts == ("src/components/Dashboard.tsx",)
         default_report_criteria = [
             crit
             for crit in leaf.acceptance_criteria
@@ -509,6 +645,28 @@ class TestVerifier:
         assert not rep.hard_fail
         assert "retryable infrastructure failure" in rep.summary()
 
+    async def test_verifier_soft_fails_litellm_internal_server_blocker(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node()
+        summary = (
+            "litellm.InternalServerError: AnthropicException - 400, "
+            'message="Expected HTTP/, RTSP/ or ICE/"'
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            stdout=summary,
+            artifacts={
+                "last_worker_report_type": "blocked",
+                "last_worker_report_summary": summary,
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert not rep.hard_fail
+        assert "retryable infrastructure failure" in rep.summary()
+
     async def test_verifier_soft_fails_rate_limit_blocker(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node()
@@ -771,6 +929,110 @@ class TestVerifier:
             "test_run:uv run pytest src/tests/unit/example.py",
         }
 
+    async def test_verifier_rejects_commit_checkpoint_with_dirty_worktree(self) -> None:
+        class DirtySandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                assert command == "git -C /workspace/my-evo status --short"
+                assert timeout == 15
+                return {
+                    "exit_code": 0,
+                    "stdout": " M frontend/src/components/auth/LoginForm.tsx\n",
+                    "stderr": "",
+                }
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "write_set": ["frontend/tests/E2E-TEST-RESULTS.md"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="E2E evidence",
+                expected_artifacts=("frontend/tests/E2E-TEST-RESULTS.md",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:78dacf1", "git_diff_summary:3 files changed"],
+            },
+            sandbox=DirtySandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert "uncommitted changes remain after commit_ref" in rep.summary()
+
+    async def test_verifier_accepts_commit_checkpoint_with_clean_worktree(self) -> None:
+        class CleanSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                return {"exit_code": 0, "stdout": "", "stderr": ""}
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={"write_set": ["src/app.py"]},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:abc123", "git_diff_summary:1 file changed"],
+            },
+            sandbox=CleanSandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(result.message == "clean worktree after commit" for result in rep.results)
+
+    async def test_verifier_does_not_hard_fail_when_clean_worktree_check_unavailable(
+        self,
+    ) -> None:
+        class UnavailableSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                raise RuntimeError("MCP sandbox adapter is not initialized")
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={"write_set": ["src/app.py"]},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:abc123", "git_diff_summary:1 file changed"],
+            },
+            sandbox=UnavailableSandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(
+            result.message.startswith("clean worktree check skipped")
+            for result in rep.results
+        )
+
     async def test_review_phase_feature_artifacts_do_not_require_git_evidence(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
@@ -992,6 +1254,20 @@ class TestSupervisorTick:
     async def test_tick_dispatches_ready_and_verifies_reported(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
+        stale = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                stale,
+                metadata={
+                    "last_verification_summary": "verification failed: old attempt",
+                    "last_verification_passed": False,
+                    "last_verification_attempt_id": "old-attempt",
+                    "verification_evidence_refs": ["old-evidence"],
+                    "terminal_attempt_status": "blocked",
+                    "terminal_attempt_retry_count": 1,
+                },
+            )
+        )
         await repo.save(plan)
 
         allocator = CapabilityAllocator()
@@ -1044,9 +1320,15 @@ class TestSupervisorTick:
         # Simulate worker report for "a".
         reloaded = await repo.get_by_workspace("ws-1")
         assert reloaded is not None
-        from dataclasses import replace
 
         a = reloaded.nodes[PlanNodeId("a")]
+        assert a.current_attempt_id == "attempt-a"
+        assert "last_verification_summary" not in a.metadata
+        assert "last_verification_passed" not in a.metadata
+        assert "last_verification_attempt_id" not in a.metadata
+        assert "verification_evidence_refs" not in a.metadata
+        assert "terminal_attempt_status" not in a.metadata
+        assert a.metadata["terminal_attempt_retry_count"] == 1
         reloaded.replace_node(replace(a, execution=TaskExecution.REPORTED))
         await repo.save(reloaded)
 
@@ -1117,6 +1399,77 @@ class TestSupervisorTick:
 
         assert report.allocations_made == 1
         assert len(dispatched) == 1
+        assert events == [("dispatch_deferred_write_conflict", "b")]
+
+    async def test_tick_defers_ready_node_overlapping_active_write_set(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.RUNNING,
+                current_attempt_id="attempt-a",
+                metadata={"write_set": ["src/shared.ts"]},
+            )
+        )
+        plan.replace_node(
+            replace(
+                b,
+                depends_on=frozenset(),
+                metadata={"write_set": ["src/shared.ts"]},
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            _payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 0
+        assert dispatched == []
         assert events == [("dispatch_deferred_write_conflict", "b")]
 
     async def test_tick_limits_dispatches_per_tick(self) -> None:
@@ -1312,6 +1665,131 @@ class TestSupervisorTick:
         assert retry_job["payload"]["retry_node_id"] == "a"
         assert retry_job["next_attempt_at"].isoformat() == "2026-04-29T06:46:46+00:00"
 
+    async def test_sql_event_sink_schedules_next_sprint_dispatch_tick(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        appended_events: list[dict[str, Any]] = []
+        enqueued_outbox: list[dict[str, Any]] = []
+
+        class _FakeEventRepo:
+            def __init__(self, db: object) -> None:
+                self.db = db
+
+            async def append(self, **kwargs: Any) -> object:
+                appended_events.append(kwargs)
+                return object()
+
+        class _FakeOutboxRepo:
+            def __init__(self, db: object) -> None:
+                self.db = db
+
+            async def enqueue(self, **kwargs: Any) -> object:
+                enqueued_outbox.append(kwargs)
+                return object()
+
+        monkeypatch.setattr(
+            workspace_plan_factory,
+            "SqlWorkspacePlanEventRepository",
+            _FakeEventRepo,
+        )
+        monkeypatch.setattr(
+            workspace_plan_factory,
+            "SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepo,
+        )
+
+        sink = workspace_plan_factory._make_sql_plan_event_sink(object())
+        goal_node = PlanNode(
+            id="goal-1",
+            plan_id="plan-1",
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="root",
+        )
+
+        await sink(
+            "ws-1",
+            goal_node,
+            "iteration_next_sprint_planned",
+            {
+                "iteration_index": 1,
+                "next_iteration": 2,
+                "task_count": 6,
+            },
+        )
+
+        assert appended_events
+        assert len(enqueued_outbox) == 1
+        tick_job = enqueued_outbox[0]
+        assert tick_job["event_type"] == "supervisor_tick"
+        assert tick_job["plan_id"] == "plan-1"
+        assert tick_job["payload"]["iteration_followup"] == "next_sprint_dispatch"
+        assert tick_job["payload"]["reviewed_iteration"] == 1
+        assert tick_job["payload"]["next_iteration"] == 2
+
+    async def test_sql_event_sink_schedules_followup_for_dispatch_limit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        appended_events: list[dict[str, Any]] = []
+        enqueued_outbox: list[dict[str, Any]] = []
+
+        class _FakeEventRepo:
+            def __init__(self, db: object) -> None:
+                self.db = db
+
+            async def append(self, **kwargs: Any) -> object:
+                appended_events.append(kwargs)
+                return object()
+
+        class _FakeOutboxRepo:
+            def __init__(self, db: object) -> None:
+                self.db = db
+
+            async def enqueue(self, **kwargs: Any) -> object:
+                enqueued_outbox.append(kwargs)
+                return object()
+
+        monkeypatch.setattr(
+            workspace_plan_factory,
+            "SqlWorkspacePlanEventRepository",
+            _FakeEventRepo,
+        )
+        monkeypatch.setattr(
+            workspace_plan_factory,
+            "SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepo,
+        )
+
+        sink = workspace_plan_factory._make_sql_plan_event_sink(object())
+        node = PlanNode(
+            id="task-3",
+            plan_id="plan-1",
+            parent_id=PlanNodeId("goal-1"),
+            kind=PlanNodeKind.TASK,
+            title="third ready task",
+        )
+
+        await sink(
+            "ws-1",
+            node,
+            "dispatch_deferred_concurrency_limit",
+            {
+                "summary": "node deferred because the per-tick dispatch limit was reached",
+                "max_dispatches_per_tick": 2,
+            },
+        )
+
+        assert appended_events
+        assert len(enqueued_outbox) == 1
+        tick_job = enqueued_outbox[0]
+        assert tick_job["event_type"] == "supervisor_tick"
+        assert tick_job["plan_id"] == "plan-1"
+        assert tick_job["payload"]["deferred_node_id"] == "task-3"
+        assert tick_job["payload"]["deferred_reason"] == "dispatch_concurrency_limit"
+        assert tick_job["metadata"]["max_dispatches_per_tick"] == 2
+
     async def test_completed_iteration_accepts_complete_goal_verdict(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -1346,6 +1824,80 @@ class TestSupervisorTick:
             "iteration_loop_completed",
         ]
         assert reloaded.goal_node.metadata["iteration_loop"]["loop_status"] == "completed"
+
+    async def test_completed_iteration_suspends_when_iteration_reviewer_missing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        goal = plan.goal_node
+        plan.replace_node(
+            replace(
+                goal,
+                metadata={
+                    **dict(goal.metadata or {}),
+                    "iteration_loop": {
+                        "mode": "auto",
+                        "loop_status": "active",
+                        "current_iteration": 1,
+                    },
+                },
+            )
+        )
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            return None
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        supervisor = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            iteration_reviewer=None,
+            heartbeat_seconds=0.05,
+        )
+
+        await supervisor.tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.status is PlanStatus.SUSPENDED
+        loop = reloaded.goal_node.metadata["iteration_loop"]
+        assert loop["loop_status"] == "suspended"
+        assert loop["stop_reason"] == "iteration review agent is unavailable"
+        assert events == [
+            (
+                "iteration_loop_suspended",
+                "goal-1",
+                {
+                    "iteration_index": 1,
+                    "reason": "iteration review agent is unavailable",
+                },
+            )
+        ]
 
     async def test_iteration_review_context_uses_latest_passed_verification_summary(
         self,
@@ -1560,6 +2112,303 @@ class TestSupervisorTick:
             == 6
         )
         assert len(reviewer.contexts) == 1
+
+    async def test_completed_iteration_adds_phase_barrier_dependencies(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="Continue with ordered implementation, testing, and release work.",
+                next_sprint_goal="Ship an ordered follow-up sprint.",
+                next_tasks=(
+                    IterationNextTask(
+                        id="backend",
+                        description="Implement backend follow-up.",
+                        phase="implement",
+                    ),
+                    IterationNextTask(
+                        id="frontend",
+                        description="Implement frontend follow-up.",
+                        phase="implement",
+                    ),
+                    IterationNextTask(
+                        id="test",
+                        description="Run end-to-end verification.",
+                        phase="test",
+                    ),
+                    IterationNextTask(
+                        id="deploy",
+                        description="Deploy the verified build.",
+                        phase="deploy",
+                    ),
+                    IterationNextTask(
+                        id="review",
+                        description="Review sprint outcomes.",
+                        phase="review",
+                    ),
+                ),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        nodes_by_title = {
+            node.title: node
+            for node in reloaded.nodes.values()
+            if dict(node.metadata or {}).get("iteration_index") == 2
+        }
+        backend = nodes_by_title["Implement backend follow-up."]
+        frontend = nodes_by_title["Implement frontend follow-up."]
+        test = nodes_by_title["Run end-to-end verification."]
+        deploy = nodes_by_title["Deploy the verified build."]
+        review = nodes_by_title["Review sprint outcomes."]
+
+        assert backend.depends_on == frozenset()
+        assert frontend.depends_on == frozenset()
+        assert test.depends_on == frozenset({PlanNodeId(backend.id), PlanNodeId(frontend.id)})
+        assert PlanNodeId(test.id) in deploy.depends_on
+        assert PlanNodeId(backend.id) in deploy.depends_on
+        assert PlanNodeId(frontend.id) in deploy.depends_on
+        assert PlanNodeId(deploy.id) in review.depends_on
+        assert PlanNodeId(test.id) in review.depends_on
+
+    async def test_completed_iteration_normalizes_out_of_order_phase_dependencies(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="Continue with a review task listed before implementation.",
+                next_sprint_goal="Verify parity and implement gaps.",
+                next_tasks=(
+                    IterationNextTask(
+                        id="review",
+                        description="Review browser parity evidence.",
+                        dependencies=("implement",),
+                        phase="review",
+                    ),
+                    IterationNextTask(
+                        id="implement",
+                        description="Implement parity gaps found during review.",
+                        phase="implement",
+                    ),
+                ),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        nodes_by_title = {
+            node.title: node
+            for node in reloaded.nodes.values()
+            if dict(node.metadata or {}).get("iteration_index") == 2
+        }
+        review = nodes_by_title["Review browser parity evidence."]
+        implement = nodes_by_title["Implement parity gaps found during review."]
+        assert review.metadata["iteration_phase"] == "research"
+        assert implement.metadata["iteration_phase"] == "plan"
+        assert review.depends_on == frozenset()
+        assert PlanNodeId(review.id) in implement.depends_on
+        assert reloaded.validate() == []
+        assert {node.id for node in reloaded.ready_nodes()} == {review.id}
+
+    async def test_completed_iteration_rejects_forward_dependency_deadlocks(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="Continue with a bounded release-readiness sprint.",
+                next_sprint_goal="Ship an ordered release-readiness sprint.",
+                next_tasks=(
+                    IterationNextTask(
+                        id="triage",
+                        description="Read status summary and create the sprint plan.",
+                        dependencies=("test", "deploy"),
+                        phase="review",
+                    ),
+                    IterationNextTask(
+                        id="test",
+                        description="Run focused regression tests.",
+                        dependencies=("triage",),
+                        phase="test",
+                    ),
+                    IterationNextTask(
+                        id="fix",
+                        description="Apply high-impact UI fixes.",
+                        dependencies=("triage",),
+                        phase="implement",
+                    ),
+                    IterationNextTask(
+                        id="deploy",
+                        description="Verify deployment readiness.",
+                        dependencies=("test", "fix"),
+                        phase="deploy",
+                    ),
+                ),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        iteration_nodes = [
+            node
+            for node in reloaded.nodes.values()
+            if dict(node.metadata or {}).get("iteration_index") == 2
+        ]
+        assert reloaded.validate() == []
+        assert {node.id for node in reloaded.ready_nodes()} == {iteration_nodes[0].id}
+        assert [node.metadata["iteration_phase"] for node in iteration_nodes] == [
+            "research",
+            "plan",
+            "implement",
+            "test",
+        ]
+        assert all(
+            PlanNodeId(later.id) not in earlier.depends_on
+            for index, earlier in enumerate(iteration_nodes)
+            for later in iteration_nodes[index + 1 :]
+        )
+
+    async def test_tick_repairs_existing_next_iteration_phase_barriers_before_dispatch(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan_id = "plan-repair"
+        goal_id = PlanNodeId("goal-1")
+        plan = Plan(
+            id=plan_id,
+            workspace_id="ws-1",
+            goal_id=goal_id,
+            status=PlanStatus.ACTIVE,
+        )
+        plan.add_node(
+            PlanNode(
+                id=goal_id.value,
+                plan_id=plan_id,
+                parent_id=None,
+                kind=PlanNodeKind.GOAL,
+                title="root",
+            )
+        )
+        for node_id, title, phase in (
+            ("impl-a", "Implement backend polish", "implement"),
+            ("impl-b", "Implement frontend polish", "implement"),
+            ("test", "Run acceptance verification", "test"),
+            ("deploy", "Prepare release candidate", "deploy"),
+            ("review", "Review sprint outcome", "review"),
+        ):
+            plan.add_node(
+                PlanNode(
+                    id=node_id,
+                    plan_id=plan_id,
+                    parent_id=goal_id,
+                    kind=PlanNodeKind.TASK,
+                    title=title,
+                    depends_on=frozenset(),
+                    recommended_capabilities=(Capability(name="codegen"),),
+                    metadata={"iteration_index": 2, "iteration_phase": phase},
+                )
+            )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+            max_dispatches_per_tick=6,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 2
+        assert set(dispatched) == {"impl-a", "impl-b"}
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        test = reloaded.nodes[PlanNodeId("test")]
+        deploy = reloaded.nodes[PlanNodeId("deploy")]
+        review = reloaded.nodes[PlanNodeId("review")]
+        assert test.depends_on == frozenset({PlanNodeId("impl-a"), PlanNodeId("impl-b")})
+        assert PlanNodeId("test") in deploy.depends_on
+        assert PlanNodeId("impl-a") in deploy.depends_on
+        assert PlanNodeId("impl-b") in deploy.depends_on
+        assert PlanNodeId("deploy") in review.depends_on
+        assert PlanNodeId("test") in review.depends_on
+        repair_events = [
+            event for event in events if event[0] == "iteration_phase_barriers_repaired"
+        ]
+        assert repair_events == [
+            (
+                "iteration_phase_barriers_repaired",
+                "goal-1",
+                {
+                    "summary": "pending sprint nodes were missing phase barrier dependencies",
+                    "node_count": 3,
+                },
+            )
+        ]
 
     async def test_review_phase_next_sprint_artifacts_do_not_force_change_evidence(
         self,

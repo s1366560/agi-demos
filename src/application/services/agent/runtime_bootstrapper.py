@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -42,6 +43,9 @@ class AgentRuntimeBootstrapper:
     _local_chat_lock = asyncio.Lock()
     _local_chat_tasks: ClassVar[dict[str, asyncio.Task[Any]]] = {}
     _local_chat_abort_signals: ClassVar[dict[str, asyncio.Event]] = {}
+    _local_subprocesses: ClassVar[dict[str, asyncio.subprocess.Process]] = {}
+    _local_subprocess_request_paths: ClassVar[dict[str, Path]] = {}
+    _local_subprocess_superseded: ClassVar[set[tuple[str, int | None]]] = set()
 
     @staticmethod
     def _normalize_runtime_mode(mode: str | None) -> str:
@@ -403,18 +407,29 @@ class AgentRuntimeBootstrapper:
         in the uvicorn process turns reload SIGTERM into false task blockers,
         so local mode uses a short-lived child process for those turns.
         """
-        request_path = self._write_local_subprocess_request(config, request)
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-m",
-            "src.infrastructure.agent.actor.local_chat_worker",
-            str(request_path),
-            cwd=str(Path.cwd()),
-            stdout=DEVNULL,
-            stderr=None,
-            env=os.environ.copy(),
-            start_new_session=True,
-        )
+        async with self._local_chat_lock:
+            await self._terminate_local_subprocess_locked(
+                conversation_id,
+                reason="replacement",
+            )
+            request_path = self._write_local_subprocess_request(config, request)
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    "-m",
+                    "src.infrastructure.agent.actor.local_chat_worker",
+                    str(request_path),
+                    cwd=str(Path.cwd()),
+                    stdout=DEVNULL,
+                    stderr=None,
+                    env=os.environ.copy(),
+                    start_new_session=True,
+                )
+            except Exception:
+                request_path.unlink(missing_ok=True)
+                raise
+            self._local_subprocesses[conversation_id] = process
+            self._local_subprocess_request_paths[conversation_id] = request_path
         monitor = asyncio.create_task(
             self._monitor_local_subprocess_chat(
                 conversation_id=conversation_id,
@@ -427,6 +442,15 @@ class AgentRuntimeBootstrapper:
         )
         _background_tasks.add(monitor)
         monitor.add_done_callback(_background_tasks.discard)
+
+    @classmethod
+    async def has_running_local_subprocess(cls, conversation_id: str) -> bool:
+        """Return True when a detached local workspace worker is still alive."""
+        async with cls._local_chat_lock:
+            process = cls._local_subprocesses.get(conversation_id)
+            if process is None:
+                return False
+            return getattr(process, "returncode", None) is None
 
     @staticmethod
     def _write_local_subprocess_request(
@@ -450,6 +474,55 @@ class AgentRuntimeBootstrapper:
             json.dump(payload, fp, ensure_ascii=False)
         return request_path
 
+    @classmethod
+    async def _terminate_local_subprocess_locked(
+        cls,
+        conversation_id: str,
+        *,
+        reason: str,
+    ) -> bool:
+        """Terminate the tracked detached worker for a conversation.
+
+        The caller must hold ``_local_chat_lock``. Detached workspace workers are
+        keyed by conversation, so stale recovery can safely relaunch a worker only
+        after the previous process has been asked to stop.
+        """
+        process = cls._local_subprocesses.pop(conversation_id, None)
+        request_path = cls._local_subprocess_request_paths.pop(conversation_id, None)
+        if process is None:
+            if request_path is not None:
+                request_path.unlink(missing_ok=True)
+            return False
+
+        pid = getattr(process, "pid", None)
+        returncode = getattr(process, "returncode", None)
+        if returncode is None:
+            cls._local_subprocess_superseded.add((conversation_id, pid))
+            logger.warning(
+                "[AgentService] Terminating previous local subprocess: conversation=%s pid=%s reason=%s",
+                conversation_id,
+                pid,
+                reason,
+            )
+            with contextlib.suppress(ProcessLookupError):
+                process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5.0)
+            except TimeoutError:
+                logger.warning(
+                    "[AgentService] Killing unresponsive local subprocess: conversation=%s pid=%s",
+                    conversation_id,
+                    pid,
+                )
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(process.wait(), timeout=2.0)
+
+        if request_path is not None:
+            request_path.unlink(missing_ok=True)
+        return True
+
     async def _monitor_local_subprocess_chat(
         self,
         *,
@@ -460,27 +533,35 @@ class AgentRuntimeBootstrapper:
         request_path: Path,
     ) -> None:
         return_code = await process.wait()
-        if return_code == 0:
-            return
-        logger.error(
-            "[AgentService] Local subprocess chat failed: conversation=%s return_code=%s",
-            conversation_id,
-            return_code,
-        )
+        pid = getattr(process, "pid", None)
+        async with self._local_chat_lock:
+            superseded = (conversation_id, pid) in self._local_subprocess_superseded
+            self._local_subprocess_superseded.discard((conversation_id, pid))
+            if self._local_subprocesses.get(conversation_id) is process:
+                self._local_subprocesses.pop(conversation_id, None)
+                self._local_subprocess_request_paths.pop(conversation_id, None)
         try:
-            from src.infrastructure.agent.actor.execution import _publish_error_event
+            if return_code == 0 or superseded:
+                return
+            logger.error(
+                "[AgentService] Local subprocess chat failed: conversation=%s return_code=%s",
+                conversation_id,
+                return_code,
+            )
+            try:
+                from src.infrastructure.agent.actor.execution import _publish_error_event
 
-            await _publish_error_event(
-                conversation_id=conversation_id,
-                message_id=message_id,
-                error_message=f"Agent subprocess failed with exit code {return_code}",
-                correlation_id=correlation_id,
-            )
-        except Exception as pub_err:
-            logger.warning(
-                "[AgentService] Failed to publish local subprocess error: %s",
-                pub_err,
-            )
+                await _publish_error_event(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    error_message=f"Agent subprocess failed with exit code {return_code}",
+                    correlation_id=correlation_id,
+                )
+            except Exception as pub_err:
+                logger.warning(
+                    "[AgentService] Failed to publish local subprocess error: %s",
+                    pub_err,
+                )
         finally:
             try:
                 request_path.unlink(missing_ok=True)
@@ -542,6 +623,10 @@ class AgentRuntimeBootstrapper:
         async with cls._local_chat_lock:
             abort_signal = cls._local_chat_abort_signals.get(conversation_id)
             task = cls._local_chat_tasks.get(conversation_id)
+            subprocess_cancelled = await cls._terminate_local_subprocess_locked(
+                conversation_id,
+                reason="cancel",
+            )
 
             if abort_signal:
                 abort_signal.set()
@@ -552,7 +637,7 @@ class AgentRuntimeBootstrapper:
 
             cls._local_chat_tasks.pop(conversation_id, None)
             cls._local_chat_abort_signals.pop(conversation_id, None)
-            return False
+            return subprocess_cancelled
 
     async def _run_chat_local(
         self,

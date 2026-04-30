@@ -269,6 +269,39 @@ class TestStartupSweep:
         assert saves[0].adjudication_reason == f"recovery:{RECOVERY_SUMMARY_RESTART}"
 
     @pytest.mark.asyncio
+    async def test_paused_plan_linked_attempt_does_not_enqueue_resume_or_tick(self) -> None:
+        enqueue_resume = AsyncMock()
+        saves: list[WorkspaceTaskSessionAttempt] = []
+        att = _make_attempt(attempt_id="att-plan-paused", workspace_task_id="task-1")
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            enqueue_resume=enqueue_resume,
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+            attempt_saves=saves,
+        )
+        service._plan_recovery_suppressed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_not_awaited()
+        enqueue_resume.assert_not_awaited()
+        schedule_tick.assert_not_called()
+        assert len(saves) == 1
+        assert saves[0].status == WorkspaceTaskSessionAttemptStatus.BLOCKED
+
+    @pytest.mark.asyncio
     async def test_noop_when_no_stale_attempts(self) -> None:
         service, apply_report, schedule_tick = _make_service(stale_attempts=[])
         for p in service._patches:  # type: ignore[attr-defined]
@@ -403,6 +436,41 @@ class TestStartupSweep:
         assert recovered == 1
         apply_report.assert_not_awaited()
         schedule_tick.assert_called_once_with("ws-1", "user-1")
+        assert len(service._saves) == 1  # type: ignore[attr-defined]
+        assert (
+            service._saves[0].status  # type: ignore[attr-defined]
+            == WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION
+        )
+
+    @pytest.mark.asyncio
+    async def test_paused_plan_awaiting_leader_attempt_does_not_reschedule_tick(self) -> None:
+        att = _make_attempt(
+            attempt_id="att-awaiting-paused",
+            workspace_task_id="task-1",
+            status=WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
+        )
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+        )
+        service._plan_recovery_suppressed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 0
+        apply_report.assert_not_awaited()
+        schedule_tick.assert_not_called()
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         assert (
             service._saves[0].status  # type: ignore[attr-defined]

@@ -205,6 +205,41 @@ class TestLiteLLMClient:
         assert kwargs["messages"][0]["role"] == "system"
         assert kwargs["messages"][1]["role"] == "user"
 
+    def test_build_completion_kwargs_drops_orphan_tool_result_after_trim(self, client):
+        """Should not send a tool result whose assistant tool call was trimmed away."""
+        messages = [
+            {"role": "system", "content": "system prompt"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "bash", "arguments": "{}"},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call-1", "content": "large tool output"},
+            {"role": "user", "content": "continue"},
+        ]
+
+        with (
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_model_input_budget",
+                return_value=120,
+            ),
+            patch.object(client, "_estimate_input_tokens", side_effect=[400, 300, 80]),
+        ):
+            kwargs = client._build_completion_kwargs(
+                model="qwen-max",
+                messages=messages,
+                max_tokens=4096,
+            )
+
+        assert [message["role"] for message in kwargs["messages"]] == ["system", "user"]
+        assert all(message.get("tool_call_id") != "call-1" for message in kwargs["messages"])
+
     def test_build_completion_kwargs_prefers_max_completion_tokens(self, client):
         """Should avoid sending max_tokens when max_completion_tokens is requested."""
         kwargs = client._build_completion_kwargs(

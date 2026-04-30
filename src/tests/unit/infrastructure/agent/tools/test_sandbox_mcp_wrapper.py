@@ -7,6 +7,7 @@ from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.mcp_errors import RetryConfig
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import (
     WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS,
+    WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS,
     WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS,
     create_sandbox_mcp_tool,
 )
@@ -37,11 +38,13 @@ class MockSandboxAdapter:
         self.call_count = 0
         self.error_message = error_message
         self.last_kwargs = None
+        self.last_call_options = None
 
     async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
         """Mock call_tool method with optional failure simulation."""
         self.call_count += 1
         self.last_kwargs = kwargs
+        self.last_call_options = kw
 
         if self.call_count <= self.fail_count:
             # Simulate connection error (retryable)
@@ -326,6 +329,33 @@ class TestSandboxMCPToolParameters:
         command_schema = tool.parameters["properties"]["command"]
         assert command_schema["maxLength"] == WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS
         assert "heredocs" in command_schema["description"]
+        assert "nohup" in command_schema["description"]
+
+    def test_edit_tool_schema_encourages_small_exact_old_strings(self):
+        """Edit tool schema should steer workers toward robust focused replacements."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string", "description": "String to replace"},
+                        "new_string": {"type": "string", "description": "Replacement"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        old_schema = tool.parameters["properties"]["old_string"]
+        assert old_schema["maxLength"] == WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS
+        assert "smallest exact snippet" in old_schema["description"]
 
 
 class TestSandboxMCPToolExecute:
@@ -477,6 +507,104 @@ class TestSandboxMCPToolExecute:
         assert "bash.command exceeds" in result.output
         assert adapter.call_count == 0
 
+    async def test_edit_tool_rejects_oversized_old_string_before_sandbox(self):
+        """Oversized old_string values should fail locally with recovery guidance."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(),
+            file_path="/workspace/app.ts",
+            old_string="x" * (WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS + 1),
+            new_string="replacement",
+        )
+
+        assert result.is_error is True
+        assert "edit.old_string exceeds" in result.output
+        assert adapter.call_count == 0
+
+    async def test_bash_tool_uses_short_transport_timeout_grace(self):
+        """Transport timeout should only slightly exceed command timeout."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "number"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(_make_ctx(), command="echo ok", timeout=10)
+
+        assert result.is_error is False
+        assert adapter.last_call_options["timeout"] == 15.0
+
+    async def test_bash_tool_wraps_command_with_process_tree_timeout_guard(self):
+        """Sandbox bash timeout should kill the foreground command tree, not just transport."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "number"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(),
+            command="printf 'ready'\nsleep 600",
+            timeout=20,
+        )
+
+        assert result.is_error is False
+        assert "timeout --kill-after=5s 20s bash -lc" in adapter.last_kwargs["command"]
+        assert "[workspace_harness_timeout] bash command exceeded 20s" in adapter.last_kwargs[
+            "command"
+        ]
+        assert 'exit "$status"' in adapter.last_kwargs["command"]
+        assert "printf" in adapter.last_kwargs["command"]
+        assert "ready" in adapter.last_kwargs["command"]
+        assert "sleep 600" in adapter.last_kwargs["command"]
+        assert adapter.last_kwargs["timeout"] == 20
+        assert adapter.last_call_options["timeout"] == 25.0
+
     async def test_execute_error_response(self):
         """Test tool execution with error response."""
 
@@ -515,6 +643,47 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is True
         assert "Tool execution failed" in result.output
         assert "File not found" in result.output
+
+    async def test_edit_string_not_found_error_includes_retry_guidance(self):
+        """Exact-match edit failures should give the worker a smaller-snippet recovery path."""
+
+        class ErrorAdapter:
+            async def call_tool(
+                self,
+                sandbox_id: str,
+                tool_name: str,
+                kwargs: dict,
+                **kw,
+            ):
+                return {
+                    "content": [{"text": "Error: String not found in file: old block"}],
+                    "is_error": True,
+                }
+
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            sandbox_port=ErrorAdapter(),
+        )
+
+        result = await tool.execute(
+            _make_ctx(),
+            file_path="/workspace/app.ts",
+            old_string="old block",
+            new_string="new block",
+        )
+
+        assert result.is_error is True
+        assert "String not found" in result.output
+        assert "smaller exact old_string" in result.output
 
 
 class TestSandboxMCPToolRetry:

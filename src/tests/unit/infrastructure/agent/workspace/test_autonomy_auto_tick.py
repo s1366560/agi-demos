@@ -233,6 +233,15 @@ class TestWorkerReportHook:
         assert "message_service.send_message" not in source
         assert "_fire_mention_routing" not in source
 
+    def test_headless_container_resolution_falls_back_to_db_bound_container(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(wlb, "get_app_container", lambda: None)
+
+        container = wlb._resolve_container(request=None, db=MagicMock())
+
+        assert container is not None
+
     def test_ready_for_completion_auto_complete_precedes_v2_kickoff(self) -> None:
         """Root auto-completion must be attempted before any side-by-side kickoff."""
         import inspect
@@ -329,7 +338,51 @@ class TestWorkerReportHook:
         )
 
     @pytest.mark.asyncio
-    async def test_durable_plan_gate_allows_idle_done_or_blocked_plan(
+    async def test_durable_plan_gate_blocks_active_iteration_loop(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.domain.model.workspace_plan import PlanStatus
+        from src.domain.model.workspace_plan.plan_node import (
+            PlanNodeKind,
+            TaskExecution,
+            TaskIntent,
+        )
+
+        goal_node = MagicMock()
+        goal_node.kind = PlanNodeKind.GOAL
+        goal_node.metadata = {
+            "iteration_loop": {
+                "mode": "auto",
+                "loop_status": "active",
+                "current_iteration": 3,
+            }
+        }
+        done_node = MagicMock()
+        done_node.kind = PlanNodeKind.TASK
+        done_node.intent = TaskIntent.DONE
+        done_node.execution = TaskExecution.IDLE
+        plan = MagicMock()
+        plan.status = PlanStatus.ACTIVE
+        plan.goal_node = goal_node
+        plan.nodes = {"goal": goal_node, "done": done_node}
+        repo = MagicMock()
+        repo.get_by_workspace = AsyncMock(return_value=plan)
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_plan_repository"
+            ".SqlPlanRepository",
+            lambda _db: repo,
+        )
+
+        assert (
+            await wlb._durable_plan_allows_root_auto_complete(
+                db=MagicMock(),
+                workspace_id="ws-1",
+            )
+            is False
+        )
+
+    @pytest.mark.asyncio
+    async def test_durable_plan_gate_blocks_active_done_or_blocked_plan(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from src.domain.model.workspace_plan import PlanStatus
@@ -367,7 +420,7 @@ class TestWorkerReportHook:
                 db=MagicMock(),
                 workspace_id="ws-1",
             )
-            is True
+            is False
         )
 
     @pytest.mark.asyncio

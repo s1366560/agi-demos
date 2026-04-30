@@ -60,6 +60,7 @@ WORKER_LAUNCH_HEARTBEAT_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45")
 )
 WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
+WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 8_000
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
 WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
     "preflight:read-progress",
@@ -185,15 +186,22 @@ def _build_worker_system_context(
             },
             "completion_contract": {
                 "required_verification_refs": list(WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS),
+                "required_change_evidence": (
+                    "For any task that edits files or produces code/docs, include "
+                    "commit_ref:<sha> if committed, otherwise "
+                    "git_diff_summary:<changed files and verification state>."
+                ),
                 "tool": "workspace_report_complete",
                 "argument": "verifications",
                 "example": (
                     "workspace_report_complete("
-                    "verifications=['preflight:read-progress', 'preflight:git-status', ...])"
+                    "verifications=['preflight:read-progress', 'preflight:git-status', "
+                    "'git_diff_summary:changed src/app.ts and tests pass', ...])"
                 ),
                 "rule": (
                     "Do not report completed unless every required_verification_ref is "
-                    "present verbatim in the verifications argument."
+                    "present verbatim in the verifications argument, plus a commit_ref or "
+                    "git_diff_summary when files changed."
                 ),
             },
             "instructions": [
@@ -204,6 +212,11 @@ def _build_worker_system_context(
                     "The completion report MUST include these exact verification refs: "
                     f"{', '.join(WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS)}."
                 ),
+                (
+                    "If you changed files, workspace_report_complete MUST also include "
+                    "commit_ref:<sha> or git_diff_summary:<changed files and verification state> "
+                    "in artifacts or verifications."
+                ),
                 "Call workspace_report_blocked if a hard blocker cannot be recovered.",
             ],
         },
@@ -211,10 +224,13 @@ def _build_worker_system_context(
             "max_single_write_chars": WORKER_MAX_SINGLE_WRITE_CHARS,
             "max_single_bash_command_chars": WORKER_MAX_SINGLE_BASH_COMMAND_CHARS,
             "instructions": [
-                "Prefer one complete write call when the document or code file fits under max_single_write_chars.",
+                (
+                    "Prefer one complete write call only for files under "
+                    f"{WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters."
+                ),
                 (
                     "For longer generated files, write the first chunk, then append or edit "
-                    "sections in chunks under max_single_write_chars."
+                    f"sections in chunks under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters."
                 ),
                 (
                     "Do not use a giant heredoc or shell command with generated content "
@@ -227,6 +243,41 @@ def _build_worker_system_context(
                 ),
                 "Split very large documentation into multiple focused files when appropriate.",
             ],
+        },
+        "shell_execution_policy": {
+            "instructions": [
+                (
+                    "Never run dev servers, watch commands, or other long-lived processes "
+                    "in the foreground inside bash tool calls."
+                ),
+                (
+                    "For service verification, start the process with nohup, redirect logs "
+                    "to /tmp or the project logs directory, write the PID to a file, then "
+                    "run a separate short curl/health-check command."
+                ),
+                (
+                    "For Playwright/browser E2E, first try the existing browser cache or "
+                    "`npx playwright install chromium`. Do not run `playwright install "
+                    "--with-deps` unless an explicit OS dependency error proves it is "
+                    "needed; if browser installation times out, record the blocker and "
+                    "fallback HTTP/build evidence."
+                ),
+                (
+                    "If a port is already in use, treat it as an existing service candidate: "
+                    "probe /health or the documented endpoint before trying another port. If "
+                    "you rebuilt or changed code after that service started, stop the stale PID "
+                    "and restart the service before rerunning browser/E2E verification."
+                ),
+                (
+                    "When setting E2E_BASE_URL or similar test URLs, use an explicit valid URL "
+                    "such as http://127.0.0.1:3002; assigning an empty string is not the same "
+                    "as unsetting the variable and can make Playwright navigate to an invalid URL."
+                ),
+                (
+                    "Do not rely on ss being installed; use curl probes, ps, pgrep, lsof, "
+                    "or netstat when available."
+                ),
+            ]
         },
     }
     harness_context = _task_harness_context(task)
@@ -366,17 +417,28 @@ def _build_worker_brief(
         sections.append(f"## Task description\n{description}")
     sections.append(
         "## Artifact write discipline\n"
-        f"Keep any single write/edit payload under {WORKER_MAX_SINGLE_WRITE_CHARS} "
+        f"Keep ordinary write/edit payloads under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} "
+        f"characters; the hard write limit is {WORKER_MAX_SINGLE_WRITE_CHARS} "
         f"characters and any bash command under {WORKER_MAX_SINGLE_BASH_COMMAND_CHARS} "
         "characters. For longer docs or generated code, write the first chunk and append "
         "small sections with write mode='append'; do not send one giant heredoc."
+    )
+    sections.append(
+        "## Shell execution discipline\n"
+        "Do not run dev servers, watch commands, or other long-lived processes in the "
+        "foreground. Start services with nohup plus log redirection and a PID file, then "
+        "verify with a separate short health-check command. If a port is already in use, "
+        "probe the existing service before starting another one. Do not assume `ss` exists."
     )
     sections.append(
         "## Completion gate\n"
         "Before calling workspace_report_complete, include these exact verification refs in "
         "the verifications argument: "
         f"{', '.join(WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS)}. "
-        "Add the concrete test/build/browser evidence refs after them."
+        "Add the concrete test/build/browser evidence refs after them. If you changed "
+        "files, also include commit_ref:<sha> or git_diff_summary:<changed files and "
+        "verification state> in artifacts or verifications; otherwise the verifier will "
+        "reject the attempt."
     )
 
     return "\n\n".join(sections)

@@ -248,6 +248,9 @@ class TestComplete:
                 summary="All done",
                 artifacts=["/tmp/report.md", ""],
                 verifications=["preflight:read-progress", "", "preflight:git-status"],
+                commit_ref="abc123",
+                git_diff_summary="2 files changed",
+                changed_files=["src/app.ts", ""],
             )
 
         assert result.is_error is False
@@ -255,11 +258,19 @@ class TestComplete:
         assert payload["verb"] == "task.completed"
         assert payload["applied_report"] == {"applied": True, "task_status": "in_review"}
 
-        # Only non-empty artifacts are forwarded.
+        # Only non-empty artifacts are forwarded, with structured git evidence normalized.
         send_call = mock_orchestrator.send_message.await_args
         content = json.loads(send_call.kwargs["message"])
-        assert content["artifacts"] == ["/tmp/report.md"]
+        assert content["artifacts"] == [
+            "/tmp/report.md",
+            "commit_ref:abc123",
+            "git_diff_summary:2 files changed",
+            "changed_file:src/app.ts",
+        ]
         assert content["verifications"] == ["preflight:read-progress", "preflight:git-status"]
+        assert content["commit_ref"] == "abc123"
+        assert content["git_diff_summary"] == "2 files changed"
+        assert content["changed_files"] == ["src/app.ts"]
         assert send_call.kwargs["message_type"] == AgentMessageType.ANNOUNCE
         assert send_call.kwargs["metadata"]["wtp_verb"] == "task.completed"
         assert send_call.kwargs["metadata"]["workspace_agent_binding_id"] == "binding-1"
@@ -267,7 +278,12 @@ class TestComplete:
         # apply_terminal_report received the normalized artifact list + correct report_type.
         apply_kwargs = mock_apply.await_args.kwargs
         assert apply_kwargs["report_type"] == "completed"
-        assert apply_kwargs["artifacts"] == ["/tmp/report.md"]
+        assert apply_kwargs["artifacts"] == [
+            "/tmp/report.md",
+            "commit_ref:abc123",
+            "git_diff_summary:2 files changed",
+            "changed_file:src/app.ts",
+        ]
         assert apply_kwargs["verifications"] == [
             "preflight:read-progress",
             "preflight:git-status",

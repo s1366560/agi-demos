@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_service import WorkspaceService
@@ -27,6 +28,7 @@ from src.infrastructure.adapters.primary.web.startup.workspace_plan_outbox impor
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
     User,
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
@@ -54,6 +56,12 @@ router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["works
 logger = logging.getLogger(__name__)
 _SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS = 180
 _SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS = 300
+
+
+class _RedisExistsClient(Protocol):
+    async def exists(self, key: str) -> int: ...
+
+
 _TERMINAL_ATTEMPT_STATUSES = frozenset({"accepted", "rejected", "blocked", "cancelled"})
 _ITERATION_PHASE_ORDER = ("research", "plan", "implement", "test", "deploy", "review")
 _ITERATION_PHASE_LABELS = {
@@ -943,6 +951,8 @@ def _reset_node_for_operator(
             confidence=node.progress.confidence,
             note=f"Operator {action_label}.",
         ),
+        assignee_agent_id=None,
+        current_attempt_id=None,
         metadata={
             **dict(node.metadata or {}),
             "operator_action": {
@@ -982,6 +992,9 @@ async def _update_iteration_loop_for_operator(
     raw_loop = metadata.get("iteration_loop")
     loop = dict(raw_loop) if isinstance(raw_loop, dict) else {}
     now = datetime.now(UTC).isoformat()
+    reopened_review_iteration = (
+        _reopen_current_iteration_review(loop) if enqueue_tick and loop_status == "active" else None
+    )
     loop.update(
         {
             "mode": "auto",
@@ -1009,6 +1022,11 @@ async def _update_iteration_loop_for_operator(
         payload={
             "reason": body.reason,
             "loop_status": loop_status,
+            **(
+                {"reopened_review_iteration": reopened_review_iteration}
+                if reopened_review_iteration is not None
+                else {}
+            ),
         },
     )
     if enqueue_tick:
@@ -1036,6 +1054,31 @@ async def _update_iteration_loop_for_operator(
         plan_id=plan.id,
         node_id=goal_node.id,
     )
+
+
+def _reopen_current_iteration_review(loop: dict[str, Any]) -> int | None:
+    """Let an operator-triggered tick re-run review for a suspended current sprint."""
+
+    current_iteration = _positive_iteration_index(loop.get("current_iteration"))
+    if current_iteration is None:
+        return None
+    reviewed = loop.get("reviewed_iterations")
+    if not isinstance(reviewed, list):
+        return None
+    kept = [item for item in reviewed if _positive_iteration_index(item) != current_iteration]
+    if len(kept) == len(reviewed):
+        return None
+    loop["reviewed_iterations"] = kept
+    loop["reopened_review_iteration"] = current_iteration
+    return current_iteration
+
+
+def _positive_iteration_index(value: object) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return max(1, int(value))
+    return None
 
 
 async def _enqueue_operator_tick(
@@ -1155,6 +1198,102 @@ def _stale_running_nodes(plan: Plan) -> list[PlanNode]:
     return stale_nodes
 
 
+def _exclude_live_attempt_nodes(
+    nodes: list[PlanNode],
+    live_attempt_ids: set[str],
+) -> list[PlanNode]:
+    return [
+        node
+        for node in nodes
+        if node.execution is not TaskExecution.RUNNING
+        or not node.current_attempt_id
+        or node.current_attempt_id not in live_attempt_ids
+    ]
+
+
+async def _local_subprocess_live_attempt_ids(
+    conversation_by_attempt: Mapping[str, str],
+) -> set[str]:
+    try:
+        from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+
+        live_attempt_ids: set[str] = set()
+        for attempt_id, conversation_id in conversation_by_attempt.items():
+            if await AgentRuntimeBootstrapper.has_running_local_subprocess(conversation_id):
+                live_attempt_ids.add(attempt_id)
+        return live_attempt_ids
+    except Exception:
+        logger.debug(
+            "workspace_plan.snapshot_local_subprocess_liveness_lookup_failed",
+            exc_info=True,
+            extra={"event": "workspace_plan.snapshot_local_subprocess_liveness_lookup_failed"},
+        )
+        return set()
+
+
+async def _redis_runtime_live_attempt_ids(
+    *,
+    redis_client: _RedisExistsClient,
+    conversation_by_attempt: Mapping[str, str],
+    last_event_by_conversation: Mapping[str, datetime],
+    skip_attempt_ids: set[str],
+) -> set[str]:
+    now = datetime.now(UTC)
+    heartbeat_threshold = timedelta(seconds=_SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS)
+    live_attempt_ids: set[str] = set()
+    for attempt_id, conversation_id in conversation_by_attempt.items():
+        if attempt_id in skip_attempt_ids:
+            continue
+        try:
+            running_exists = await redis_client.exists(f"agent:running:{conversation_id}")
+            cooldown_exists = await redis_client.exists(
+                f"workspace:worker_launch:cooldown:{conversation_id}"
+            )
+        except Exception:
+            logger.debug(
+                "workspace_plan.snapshot_liveness_key_check_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_plan.snapshot_liveness_key_check_failed",
+                    "attempt_id": attempt_id,
+                    "conversation_id": conversation_id,
+                },
+            )
+            continue
+        if not bool(running_exists) and not bool(cooldown_exists):
+            continue
+        last_event_at = last_event_by_conversation.get(conversation_id)
+        if last_event_at is None:
+            logger.info(
+                "workspace_plan.snapshot_live_worker_no_agent_event",
+                extra={
+                    "event": "workspace_plan.snapshot_live_worker_no_agent_event",
+                    "attempt_id": attempt_id,
+                    "conversation_id": conversation_id,
+                    "running_key": bool(running_exists),
+                    "cooldown_key": bool(cooldown_exists),
+                },
+            )
+        else:
+            if last_event_at.tzinfo is None:
+                last_event_at = last_event_at.replace(tzinfo=UTC)
+            if now - last_event_at > heartbeat_threshold:
+                logger.info(
+                    "workspace_plan.snapshot_live_worker_agent_event_stale",
+                    extra={
+                        "event": "workspace_plan.snapshot_live_worker_agent_event_stale",
+                        "attempt_id": attempt_id,
+                        "conversation_id": conversation_id,
+                        "last_event_at": last_event_at.isoformat(),
+                        "stale_seconds": round((now - last_event_at).total_seconds(), 3),
+                        "running_key": bool(running_exists),
+                        "cooldown_key": bool(cooldown_exists),
+                    },
+                )
+        live_attempt_ids.add(attempt_id)
+    return live_attempt_ids
+
+
 async def _nodes_without_live_worker(
     *,
     session: AsyncSession,
@@ -1192,38 +1331,48 @@ async def _nodes_without_live_worker(
     if not conversation_by_attempt:
         return nodes
 
+    live_attempt_ids = await _local_subprocess_live_attempt_ids(conversation_by_attempt)
+
     try:
         from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
-        redis_client = await get_redis_client()
+        redis_client = cast(_RedisExistsClient, await get_redis_client())
     except Exception:
         logger.debug(
             "workspace_plan.snapshot_liveness_lookup_failed",
             exc_info=True,
             extra={"event": "workspace_plan.snapshot_liveness_lookup_failed"},
         )
-        return [node for node in nodes if node.execution is not TaskExecution.RUNNING]
+        # Redis worker state is the authoritative signal for remote workers.
+        # When it is unavailable, fail closed for RUNNING attempts that still
+        # have a conversation binding so snapshot repair does not interrupt an
+        # active worker whose heartbeat cannot be observed from this process.
+        return _exclude_live_attempt_nodes(
+            nodes,
+            live_attempt_ids | set(conversation_by_attempt),
+        )
 
-    live_attempt_ids: set[str] = set()
-    for attempt_id, conversation_id in conversation_by_attempt.items():
-        try:
-            running_exists = await redis_client.exists(f"agent:running:{conversation_id}")
-            cooldown_exists = await redis_client.exists(
-                f"workspace:worker_launch:cooldown:{conversation_id}"
+    event_result = await session.execute(
+        refresh_select_statement(
+            select(
+                AgentExecutionEvent.conversation_id,
+                func.max(AgentExecutionEvent.created_at),
             )
-        except Exception:
-            logger.debug(
-                "workspace_plan.snapshot_liveness_key_check_failed",
-                exc_info=True,
-                extra={
-                    "event": "workspace_plan.snapshot_liveness_key_check_failed",
-                    "attempt_id": attempt_id,
-                    "conversation_id": conversation_id,
-                },
-            )
-            continue
-        if bool(running_exists) or bool(cooldown_exists):
-            live_attempt_ids.add(attempt_id)
+            .where(AgentExecutionEvent.conversation_id.in_(conversation_by_attempt.values()))
+            .group_by(AgentExecutionEvent.conversation_id)
+        )
+    )
+    last_event_by_conversation = {
+        conversation_id: last_event_at for conversation_id, last_event_at in event_result.all()
+    }
+    live_attempt_ids.update(
+        await _redis_runtime_live_attempt_ids(
+            redis_client=redis_client,
+            conversation_by_attempt=conversation_by_attempt,
+            last_event_by_conversation=last_event_by_conversation,
+            skip_attempt_ids=live_attempt_ids,
+        )
+    )
 
     if not live_attempt_ids:
         return nodes

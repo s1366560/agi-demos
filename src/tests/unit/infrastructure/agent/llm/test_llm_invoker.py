@@ -176,7 +176,7 @@ class TestInvocationConfig:
         assert config.api_key == "test-key"
         assert config.base_url is None
         assert config.temperature == 0.7
-        assert config.max_tokens == 16384
+        assert config.max_tokens == 32768
         assert config.max_attempts == 3
 
     def test_all_fields(self):

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -25,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS = 6_000
+WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS = 12_000
+WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS = 64_000
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -65,7 +68,7 @@ def _apply_workspace_harness_limits(
     parameters: dict[str, Any],
 ) -> dict[str, Any]:
     """Inject hard argument limits for tools that commonly overflow JSON streams."""
-    if tool_name not in {"write", "bash"}:
+    if tool_name not in {"write", "bash", "edit"}:
         return parameters
 
     limited = dict(parameters)
@@ -92,10 +95,42 @@ def _apply_workspace_harness_limits(
             command_schema.get("description"),
             (
                 "HARD LIMIT: at most 6000 characters per command. "
-                "Do not embed large heredocs; use short append/edit steps instead."
+                "Do not embed large heredocs; use short append/edit steps instead. "
+                "Do not run dev servers or watch commands in the foreground. For "
+                "long-running processes, use nohup with log redirection and write "
+                "the PID, then verify with a separate short health-check command."
             ),
         )
         properties["command"] = command_schema
+
+    if tool_name == "edit":
+        if isinstance(properties.get("old_string"), dict):
+            old_string_schema = dict(properties["old_string"])
+            old_string_schema["maxLength"] = WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS
+            old_string_schema["description"] = _append_limit_hint(
+                old_string_schema.get("description"),
+                (
+                    "HARD LIMIT: at most "
+                    f"{WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS} characters. "
+                    "Use the smallest exact snippet copied from a fresh read. "
+                    "Prefer one unique line or a small adjacent block; avoid replacing "
+                    "whole functions when whitespace may differ."
+                ),
+            )
+            properties["old_string"] = old_string_schema
+        if isinstance(properties.get("new_string"), dict):
+            new_string_schema = dict(properties["new_string"])
+            new_string_schema["maxLength"] = WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS
+            new_string_schema["description"] = _append_limit_hint(
+                new_string_schema.get("description"),
+                (
+                    "HARD LIMIT: at most "
+                    f"{WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS} characters. "
+                    "For larger rewrites, use write for the complete file or split into "
+                    "multiple focused edit calls."
+                ),
+            )
+            properties["new_string"] = new_string_schema
 
     limited["properties"] = properties
     return limited
@@ -117,6 +152,43 @@ def _normalize_workspace_harness_kwargs(tool_name: str, kwargs: dict[str, Any]) 
     return normalized
 
 
+def _with_bash_timeout_guard(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    configured_timeout_s: float | None,
+) -> dict[str, Any]:
+    """Wrap sandbox bash commands so transport timeouts also stop the process tree."""
+    if tool_name != "bash" or configured_timeout_s is None:
+        return kwargs
+
+    command = kwargs.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return kwargs
+
+    timeout_seconds = max(1, int(configured_timeout_s))
+    kill_after_seconds = 5
+    guarded = dict(kwargs)
+    quoted_command = shlex.quote(command)
+    guarded["command"] = (
+        "if command -v timeout >/dev/null 2>&1; then "
+        "set +e; "
+        f"timeout --kill-after={kill_after_seconds}s {timeout_seconds}s "
+        f"bash -lc {quoted_command}; "
+        "status=$?; "
+        'case "$status" in '
+        "124|137|143) "
+        "printf '\\n[workspace_harness_timeout] bash command exceeded "
+        f"{timeout_seconds}s and was terminated (exit=%s)\\n' \"$status\" >&2; "
+        ";; "
+        "esac; "
+        'exit "$status"; '
+        "else "
+        f"bash -lc {quoted_command}; "
+        "fi"
+    )
+    return guarded
+
+
 def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) -> str | None:
     if tool_name == "write":
         content = kwargs.get("content")
@@ -134,6 +206,27 @@ def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) ->
                 "bash.command exceeds the workspace harness hard limit "
                 f"({len(command)} > {WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS} characters). "
                 "Retry with a short command; do not embed large heredocs."
+            )
+    if tool_name == "edit":
+        old_string = kwargs.get("old_string")
+        if (
+            isinstance(old_string, str)
+            and len(old_string) > WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS
+        ):
+            return (
+                "edit.old_string exceeds the workspace harness hard limit "
+                f"({len(old_string)} > {WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS} "
+                "characters). Retry with a smaller exact snippet copied from a fresh read."
+            )
+        new_string = kwargs.get("new_string")
+        if (
+            isinstance(new_string, str)
+            and len(new_string) > WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS
+        ):
+            return (
+                "edit.new_string exceeds the workspace harness hard limit "
+                f"({len(new_string)} > {WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS} "
+                "characters). Retry with multiple focused edits or write the full file."
             )
     return None
 
@@ -162,6 +255,20 @@ def _extract_error_msg(result: dict[str, Any]) -> str:
         error_msg = f"Tool execution failed (no details provided). Raw result: {result}"
 
     return str(error_msg)
+
+
+def _augment_tool_error_message(tool_name: str, error_msg: str) -> str:
+    """Add recovery guidance for common sandbox tool failures."""
+    if tool_name == "edit" and "String not found" in error_msg:
+        hint = (
+            "Hint: Retry with a smaller exact old_string copied from a fresh read result. "
+            "Replace one unique line or a short adjacent block, and preserve whitespace "
+            "exactly. If the change spans much of the file, write the complete file "
+            "instead of using sed/heredoc shell commands."
+        )
+        if hint not in error_msg:
+            return f"{error_msg}\n{hint}"
+    return error_msg
 
 
 def _extract_ok_output(result: dict[str, Any]) -> str:
@@ -218,30 +325,32 @@ async def _execute_with_retry(
     configured_timeout_s: float | None = (
         float(tool_timeout) if tool_timeout and isinstance(tool_timeout, (int, float)) else None
     )
+    execution_kwargs = _with_bash_timeout_guard(tool_name, kwargs, configured_timeout_s)
 
     for attempt in range(retry_config.max_retries + 1):
         start_time = _time.time()
         try:
             call_kwargs: dict[str, Any] = {}
             if configured_timeout_s is not None:
-                call_kwargs["timeout"] = configured_timeout_s + 30.0
+                call_kwargs["timeout"] = configured_timeout_s + 5.0
 
             result = await sandbox_port.call_tool(
                 sandbox_id,
                 tool_name,
-                kwargs,
+                execution_kwargs,
                 **call_kwargs,
             )
             elapsed_ms = int((_time.time() - start_time) * 1000)
 
             if result.get("is_error") or result.get("isError"):
-                error_msg = _extract_error_msg(result)
+                error_msg = _augment_tool_error_message(tool_name, _extract_error_msg(result))
                 mcp_err = MCPToolErrorClassifier.classify(
                     error=Exception(error_msg),
                     tool_name=tool_name,
                     sandbox_id=sandbox_id,
                     context={
                         "kwargs": kwargs,
+                        "execution_kwargs": execution_kwargs,
                         "attempt": attempt,
                         "execution_duration_ms": elapsed_ms,
                         "configured_timeout_s": configured_timeout_s,
@@ -266,6 +375,7 @@ async def _execute_with_retry(
                 sandbox_id=sandbox_id,
                 context={
                     "kwargs": kwargs,
+                    "execution_kwargs": execution_kwargs,
                     "attempt": attempt,
                     "execution_duration_ms": elapsed_ms,
                     "configured_timeout_s": configured_timeout_s,

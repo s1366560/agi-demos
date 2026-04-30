@@ -1264,7 +1264,7 @@ async def _attach_handoff_to_plan_node(
     node.execution = TaskExecution.RUNNING
     node.handoff_package = handoff
     node.metadata = {
-        **dict(node.metadata or {}),
+        **_clear_stale_attempt_metadata(node.metadata or {}),
         "workspace_task_id": task.id,
         WORKSPACE_AGENT_BINDING_ID: worker_binding_id,
     }
@@ -1756,7 +1756,11 @@ def _node_allowed_sandbox_commands(node: PlanNode) -> set[str]:
 
 
 def _is_structural_sandbox_command(command: str) -> bool:
-    return command.startswith('[ -e "') and 'wc -c < "' in command
+    if command.startswith('[ -e "') and 'wc -c < "' in command:
+        return True
+    return "\n" not in command and command.startswith("git -C ") and command.endswith(
+        " status --short"
+    )
 
 
 async def _resolve_root_task_id(
@@ -1888,6 +1892,31 @@ def _apply_attempt_worktree_checkpoint(node: PlanNode, attempt_id: str) -> None:
         branch_name=branch_name,
         base_ref=feature.base_ref or "HEAD",
     )
+
+
+_STALE_ATTEMPT_METADATA_KEYS = frozenset(
+    {
+        "last_verification_summary",
+        "last_verification_passed",
+        "last_verification_hard_fail",
+        "last_verification_attempt_id",
+        "last_verification_ran_at",
+        "verification_evidence_refs",
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "retry_last_reason",
+        "terminal_attempt_status",
+        "terminal_attempt_reconciled_at",
+    }
+)
+
+
+def _clear_stale_attempt_metadata(metadata: Mapping[str, object]) -> dict[str, object]:
+    cleaned = dict(metadata)
+    for key in _STALE_ATTEMPT_METADATA_KEYS:
+        cleaned.pop(key, None)
+    return cleaned
 
 
 def _worktree_branch_name(*, node_id: str, attempt_id: str) -> str:

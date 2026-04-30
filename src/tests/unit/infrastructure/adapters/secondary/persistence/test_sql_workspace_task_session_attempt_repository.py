@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
@@ -32,3 +33,35 @@ class TestSqlWorkspaceTaskSessionAttemptRepository:
         assert "pg_advisory_xact_lock" in str(session.statement)
         assert "hashtextextended" in str(session.statement)
         assert session.params == {"workspace_task_id": "task-123"}
+
+    @pytest.mark.asyncio
+    async def test_stale_lookup_uses_conversation_event_activity(self) -> None:
+        class _Result:
+            class _Scalars:
+                @staticmethod
+                def all() -> list[Any]:
+                    return []
+
+            @staticmethod
+            def scalars() -> _Scalars:
+                return _Result._Scalars()
+
+        class _Session:
+            statement: Any = None
+
+            async def execute(self, statement: Any) -> _Result:
+                self.statement = statement
+                return _Result()
+
+        session = _Session()
+        repo = SqlWorkspaceTaskSessionAttemptRepository(cast(AsyncSession, session))
+
+        rows = await repo.find_stale_non_terminal(
+            older_than=datetime.now(UTC) - timedelta(minutes=3)
+        )
+
+        assert rows == []
+        sql = str(session.statement)
+        assert "agent_execution_events" in sql
+        assert "max(agent_execution_events.created_at)" in sql
+        assert "CASE" in sql

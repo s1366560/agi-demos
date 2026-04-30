@@ -7,6 +7,7 @@ a user message, injecting relevant context into the system prompt.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, cast
 
 from src.infrastructure.memory.prompt_safety import (
@@ -17,6 +18,11 @@ from src.infrastructure.memory.prompt_safety import (
 logger = logging.getLogger(__name__)
 
 _MAX_CONTEXT_CHARS = 4000
+_WORKSPACE_BINDING_RE = re.compile(
+    r"\[workspace-task-binding\](?P<body>.*?)\[/workspace-task-binding\]",
+    re.DOTALL,
+)
+_WORKSPACE_ID_RE = re.compile(r"^\s*workspace_id=(?P<workspace_id>[^\s]+)\s*$", re.MULTILINE)
 
 
 class MemoryRecallPreprocessor:
@@ -78,6 +84,13 @@ class MemoryRecallPreprocessor:
 
         # Filter prompt injections
         safe_results = [r for r in all_results if not looks_like_prompt_injection(r["content"])]
+        current_workspace_id = _extract_workspace_binding_id(query)
+        if current_workspace_id:
+            safe_results = [
+                r
+                for r in safe_results
+                if not _is_other_workspace_task_memory(r["content"], current_workspace_id)
+            ]
 
         if not safe_results:
             self.last_results = []
@@ -202,3 +215,23 @@ class MemoryRecallPreprocessor:
             return None
 
         return "\n".join(lines)
+
+
+def _extract_workspace_binding_id(text: str) -> str | None:
+    """Extract the explicit workspace binding id from a workspace task prompt."""
+    if "[workspace-task-binding]" not in text:
+        return None
+    match = _WORKSPACE_BINDING_RE.search(text)
+    if not match:
+        return None
+    id_match = _WORKSPACE_ID_RE.search(match.group("body"))
+    if not id_match:
+        return None
+    workspace_id = id_match.group("workspace_id").strip()
+    return workspace_id or None
+
+
+def _is_other_workspace_task_memory(content: str, current_workspace_id: str) -> bool:
+    """Return true when a recalled workspace task binding belongs to another workspace."""
+    recalled_workspace_id = _extract_workspace_binding_id(content)
+    return recalled_workspace_id is not None and recalled_workspace_id != current_workspace_id

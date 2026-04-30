@@ -72,7 +72,7 @@ class AgentInstanceConfig:
     api_key: str | None = None
     base_url: str | None = None
     temperature: float = 0.7
-    max_tokens: int = 16384  # Increased from 4096 to support larger tool arguments
+    max_tokens: int = 32768  # Larger budget prevents write/tool JSON truncation.
     max_steps: int = 20
 
     # 生命周期配置
