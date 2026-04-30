@@ -566,6 +566,16 @@ export const workspacePlanService = {
     });
     return response.json() as Promise<WorkspacePlanActionResult>;
   },
+
+  regenerateDeliveryContract: async (
+    workspaceId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/delivery/regenerate-contract`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
 };
 
 export const workspaceTopologyService = {

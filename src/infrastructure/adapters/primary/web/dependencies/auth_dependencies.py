@@ -10,10 +10,11 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException, Query, Request, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import HTTPConnection
 
 from src.application.services.auth_service_v2 import AuthService
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -140,7 +141,7 @@ async def get_api_key_from_header_or_query(
 
 
 async def get_api_key_from_header_query_or_cookie(
-    request: Request,
+    connection: HTTPConnection,
     authorization: str | None = Header(None),
     token: str | None = Query(None, description="API key for authentication"),
 ) -> str:
@@ -151,22 +152,24 @@ async def get_api_key_from_header_query_or_cookie(
     that subsequent asset requests use for authentication.
     """
     # Try header first
-    if authorization:
-        if authorization.startswith("Bearer "):
-            api_key = authorization[7:]
-        elif authorization.startswith("Token "):
-            api_key = authorization[6:]
+    authorization_value = authorization or connection.headers.get("authorization")
+    if authorization_value:
+        if authorization_value.startswith("Bearer "):
+            api_key = authorization_value[7:]
+        elif authorization_value.startswith("Token "):
+            api_key = authorization_value[6:]
         else:
-            api_key = authorization
+            api_key = authorization_value
         if api_key.startswith("ms_sk_"):
             return api_key
 
     # Try query parameter
-    if token and token.startswith("ms_sk_"):
-        return token
+    query_token = token or connection.query_params.get("token")
+    if query_token and query_token.startswith("ms_sk_"):
+        return query_token
 
     # Fall back to cookie (for desktop proxy sub-resources)
-    cookie_token = request.cookies.get("desktop_token")
+    cookie_token = connection.cookies.get("desktop_token")
     if cookie_token and cookie_token.startswith("ms_sk_"):
         return cookie_token
 
@@ -198,7 +201,9 @@ async def verify_api_key_from_header_or_query(
             raise ValueError("Invalid API key")
 
         # Convert to DB model for backward compatibility
-        result = await db.execute(refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id)))
+        result = await db.execute(
+            refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        )
         db_key = result.scalar_one_or_none()
 
         return db_key
@@ -223,7 +228,9 @@ async def verify_api_key_from_header_query_or_cookie(
         domain_api_key = await auth_service.verify_api_key(api_key)
         if domain_api_key is None:
             raise ValueError("Invalid API key")
-        result = await db.execute(refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id)))
+        result = await db.execute(
+            refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        )
         return result.scalar_one_or_none()
     except ValueError as e:
         raise HTTPException(
@@ -245,7 +252,9 @@ async def get_current_user_from_desktop_proxy(
         domain_user = await auth_service.get_user_by_id(api_key.user_id)
         if not domain_user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        result = await db.execute(refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id)))
+        result = await db.execute(
+            refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id))
+        )
         db_user = result.scalar_one_or_none()
         if not db_user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -279,7 +288,9 @@ async def get_current_user_from_header_or_query(
             )
 
         # Convert to DB model for backward compatibility
-        result = await db.execute(refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id)))
+        result = await db.execute(
+            refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id))
+        )
         db_user = result.scalar_one_or_none()
 
         if not db_user:
@@ -320,7 +331,9 @@ async def verify_api_key_dependency(
         # Convert to DB model for backward compatibility
         # Note: We only need to read the key, not update it.
         # last_used_at updates are disabled to prevent row-level lock contention.
-        result = await db.execute(refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id)))
+        result = await db.execute(
+            refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        )
         db_key = result.scalar_one_or_none()
 
         return db_key
@@ -359,7 +372,9 @@ async def get_current_user(
         # Convert to DB model for backward compatibility
         # Note: Removed selectinload for roles to reduce query overhead
         # Roles should be loaded on-demand when needed
-        result = await db.execute(refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id)))
+        result = await db.execute(
+            refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id))
+        )
         db_user = result.scalar_one_or_none()
 
         if not db_user:
@@ -393,7 +408,9 @@ async def get_current_user_tenant(
         HTTPException: If the user does not belong to any tenant
     """
     result = await db.execute(
-        refresh_select_statement(select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1))
+        refresh_select_statement(
+            select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1)
+        )
     )
     tenant_id = result.scalar_one_or_none()
 
@@ -434,7 +451,9 @@ async def create_api_key(
     )
 
     # Convert to DB model for backward compatibility
-    result = await db.execute(refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_key.id)))
+    result = await db.execute(
+        refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == domain_key.id))
+    )
     db_key = result.scalar_one_or_none()
 
     return plain_key, db_key
@@ -456,7 +475,9 @@ async def create_user(db: AsyncSession, email: str, name: str, password: str) ->
     domain_user = await auth_service.create_user(email=email, name=name, password=password)
 
     # Convert to DB model for backward compatibility
-    result = await db.execute(refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id)))
+    result = await db.execute(
+        refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id))
+    )
     db_user = result.scalar_one_or_none()
 
     return db_user
@@ -489,7 +510,9 @@ async def _init_permissions(db: AsyncSession) -> dict[str, Permission]:
     ]
     created_permissions: dict[str, Permission] = {}
     for perm_data in permissions_data:
-        result = await db.execute(refresh_select_statement(select(Permission).where(Permission.code == perm_data["code"])))
+        result = await db.execute(
+            refresh_select_statement(select(Permission).where(Permission.code == perm_data["code"]))
+        )
         perm = result.scalar_one_or_none()
         if not perm:
             perm = Permission(id=str(uuid4()), **perm_data)
@@ -508,7 +531,9 @@ async def _init_roles(db: AsyncSession) -> dict[str, Role]:
     ]
     created_roles: dict[str, Role] = {}
     for role_data in roles_data:
-        result = await db.execute(refresh_select_statement(select(Role).where(Role.name == role_data["name"])))
+        result = await db.execute(
+            refresh_select_statement(select(Role).where(Role.name == role_data["name"]))
+        )
         role = result.scalar_one_or_none()
         if not role:
             role = Role(id=str(uuid4()), **role_data)
@@ -528,10 +553,12 @@ async def _assign_role_permissions(
     admin_role = created_roles["admin"]
     for perm in created_permissions.values():
         result = await db.execute(
-            refresh_select_statement(select(RolePermission).where(
-                RolePermission.role_id == admin_role.id,
-                RolePermission.permission_id == perm.id,
-            ))
+            refresh_select_statement(
+                select(RolePermission).where(
+                    RolePermission.role_id == admin_role.id,
+                    RolePermission.permission_id == perm.id,
+                )
+            )
         )
         if not result.scalar_one_or_none():
             db.add(RolePermission(id=str(uuid4()), role_id=admin_role.id, permission_id=perm.id))
@@ -540,10 +567,12 @@ async def _assign_role_permissions(
     for code, perm in created_permissions.items():
         if "read" in code or "create" in code:
             result = await db.execute(
-                refresh_select_statement(select(RolePermission).where(
-                    RolePermission.role_id == user_role.id,
-                    RolePermission.permission_id == perm.id,
-                ))
+                refresh_select_statement(
+                    select(RolePermission).where(
+                        RolePermission.role_id == user_role.id,
+                        RolePermission.permission_id == perm.id,
+                    )
+                )
             )
             if not result.scalar_one_or_none():
                 db.add(RolePermission(id=str(uuid4()), role_id=user_role.id, permission_id=perm.id))
@@ -559,10 +588,12 @@ async def _ensure_tenant_membership(
 ) -> None:
     """Ensure a user has membership in a tenant."""
     result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            UserTenant.user_id == user_id,
-            UserTenant.tenant_id == tenant_id,
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                UserTenant.user_id == user_id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
     )
     if not result.scalar_one_or_none():
         membership = UserTenant(
@@ -605,7 +636,9 @@ async def _init_admin_user(
     default_tenant: Tenant | None,
 ) -> tuple[DBUser | None, Tenant | None]:
     """Create admin user with API key and tenant if needed."""
-    result = await db.execute(refresh_select_statement(select(DBUser).where(DBUser.email == "admin@memstack.ai")))
+    result = await db.execute(
+        refresh_select_statement(select(DBUser).where(DBUser.email == "admin@memstack.ai"))
+    )
     user = result.scalar_one_or_none()
 
     if not user:
@@ -645,7 +678,9 @@ async def _init_normal_user(
     default_tenant: Tenant | None,
 ) -> None:
     """Create normal user with API key and tenant if needed."""
-    result = await db.execute(refresh_select_statement(select(DBUser).where(DBUser.email == "user@memstack.ai")))
+    result = await db.execute(
+        refresh_select_statement(select(DBUser).where(DBUser.email == "user@memstack.ai"))
+    )
     normal_user = result.scalar_one_or_none()
 
     if not normal_user:
@@ -708,7 +743,9 @@ async def initialize_default_credentials() -> None:
             await _assign_role_permissions(db, created_roles, created_permissions)
 
             # 4. Check if default tenant exists
-            result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.name == "Default Tenant")))
+            result = await db.execute(
+                refresh_select_statement(select(Tenant).where(Tenant.name == "Default Tenant"))
+            )
             default_tenant = result.scalar_one_or_none()
             # 5. Create Admin User
             _, default_tenant = await _init_admin_user(db, created_roles["admin"], default_tenant)

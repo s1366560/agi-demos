@@ -11,6 +11,7 @@ import {
   Code2,
   Database,
   Loader2,
+  Plus,
   RotateCcw,
   Rocket,
   ShieldCheck,
@@ -39,6 +40,7 @@ import {
   USE_CASE_OPTIONS,
   VERIFICATION_GRADE_OPTIONS,
   buildWorkspaceMetadataDraft,
+  createBlankDeliveryService,
   getOptionLabel,
   syncDraftFromWorkspace,
   type SettingsDraft,
@@ -53,6 +55,7 @@ import {
 
 import type {
   WorkspaceCollaborationMode,
+  WorkspaceDeliveryServiceConfig,
   WorkspaceMember,
   WorkspaceMemberRole,
   WorkspaceUseCase,
@@ -100,6 +103,51 @@ export const WorkspaceSettingsPanel: React.FC<{
     },
     []
   );
+
+  const updateDeliveryService = useCallback(
+    <TKey extends keyof WorkspaceDeliveryServiceConfig>(
+      index: number,
+      key: TKey,
+      value: WorkspaceDeliveryServiceConfig[TKey]
+    ) => {
+      setDraft((current) => {
+        if (!current) return current;
+        const services = current.deliveryServices.map((service, serviceIndex) =>
+          serviceIndex === index ? { ...service, [key]: value } : service
+        );
+        return { ...current, deliveryServices: services };
+      });
+      setIsDirty(true);
+    },
+    []
+  );
+
+  const addDeliveryService = useCallback(() => {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        deliveryServices: [
+          ...current.deliveryServices,
+          createBlankDeliveryService(current.deliveryServices.length + 1),
+        ],
+      };
+    });
+    setIsDirty(true);
+  }, []);
+
+  const removeDeliveryService = useCallback((index: number) => {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        deliveryServices: current.deliveryServices.filter(
+          (_, serviceIndex) => serviceIndex !== index
+        ),
+      };
+    });
+    setIsDirty(true);
+  }, []);
 
   const metadataDraft = useMemo(
     () => (draft ? buildWorkspaceMetadataDraft(draft) : { metadata: {}, error: null }),
@@ -434,6 +482,39 @@ export const WorkspaceSettingsPanel: React.FC<{
             title="Delivery / CI/CD"
             description="Sandbox-native pipeline, preview deployment, and health-check settings."
           >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(180px,0.35fr)]">
+              <div className="rounded-md border border-border-light bg-surface-muted px-3 py-3 dark:border-border-dark dark:bg-surface-dark-alt">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
+                      Agent managed contract
+                    </div>
+                    <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+                      {draft.deliveryContractSource || 'metadata'} ·{' '}
+                      {Math.round(draft.deliveryContractConfidence * 100)}% confidence
+                    </p>
+                  </div>
+                  <SwitchField
+                    label="Agent managed"
+                    checked={draft.deliveryAgentManaged}
+                    onChange={(checked) => {
+                      updateDraft('deliveryAgentManaged', checked);
+                    }}
+                  />
+                </div>
+              </div>
+              <Field label="Contract source" htmlFor="workspace-delivery-contract-source">
+                <Input
+                  id="workspace-delivery-contract-source"
+                  value={draft.deliveryContractSource}
+                  onChange={(event) => {
+                    updateDraft('deliveryContractSource', event.target.value);
+                  }}
+                  disabled={draft.deliveryAgentManaged}
+                />
+              </Field>
+            </div>
+
             <div className="grid gap-4 lg:grid-cols-3">
               <Field label="Provider" htmlFor="workspace-delivery-provider">
                 <Input
@@ -487,6 +568,174 @@ export const WorkspaceSettingsPanel: React.FC<{
                   updateDraft('deliveryAutoDeploy', checked);
                 }}
               />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
+                    Preview web services
+                  </div>
+                  <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+                    Services run inside the project sandbox and open through the MemStack proxy.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+                  onClick={addDeliveryService}
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add service
+                </button>
+              </div>
+
+              {draft.deliveryServices.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border-light px-3 py-3 text-xs text-text-secondary dark:border-border-dark dark:text-text-muted">
+                  No explicit services. Legacy deploy command and preview port will be mapped to a
+                  default service.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {draft.deliveryServices.map((service, index) => (
+                    <div
+                      key={`${service.service_id}-${String(index)}`}
+                      className="min-w-0 rounded-md border border-border-light bg-surface-muted p-3 dark:border-border-dark dark:bg-surface-dark-alt"
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-text-primary dark:text-text-inverse">
+                            {service.name || service.service_id}
+                          </div>
+                          <p className="mt-1 break-words font-mono text-[11px] text-text-secondary dark:text-text-muted">
+                            {service.service_id} · {service.internal_scheme || 'http'}://0.0.0.0:
+                            {service.internal_port}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+                          onClick={() => {
+                            removeDeliveryService(index);
+                          }}
+                          aria-label="Remove service"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 lg:grid-cols-4">
+                        <Field label="Service ID" htmlFor={`delivery-service-id-${String(index)}`}>
+                          <Input
+                            id={`delivery-service-id-${String(index)}`}
+                            value={service.service_id}
+                            onChange={(event) => {
+                              updateDeliveryService(index, 'service_id', event.target.value);
+                            }}
+                          />
+                        </Field>
+                        <Field label="Name" htmlFor={`delivery-service-name-${String(index)}`}>
+                          <Input
+                            id={`delivery-service-name-${String(index)}`}
+                            value={service.name}
+                            onChange={(event) => {
+                              updateDeliveryService(index, 'name', event.target.value);
+                            }}
+                          />
+                        </Field>
+                        <Field label="Port" htmlFor={`delivery-service-port-${String(index)}`}>
+                          <Input
+                            id={`delivery-service-port-${String(index)}`}
+                            type="number"
+                            min={1}
+                            value={service.internal_port}
+                            onChange={(event) => {
+                              updateDeliveryService(
+                                index,
+                                'internal_port',
+                                Number(event.target.value) || 3000
+                              );
+                            }}
+                          />
+                        </Field>
+                        <Field label="Path" htmlFor={`delivery-service-path-${String(index)}`}>
+                          <Input
+                            id={`delivery-service-path-${String(index)}`}
+                            value={service.path_prefix ?? '/'}
+                            onChange={(event) => {
+                              updateDeliveryService(index, 'path_prefix', event.target.value);
+                            }}
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        <Field
+                          label="Start command"
+                          htmlFor={`delivery-service-start-${String(index)}`}
+                        >
+                          <TextArea
+                            id={`delivery-service-start-${String(index)}`}
+                            value={service.start_command}
+                            onChange={(event) => {
+                              updateDeliveryService(index, 'start_command', event.target.value);
+                            }}
+                            placeholder="pnpm dev --host 0.0.0.0 --port 3000"
+                            rows={3}
+                          />
+                        </Field>
+                        <Field
+                          label="Health path"
+                          htmlFor={`delivery-service-health-path-${String(index)}`}
+                        >
+                          <Input
+                            id={`delivery-service-health-path-${String(index)}`}
+                            value={service.health_path ?? '/'}
+                            onChange={(event) => {
+                              updateDeliveryService(index, 'health_path', event.target.value);
+                            }}
+                            placeholder="/"
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="mt-3">
+                        <Field
+                          label="Health command override"
+                          htmlFor={`delivery-service-health-command-${String(index)}`}
+                        >
+                          <TextArea
+                            id={`delivery-service-health-command-${String(index)}`}
+                            value={service.health_command ?? ''}
+                            onChange={(event) => {
+                              updateDeliveryService(index, 'health_command', event.target.value);
+                            }}
+                            placeholder="curl -fsS http://127.0.0.1:3000/"
+                            rows={2}
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <SwitchField
+                          label="Required"
+                          checked={service.required ?? true}
+                          onChange={(checked) => {
+                            updateDeliveryService(index, 'required', checked);
+                          }}
+                        />
+                        <SwitchField
+                          label="Auto open"
+                          checked={service.auto_open ?? true}
+                          onChange={(checked) => {
+                            updateDeliveryService(index, 'auto_open', checked);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">

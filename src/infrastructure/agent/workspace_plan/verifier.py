@@ -312,8 +312,7 @@ class BrowserE2ECriterionRunner(CriterionRunner):
         if require_screenshot and not screenshot_refs:
             missing.append("screenshot evidence")
         console_clean = (
-            "console_errors:0" in evidence_values
-            or "browser_console_errors:0" in evidence_values
+            "console_errors:0" in evidence_values or "browser_console_errors:0" in evidence_values
         )
         if require_console_clean and not console_clean:
             missing.append("console_errors:0")
@@ -383,9 +382,18 @@ class PipelineStageCriterionRunner(CriterionRunner):
         self, criterion: AcceptanceCriterion, ctx: VerificationContext
     ) -> CriterionResult:
         stage = str(criterion.spec.get("stage") or "").strip()
+        service_id = str(criterion.spec.get("service_id") or "").strip()
         values = _pipeline_evidence_values(ctx)
-        passed_ref = f"pipeline_stage:{stage}:passed"
-        failed_ref = f"pipeline_stage:{stage}:failed"
+        passed_ref = (
+            f"pipeline_stage:{stage}:passed:{service_id}"
+            if service_id
+            else f"pipeline_stage:{stage}:passed"
+        )
+        failed_ref = (
+            f"pipeline_stage:{stage}:failed:{service_id}"
+            if service_id
+            else f"pipeline_stage:{stage}:failed"
+        )
         if passed_ref in values:
             return CriterionResult(
                 criterion=criterion,
@@ -416,7 +424,18 @@ class DeploymentHealthCriterionRunner(CriterionRunner):
         self, criterion: AcceptanceCriterion, ctx: VerificationContext
     ) -> CriterionResult:
         values = _pipeline_evidence_values(ctx)
-        if "deployment_health:passed" in values:
+        service_id = str(criterion.spec.get("service_id") or "").strip()
+        passed_ref = f"deployment_health:passed:{service_id}" if service_id else None
+        failed_ref = f"deployment_health:failed:{service_id}" if service_id else None
+        has_passed = "deployment_health:passed" in values or (
+            passed_ref is not None and passed_ref in values
+        )
+        has_failed = (
+            "deployment_health:failed" in values
+            or (failed_ref is not None and failed_ref in values)
+            or (not service_id and _first_prefixed(values, "deployment_health:failed:") is not None)
+        )
+        if has_passed:
             refs = [
                 value
                 for value in values
@@ -429,7 +448,7 @@ class DeploymentHealthCriterionRunner(CriterionRunner):
                 message="preview deployment is healthy",
                 evidence=tuple(EvidenceRef(kind="deployment", ref=value) for value in refs),
             )
-        if "deployment_health:failed" in values:
+        if has_failed:
             return CriterionResult(
                 criterion=criterion,
                 passed=False,
@@ -451,6 +470,7 @@ class PreviewE2ECriterionRunner(CriterionRunner):
         self, criterion: AcceptanceCriterion, ctx: VerificationContext
     ) -> CriterionResult:
         scenario = str(criterion.spec.get("name") or criterion.spec.get("path") or "").strip()
+        service_id = str(criterion.spec.get("service_id") or "").strip()
         values = _pipeline_evidence_values(ctx) | _artifact_text_values(
             ctx,
             "browser_e2e",
@@ -460,13 +480,22 @@ class PreviewE2ECriterionRunner(CriterionRunner):
             "evidence_refs",
         )
         missing: list[str] = []
-        scenario_ref = f"preview_e2e:{scenario}"
-        if scenario_ref not in values and f"browser_e2e:{scenario}" not in values:
+        scenario_ref = (
+            f"preview_e2e:{service_id}:{scenario}" if service_id else f"preview_e2e:{scenario}"
+        )
+        browser_ref = (
+            f"browser_e2e:{service_id}:{scenario}" if service_id else f"browser_e2e:{scenario}"
+        )
+        if scenario_ref not in values and browser_ref not in values:
             missing.append(scenario_ref)
-        if not _first_prefixed(values, "preview_url:"):
+        preview_prefix = f"preview_url:{service_id}:" if service_id else "preview_url:"
+        if not _first_prefixed(values, preview_prefix):
             missing.append("preview_url")
-        if "deployment_health:passed" not in values:
-            missing.append("deployment_health:passed")
+        health_ref = (
+            f"deployment_health:passed:{service_id}" if service_id else "deployment_health:passed"
+        )
+        if health_ref not in values:
+            missing.append(health_ref)
         if missing:
             return CriterionResult(
                 criterion=criterion,
@@ -483,7 +512,7 @@ class PreviewE2ECriterionRunner(CriterionRunner):
                 EvidenceRef(kind="preview_e2e", ref=value)
                 for value in values
                 if value.startswith(("preview_e2e:", "browser_e2e:", "preview_url:"))
-                or value == "deployment_health:passed"
+                or value.startswith("deployment_health:passed")
             ),
         )
 
@@ -908,7 +937,10 @@ def _pipeline_evidence_values(ctx: VerificationContext) -> set[str]:
 
 def _has_pipeline_success_evidence(ctx: VerificationContext) -> bool:
     values = _pipeline_evidence_values(ctx)
-    return "ci_pipeline:passed" in values or _first_prefixed(values, "pipeline_run:success:") is not None
+    return (
+        "ci_pipeline:passed" in values
+        or _first_prefixed(values, "pipeline_run:success:") is not None
+    )
 
 
 def _has_structured_verification_ref(evidence: set[str], expected_ref: str) -> bool:

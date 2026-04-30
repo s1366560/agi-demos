@@ -7,6 +7,7 @@ Provides REST API endpoints for managing persistent sandboxes per project:
 """
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -743,6 +744,7 @@ def _filter_proxy_headers(headers: Any) -> dict[str, str]:
         "content-length",
         "connection",
         "authorization",
+        "accept-encoding",
         "cookie",
         "proxy-authorization",
         "x-forwarded-for",
@@ -788,6 +790,7 @@ def _rewrite_http_service_content(
         content_type.startswith("text/html")
         or content_type.startswith("application/javascript")
         or content_type.startswith("text/javascript")
+        or content_type.startswith("text/css")
     ):
         return content_bytes
 
@@ -795,34 +798,125 @@ def _rewrite_http_service_content(
     proxy_prefix = _build_http_preview_proxy_url(project_id, service_id)
     ws_proxy_prefix = _build_http_preview_ws_proxy_url(project_id, service_id)
 
-    def _append_token(url: str) -> str:
-        if not token_param:
-            return url
-        delimiter = "&" if "?" in url else "?"
-        return f"{url}{delimiter}token={token_param}"
-
     def _rewrite_root_relative(match: re.Match[str]) -> str:
         attr = match.group(1)
         quote = match.group(2)
         path_part = match.group(3)
-        proxied = _append_token(f"{proxy_prefix}{path_part}")
+        proxied = _append_proxy_token(f"{proxy_prefix}{path_part}", token_param)
         return f"{attr}={quote}{proxied}"
 
     content_str = re.sub(
-        r'(href|src|action)=(["\'])/([^"\']*)', _rewrite_root_relative, content_str
+        r'(href|src|action)=(["\'])/(?!/)([^"\']*)',
+        _rewrite_root_relative,
+        content_str,
     )
 
-    ws_with_token = _append_token(ws_proxy_prefix)
+    def _rewrite_url_call(match: re.Match[str]) -> str:
+        quote = match.group(1) or ""
+        path_part = match.group(2)
+        proxied = _append_proxy_token(f"{proxy_prefix}{path_part}", token_param)
+        return f"url({quote}{proxied}{quote})"
+
+    content_str = re.sub(
+        r"url\((['\"]?)/(?!/)([^)'\"]+)\1\)",
+        _rewrite_url_call,
+        content_str,
+    )
+
+    def _rewrite_browser_http_call(match: re.Match[str]) -> str:
+        call = match.group(1)
+        quote = match.group(2)
+        path_part = match.group(3)
+        proxied = _append_proxy_token(f"{proxy_prefix}{path_part}", token_param)
+        return f"{call}({quote}{proxied}"
+
+    content_str = re.sub(
+        r"\b(fetch|EventSource)\((['\"])/(?!/)([^'\"]*)",
+        _rewrite_browser_http_call,
+        content_str,
+    )
+
     content_str = content_str.replace(
-        'ws://" + location.host + "/', f'ws://" + location.host + "{ws_with_token}'
+        'ws://" + location.host + "/', f'ws://" + location.host + "{ws_proxy_prefix}'
     )
     content_str = content_str.replace(
-        'wss://" + location.host + "/', f'wss://" + location.host + "{ws_with_token}'
+        'wss://" + location.host + "/', f'wss://" + location.host + "{ws_proxy_prefix}'
     )
-    content_str = content_str.replace('new WebSocket("/', f'new WebSocket("{ws_with_token}')
-    content_str = content_str.replace("new WebSocket('/", f"new WebSocket('{ws_with_token}")
+
+    def _rewrite_websocket_call(match: re.Match[str]) -> str:
+        quote = match.group(1)
+        path_part = match.group(2)
+        proxied = _append_proxy_token(f"{ws_proxy_prefix}{path_part}", token_param)
+        return f"new WebSocket({quote}{proxied}"
+
+    content_str = re.sub(
+        r"new WebSocket\((['\"])/(?!/)([^'\"]*)",
+        _rewrite_websocket_call,
+        content_str,
+    )
 
     return content_str.encode("utf-8")
+
+
+def _append_proxy_token(url: str, token_param: str) -> str:
+    if not token_param or "token=" in url:
+        return url
+    delimiter = "&" if "?" in url else "?"
+    return f"{url}{delimiter}token={token_param}"
+
+
+def _proxy_cookie_seed_token(request: Request) -> str:
+    """Return a verified-looking API token that can seed proxy cookie auth."""
+    query_token = request.query_params.get("token", "")
+    if query_token.startswith("ms_sk_"):
+        return query_token
+
+    authorization = request.headers.get("authorization", "")
+    if authorization.startswith("Bearer "):
+        api_key = authorization[7:]
+    elif authorization.startswith("Token "):
+        api_key = authorization[6:]
+    else:
+        api_key = authorization
+
+    if api_key.startswith("ms_sk_"):
+        return api_key
+
+    return ""
+
+
+def _rewrite_http_service_location(
+    location: str,
+    *,
+    project_id: str,
+    service_id: str,
+    token_param: str,
+    upstream_base_url: str,
+) -> str:
+    """Rewrite upstream redirects so the browser remains inside the service proxy."""
+    if not location:
+        return location
+
+    proxy_prefix = _build_http_preview_proxy_url(project_id, service_id)
+    parsed_location = urlparse(location)
+    upstream = urlparse(upstream_base_url)
+
+    if parsed_location.scheme and parsed_location.netloc:
+        if parsed_location.netloc != upstream.netloc:
+            return location
+        path_part = parsed_location.path.lstrip("/")
+        target = f"{proxy_prefix}{path_part}"
+        if parsed_location.query:
+            target = f"{target}?{parsed_location.query}"
+        return _append_proxy_token(target, token_param)
+
+    if location.startswith("//"):
+        return location
+
+    if location.startswith("/"):
+        return _append_proxy_token(f"{proxy_prefix}{location.lstrip('/')}", token_param)
+
+    return _append_proxy_token(f"{proxy_prefix}{location}", token_param)
 
 
 async def _connect_http_service_upstream(ws_target: str, origin: str) -> Any:
@@ -839,6 +933,109 @@ async def _connect_http_service_upstream(ws_target: str, origin: str) -> Any:
         additional_headers={"Origin": origin},
         proxy=None,
     )
+
+
+def _sandbox_exec_target_url(target_url: str) -> str:
+    """Rewrite a sandbox bridge URL to loopback for in-container HTTP fetches."""
+    parsed = urlparse(target_url)
+    if not parsed.hostname or parsed.hostname in {"127.0.0.1", "localhost"}:
+        return target_url
+    netloc = "127.0.0.1"
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+def _decode_sandbox_exec_http_response(output: bytes) -> tuple[int, dict[str, str], bytes]:
+    """Decode the JSON envelope returned by the sandbox exec HTTP fetcher."""
+    payload = json.loads(output.decode("utf-8"))
+    if payload.get("error"):
+        raise RuntimeError(str(payload["error"]))
+    body = base64.b64decode(str(payload.get("body_b64") or ""))
+    headers = {
+        str(key).lower(): str(value)
+        for key, value in dict(payload.get("headers") or {}).items()
+        if value is not None
+    }
+    return int(payload.get("status") or 502), headers, body
+
+
+async def _request_http_service_via_sandbox_exec(
+    *,
+    service_info: HttpServiceProxyInfo,
+    target_url: str,
+    method: str,
+    headers: dict[str, str],
+    body: bytes,
+) -> tuple[int, dict[str, str], bytes]:
+    """Fetch a sandbox-internal HTTP service from inside the sandbox container.
+
+    Docker bridge IPs are not reliably reachable from the host on Docker
+    Desktop. The preview proxy therefore falls back to an in-container fetch
+    without exposing or reserving a host port.
+    """
+    if not service_info.sandbox_id:
+        raise RuntimeError("sandbox service has no sandbox_id")
+
+    adapter = get_sandbox_adapter()
+    docker_client = getattr(adapter, "_docker", None)
+    if docker_client is None:
+        raise RuntimeError("sandbox adapter Docker client unavailable")
+
+    payload = {
+        "method": method,
+        "url": _sandbox_exec_target_url(target_url),
+        "headers": headers,
+        "body_b64": base64.b64encode(body).decode("ascii"),
+    }
+    payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    script = r"""
+import base64
+import json
+import sys
+import urllib.error
+import urllib.request
+
+payload = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+body = base64.b64decode(payload.get("body_b64") or "")
+method = payload.get("method") or "GET"
+data = None if method in {"GET", "HEAD"} else body
+request = urllib.request.Request(
+    payload["url"],
+    data=data,
+    headers=payload.get("headers") or {},
+    method=method,
+)
+try:
+    with urllib.request.urlopen(request, timeout=55) as response:
+        response_body = response.read()
+        output = {
+            "status": response.status,
+            "headers": dict(response.headers.items()),
+            "body_b64": base64.b64encode(response_body).decode("ascii"),
+        }
+except urllib.error.HTTPError as exc:
+    response_body = exc.read()
+    output = {
+        "status": exc.code,
+        "headers": dict(exc.headers.items()),
+        "body_b64": base64.b64encode(response_body).decode("ascii"),
+    }
+except Exception as exc:
+    output = {"error": f"{type(exc).__name__}: {exc}"}
+print(json.dumps(output))
+"""
+
+    def _exec_fetch() -> tuple[int, bytes]:
+        container = docker_client.containers.get(service_info.sandbox_id)
+        result = container.exec_run(["python3", "-c", script, payload_b64])
+        return int(result.exit_code or 0), cast(bytes, result.output or b"")
+
+    loop = asyncio.get_running_loop()
+    exit_code, output = await loop.run_in_executor(None, _exec_fetch)
+    if exit_code != 0:
+        raise RuntimeError(output.decode("utf-8", errors="replace") or f"exit {exit_code}")
+    return _decode_sandbox_exec_http_response(output)
 
 
 # ============================================================================
@@ -2032,48 +2229,80 @@ async def proxy_project_http_service(
     target_url = _build_upstream_http_url(service_info.service_url, path, query_pairs)
 
     try:
-        async with httpx.AsyncClient(timeout=60.0, verify=False, follow_redirects=False) as client:
-            body = await request.body()
-            headers = _filter_proxy_headers(request.headers)
-            upstream_response = await client.request(
-                request.method,
-                target_url,
-                headers=headers,
-                content=body,
-            )
-
-            content_type = upstream_response.headers.get("content-type", "application/octet-stream")
-            token_param = request.query_params.get("token", "")
-            content = _rewrite_http_service_content(
-                upstream_response.content,
-                content_type,
-                project_id,
-                service_id,
-                token_param,
-            )
-
-            response_obj = Response(
-                content=content,
-                status_code=upstream_response.status_code,
-                headers={"content-type": content_type},
-            )
-
-            cache_control = upstream_response.headers.get("cache-control")
-            if cache_control:
-                response_obj.headers["cache-control"] = cache_control
-
-            if token_param:
-                response_obj.set_cookie(
-                    key="desktop_token",
-                    value=token_param,
-                    httponly=True,
-                    samesite="strict",
-                    max_age=86400,
-                    path=f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy",
+        body = await request.body()
+        headers = _filter_proxy_headers(request.headers)
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=2.0),
+                verify=False,
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
+                upstream_response = await client.request(
+                    request.method,
+                    target_url,
+                    headers=headers,
+                    content=body,
                 )
+                upstream_status_code = upstream_response.status_code
+                upstream_headers = upstream_response.headers
+                upstream_content = upstream_response.content
+        except httpx.RequestError:
+            (
+                upstream_status_code,
+                upstream_headers,
+                upstream_content,
+            ) = await _request_http_service_via_sandbox_exec(
+                service_info=service_info,
+                target_url=target_url,
+                method=request.method,
+                headers=headers,
+                body=body,
+            )
 
-            return response_obj
-    except httpx.RequestError as e:
+        content_type = upstream_headers.get("content-type", "application/octet-stream")
+        token_param = request.query_params.get("token", "")
+        cookie_seed_token = _proxy_cookie_seed_token(request)
+        content = _rewrite_http_service_content(
+            upstream_content,
+            content_type,
+            project_id,
+            service_id,
+            token_param,
+        )
+
+        response_obj = Response(
+            content=content,
+            status_code=upstream_status_code,
+            headers={"content-type": content_type},
+        )
+
+        cache_control = upstream_headers.get("cache-control")
+        if cache_control:
+            response_obj.headers["cache-control"] = cache_control
+
+        location = upstream_headers.get("location")
+        if location:
+            response_obj.headers["location"] = _rewrite_http_service_location(
+                location,
+                project_id=project_id,
+                service_id=service_id,
+                token_param=token_param,
+                upstream_base_url=service_info.service_url,
+            )
+
+        if cookie_seed_token:
+            response_obj.set_cookie(
+                key="desktop_token",
+                value=cookie_seed_token,
+                httponly=True,
+                samesite="strict",
+                max_age=86400,
+                path=f"/api/v1/projects/{project_id}/sandbox/http-services/{service_id}/proxy",
+            )
+
+        return response_obj
+    except (httpx.RequestError, RuntimeError) as e:
         error_detail = str(e) or type(e).__name__
         logger.error(
             "HTTP service proxy error for %s (%s): %s", service_id, target_url, error_detail
@@ -2099,7 +2328,7 @@ async def proxy_project_http_service_websocket(
     project_id: str,
     service_id: str,
     path: str = "",
-    current_user: User = Depends(get_current_user_from_header_or_query),
+    current_user: User = Depends(get_current_user_from_desktop_proxy),
     db: AsyncSession = Depends(get_db),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher_for_websocket),
     redis_client: redis.Redis | None = Depends(get_http_service_redis_client_for_websocket),

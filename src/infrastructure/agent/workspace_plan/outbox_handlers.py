@@ -14,6 +14,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
+import redis.asyncio as redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,6 +109,7 @@ from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanO
 from src.infrastructure.agent.workspace_plan.pipeline import (
     SANDBOX_NATIVE_PROVIDER,
     PipelineContractSpec,
+    PipelineServiceSpec,
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
 )
@@ -1259,7 +1261,9 @@ def make_attempt_retry_handler() -> WorkspacePlanOutboxHandler:
     return make_handoff_resume_handler()
 
 
-def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa: C901, PLR0915
+def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
+    *, redis_client: redis.Redis | None = None
+) -> WorkspacePlanOutboxHandler:
     """Build a handler that runs harness-native CI/CD in the project sandbox."""
 
     async def _handle(  # noqa: C901, PLR0912, PLR0915
@@ -1348,7 +1352,13 @@ def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa
             auto_deploy=contract.auto_deploy,
             preview_port=contract.preview_port,
             health_url=contract.health_url,
-            metadata={"source": "workspace_plan.pipeline_run_requested"},
+            metadata={
+                "source": "workspace_plan.pipeline_run_requested",
+                "agent_managed": contract.agent_managed,
+                "contract_source": contract.contract_source,
+                "contract_confidence": contract.contract_confidence,
+                "services": contract.services_json(),
+            },
         )
         run = await pipeline_repo.create_run(
             contract_id=contract_model.id,
@@ -1363,7 +1373,7 @@ def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa
         await _mark_pipeline_running(session=session, plan=plan, node=node, run_id=run.id)
 
         provider = SandboxNativePipelineProvider(
-            _WorkspaceSandboxCommandRunner(
+            runner := _WorkspaceSandboxCommandRunner(
                 project_id=workspace.project_id,
                 tenant_id=workspace.tenant_id,
             )
@@ -1371,9 +1381,9 @@ def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa
         stage_results = []
         evidence_refs: list[str] = []
         failure_reason: str | None = None
-        deployment_status: str | None = None
-        deployment_pid: int | None = None
-        preview_url = _pipeline_preview_url(contract.health_url, contract.preview_port)
+        service_status: dict[str, str] = {}
+        service_pid: dict[str, int | None] = {}
+        preview_urls: dict[str, str] = {}
 
         for stage in contract.stages:
             stage_row = await pipeline_repo.create_stage_run(
@@ -1381,7 +1391,7 @@ def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa
                 workspace_id=workspace_id,
                 stage=stage.stage,
                 command=stage.command,
-                metadata={"required": stage.required},
+                metadata={"required": stage.required, "service_id": stage.service_id},
             )
             stage_result = await provider.run_stage(contract, stage)
             stage_results.append(stage_result)
@@ -1393,50 +1403,110 @@ def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa
                 stderr_preview=stage_result.stderr_preview,
                 log_ref=stage_result.log_ref,
                 artifact_refs=list(stage_result.artifact_refs),
-                metadata={"duration_ms_observed": stage_result.duration_ms},
+                metadata={
+                    "duration_ms_observed": stage_result.duration_ms,
+                    "service_id": stage.service_id,
+                },
             )
+            service_suffix = f":{stage.service_id}" if stage.service_id else ""
             if stage_result.passed:
                 evidence_refs.append(f"pipeline_stage:{stage.stage}:passed")
+                if service_suffix:
+                    evidence_refs.append(f"pipeline_stage:{stage.stage}:passed{service_suffix}")
             else:
                 evidence_refs.append(f"pipeline_stage:{stage.stage}:failed")
-            if stage.stage == "deploy" and stage_result.passed:
-                deployment_status = "running"
-                deployment_pid = _first_int(stage_result.stdout_preview)
-            if stage.stage == "health":
-                deployment_status = "healthy" if stage_result.passed else "unhealthy"
-                evidence_refs.append(
-                    "deployment_health:passed"
-                    if stage_result.passed
-                    else "deployment_health:failed"
+                if service_suffix:
+                    evidence_refs.append(f"pipeline_stage:{stage.stage}:failed{service_suffix}")
+            if stage.service_id and stage.stage == "deploy":
+                service_status[stage.service_id] = "running" if stage_result.passed else "failed"
+                service_pid[stage.service_id] = (
+                    _first_int(stage_result.stdout_preview) if stage_result.passed else None
                 )
+            if stage.stage == "health":
+                health_status = "healthy" if stage_result.passed else "unhealthy"
+                if stage.service_id:
+                    service_status[stage.service_id] = health_status
+                    health_ref_status = "passed" if stage_result.passed else "failed"
+                    evidence_refs.append(
+                        f"deployment_health:{health_ref_status}:{stage.service_id}"
+                    )
+                else:
+                    evidence_refs.append(
+                        "deployment_health:passed"
+                        if stage_result.passed
+                        else "deployment_health:failed"
+                    )
             if not stage_result.passed and stage.required:
                 failure_reason = f"stage {stage.stage} failed with exit {stage_result.exit_code}"
                 break
 
         run_status = "success" if failure_reason is None else "failed"
+        if contract.services:
+            for service_spec in contract.services:
+                status_value = service_status.get(service_spec.service_id)
+                if status_value not in {"running", "healthy", "unhealthy"}:
+                    continue
+                preview_url, ws_preview_url, service_url = await _register_pipeline_service_preview(
+                    project_id=workspace.project_id,
+                    sandbox_runner=runner,
+                    redis_client=redis_client,
+                    service=service_spec,
+                )
+                preview_urls[service_spec.service_id] = preview_url
+                evidence_refs.append(f"preview_url:{service_spec.service_id}:{preview_url}")
+                evidence_refs.append(f"deployment:{service_spec.service_id}:{status_value}")
+                await pipeline_repo.upsert_deployment(
+                    workspace_id=workspace_id,
+                    plan_id=plan_id,
+                    node_id=node_id,
+                    pipeline_run_id=run.id,
+                    provider=contract.provider,
+                    status=status_value,
+                    command=service_spec.start_command,
+                    pid=service_pid.get(service_spec.service_id),
+                    port=service_spec.internal_port,
+                    preview_url=preview_url,
+                    health_url=service_spec.internal_health_url,
+                    rollback_ref=_pipeline_commit_ref(node),
+                    log_ref=None,
+                    service_id=service_spec.service_id,
+                    service_name=service_spec.name,
+                    service_url=service_url,
+                    ws_preview_url=ws_preview_url,
+                    required=service_spec.required,
+                    metadata={"pipeline_status": run_status},
+                )
+
+        if contract.services and _required_services_healthy(contract.services, service_status):
+            evidence_refs.append("deployment_health:passed")
         evidence_refs.insert(
             0,
             f"ci_pipeline:{'passed' if run_status == 'success' else 'failed'}",
         )
         evidence_refs.append(f"pipeline_run:{run_status}:{run.id}")
-        if preview_url:
-            evidence_refs.append(f"preview_url:{preview_url}")
         await pipeline_repo.finish_run(
             run,
             status=run_status,
             reason=failure_reason,
-            metadata={"stage_count": len(stage_results)},
+            metadata={
+                "stage_count": len(stage_results),
+                "service_count": len(contract.services),
+                "preview_urls": preview_urls,
+            },
         )
-        if deployment_status or contract.auto_deploy:
+        preview_url = next(iter(preview_urls.values()), None) or _pipeline_preview_url(
+            contract.health_url,
+            contract.preview_port,
+        )
+        if not contract.services and (contract.auto_deploy or contract.health_url):
             await pipeline_repo.upsert_deployment(
                 workspace_id=workspace_id,
                 plan_id=plan_id,
                 node_id=node_id,
                 pipeline_run_id=run.id,
                 provider=contract.provider,
-                status=deployment_status or ("skipped" if not contract.deploy_command else "running"),
+                status="skipped" if not contract.deploy_command else run_status,
                 command=contract.deploy_command,
-                pid=deployment_pid,
                 port=contract.preview_port,
                 preview_url=preview_url,
                 health_url=contract.health_url,
@@ -1527,7 +1597,9 @@ async def _mark_pipeline_skipped(
         }
     )
     plan.replace_node(
-        replace(node, execution=TaskExecution.REPORTED, metadata=metadata, updated_at=datetime.now(UTC))
+        replace(
+            node, execution=TaskExecution.REPORTED, metadata=metadata, updated_at=datetime.now(UTC)
+        )
     )
     await SqlPlanRepository(session).save(plan)
 
@@ -1658,11 +1730,59 @@ def _pipeline_commit_ref(node: PlanNode) -> str | None:
     return None
 
 
+async def _register_pipeline_service_preview(
+    *,
+    project_id: str,
+    sandbox_runner: _WorkspaceSandboxCommandRunner,
+    redis_client: redis.Redis | None,
+    service: PipelineServiceSpec,
+) -> tuple[str, str | None, str]:
+    """Register a pipeline-managed service with the sandbox HTTP proxy."""
+    from src.infrastructure.adapters.primary.web.routers import project_sandbox
+
+    sandbox_id, adapter = await sandbox_runner.ensure_sandbox()
+    sandbox_ip = await project_sandbox._resolve_sandbox_container_ip(adapter, sandbox_id)
+    service_url = (
+        f"{service.internal_scheme}://{sandbox_ip}:{service.internal_port}{service.path_prefix}"
+    )
+    preview_url = project_sandbox._build_http_preview_proxy_url(project_id, service.service_id)
+    ws_preview_url = project_sandbox._build_http_preview_ws_proxy_url(
+        project_id,
+        service.service_id,
+    )
+    now_iso = datetime.now(UTC).isoformat()
+    restart_token = str(int(datetime.now(UTC).timestamp() * 1000))
+    service_info = project_sandbox.HttpServiceProxyInfo(
+        service_id=service.service_id,
+        name=service.name,
+        source_type=project_sandbox.HttpServiceSourceType.SANDBOX_INTERNAL,
+        status="running",
+        service_url=service_url,
+        preview_url=preview_url,
+        ws_preview_url=ws_preview_url,
+        sandbox_id=sandbox_id,
+        auto_open=service.auto_open,
+        restart_token=restart_token,
+        updated_at=now_iso,
+    )
+    await project_sandbox._upsert_http_service(project_id, service_info, redis_client)
+    return preview_url, ws_preview_url, service_url
+
+
+def _required_services_healthy(
+    services: Iterable[PipelineServiceSpec],
+    service_status: Mapping[str, str],
+) -> bool:
+    required_services = [service for service in services if service.required]
+    if not required_services:
+        return False
+    return all(service_status.get(service.service_id) == "healthy" for service in required_services)
+
+
 def _pipeline_preview_url(health_url: str | None, port: int | None) -> str | None:
     if health_url:
         return health_url
-    if port:
-        return f"http://127.0.0.1:{port}"
+    _ = port
     return None
 
 
@@ -1967,7 +2087,7 @@ def _worktree_setup_command(
             f"cd {code_root}",
             'repo_name="$(basename "$(pwd)")"',
             'fallback_remote="$(dirname "$(pwd)")/.memstack/git-remotes/${repo_name}.git"',
-            'if ! git remote get-url origin >/dev/null 2>&1; then',
+            "if ! git remote get-url origin >/dev/null 2>&1; then",
             '  mkdir -p "$(dirname "$fallback_remote")"',
             '  git init --bare "$fallback_remote" >/dev/null',
             '  git remote add origin "$fallback_remote"',
@@ -2151,6 +2271,25 @@ class _WorkspaceSandboxCommandRunner:
                 "stdout": "",
                 "stderr": f"command not allowed by workspace harness: {command}",
             }
+        sandbox_id, adapter = await self.ensure_sandbox()
+        raw = await adapter.call_tool(
+            sandbox_id,
+            "bash",
+            {
+                "command": command,
+                "timeout": timeout,
+            },
+            timeout=float(timeout) + 5.0,
+        )
+        text = _tool_result_text(raw)
+        is_error = bool(raw.get("is_error") or raw.get("isError"))
+        return {
+            "exit_code": 1 if is_error else 0,
+            "stdout": "" if is_error else text,
+            "stderr": text if is_error else "",
+        }
+
+    async def ensure_sandbox(self) -> tuple[str, MCPSandboxAdapter]:
         from src.infrastructure.agent.state.agent_worker_state import (
             _resolve_project_sandbox_id,
             get_mcp_sandbox_adapter,
@@ -2173,23 +2312,7 @@ class _WorkspaceSandboxCommandRunner:
             )
         if not sandbox_id:
             raise RuntimeError(f"no sandbox found for project {self._project_id}")
-
-        raw = await adapter.call_tool(
-            sandbox_id,
-            "bash",
-            {
-                "command": command,
-                "timeout": timeout,
-            },
-            timeout=float(timeout) + 5.0,
-        )
-        text = _tool_result_text(raw)
-        is_error = bool(raw.get("is_error") or raw.get("isError"))
-        return {
-            "exit_code": 1 if is_error else 0,
-            "stdout": "" if is_error else text,
-            "stderr": text if is_error else "",
-        }
+        return sandbox_id, adapter
 
     def _command_allowed(self, command: str) -> bool:
         if self._allowed_commands is None:
@@ -2273,8 +2396,10 @@ def _node_allowed_sandbox_commands(node: PlanNode) -> set[str]:
 def _is_structural_sandbox_command(command: str) -> bool:
     if command.startswith('[ -e "') and 'wc -c < "' in command:
         return True
-    return "\n" not in command and command.startswith("git -C ") and command.endswith(
-        " status --short"
+    return (
+        "\n" not in command
+        and command.startswith("git -C ")
+        and command.endswith(" status --short")
     )
 
 

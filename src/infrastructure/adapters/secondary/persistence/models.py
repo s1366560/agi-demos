@@ -3465,6 +3465,11 @@ class WorkspaceDeploymentModel(Base):
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
     process_group_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    service_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    service_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    ws_preview_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     preview_url: Mapped[str | None] = mapped_column(String, nullable=True)
     health_url: Mapped[str | None] = mapped_column(String, nullable=True)
     restart_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -3482,6 +3487,7 @@ class WorkspaceDeploymentModel(Base):
     __table_args__ = (
         Index("ix_workspace_deployments_workspace_created", "workspace_id", "created_at"),
         Index("ix_workspace_deployments_plan_node", "plan_id", "node_id"),
+        Index("ix_workspace_deployments_plan_node_service", "plan_id", "node_id", "service_id"),
         Index("ix_workspace_deployments_pipeline_run", "pipeline_run_id"),
         Index("ix_workspace_deployments_status", "status"),
     )

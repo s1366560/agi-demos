@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -175,6 +176,69 @@ async def test_verifier_ignores_stale_attempt_status_after_pipeline_success() ->
     assert report.passed
 
 
+@pytest.mark.asyncio
+async def test_verifier_requires_named_service_deployment_health() -> None:
+    verifier = AcceptanceCriterionVerifier()
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_evidence_refs": [
+                "ci_pipeline:passed",
+                "deployment_health:passed:frontend",
+                "deployment_health:failed:admin",
+            ],
+        }
+    )
+    node = replace(
+        node,
+        acceptance_criteria=(
+            AcceptanceCriterion(
+                kind=CriterionKind.DEPLOYMENT_HEALTH,
+                spec={"service_id": "frontend"},
+                required=True,
+            ),
+        ),
+    )
+
+    report = await verifier.verify(
+        VerificationContext(workspace_id="ws-1", node=node, stdout="worker completed")
+    )
+
+    assert report.passed
+
+
+@pytest.mark.asyncio
+async def test_verifier_blocks_required_service_health_failure() -> None:
+    verifier = AcceptanceCriterionVerifier()
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_evidence_refs": [
+                "ci_pipeline:passed",
+                "deployment_health:failed:frontend",
+            ],
+        }
+    )
+    node = replace(
+        node,
+        acceptance_criteria=(
+            AcceptanceCriterion(
+                kind=CriterionKind.DEPLOYMENT_HEALTH,
+                spec={"service_id": "frontend"},
+                required=True,
+            ),
+        ),
+    )
+
+    report = await verifier.verify(
+        VerificationContext(workspace_id="ws-1", node=node, stdout="worker completed")
+    )
+
+    assert not report.passed
+
+
 def test_pipeline_contract_uses_workspace_delivery_metadata() -> None:
     contract = build_pipeline_contract_from_metadata(
         workspace_metadata={
@@ -192,3 +256,59 @@ def test_pipeline_contract_uses_workspace_delivery_metadata() -> None:
     assert contract.provider == "sandbox_native"
     assert contract.code_root == "/workspace/app"
     assert [stage.stage for stage in contract.stages] == ["test", "build", "health"]
+
+
+def test_pipeline_contract_maps_legacy_deploy_fields_to_default_service() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "deploy_command": "pnpm dev --host 0.0.0.0 --port 4173",
+                "preview_port": 4173,
+                "health_command": "curl -fsS http://127.0.0.1:4173/",
+            }
+        },
+        fallback_code_root="/workspace/app",
+    )
+
+    assert [service.service_id for service in contract.services] == ["default"]
+    assert contract.services[0].internal_port == 4173
+    assert contract.services[0].start_command.startswith("pnpm dev")
+    assert [
+        (stage.stage, stage.service_id)
+        for stage in contract.stages
+        if stage.stage in {"deploy", "health"}
+    ] == [("deploy", "default"), ("health", "default")]
+
+
+def test_pipeline_contract_supports_multiple_services() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "services": [
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend",
+                        "start_command": "pnpm dev --host 0.0.0.0 --port 3000",
+                        "internal_port": 3000,
+                        "health_path": "/",
+                        "required": True,
+                    },
+                    {
+                        "service_id": "admin",
+                        "name": "Admin",
+                        "start_command": "pnpm admin --host 0.0.0.0 --port 3001",
+                        "internal_port": 3001,
+                        "health_path": "/admin",
+                        "required": False,
+                    },
+                ]
+            }
+        },
+        fallback_code_root="/workspace/app",
+    )
+
+    assert [service.service_id for service in contract.services] == ["frontend", "admin"]
+    assert [stage.service_id for stage in contract.stages if stage.stage == "deploy"] == [
+        "frontend",
+        "admin",
+    ]

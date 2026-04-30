@@ -9,6 +9,7 @@ import {
 import type {
   Workspace,
   WorkspaceCollaborationMode,
+  WorkspaceDeliveryServiceConfig,
   WorkspaceMemberRole,
   WorkspaceMetadata,
   WorkspaceUseCase,
@@ -94,6 +95,9 @@ export interface SettingsDraft {
   minimumVerificationGrade: WorkspaceVerificationGrade;
   requiredArtifactPrefixes: string;
   deliveryProvider: string;
+  deliveryAgentManaged: boolean;
+  deliveryContractSource: string;
+  deliveryContractConfidence: number;
   deliveryTimeoutSeconds: number;
   deliveryAutoDeploy: boolean;
   deliveryPreviewPort: number;
@@ -104,6 +108,7 @@ export interface SettingsDraft {
   deliveryTestCommand: string;
   deliveryBuildCommand: string;
   deliveryDeployCommand: string;
+  deliveryServices: WorkspaceDeliveryServiceConfig[];
   rawMetadata: string;
 }
 
@@ -127,6 +132,9 @@ export function syncDraftFromWorkspace(workspace: Workspace): SettingsDraft {
     minimumVerificationGrade: policy.minimum_verification_grade ?? 'warn',
     requiredArtifactPrefixes: formatPrefixDraft(policy.required_artifact_prefixes),
     deliveryProvider: asString(delivery.provider) || 'sandbox_native',
+    deliveryAgentManaged: delivery.agent_managed ?? true,
+    deliveryContractSource: asString(delivery.contract_source) || 'metadata',
+    deliveryContractConfidence: clampConfidence(delivery.contract_confidence),
     deliveryTimeoutSeconds: asNumber(delivery.timeout_seconds, 600),
     deliveryAutoDeploy: delivery.auto_deploy ?? true,
     deliveryPreviewPort: asNumber(delivery.preview_port, 3000),
@@ -137,6 +145,7 @@ export function syncDraftFromWorkspace(workspace: Workspace): SettingsDraft {
     deliveryTestCommand: asString(delivery.test_command),
     deliveryBuildCommand: asString(delivery.build_command),
     deliveryDeployCommand: asString(delivery.deploy_command),
+    deliveryServices: normaliseDeliveryServices(delivery.services),
     rawMetadata: prettyJson(metadata),
   };
 }
@@ -196,6 +205,9 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
     ...(metadata.delivery_cicd ?? {}),
     provider: draft.deliveryProvider || 'sandbox_native',
     code_root: normalizedCodeRoot || undefined,
+    agent_managed: draft.deliveryAgentManaged,
+    contract_source: draft.deliveryContractSource || 'metadata',
+    contract_confidence: draft.deliveryContractConfidence,
     timeout_seconds: Math.max(1, draft.deliveryTimeoutSeconds || 600),
     auto_deploy: draft.deliveryAutoDeploy,
     preview_port: Math.max(1, draft.deliveryPreviewPort || 3000),
@@ -206,6 +218,7 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
     test_command: draft.deliveryTestCommand.trim() || undefined,
     build_command: draft.deliveryBuildCommand.trim() || undefined,
     deploy_command: draft.deliveryDeployCommand.trim() || undefined,
+    services: normaliseDeliveryServices(draft.deliveryServices),
   };
 
   return { metadata, error: null };
@@ -260,6 +273,97 @@ function asNumber(value: unknown, fallback: number): number {
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function clampConfidence(value: unknown): number {
+  const parsed = asNumber(value, 0);
+  return Math.max(0, Math.min(1, parsed));
+}
+
+export function createBlankDeliveryService(index: number): WorkspaceDeliveryServiceConfig {
+  const suffix = Math.max(1, index);
+  const suffixLabel = String(suffix);
+  return {
+    service_id: suffix === 1 ? 'default' : `service-${suffixLabel}`,
+    name: suffix === 1 ? 'Preview' : `Service ${suffixLabel}`,
+    start_command: '',
+    internal_port: suffix === 1 ? 3000 : 3000 + suffix - 1,
+    internal_scheme: 'http',
+    path_prefix: '/',
+    health_path: '/',
+    required: true,
+    auto_open: suffix === 1,
+  };
+}
+
+export function normaliseDeliveryServices(value: unknown): WorkspaceDeliveryServiceConfig[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item, index): WorkspaceDeliveryServiceConfig | null => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      const serviceId = asServiceId(record.service_id ?? record.id, index + 1);
+      const startCommand = asString(record.start_command ?? record.deploy_command).trim();
+      const port = Math.max(1, Math.trunc(asNumber(record.internal_port ?? record.port, 0)));
+      if (!startCommand || port <= 0) {
+        return null;
+      }
+      const scheme = asString(record.internal_scheme ?? record.scheme) || 'http';
+      return {
+        service_id: serviceId,
+        name: asString(record.name) || serviceId,
+        start_command: startCommand,
+        internal_port: port,
+        internal_scheme: scheme === 'https' ? 'https' : 'http',
+        path_prefix: normalizePath(asString(record.path_prefix) || '/'),
+        health_path: normalizePath(asString(record.health_path) || '/'),
+        health_command: asString(record.health_command).trim() || undefined,
+        required: asBoolean(record.required, true),
+        auto_open: asBoolean(record.auto_open, true),
+      };
+    })
+    .filter((item): item is WorkspaceDeliveryServiceConfig => item !== null);
+}
+
+function asServiceId(value: unknown, index: number): string {
+  const indexLabel = String(index);
+  const raw = asString(value) || `service-${indexLabel}`;
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || `service-${indexLabel}`;
+}
+
+function normalizePath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '/';
+  }
+  return trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')
+    ? trimmed
+    : `/${trimmed}`;
+}
+
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
   }
   return fallback;
 }

@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     User,
     WorkspaceDeploymentModel,
+    WorkspaceModel,
     WorkspacePipelineRunModel,
     WorkspacePipelineStageRunModel,
     WorkspacePlanEventModel,
@@ -170,6 +171,7 @@ class WorkspacePipelineStageRunResponse(BaseModel):
     run_id: str
     stage: str
     status: str
+    service_id: str | None = None
     command: str | None = None
     exit_code: int | None = None
     stdout_preview: str | None = None
@@ -199,13 +201,18 @@ class WorkspaceDeploymentResponse(BaseModel):
     id: str
     provider: str
     status: str
+    service_id: str | None = None
+    service_name: str | None = None
     node_id: str | None = None
     pipeline_run_id: str | None = None
     command: str | None = None
     pid: int | None = None
     port: int | None = None
+    service_url: str | None = None
     preview_url: str | None = None
+    ws_preview_url: str | None = None
     health_url: str | None = None
+    required: bool = True
     restart_count: int = 0
     last_healthy_at: datetime | None = None
     rollback_ref: str | None = None
@@ -214,12 +221,32 @@ class WorkspaceDeploymentResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class WorkspaceDeliveryServiceResponse(BaseModel):
+    service_id: str
+    name: str
+    start_command: str | None = None
+    internal_port: int | None = None
+    internal_scheme: str = "http"
+    path_prefix: str = "/"
+    health_path: str | None = None
+    health_command: str | None = None
+    required: bool = True
+    auto_open: bool = True
+    preview_url: str | None = None
+    status: str = "not_deployed"
+
+
 class WorkspaceDeliverySummaryResponse(BaseModel):
     provider: str = "sandbox_native"
     status: str = "not_configured"
+    contract_source: str = "metadata"
+    contract_confidence: float = 0.0
+    agent_managed: bool = True
     latest_run: WorkspacePipelineRunResponse | None = None
     recent_runs: list[WorkspacePipelineRunResponse] = Field(default_factory=list)
+    services: list[WorkspaceDeliveryServiceResponse] = Field(default_factory=list)
     deployment: WorkspaceDeploymentResponse | None = None
+    deployments: list[WorkspaceDeploymentResponse] = Field(default_factory=list)
     actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
 
 
@@ -520,28 +547,52 @@ async def _to_delivery_summary(
     plan: Plan,
 ) -> WorkspaceDeliverySummaryResponse:
     repo = SqlWorkspacePipelineRepository(db)
+    contract = await repo.get_contract(workspace_id=plan.workspace_id, plan_id=plan.id)
     runs = await repo.latest_runs(plan_id=plan.id, limit=5)
     stages = await repo.stages_for_runs([run.id for run in runs])
-    deployments = await repo.latest_deployments(plan_id=plan.id, limit=1)
+    deployments = await repo.latest_deployments(plan_id=plan.id, limit=20)
     stage_map: dict[str, list[WorkspacePipelineStageRunModel]] = {}
     for stage in stages:
         stage_map.setdefault(stage.run_id, []).append(stage)
     run_responses = [_to_pipeline_run_response(run, stage_map.get(run.id, [])) for run in runs]
-    deployment_response = _to_deployment_response(deployments[0]) if deployments else None
+    deployment_responses = [_to_deployment_response(deployment) for deployment in deployments]
+    deployment_response = deployment_responses[0] if deployment_responses else None
     latest_run = run_responses[0] if run_responses else None
     status = latest_run.status if latest_run is not None else "not_configured"
-    if deployment_response is not None and deployment_response.status in {"unhealthy", "failed"}:
-        status = deployment_response.status
+    if any(
+        item.required and item.status in {"unhealthy", "failed"} for item in deployment_responses
+    ):
+        status = "unhealthy"
+    elif deployment_responses and all(
+        item.status == "healthy" for item in deployment_responses if item.required
+    ):
+        status = "healthy"
+    contract_metadata = dict(contract.metadata_json or {}) if contract is not None else {}
+    services = _to_delivery_services(contract_metadata, deployment_responses)
     return WorkspaceDeliverySummaryResponse(
-        provider=latest_run.provider if latest_run is not None else "sandbox_native",
+        provider=latest_run.provider
+        if latest_run is not None
+        else (contract.provider if contract is not None else "sandbox_native"),
         status=status,
+        contract_source=_metadata_string(contract_metadata.get("contract_source")) or "metadata",
+        contract_confidence=_metadata_float(contract_metadata.get("contract_confidence")),
+        agent_managed=_metadata_bool(contract_metadata.get("agent_managed"), fallback=True),
         latest_run=latest_run,
         recent_runs=run_responses,
+        services=services,
         deployment=deployment_response,
+        deployments=deployment_responses,
         actions={
             "request_pipeline": _action(
                 enabled=plan.status is not PlanStatus.COMPLETED,
                 label="Run pipeline",
+                reason="The plan is already complete."
+                if plan.status is PlanStatus.COMPLETED
+                else None,
+            ),
+            "regenerate_contract": _action(
+                enabled=plan.status is not PlanStatus.COMPLETED,
+                label="Regenerate contract",
                 reason="The plan is already complete."
                 if plan.status is PlanStatus.COMPLETED
                 else None,
@@ -585,11 +636,13 @@ def _to_pipeline_run_response(
 def _to_pipeline_stage_response(
     stage: WorkspacePipelineStageRunModel,
 ) -> WorkspacePipelineStageRunResponse:
+    metadata = dict(stage.metadata_json or {})
     return WorkspacePipelineStageRunResponse(
         id=stage.id,
         run_id=stage.run_id,
         stage=stage.stage,
         status=stage.status,
+        service_id=_metadata_string(metadata.get("service_id")) or None,
         command=stage.command,
         exit_code=stage.exit_code,
         stdout_preview=stage.stdout_preview,
@@ -607,13 +660,18 @@ def _to_deployment_response(deployment: WorkspaceDeploymentModel) -> WorkspaceDe
         id=deployment.id,
         provider=deployment.provider,
         status=deployment.status,
+        service_id=deployment.service_id,
+        service_name=deployment.service_name,
         node_id=deployment.node_id,
         pipeline_run_id=deployment.pipeline_run_id,
         command=deployment.command,
         pid=deployment.pid,
         port=deployment.port,
+        service_url=deployment.service_url,
         preview_url=deployment.preview_url,
+        ws_preview_url=deployment.ws_preview_url,
         health_url=deployment.health_url,
+        required=deployment.required,
         restart_count=deployment.restart_count,
         last_healthy_at=deployment.last_healthy_at,
         rollback_ref=deployment.rollback_ref,
@@ -621,6 +679,59 @@ def _to_deployment_response(deployment: WorkspaceDeploymentModel) -> WorkspaceDe
         created_at=deployment.created_at,
         updated_at=deployment.updated_at,
     )
+
+
+def _to_delivery_services(
+    contract_metadata: Mapping[str, Any],
+    deployments: list[WorkspaceDeploymentResponse],
+) -> list[WorkspaceDeliveryServiceResponse]:
+    deployment_by_service = {
+        deployment.service_id or "default": deployment for deployment in deployments
+    }
+    raw_services = contract_metadata.get("services")
+    services: list[WorkspaceDeliveryServiceResponse] = []
+    if isinstance(raw_services, list):
+        for item in raw_services:
+            if not isinstance(item, Mapping):
+                continue
+            service_id = _metadata_string(item.get("service_id") or item.get("id"))
+            if not service_id:
+                continue
+            deployment = deployment_by_service.get(service_id)
+            services.append(
+                WorkspaceDeliveryServiceResponse(
+                    service_id=service_id,
+                    name=_metadata_string(item.get("name")) or service_id,
+                    start_command=_metadata_string(item.get("start_command")) or None,
+                    internal_port=_metadata_optional_int(item.get("internal_port")),
+                    internal_scheme=_metadata_string(item.get("internal_scheme")) or "http",
+                    path_prefix=_metadata_string(item.get("path_prefix")) or "/",
+                    health_path=_metadata_string(item.get("health_path")) or None,
+                    health_command=_metadata_string(item.get("health_command")) or None,
+                    required=_metadata_bool(item.get("required"), fallback=True),
+                    auto_open=_metadata_bool(item.get("auto_open"), fallback=True),
+                    preview_url=deployment.preview_url if deployment is not None else None,
+                    status=deployment.status if deployment is not None else "not_deployed",
+                )
+            )
+
+    known_ids = {service.service_id for service in services}
+    for deployment in deployments:
+        service_id = deployment.service_id or "default"
+        if service_id in known_ids:
+            continue
+        services.append(
+            WorkspaceDeliveryServiceResponse(
+                service_id=service_id,
+                name=deployment.service_name or service_id,
+                start_command=deployment.command,
+                internal_port=deployment.port,
+                required=deployment.required,
+                preview_url=deployment.preview_url,
+                status=deployment.status,
+            )
+        )
+    return services
 
 
 def _to_iteration_summary(
@@ -696,6 +807,38 @@ def _metadata_int(value: object, *, fallback: int) -> int:
         return max(1, value)
     if isinstance(value, str) and value.isdigit():
         return max(1, int(value))
+    return fallback
+
+
+def _metadata_optional_int(value: object) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    return None
+
+
+def _metadata_float(value: object, *, fallback: float = 0.0) -> float:
+    if isinstance(value, int | float):
+        return max(0.0, min(1.0, float(value)))
+    if isinstance(value, str):
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def _metadata_bool(value: object, *, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
     return fallback
 
 
@@ -2168,6 +2311,95 @@ async def request_workspace_plan_pipeline_run(
             message="Harness-native pipeline run requested.",
             plan_id=plan.id,
             node_id=node.id,
+            outbox_id=outbox.id,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post("/delivery/regenerate-contract", response_model=WorkspacePlanActionResultResponse)
+async def request_workspace_plan_delivery_contract_regeneration(
+    workspace_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Mark the delivery contract for agent-managed regeneration and tick the supervisor."""
+    try:
+        await _ensure_workspace_access(
+            workspace_id=workspace_id,
+            request=request,
+            db=db,
+            current_user=current_user,
+        )
+        plan = await SqlPlanRepository(db).get_by_workspace(workspace_id)
+        if plan is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan_not_found")
+
+        result = await db.execute(
+            refresh_select_statement(
+                select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
+            )
+        )
+        workspace_model = result.scalar_one_or_none()
+        if workspace_model is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workspace_not_found")
+
+        metadata = dict(workspace_model.metadata_json or {})
+        delivery = dict(metadata.get("delivery_cicd") or {})
+        now_iso = datetime.now(UTC).isoformat()
+        delivery.update(
+            {
+                "agent_managed": True,
+                "contract_source": "agent_regeneration_requested",
+                "contract_confidence": 0.0,
+                "regenerate_requested_at": now_iso,
+                "regenerate_requested_by": current_user.id,
+            }
+        )
+        if body.reason:
+            delivery["regenerate_reason"] = body.reason
+        metadata["delivery_cicd"] = delivery
+        workspace_model.metadata_json = metadata
+
+        outbox = await SqlWorkspacePlanOutboxRepository(db).enqueue(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            event_type=SUPERVISOR_TICK_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "plan_id": plan.id,
+                "reason": body.reason or "operator requested delivery contract regeneration",
+            },
+            metadata={"source": "workspace_plan.operator_delivery_regenerate_contract"},
+        )
+        await SqlWorkspacePlanEventRepository(db).append(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            node_id=None,
+            attempt_id=None,
+            event_type="delivery_contract_regeneration_requested",
+            source="operator",
+            payload={
+                "reason": body.reason,
+                "requested_by": current_user.id,
+                "requested_at": now_iso,
+            },
+        )
+        await db.commit()
+        await _publish_plan_updated_event(
+            request=request,
+            workspace_id=workspace_id,
+            plan_id=plan.id,
+            node_id=None,
+            outbox_id=outbox.id,
+            action="operator_delivery_contract_regeneration_requested",
+        )
+        return WorkspacePlanActionResultResponse(
+            ok=True,
+            message="Delivery contract regeneration requested.",
+            plan_id=plan.id,
             outbox_id=outbox.id,
         )
     except Exception as exc:

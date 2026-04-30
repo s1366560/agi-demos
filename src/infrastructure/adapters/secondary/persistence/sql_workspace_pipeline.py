@@ -271,44 +271,91 @@ class SqlWorkspacePipelineRepository:
         port: int | None = None,
         preview_url: str | None = None,
         health_url: str | None = None,
+        service_id: str | None = None,
+        service_name: str | None = None,
+        service_url: str | None = None,
+        ws_preview_url: str | None = None,
+        required: bool = True,
         rollback_ref: str | None = None,
         log_ref: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> WorkspaceDeploymentModel:
-        model = WorkspaceDeploymentModel(
-            id=str(uuid.uuid4()),
-            workspace_id=workspace_id,
+        model = await self._deployment_for_service(
             plan_id=plan_id,
             node_id=node_id,
-            pipeline_run_id=pipeline_run_id,
-            provider=provider,
-            status=status,
-            command=command,
-            pid=pid,
-            process_group_id=process_group_id,
-            port=port,
-            preview_url=preview_url,
-            health_url=health_url,
-            rollback_ref=rollback_ref,
-            log_ref=log_ref,
-            last_healthy_at=datetime.now(UTC) if status == "healthy" else None,
-            metadata_json=dict(metadata or {}),
+            service_id=service_id,
         )
-        self._db.add(model)
+        if model is None:
+            model = WorkspaceDeploymentModel(
+                id=str(uuid.uuid4()),
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                node_id=node_id,
+            )
+            self._db.add(model)
+        model.pipeline_run_id = pipeline_run_id
+        model.provider = provider
+        model.status = status
+        model.command = command
+        model.pid = pid
+        model.process_group_id = process_group_id
+        model.port = port
+        model.preview_url = preview_url
+        model.health_url = health_url
+        model.service_id = service_id
+        model.service_name = service_name
+        model.service_url = service_url
+        model.ws_preview_url = ws_preview_url
+        model.required = bool(required)
+        model.rollback_ref = rollback_ref
+        model.log_ref = log_ref
+        if status == "healthy":
+            model.last_healthy_at = datetime.now(UTC)
+        model.updated_at = datetime.now(UTC)
+        model.metadata_json = {**dict(model.metadata_json or {}), **dict(metadata or {})}
         await self._db.flush()
         return model
+
+    async def _deployment_for_service(
+        self,
+        *,
+        plan_id: str | None,
+        node_id: str | None,
+        service_id: str | None,
+    ) -> WorkspaceDeploymentModel | None:
+        if plan_id is None or node_id is None:
+            return None
+        stmt = (
+            select(WorkspaceDeploymentModel)
+            .where(WorkspaceDeploymentModel.plan_id == plan_id)
+            .where(WorkspaceDeploymentModel.node_id == node_id)
+        )
+        if service_id is None:
+            stmt = stmt.where(WorkspaceDeploymentModel.service_id.is_(None))
+        else:
+            stmt = stmt.where(WorkspaceDeploymentModel.service_id == service_id)
+        result = await self._db.execute(
+            refresh_select_statement(
+                stmt.order_by(
+                    WorkspaceDeploymentModel.created_at.desc(),
+                    WorkspaceDeploymentModel.id.desc(),
+                ).limit(1)
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def latest_deployments(
         self,
         *,
         plan_id: str,
-        limit: int = 3,
+        limit: int = 10,
     ) -> list[WorkspaceDeploymentModel]:
         result = await self._db.execute(
             refresh_select_statement(
                 select(WorkspaceDeploymentModel)
                 .where(WorkspaceDeploymentModel.plan_id == plan_id)
                 .order_by(
+                    WorkspaceDeploymentModel.updated_at.desc().nullslast(),
                     WorkspaceDeploymentModel.created_at.desc(),
                     WorkspaceDeploymentModel.id.desc(),
                 )

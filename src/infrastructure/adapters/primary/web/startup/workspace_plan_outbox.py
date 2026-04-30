@@ -7,6 +7,8 @@ import os
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
+import redis.asyncio as redis
+
 from src.domain.events.types import AgentEventType
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
@@ -64,7 +66,7 @@ def _int_env(name: str, default: int) -> int:
 
 
 async def initialize_workspace_plan_outbox_worker(
-    *, redis_client: object | None = None
+    *, redis_client: redis.Redis | None = None
 ) -> WorkspacePlanOutboxWorker | None:
     """Start the durable Workspace Plan V2 outbox worker and publish UI refresh events."""
     global _worker
@@ -96,7 +98,9 @@ async def initialize_workspace_plan_outbox_worker(
                 WORKER_LAUNCH_EVENT: make_worker_launch_handler(),
                 HANDOFF_RESUME_EVENT: make_handoff_resume_handler(),
                 ATTEMPT_RETRY_EVENT: make_attempt_retry_handler(),
-                PIPELINE_RUN_REQUESTED_EVENT: make_pipeline_run_requested_handler(),
+                PIPELINE_RUN_REQUESTED_EVENT: make_pipeline_run_requested_handler(
+                    redis_client=redis_client
+                ),
             },
             poll_interval_seconds=_float_env(_POLL_ENV, 2.0),
             batch_size=_int_env(_BATCH_ENV, 10),
@@ -122,7 +126,7 @@ async def initialize_workspace_plan_outbox_worker(
 
 
 def _make_plan_update_publisher(
-    redis_client: object,
+    redis_client: redis.Redis,
 ) -> Callable[[dict[str, Any]], Awaitable[None]]:
     async def _publish(payload: dict[str, Any]) -> None:
         from src.infrastructure.adapters.primary.web.routers.workspace_events import (

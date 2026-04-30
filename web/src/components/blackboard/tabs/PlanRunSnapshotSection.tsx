@@ -27,6 +27,7 @@ import {
 import { workspaceAutonomyService, workspacePlanService } from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+import { getAuthToken } from '@/utils/tokenResolver';
 
 import { EmptyState } from '../EmptyState';
 import { StatBadge } from '../StatBadge';
@@ -318,18 +319,29 @@ function IterationLoopPanel({
 function DeliveryPanel({
   delivery,
   isActionPending,
+  previewOpeningUrl,
   onRunPipeline,
+  onRegenerateContract,
+  onOpenPreview,
 }: {
   delivery: WorkspacePlanDeliverySummary | null | undefined;
   isActionPending: boolean;
+  previewOpeningUrl: string | null;
   onRunPipeline: () => void;
+  onRegenerateContract: () => void;
+  onOpenPreview: (previewUrl: string) => void;
 }) {
   if (!delivery) {
     return null;
   }
   const run = delivery.latest_run;
-  const deployment = delivery.deployment;
+  const deploymentList = delivery.deployments;
+  const deployments =
+    deploymentList.length > 0 ? deploymentList : delivery.deployment ? [delivery.deployment] : [];
+  const deployment = deployments[0];
+  const services = delivery.services;
   const requestAction = delivery.actions.request_pipeline;
+  const regenerateAction = delivery.actions.regenerate_contract;
   const tone =
     delivery.status === 'success' || delivery.status === 'healthy'
       ? 'text-status-text-success'
@@ -350,21 +362,14 @@ function DeliveryPanel({
             Provider {delivery.provider}
             {run ? ` · run ${shortId(run.id)} · ${run.status}` : ' · no pipeline run yet'}
           </p>
+          <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+            {delivery.agent_managed ? 'Agent managed' : 'Manual'} · {delivery.contract_source} ·{' '}
+            {Math.round(delivery.contract_confidence * 100)}% confidence
+          </p>
           {run?.reason && (
             <p className="mt-1 break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
               {run.reason}
             </p>
-          )}
-          {deployment?.preview_url && (
-            <a
-              href={deployment.preview_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-status-text-info hover:underline"
-            >
-              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="truncate">{deployment.preview_url}</span>
-            </a>
           )}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -381,8 +386,69 @@ function DeliveryPanel({
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
             Run pipeline
           </button>
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+            disabled={isActionPending || !actionEnabled(regenerateAction)}
+            title={actionDisabledReason(
+              regenerateAction,
+              'Contract regeneration is not available.'
+            )}
+            onClick={onRegenerateContract}
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            Regenerate
+          </button>
         </div>
       </div>
+
+      {(services.length > 0 || deployments.length > 0) && (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {(services.length > 0 ? services : deployments).map((item) => {
+            const serviceId = item.service_id ?? ('id' in item ? item.id : 'default');
+            const name =
+              'name' in item ? item.name : (item.service_name ?? item.service_id ?? 'Preview');
+            const statusValue = item.status;
+            const previewUrl = item.preview_url ?? undefined;
+            const required = item.required;
+            return (
+              <div
+                key={serviceId}
+                className="min-w-0 rounded-md border border-border-light bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark-alt"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs font-semibold text-text-primary dark:text-text-inverse">
+                    {name}
+                  </span>
+                  <span className="shrink-0 rounded bg-surface-light px-1.5 py-0.5 text-[11px] font-medium uppercase text-text-secondary dark:bg-surface-dark dark:text-text-muted">
+                    {statusValue}
+                  </span>
+                </div>
+                <p className="mt-1 truncate font-mono text-[11px] text-text-secondary dark:text-text-muted">
+                  {serviceId} · {required ? 'required' : 'optional'}
+                </p>
+                {previewUrl && (
+                  <button
+                    type="button"
+                    disabled={isActionPending || previewOpeningUrl === previewUrl}
+                    onClick={() => {
+                      onOpenPreview(previewUrl);
+                    }}
+                    className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-status-text-info hover:underline"
+                  >
+                    {previewOpeningUrl === previewUrl ? (
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    )}
+                    <span className="truncate">Open preview</span>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {run && run.stages.length > 0 && (
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -397,10 +463,11 @@ function DeliveryPanel({
               <div key={stage.id} className={`min-w-0 rounded-md border px-3 py-2 ${stageTone}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-xs font-semibold uppercase">{stage.stage}</span>
-                  <span className="shrink-0 font-mono text-[11px]">
-                    {stage.exit_code ?? '-'}
-                  </span>
+                  <span className="shrink-0 font-mono text-[11px]">{stage.exit_code ?? '-'}</span>
                 </div>
+                {stage.service_id && (
+                  <p className="mt-1 truncate font-mono text-[11px]">{stage.service_id}</p>
+                )}
                 <p className="mt-1 line-clamp-2 break-words text-[11px] leading-4">
                   {stage.stderr_preview || stage.stdout_preview || stage.command || stage.status}
                 </p>
@@ -434,6 +501,7 @@ export function PlanRunSnapshotSection({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
   const [isTickPending, setIsTickPending] = useState(false);
+  const [previewOpeningUrl, setPreviewOpeningUrl] = useState<string | null>(null);
   const [operatorReason, setOperatorReason] = useState('');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
@@ -831,6 +899,74 @@ export function PlanRunSnapshotSection({
     }
   };
 
+  const regenerateDeliveryContract = async () => {
+    const action = delivery?.actions.regenerate_contract;
+    if (!actionEnabled(action)) {
+      setActionError(action?.reason ?? 'Contract regeneration is not available.');
+      return;
+    }
+    setIsActionPending(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const reason = reasonOrFallback(operatorReason, DEFAULT_NODE_ACTION_REASON);
+      const result = await workspacePlanService.regenerateDeliveryContract(workspaceId, {
+        reason,
+      });
+      setActionMessage(result.message);
+      await loadSnapshot({ silent: true });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const openPreview = async (previewUrl: string) => {
+    const previewWindow = window.open('about:blank', '_blank');
+    if (previewWindow) {
+      previewWindow.opener = null;
+    }
+
+    setPreviewOpeningUrl(previewUrl);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No authentication token is available for preview access.');
+      }
+
+      const isSandboxProxyUrl =
+        previewUrl.startsWith('/api/v1/projects/') &&
+        previewUrl.includes('/sandbox/http-services/');
+      if (isSandboxProxyUrl) {
+        const response = await fetch(previewUrl, {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`Preview authorization failed with ${String(response.status)}`);
+        }
+      }
+
+      if (previewWindow) {
+        previewWindow.location.replace(previewUrl);
+      } else {
+        window.open(previewUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      if (previewWindow) {
+        previewWindow.close();
+      }
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPreviewOpeningUrl(null);
+    }
+  };
+
   return (
     <section className="rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt">
       <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
@@ -965,7 +1101,10 @@ export function PlanRunSnapshotSection({
           <DeliveryPanel
             delivery={delivery}
             isActionPending={isActionPending}
+            previewOpeningUrl={previewOpeningUrl}
             onRunPipeline={() => void runDeliveryPipeline()}
+            onRegenerateContract={() => void regenerateDeliveryContract()}
+            onOpenPreview={(previewUrl) => void openPreview(previewUrl)}
           />
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">

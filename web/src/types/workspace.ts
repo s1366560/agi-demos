@@ -43,12 +43,31 @@ export interface WorkspaceDeliveryCicdStageConfig {
   command: string;
   required?: boolean | undefined;
   timeout_seconds?: number | undefined;
+  service_id?: string | undefined;
+}
+
+export interface WorkspaceDeliveryServiceConfig {
+  service_id: string;
+  name: string;
+  start_command: string;
+  internal_port: number;
+  internal_scheme?: string | undefined;
+  path_prefix?: string | undefined;
+  health_path?: string | undefined;
+  health_command?: string | undefined;
+  required?: boolean | undefined;
+  auto_open?: boolean | undefined;
 }
 
 export interface WorkspaceDeliveryCicdConfig {
   provider?: string | undefined;
   code_root?: string | undefined;
   stages?: WorkspaceDeliveryCicdStageConfig[] | undefined;
+  services?: WorkspaceDeliveryServiceConfig[] | undefined;
+  agent_managed?: boolean | undefined;
+  contract_source?: string | undefined;
+  contract_confidence?: number | undefined;
+  agent_proposal?: Record<string, unknown> | undefined;
   env?: Record<string, string> | undefined;
   timeout_seconds?: number | undefined;
   auto_deploy?: boolean | undefined;
@@ -336,6 +355,7 @@ export interface WorkspacePipelineStageRun {
   run_id: string;
   stage: string;
   status: string;
+  service_id?: string | null | undefined;
   command?: string | null | undefined;
   exit_code?: number | null | undefined;
   stdout_preview?: string | null | undefined;
@@ -365,13 +385,18 @@ export interface WorkspaceDeployment {
   id: string;
   provider: string;
   status: string;
+  service_id?: string | null | undefined;
+  service_name?: string | null | undefined;
   node_id?: string | null | undefined;
   pipeline_run_id?: string | null | undefined;
   command?: string | null | undefined;
   pid?: number | null | undefined;
   port?: number | null | undefined;
+  service_url?: string | null | undefined;
   preview_url?: string | null | undefined;
+  ws_preview_url?: string | null | undefined;
   health_url?: string | null | undefined;
+  required: boolean;
   restart_count: number;
   last_healthy_at?: string | null | undefined;
   rollback_ref?: string | null | undefined;
@@ -380,12 +405,32 @@ export interface WorkspaceDeployment {
   updated_at?: string | null | undefined;
 }
 
+export interface WorkspaceDeliveryServiceSummary {
+  service_id: string;
+  name: string;
+  start_command?: string | null | undefined;
+  internal_port?: number | null | undefined;
+  internal_scheme: string;
+  path_prefix: string;
+  health_path?: string | null | undefined;
+  health_command?: string | null | undefined;
+  required: boolean;
+  auto_open: boolean;
+  preview_url?: string | null | undefined;
+  status: string;
+}
+
 export interface WorkspacePlanDeliverySummary {
   provider: string;
   status: string;
+  contract_source: string;
+  contract_confidence: number;
+  agent_managed: boolean;
   latest_run?: WorkspacePipelineRun | null | undefined;
   recent_runs: WorkspacePipelineRun[];
+  services: WorkspaceDeliveryServiceSummary[];
   deployment?: WorkspaceDeployment | null | undefined;
+  deployments: WorkspaceDeployment[];
   actions: Record<string, WorkspacePlanActionCapability>;
 }
 
