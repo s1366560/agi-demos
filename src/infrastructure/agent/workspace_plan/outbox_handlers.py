@@ -56,6 +56,7 @@ from src.domain.ports.services.task_allocator_port import (
 )
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.adapters.secondary.persistence.models import (
+    WorkspaceModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
@@ -1306,11 +1307,48 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             )
             return
 
+        runner = _WorkspaceSandboxCommandRunner(
+            project_id=workspace.project_id,
+            tenant_id=workspace.tenant_id,
+        )
         contract = _pipeline_contract_for_workspace(
             project_id=workspace.project_id,
             workspace_metadata=workspace_metadata,
             root_metadata=root_metadata,
         )
+        if _needs_agent_managed_pipeline_proposal(contract):
+            proposal = await _propose_agent_managed_pipeline_contract(
+                runner=runner,
+                code_root=contract.code_root,
+                preview_port=contract.preview_port,
+            )
+            if proposal is None:
+                await _suspend_plan_for_pipeline(
+                    session=session,
+                    plan=plan,
+                    node=node,
+                    reason="agent-managed delivery contract could not infer a preview service",
+                )
+                return
+            workspace_metadata = await _persist_agent_managed_pipeline_proposal(
+                session=session,
+                workspace_id=workspace_id,
+                workspace_metadata=workspace_metadata,
+                proposal=proposal,
+            )
+            contract = _pipeline_contract_for_workspace(
+                project_id=workspace.project_id,
+                workspace_metadata=workspace_metadata,
+                root_metadata=root_metadata,
+            )
+        if _requires_preview_deployment(contract) and not contract.services:
+            await _suspend_plan_for_pipeline(
+                session=session,
+                plan=plan,
+                node=node,
+                reason="delivery contract requires preview deployment but has no services",
+            )
+            return
         if contract.provider != SANDBOX_NATIVE_PROVIDER:
             await _suspend_plan_for_pipeline(
                 session=session,
@@ -1326,7 +1364,16 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             node_id=node_id,
             attempt_id=attempt_id,
         )
-        if latest is not None and latest.status in {"running", "success"}:
+        if latest is not None and (
+            latest.status == "running"
+            or (
+                latest.status == "success"
+                and (
+                    not _requires_preview_deployment(contract)
+                    or _node_has_required_deployment_health(node)
+                )
+            )
+        ):
             await _reflect_existing_pipeline_run(
                 session=session,
                 plan=plan,
@@ -1372,12 +1419,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
         )
         await _mark_pipeline_running(session=session, plan=plan, node=node, run_id=run.id)
 
-        provider = SandboxNativePipelineProvider(
-            runner := _WorkspaceSandboxCommandRunner(
-                project_id=workspace.project_id,
-                tenant_id=workspace.tenant_id,
-            )
-        )
+        provider = SandboxNativePipelineProvider(runner)
         stage_results = []
         evidence_refs: list[str] = []
         failure_reason: str | None = None
@@ -1580,6 +1622,260 @@ def _pipeline_contract_for_workspace(
     )
 
 
+def _needs_agent_managed_pipeline_proposal(contract: PipelineContractSpec) -> bool:
+    return (
+        contract.agent_managed
+        and contract.auto_deploy
+        and not contract.services
+        and not contract.deploy_command
+        and not contract.health_url
+    )
+
+
+def _requires_preview_deployment(contract: PipelineContractSpec) -> bool:
+    return contract.auto_deploy
+
+
+def _node_has_required_deployment_health(node: PlanNode) -> bool:
+    refs = _merge_string_values(node.metadata.get("pipeline_evidence_refs"), [])
+    return "deployment_health:passed" in refs or any(
+        ref.startswith("deployment_health:passed:") for ref in refs
+    )
+
+
+async def _propose_agent_managed_pipeline_contract(
+    *,
+    runner: _WorkspaceSandboxCommandRunner,
+    code_root: str | None,
+    preview_port: int | None,
+) -> dict[str, Any] | None:
+    if not code_root:
+        return None
+    raw = await runner.run_command(
+        _agent_managed_pipeline_probe_command(code_root=code_root),
+        timeout=30,
+    )
+    raw_exit_code = raw.get("exit_code")
+    exit_code = int(raw_exit_code) if raw_exit_code is not None else 1
+    if exit_code != 0:
+        logger.info(
+            "workspace_plan.pipeline_contract_probe_failed",
+            extra={
+                "event": "workspace_plan.pipeline_contract_probe_failed",
+                "code_root": code_root,
+                "stderr": str(raw.get("stderr") or "")[:500],
+            },
+        )
+        return None
+    return _parse_agent_managed_pipeline_probe(
+        str(raw.get("stdout") or ""),
+        preview_port=preview_port,
+    )
+
+
+def _agent_managed_pipeline_probe_command(*, code_root: str) -> str:
+    script = r'''
+import json
+import re
+from pathlib import Path
+
+root = Path.cwd()
+
+def load_json(rel):
+    path = root / rel
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+def read_text(rel):
+    path = root / rel
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+root_pkg = load_json("package.json")
+backend_pkg = load_json("backend/package.json")
+root_scripts = root_pkg.get("scripts") if isinstance(root_pkg.get("scripts"), dict) else {}
+backend_scripts = backend_pkg.get("scripts") if isinstance(backend_pkg.get("scripts"), dict) else {}
+server_text = "\n".join(
+    read_text(rel)
+    for rel in (
+        "server.js",
+        "app.js",
+        "index.js",
+        "backend/server.js",
+        "backend/app.js",
+        "src/server.js",
+        "src/app.js",
+    )
+)
+port_match = re.search(r"process\.env\.PORT\s*\|\|\s*([0-9]{2,5})", server_text)
+declared_port = int(port_match.group(1)) if port_match else None
+health_path = "/api/health" if re.search(r"""['"]\/api\/health['"]""", server_text) else "/"
+
+service = None
+reason = ""
+if root_scripts.get("start"):
+    service = {
+        "service_id": "default",
+        "name": root_pkg.get("name") or "Preview",
+        "start_command": "npm start",
+        "internal_port": declared_port,
+        "health_path": health_path,
+    }
+    reason = "root package.json start script"
+elif root_scripts.get("preview"):
+    service = {
+        "service_id": "default",
+        "name": root_pkg.get("name") or "Preview",
+        "start_command": "npm run preview -- --host 0.0.0.0",
+        "internal_port": declared_port,
+        "health_path": health_path,
+    }
+    reason = "root package.json preview script"
+elif root_scripts.get("dev"):
+    service = {
+        "service_id": "default",
+        "name": root_pkg.get("name") or "Preview",
+        "start_command": "npm run dev -- --host 0.0.0.0",
+        "internal_port": declared_port,
+        "health_path": health_path,
+    }
+    reason = "root package.json dev script"
+elif backend_scripts.get("start"):
+    service = {
+        "service_id": "default",
+        "name": backend_pkg.get("name") or "Backend Preview",
+        "start_command": "npm --prefix backend start",
+        "internal_port": declared_port,
+        "health_path": health_path,
+    }
+    reason = "backend package.json start script"
+elif (root / "public" / "index.html").exists():
+    service = {
+        "service_id": "default",
+        "name": "Static Preview",
+        "start_command": "python3 -m http.server --bind 0.0.0.0",
+        "internal_port": declared_port,
+        "health_path": "/",
+    }
+    reason = "public/index.html static fallback"
+
+print(json.dumps({"service": service, "reason": reason}, ensure_ascii=False))
+'''.strip()
+    return f"cd {shlex.quote(code_root)} && python3 - <<'PY'\n{script}\nPY"
+
+
+def _parse_agent_managed_pipeline_probe(
+    stdout: str,
+    *,
+    preview_port: int | None,
+) -> dict[str, Any] | None:
+    payload: dict[str, Any] | None = None
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            payload = parsed
+            break
+    if payload is None:
+        return None
+    service = payload.get("service")
+    if not isinstance(service, dict):
+        return None
+    port = _positive_port(service.get("internal_port")) or preview_port or 3000
+    start_command = _metadata_string(service.get("start_command"))
+    if not start_command:
+        return None
+    if " --port " not in start_command and (
+        "npm run preview" in start_command or "npm run dev" in start_command
+    ):
+        start_command = f"{start_command} --port {port}"
+    elif "python3 -m http.server" in start_command:
+        start_command = f"{start_command} {port}"
+    service_id = _metadata_string(service.get("service_id")) or "default"
+    proposed_service = {
+        "service_id": service_id,
+        "name": _metadata_string(service.get("name")) or service_id,
+        "start_command": start_command,
+        "internal_port": port,
+        "path_prefix": "/",
+        "health_path": _metadata_string(service.get("health_path")) or "/",
+        "required": True,
+        "auto_open": True,
+    }
+    return {
+        "agent_managed": True,
+        "contract_source": "agent_sandbox_scan",
+        "contract_confidence": 0.82,
+        "proposal_reason": _metadata_string(payload.get("reason")) or "sandbox project script scan",
+        "services": [proposed_service],
+    }
+
+
+async def _persist_agent_managed_pipeline_proposal(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    workspace_metadata: dict[str, Any],
+    proposal: dict[str, Any],
+) -> dict[str, Any]:
+    metadata = dict(workspace_metadata)
+    delivery = dict(metadata.get("delivery_cicd") or {})
+    delivery.update(
+        {
+            "agent_managed": True,
+            "contract_source": proposal.get("contract_source") or "agent_sandbox_scan",
+            "contract_confidence": proposal.get("contract_confidence") or 0.0,
+            "services": list(proposal.get("services") or []),
+            "agent_proposal": {
+                "source": proposal.get("contract_source") or "agent_sandbox_scan",
+                "confidence": proposal.get("contract_confidence") or 0.0,
+                "reason": proposal.get("proposal_reason") or "",
+                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            },
+        }
+    )
+    first_service = next(iter(delivery.get("services") or []), None)
+    if isinstance(first_service, dict):
+        port = _positive_port(first_service.get("internal_port"))
+        if port:
+            delivery["preview_port"] = port
+    metadata["delivery_cicd"] = delivery
+    workspace_model = await session.get(WorkspaceModel, workspace_id)
+    if workspace_model is not None:
+        workspace_model.metadata_json = metadata
+        workspace_model.updated_at = datetime.now(UTC)
+        await session.flush()
+    return metadata
+
+
+def _positive_port(value: object) -> int | None:
+    if isinstance(value, int) and 0 < value <= 65535:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        parsed = int(value)
+        if 0 < parsed <= 65535:
+            return parsed
+    return None
+
+
+def _metadata_string(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 async def _mark_pipeline_skipped(
     *,
     session: AsyncSession,
@@ -1633,6 +1929,7 @@ async def _reflect_existing_pipeline_run(
     status: str,
 ) -> None:
     metadata = dict(node.metadata or {})
+    now = datetime.now(UTC)
     metadata.update(
         {
             "pipeline_run_id": run_id,
@@ -1640,15 +1937,25 @@ async def _reflect_existing_pipeline_run(
             "pipeline_gate_status": status,
         }
     )
+    intent = node.intent
+    execution = node.execution
     if status == "success":
         metadata["pipeline_evidence_refs"] = _merge_string_values(
             metadata.get("pipeline_evidence_refs"),
             ["ci_pipeline:passed", f"pipeline_run:success:{run_id}"],
         )
-        execution = TaskExecution.REPORTED
-    else:
-        execution = node.execution
-    plan.replace_node(replace(node, execution=execution, metadata=metadata))
+        metadata.update(
+            {
+                "last_verification_summary": "harness-native CI/CD pipeline passed",
+                "last_verification_passed": True,
+                "last_verification_hard_fail": False,
+                "last_verification_ran_at": now.isoformat().replace("+00:00", "Z"),
+            }
+        )
+        intent, execution = _pipeline_completion_node_state(node=node, status=status)
+    plan.replace_node(
+        replace(node, intent=intent, execution=execution, metadata=metadata, updated_at=now)
+    )
     await SqlPlanRepository(session).save(plan)
 
 
@@ -1685,13 +1992,15 @@ async def _finish_pipeline_on_node(
     health_url: str | None,
 ) -> None:
     metadata = dict(node.metadata or {})
+    finished_at = datetime.now(UTC)
+    summary = reason or "harness-native CI/CD pipeline passed"
     metadata.update(
         {
             "pipeline_run_id": run_id,
             "pipeline_status": status,
             "pipeline_gate_status": status,
-            "pipeline_finished_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            "pipeline_last_summary": reason or "harness-native CI/CD pipeline passed",
+            "pipeline_finished_at": finished_at.isoformat().replace("+00:00", "Z"),
+            "pipeline_last_summary": summary,
             "pipeline_evidence_refs": _merge_string_values(
                 metadata.get("pipeline_evidence_refs"),
                 evidence_refs,
@@ -1707,16 +2016,40 @@ async def _finish_pipeline_on_node(
         metadata["preview_url"] = preview_url
     if health_url:
         metadata["health_url"] = health_url
+    if status == "success":
+        metadata.update(
+            {
+                "last_verification_summary": summary,
+                "last_verification_passed": True,
+                "last_verification_hard_fail": False,
+                "last_verification_ran_at": finished_at.isoformat().replace("+00:00", "Z"),
+            }
+        )
+        metadata.pop("pipeline_stop_reason", None)
+    intent, execution = _pipeline_completion_node_state(node=node, status=status)
     plan.replace_node(
         replace(
             node,
-            intent=TaskIntent.IN_PROGRESS,
-            execution=TaskExecution.REPORTED,
+            intent=intent,
+            execution=execution,
             metadata=metadata,
-            updated_at=datetime.now(UTC),
+            updated_at=finished_at,
         )
     )
     await SqlPlanRepository(session).save(plan)
+
+
+def _pipeline_completion_node_state(
+    *,
+    node: PlanNode,
+    status: str,
+) -> tuple[TaskIntent, TaskExecution]:
+    if status != "success":
+        return TaskIntent.IN_PROGRESS, TaskExecution.REPORTED
+    phase = _metadata_string(dict(node.metadata or {}).get("iteration_phase"))
+    if phase in {"test", "deploy", "review"} or node.current_attempt_id:
+        return TaskIntent.DONE, TaskExecution.IDLE
+    return TaskIntent.IN_PROGRESS, TaskExecution.REPORTED
 
 
 def _pipeline_commit_ref(node: PlanNode) -> str | None:

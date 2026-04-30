@@ -363,7 +363,11 @@ def _workspace_iteration_decomposition_context(
         f"{max_subtasks} subtasks total. Cover the iteration lifecycle in this order when "
         f"possible: {phases}. Treat later unknown work as feedback for a future sprint, "
         "not as extra tasks in this plan. Each subtask should be independently verifiable "
-        "and should name concrete evidence or artifacts."
+        "and should name concrete evidence or artifacts. For CI/CD and deploy phases, use "
+        "the MemStack sandbox-native delivery harness: pipeline run, sandbox preview proxy, "
+        "health check, and preview evidence. Do not plan Vercel, Netlify, Railway, Render, "
+        "GitHub Actions, Drone, Kubernetes, or other external production deployment work "
+        "unless the user explicitly asks for external deployment credentials and approval."
     )
 
 

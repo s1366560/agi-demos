@@ -427,8 +427,10 @@ class DeploymentHealthCriterionRunner(CriterionRunner):
         service_id = str(criterion.spec.get("service_id") or "").strip()
         passed_ref = f"deployment_health:passed:{service_id}" if service_id else None
         failed_ref = f"deployment_health:failed:{service_id}" if service_id else None
-        has_passed = "deployment_health:passed" in values or (
-            passed_ref is not None and passed_ref in values
+        has_passed = (
+            "deployment_health:passed" in values
+            or (passed_ref is not None and passed_ref in values)
+            or (not service_id and _first_prefixed(values, "deployment_health:passed:") is not None)
         )
         has_failed = (
             "deployment_health:failed" in values
@@ -849,13 +851,28 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
 async def _pipeline_gate_guard(ctx: VerificationContext) -> CriterionResult | None:
     if not _requires_pipeline_gate(ctx):
         return None
-    criterion = AcceptanceCriterion(
+    pipeline_criterion = AcceptanceCriterion(
         kind=CriterionKind.CI_PIPELINE,
         spec={},
         required=True,
         description="software workspace tasks require harness-native CI/CD evidence",
     )
-    return await PipelineCriterionRunner().run(criterion, ctx)
+    pipeline_result = await PipelineCriterionRunner().run(pipeline_criterion, ctx)
+    if not pipeline_result.passed:
+        return pipeline_result
+
+    phase = _node_iteration_phase(ctx)
+    if phase in {"deploy", "review"}:
+        health_criterion = AcceptanceCriterion(
+            kind=CriterionKind.DEPLOYMENT_HEALTH,
+            spec={},
+            required=True,
+            description="deploy/review tasks require a healthy sandbox preview deployment",
+        )
+        health_result = await DeploymentHealthCriterionRunner().run(health_criterion, ctx)
+        if not health_result.passed:
+            return health_result
+    return pipeline_result
 
 
 def _requires_pipeline_gate(ctx: VerificationContext) -> bool:
@@ -865,11 +882,15 @@ def _requires_pipeline_gate(ctx: VerificationContext) -> bool:
     return False
 
 
+def _node_iteration_phase(ctx: VerificationContext) -> str | None:
+    raw_phase = ctx.node.metadata.get("iteration_phase")
+    return raw_phase.strip().lower() if isinstance(raw_phase, str) and raw_phase.strip() else None
+
+
 def _required_change_refs(ctx: VerificationContext) -> set[str]:
     refs: set[str] = set()
     feature = ctx.node.feature_checkpoint
-    raw_phase = ctx.node.metadata.get("iteration_phase")
-    phase = raw_phase.strip().lower() if isinstance(raw_phase, str) else None
+    phase = _node_iteration_phase(ctx)
     if feature is not None and (phase is None or phase in _CHANGE_EVIDENCE_PHASES):
         refs.update(str(item) for item in feature.expected_artifacts if item)
     raw_write_set = ctx.node.metadata.get("write_set")

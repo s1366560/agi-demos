@@ -569,13 +569,14 @@ async def _to_delivery_summary(
     deployment_response = deployment_responses[0] if deployment_responses else None
     latest_run = run_responses[0] if run_responses else None
     status = latest_run.status if latest_run is not None else "not_configured"
+    required_deployments = [item for item in deployment_responses if item.required]
     if any(
         item.required and item.status in {"unhealthy", "failed"} for item in deployment_responses
     ):
         status = "unhealthy"
-    elif deployment_responses and all(
-        item.status == "healthy" for item in deployment_responses if item.required
-    ):
+    elif any(item.status in {"skipped", "not_deployed"} for item in required_deployments):
+        status = "not_deployed"
+    elif required_deployments and all(item.status == "healthy" for item in required_deployments):
         status = "healthy"
     contract_metadata = dict(contract.metadata_json or {}) if contract is not None else {}
     services = _to_delivery_services(contract_metadata, deployment_responses)
@@ -786,7 +787,12 @@ def _to_iteration_summary(
         task_budget=len(_ITERATION_PHASE_ORDER),
         phases=phases,
         deliverables=_iteration_deliverables(iteration_nodes, blackboard_entries),
-        feedback_items=_iteration_feedback_items(root_goal, outbox_items, event_items),
+        feedback_items=_iteration_feedback_items(
+            root_goal,
+            outbox_items,
+            event_items,
+            nodes=list(plan.nodes.values()),
+        ),
         history=_iteration_history(loop, event_items),
         actions=_iteration_actions(plan, loop_status),
     )
@@ -1102,8 +1108,17 @@ def _iteration_feedback_items(
     root_goal: WorkspacePlanRootGoalResponse | None,
     outbox_items: list[WorkspacePlanOutboxModel],
     event_items: list[WorkspacePlanEventModel],
+    *,
+    nodes: list[PlanNode],
 ) -> list[str]:
     feedback: list[str] = []
+    resolved_node_ids = {
+        node.id
+        for node in nodes
+        if node.intent is TaskIntent.DONE
+        or dict(node.metadata or {}).get("last_verification_passed") is True
+        or dict(node.metadata or {}).get("pipeline_status") == "success"
+    }
     if root_goal and root_goal.completion_blocker_reason:
         feedback.append(root_goal.completion_blocker_reason)
     for item in outbox_items:
@@ -1112,6 +1127,8 @@ def _iteration_feedback_items(
     for event in event_items:
         payload = dict(event.payload_json or {})
         if event.event_type == "verification_completed" and payload.get("passed") is not True:
+            if event.node_id in resolved_node_ids:
+                continue
             summary = payload.get("summary") or payload.get("reason") or payload.get("error")
             if isinstance(summary, str) and summary:
                 feedback.append(summary)

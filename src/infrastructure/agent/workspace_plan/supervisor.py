@@ -26,7 +26,6 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from itertools import pairwise
 from typing import Any
 
 from src.domain.model.workspace_plan import (
@@ -999,6 +998,11 @@ def _append_next_iteration(
     sequence_by_task_id = {
         task.id: sequence for sequence, task in enumerate(verdict.next_tasks, start=1) if task.id
     }
+    phase_by_task_id = {
+        task.id: normalized_phases[sequence - 1]
+        for sequence, task in enumerate(verdict.next_tasks, start=1)
+        if task.id
+    }
     for sequence, task in enumerate(verdict.next_tasks, start=1):
         node_id = id_map.get(task.id) or PlanNodeId(f"node-{uuid.uuid4().hex[:12]}")
         phase = normalized_phases[sequence - 1]
@@ -1012,6 +1016,7 @@ def _append_next_iteration(
             if dep in id_map
             and id_map[dep] != node_id
             and sequence_by_task_id.get(dep, sequence + 1) < sequence
+            and _phase_index(phase_by_task_id.get(dep, _ITERATION_PHASES[0])) <= _phase_index(phase)
         )
         dependencies_by_node[node_id] = tuple(
             dict.fromkeys(
@@ -1124,25 +1129,14 @@ def _next_iteration_task_phase(task: IterationNextTask, sequence: int) -> str:
 
 
 def _normalized_next_iteration_task_phases(tasks: tuple[IterationNextTask, ...]) -> list[str]:
-    phases = [
+    return [
         _next_iteration_task_phase(task, sequence) for sequence, task in enumerate(tasks, start=1)
     ]
-    if _phases_are_monotonic(phases):
-        return phases
-    return [_iteration_phase_for_sequence(sequence) for sequence in range(1, len(tasks) + 1)]
 
 
 def _normalized_pending_iteration_phases(nodes: list[PlanNode]) -> dict[PlanNodeId, str]:
     ordered = _ordered_iteration_nodes(nodes)
-    phases = [_node_iteration_phase(node) for node in ordered]
-    if not _phases_are_monotonic(phases):
-        phases = [_iteration_phase_for_sequence(index) for index in range(1, len(ordered) + 1)]
-    return {node.node_id: phase for node, phase in zip(ordered, phases, strict=False)}
-
-
-def _phases_are_monotonic(phases: list[str]) -> bool:
-    phase_indexes = [_phase_index(phase) for phase in phases]
-    return all(current >= previous for previous, current in pairwise(phase_indexes))
+    return {node.node_id: _node_iteration_phase(node) for node in ordered}
 
 
 def _phase_index(phase: str) -> int:

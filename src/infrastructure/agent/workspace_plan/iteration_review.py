@@ -122,6 +122,11 @@ def _system_prompt(max_next_tasks: int) -> str:
         "produce aggregate implementation tasks such as 'fix all P0/P1 gaps' or "
         "'complete the frontend/backend'; each next_task must target one functional area, "
         "one user journey, or one concrete artifact that can be verified independently. "
+        "For CI/CD, deploy, and release-readiness gaps, stay on the MemStack "
+        "sandbox-native delivery path: pipeline run, sandbox preview proxy, health check, "
+        "and preview evidence. Do not propose Vercel, Netlify, Railway, Render, GitHub "
+        "Actions, Drone, Kubernetes, or other external production deployment tasks unless "
+        "the user explicitly granted external deployment credentials and approval. "
         "If there are more actionable gaps than the task budget, choose the highest-risk "
         "bounded items for next_tasks and put the rest in feedback_items. Do not "
         "choose needs_human_review solely because you, as the review agent, cannot browse "
@@ -156,14 +161,15 @@ def _user_payload(context: IterationReviewContext) -> str:
                 "public web research and reference-site inspection",
                 "browser_e2e workflows with screenshots and console capture",
                 "API contract verification and integration tests",
-                "code, test, documentation, and release-readiness implementation",
+                "code, test, documentation, and sandbox-native release-readiness implementation",
+                "sandbox preview proxy deployment and health-check verification",
             ],
             "continue_next_iteration_for": [
                 "missing acceptance evidence",
                 "public reference product parity checks",
                 "UI/UX comparison work",
                 "E2E user journey verification",
-                "release-readiness checks that do not require external production authority",
+                "sandbox-native release-readiness checks that do not require external production authority",
             ],
             "needs_human_review_only_for": [
                 "missing credentials or private access",

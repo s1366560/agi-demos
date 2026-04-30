@@ -2330,7 +2330,7 @@ class TestSupervisorTick:
         assert PlanNodeId(deploy.id) in review.depends_on
         assert PlanNodeId(test.id) in review.depends_on
 
-    async def test_completed_iteration_normalizes_out_of_order_phase_dependencies(
+    async def test_completed_iteration_preserves_out_of_order_agent_phases(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -2372,12 +2372,12 @@ class TestSupervisorTick:
         }
         review = nodes_by_title["Review browser parity evidence."]
         implement = nodes_by_title["Implement parity gaps found during review."]
-        assert review.metadata["iteration_phase"] == "research"
-        assert implement.metadata["iteration_phase"] == "plan"
-        assert review.depends_on == frozenset()
-        assert PlanNodeId(review.id) in implement.depends_on
+        assert review.metadata["iteration_phase"] == "review"
+        assert implement.metadata["iteration_phase"] == "implement"
+        assert review.depends_on == frozenset({PlanNodeId(implement.id)})
+        assert implement.depends_on == frozenset()
         assert reloaded.validate() == []
-        assert {node.id for node in reloaded.ready_nodes()} == {review.id}
+        assert {node.id for node in reloaded.ready_nodes()} == {implement.id}
 
     async def test_completed_iteration_rejects_forward_dependency_deadlocks(
         self,
@@ -2432,19 +2432,25 @@ class TestSupervisorTick:
             for node in reloaded.nodes.values()
             if dict(node.metadata or {}).get("iteration_index") == 2
         ]
+        nodes_by_title = {node.title: node for node in iteration_nodes}
+        triage = nodes_by_title["Read status summary and create the sprint plan."]
+        test = nodes_by_title["Run focused regression tests."]
+        fix = nodes_by_title["Apply high-impact UI fixes."]
+        deploy = nodes_by_title["Verify deployment readiness."]
         assert reloaded.validate() == []
-        assert {node.id for node in reloaded.ready_nodes()} == {iteration_nodes[0].id}
+        assert {node.id for node in reloaded.ready_nodes()} == {fix.id}
         assert [node.metadata["iteration_phase"] for node in iteration_nodes] == [
-            "research",
-            "plan",
-            "implement",
+            "review",
             "test",
+            "implement",
+            "deploy",
         ]
-        assert all(
-            PlanNodeId(later.id) not in earlier.depends_on
-            for index, earlier in enumerate(iteration_nodes)
-            for later in iteration_nodes[index + 1 :]
+        assert triage.depends_on == frozenset(
+            {PlanNodeId(test.id), PlanNodeId(fix.id), PlanNodeId(deploy.id)}
         )
+        assert test.depends_on == frozenset({PlanNodeId(fix.id)})
+        assert fix.depends_on == frozenset()
+        assert deploy.depends_on == frozenset({PlanNodeId(test.id), PlanNodeId(fix.id)})
 
     async def test_tick_repairs_existing_next_iteration_phase_barriers_before_dispatch(
         self,
