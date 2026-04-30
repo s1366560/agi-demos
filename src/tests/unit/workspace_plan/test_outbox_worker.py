@@ -67,6 +67,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     _node_allowed_sandbox_commands,
     _persisted_attempt_leader_agent_id,
     _WorkspaceSandboxCommandRunner,
+    _worktree_setup_command,
     make_handoff_resume_handler,
     make_supervisor_tick_handler,
     make_worker_launch_handler,
@@ -263,6 +264,21 @@ def test_structural_sandbox_commands_allow_git_status_in_code_root() -> None:
     assert _is_structural_sandbox_command("git -C /workspace/my-evo status --short")
     assert not _is_structural_sandbox_command("git -C /workspace/my-evo reset --hard")
     assert not _is_structural_sandbox_command("git -C /workspace/my-evo status --short\nrm -rf .")
+
+
+def test_worktree_setup_command_installs_local_push_remote_when_missing() -> None:
+    command = _worktree_setup_command(
+        sandbox_code_root="/workspace/my-evo",
+        worktree_path="/workspace/.memstack/worktrees/attempt-1",
+        branch_name="workspace/node-1-attempt-1",
+        base_ref="HEAD",
+    )
+
+    assert "git remote get-url origin" in command
+    assert ".memstack/git-remotes/${repo_name}.git" in command
+    assert 'git init --bare "$fallback_remote"' in command
+    assert 'git remote add origin "$fallback_remote"' in command
+    assert "git config push.default current" in command
 
 
 def test_node_allowed_sandbox_commands_collects_checkpoint_and_preflight_commands() -> None:
